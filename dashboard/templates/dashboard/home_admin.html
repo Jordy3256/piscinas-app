@@ -1,0 +1,65 @@
+{% extends "dashboard/base_admin.html" %}
+
+{% block title %}Inicio Admin{% endblock %}
+{% block top_title %}🏠 Inicio (Admin){% endblock %}
+
+{% block content %}
+  <div class="row g-3">
+
+    <div class="col-md-6">
+      <a class="text-decoration-none" href="/dashboard/">
+        <div class="card shadow-sm h-100">
+          <div class="card-body">
+            <h5 class="mb-1">📊 Dashboard</h5>
+            <div class="text-muted">Resumen financiero</div>
+          </div>
+        </div>
+      </a>
+    </div>
+
+    <div class="col-md-6">
+      <a class="text-decoration-none" href="/dashboard/operativo/">
+        <div class="card shadow-sm h-100">
+          <div class="card-body">
+            <h5 class="mb-1">🧑‍💼 Operativo</h5>
+            <div class="text-muted">Hoy, atrasados, próximos y asignación</div>
+          </div>
+        </div>
+      </a>
+    </div>
+
+    <div class="col-md-6">
+      <a class="text-decoration-none" href="/dashboard/finanzas/flujo/">
+        <div class="card shadow-sm h-100">
+          <div class="card-body">
+            <h5 class="mb-1">💰 Flujo mensual</h5>
+            <div class="text-muted">Ingresos / egresos + gráficos</div>
+          </div>
+        </div>
+      </a>
+    </div>
+
+    <div class="col-md-6">
+      <a class="text-decoration-none" href="/dashboard/finanzas/ingresos/">
+        <div class="card shadow-sm h-100">
+          <div class="card-body">
+            <h5 class="mb-1">✅ Ingresos manuales</h5>
+            <div class="text-muted">Ventas y servicios extra</div>
+          </div>
+        </div>
+      </a>
+    </div>
+
+    <div class="col-12">
+      <a class="text-decoration-none" href="/admin/">
+        <div class="card shadow-sm h-100">
+          <div class="card-body">
+            <h5 class="mb-1">⚙️ Admin Django</h5>
+            <div class="text-muted">Gestión completa de tablas</div>
+          </div>
+        </div>
+      </a>
+    </div>
+
+  </div>
+{% endblock %}

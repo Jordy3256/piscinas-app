@@ -1,0 +1,217 @@
+{% extends "dashboard/base_app.html" %}
+
+{% block title %}Detalle de mantenimiento{% endblock %}
+{% block top_title %}🧾 Detalle{% endblock %}
+
+{% block content %}
+
+<!-- Card info -->
+<div class="card shadow-sm mb-3">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-start">
+      <div>
+        <div class="fw-bold fs-5">{{ m.cliente }}</div>
+        <div class="text-muted small">📅 {{ m.fecha }} · Contrato: {{ m.contrato }}</div>
+
+        <!-- Acciones rápidas WhatsApp / Ubicación -->
+        <div class="mt-3 d-flex flex-wrap gap-2">
+          {% if m.cliente.telefono %}
+          <a class="btn btn-success btn-sm"
+             href="https://wa.me/{{ m.cliente.telefono }}"
+             target="_blank">
+            📞 WhatsApp
+          </a>
+          {% endif %}
+
+          {% if m.cliente.direccion %}
+          <a class="btn btn-outline-primary btn-sm"
+             href="https://www.google.com/maps/search/?api=1&query={{ m.cliente.direccion|urlencode }}"
+             target="_blank">
+            📍 Ver ubicación
+          </a>
+          {% endif %}
+        </div>
+      </div>
+
+      {% if m.estado == "realizado" %}
+        <span class="badge text-bg-success">Realizado</span>
+      {% else %}
+        <span class="badge text-bg-warning">Pendiente</span>
+      {% endif %}
+    </div>
+
+    <div class="mt-3">
+      <div class="text-muted small">Observaciones</div>
+      <div>{{ m.observaciones|default:"(sin observaciones)" }}</div>
+    </div>
+
+    <hr>
+
+    <!-- Botones grandes -->
+    <div class="d-grid gap-2">
+      {% if m.estado != 'realizado' %}
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="accion" value="marcar_realizado">
+          <button class="btn btn-success btn-lg">✅ Marcar como realizado</button>
+        </form>
+      {% else %}
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="accion" value="marcar_pendiente">
+          <button class="btn btn-warning btn-lg">↩️ Volver a pendiente</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Registrar insumo -->
+<div class="card shadow-sm mb-3">
+  <div class="card-body">
+    <div class="fw-bold mb-2">🧪 Registrar insumo usado</div>
+
+    <form method="post" class="row g-2">
+      {% csrf_token %}
+      <input type="hidden" name="accion" value="agregar_insumo">
+
+      <div class="col-12">
+        <select class="form-select form-select-lg" name="insumo_id" required>
+          <option value="">-- Selecciona un insumo --</option>
+          {% for i in insumos %}
+            <option value="{{ i.id }}">{{ i.nombre }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-12">
+        <input class="form-control form-control-lg" type="number" name="cantidad" min="1" placeholder="Cantidad" required>
+      </div>
+
+      <div class="col-12">
+        <button class="btn btn-primary btn-lg w-100" type="submit">Agregar insumo</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Subir foto -->
+<div class="card shadow-sm mb-3">
+  <div class="card-body">
+    <div class="fw-bold mb-2">📸 Subir foto del mantenimiento</div>
+
+    <form method="post" enctype="multipart/form-data" class="row g-2">
+      {% csrf_token %}
+      <input type="hidden" name="accion" value="subir_foto">
+
+      <div class="col-12">
+        <input class="form-control form-control-lg" type="file" name="imagen" accept="image/*" required>
+      </div>
+
+      <div class="col-12">
+        <input class="form-control" type="text" name="descripcion" placeholder="Descripción (opcional)">
+      </div>
+
+      <div class="col-12">
+        <button class="btn btn-dark btn-lg w-100" type="submit">Subir foto</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Galería de fotos -->
+<div class="card shadow-sm mb-3">
+  <div class="card-body">
+    <div class="fw-bold mb-2">🖼️ Fotos</div>
+
+    {% if fotos %}
+      <div class="row g-2">
+        {% for f in fotos %}
+          <div class="col-6">
+            <a href="{{ f.imagen.url }}" target="_blank" class="text-decoration-none">
+              <img src="{{ f.imagen.url }}" class="img-fluid rounded border" alt="Foto">
+            </a>
+
+            {% if f.descripcion %}
+              <div class="small text-muted mt-1">{{ f.descripcion }}</div>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="text-muted">Aún no hay fotos para este mantenimiento.</div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Insumos usados -->
+<div class="card shadow-sm mb-3">
+  <div class="card-body">
+    <div class="fw-bold mb-2">🧪 Insumos usados</div>
+
+    {% if lista_usos %}
+      <div class="table-responsive">
+        <table class="table table-sm table-striped mb-0 align-middle">
+          <thead>
+            <tr>
+              <th>Insumo</th>
+              <th>Cant.</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for u in lista_usos %}
+            <tr>
+              <td>{{ u.insumo }}</td>
+              <td>{{ u.cantidad }}</td>
+              <td class="text-nowrap">
+                <a class="btn btn-sm btn-outline-primary" href="/dashboard/usos/{{ u.id }}/editar/">Editar</a>
+                <a class="btn btn-sm btn-outline-danger" href="/dashboard/usos/{{ u.id }}/eliminar/">Eliminar</a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="text-muted">No hay insumos registrados en este mantenimiento.</div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Egresos solo admin -->
+{% if es_admin %}
+<div class="card shadow-sm mb-3">
+  <div class="card-body">
+    <div class="fw-bold mb-2">💸 Egresos (solo admin)</div>
+
+    {% if lista_egresos %}
+      <div class="table-responsive">
+        <table class="table table-sm table-striped mb-2">
+          <thead>
+            <tr>
+              <th>Insumo</th>
+              <th>Cant.</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for e in lista_egresos %}
+            <tr>
+              <td>{{ e.insumo }}</td>
+              <td>{{ e.cantidad }}</td>
+              <td>{{ e.total }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div><strong>Total egresos:</strong> {{ total_egresos }}</div>
+    {% else %}
+      <div class="text-muted">No hay egresos registrados.</div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

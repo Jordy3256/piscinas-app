@@ -1,0 +1,20 @@
+{% if es_admin %}
+  {% extends "dashboard/base_admin.html" %}
+{% else %}
+  {% extends "dashboard/base_trabajador.html" %}
+{% endif %}
+
+{% block title %}Sin conexión{% endblock %}
+{% block top_title %}📡 Sin conexión{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm">
+  <div class="card-body">
+    <h5 class="mb-2">Estás sin internet</h5>
+    <p class="text-muted mb-3">
+      La app no pudo cargar esta página. Cuando vuelvas a tener conexión, recarga.
+    </p>
+    <a class="btn btn-primary" href="/dashboard/">Ir al inicio</a>
+  </div>
+</div>
+{% endblock %}

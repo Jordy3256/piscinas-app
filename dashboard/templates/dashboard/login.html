@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<title>JV AQUA</title>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Login</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <link rel="manifest" href="/static/dashboard/manifest.json">
+<meta name="theme-color" content="#0d6efd">
+
+</head>
+<body class="bg-light">
+
+<div class="container mt-5">
+  <div class="row justify-content-center">
+    <div class="col-md-4">
+      <div class="card shadow">
+        <div class="card-body">
+          <h4 class="mb-3 text-center">🔐 Iniciar sesión</h4>
+
+          {% if error %}
+            <div class="alert alert-danger">{{ error }}</div>
+          {% endif %}
+
+          <!-- IMPORTANTE: action apunta a /login/ y csrf_token dentro -->
+          <form method="post" action="/login/">
+            {% csrf_token %}
+            <input class="form-control mb-2" name="username" placeholder="Usuario" autocomplete="username" required>
+            <input class="form-control mb-3" type="password" name="password" placeholder="Contraseña" autocomplete="current-password" required>
+            <button class="btn btn-primary w-100" type="submit">Entrar</button>
+          </form>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("/static/dashboard/sw.js");
+  }
+</script>
+</body>
+</html>

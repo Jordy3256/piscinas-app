@@ -1,0 +1,229 @@
+{% extends "dashboard/base_app.html" %}
+
+{% block title %}Operativo Admin{% endblock %}
+{% block top_title %}🧑‍💼 Operativo (Admin){% endblock %}
+
+{% block content %}
+
+<div class="text-muted small mb-3">Fecha seleccionada: {{ fecha }}</div>
+
+<!-- Filtros -->
+<div class="card shadow-sm mb-3">
+  <div class="card-body">
+    <form class="row g-2 align-items-end" method="get">
+      <div class="col-12 col-md-4">
+        <label class="form-label mb-1">Fecha</label>
+        <input type="date" class="form-control" name="fecha" value="{{ fecha|date:'Y-m-d' }}">
+      </div>
+
+      <div class="col-12 col-md-4 d-grid">
+        <button class="btn btn-primary" type="submit">Aplicar</button>
+      </div>
+
+      <div class="col-12 col-md-4 d-flex gap-2">
+        <a class="btn btn-outline-secondary w-100" href="/dashboard/operativo/?modo=hoy">Hoy</a>
+        <a class="btn btn-outline-secondary w-100" href="/dashboard/operativo/?modo=manana">Mañana</a>
+        <a class="btn btn-outline-secondary w-100" href="/dashboard/operativo/?modo=semana">Semana</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Resumen -->
+<div class="row g-2 mb-3">
+  <div class="col-4">
+    <div class="card shadow-sm">
+      <div class="card-body py-3">
+        <div class="text-muted small">Hoy</div>
+        <div class="fs-4 fw-bold">{{ dia_list|length }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-4">
+    <div class="card shadow-sm">
+      <div class="card-body py-3">
+        <div class="text-muted small">Atrasados</div>
+        <div class="fs-4 fw-bold text-danger">{{ atrasados|length }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-4">
+    <div class="card shadow-sm">
+      <div class="card-body py-3">
+        <div class="text-muted small">Próximos</div>
+        <div class="fs-4 fw-bold">{{ proximos|length }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Resumen por trabajador -->
+<div class="card shadow-sm mb-3">
+  <div class="card-body">
+    <div class="fw-bold mb-2">👷 Resumen por trabajador</div>
+    {% if resumen_trabajadores %}
+    <div class="table-responsive">
+      <table class="table table-sm table-striped mb-0">
+        <thead>
+          <tr>
+            <th>Usuario</th>
+            <th>Hoy</th>
+            <th>Atrasados</th>
+            <th>Próximos</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in resumen_trabajadores %}
+          <tr>
+            <td>{{ r.trabajadores__user__username }}</td>
+            <td>{{ r.dia }}</td>
+            <td class="text-danger fw-semibold">{{ r.atrasados }}</td>
+            <td>{{ r.proximos }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+      <div class="text-muted">Aún no hay mantenimientos asignados a trabajadores.</div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Atrasados -->
+<div class="card shadow-sm mb-3">
+  <div class="card-body">
+    <div class="fw-bold mb-2">🕒 Atrasados (Pendientes)</div>
+    {% if atrasados %}
+      <div class="vstack gap-2">
+        {% for m in atrasados %}
+          <div class="card border-danger">
+            <div class="card-body">
+              <div class="d-flex justify-content-between">
+                <div class="fw-bold">
+                  <a class="text-decoration-none" href="/dashboard/mantenimientos/{{ m.id }}/">
+                    {{ m.cliente }}
+                  </a>
+                </div>
+                <span class="badge text-bg-danger">Atrasado</span>
+              </div>
+
+              <div class="text-muted small">📅 {{ m.fecha }} · {{ m.contrato }}</div>
+
+              <div class="small mt-2">
+                <strong>Trabajadores:</strong>
+                {% for t in m.trabajadores.all %}
+                  {{ t.user.username }}{% if not forloop.last %}, {% endif %}
+                {% empty %}
+                  (sin asignar)
+                {% endfor %}
+              </div>
+
+              <div class="mt-2">
+                <a class="btn btn-sm btn-outline-dark" href="/dashboard/operativo/asignar/{{ m.id }}/">
+                  👷 Asignar/Reasignar
+                </a>
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="text-muted">No hay atrasados 🎉</div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Día seleccionado -->
+<div class="card shadow-sm mb-3">
+  <div class="card-body">
+    <div class="fw-bold mb-2">📌 Fecha seleccionada: {{ fecha }}</div>
+    {% if dia_list %}
+      <div class="vstack gap-2">
+        {% for m in dia_list %}
+          <div class="card">
+            <div class="card-body">
+              <div class="d-flex justify-content-between">
+                <div class="fw-bold">
+                  <a class="text-decoration-none" href="/dashboard/mantenimientos/{{ m.id }}/">
+                    {{ m.cliente }}
+                  </a>
+                </div>
+                {% if m.estado == "realizado" %}
+                  <span class="badge text-bg-success">Realizado</span>
+                {% else %}
+                  <span class="badge text-bg-warning">Pendiente</span>
+                {% endif %}
+              </div>
+
+              <div class="text-muted small">📅 {{ m.fecha }} · {{ m.contrato }}</div>
+
+              <div class="small mt-2">
+                <strong>Trabajadores:</strong>
+                {% for t in m.trabajadores.all %}
+                  {{ t.user.username }}{% if not forloop.last %}, {% endif %}
+                {% empty %}
+                  (sin asignar)
+                {% endfor %}
+              </div>
+
+              <div class="mt-2">
+                <a class="btn btn-sm btn-outline-dark" href="/dashboard/operativo/asignar/{{ m.id }}/">
+                  👷 Asignar/Reasignar
+                </a>
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="text-muted">No hay mantenimientos para esta fecha.</div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Próximos -->
+<div class="card shadow-sm mb-3">
+  <div class="card-body">
+    <div class="fw-bold mb-2">🗓 Próximos (Pendientes)</div>
+    {% if proximos %}
+      <div class="vstack gap-2">
+        {% for m in proximos %}
+          <div class="card">
+            <div class="card-body">
+              <div class="d-flex justify-content-between">
+                <div class="fw-bold">
+                  <a class="text-decoration-none" href="/dashboard/mantenimientos/{{ m.id }}/">
+                    {{ m.cliente }}
+                  </a>
+                </div>
+                <span class="badge text-bg-secondary">Próximo</span>
+              </div>
+
+              <div class="text-muted small">📅 {{ m.fecha }} · {{ m.contrato }}</div>
+
+              <div class="small mt-2">
+                <strong>Trabajadores:</strong>
+                {% for t in m.trabajadores.all %}
+                  {{ t.user.username }}{% if not forloop.last %}, {% endif %}
+                {% empty %}
+                  (sin asignar)
+                {% endfor %}
+              </div>
+
+              <div class="mt-2">
+                <a class="btn btn-sm btn-outline-dark" href="/dashboard/operativo/asignar/{{ m.id }}/">
+                  👷 Asignar/Reasignar
+                </a>
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="text-muted">No hay próximos pendientes.</div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}
