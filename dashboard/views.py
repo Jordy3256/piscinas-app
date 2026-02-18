@@ -251,3 +251,12 @@ def dashboard_view(request):
 @login_required
 def offline_view(request):
     return render(request, "dashboard/offline.html")
+
+# ✅ FIX TEMPORAL: evita que el deploy falle si falta esta vista
+from django.http import HttpResponse
+
+def mantenimiento_detalle_view(request, pk):
+    return HttpResponse(
+        "mantenimiento_detalle_view falta en dashboard/views.py. Restaura la vista completa.",
+        status=501,
+    )
