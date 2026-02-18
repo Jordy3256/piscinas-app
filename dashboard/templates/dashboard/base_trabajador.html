@@ -23,7 +23,7 @@
     /* El botón existe siempre. JS decide si se muestra */
     #btn-install { display: none; }
 
-    /* ✅ Debug visible (para confirmar que ESTE template se está renderizando) */
+    /* ✅ Debug visible */
     #template-debug-badge{
       position: fixed;
       right: 10px;
@@ -35,6 +35,32 @@
       background: #198754;
       color: #fff;
       opacity: .85;
+    }
+
+    /* ✅ Paso 8: campanita */
+    .notif-btn {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 38px;
+      height: 38px;
+      border-radius: 999px;
+    }
+    .notif-badge {
+      position: absolute;
+      top: -4px;
+      right: -4px;
+      min-width: 18px;
+      height: 18px;
+      padding: 0 5px;
+      border-radius: 999px;
+      font-size: 11px;
+      line-height: 18px;
+      text-align: center;
+      background: #dc3545;
+      color: #fff;
+      display: none; /* se muestra si > 0 */
     }
   </style>
 
@@ -48,7 +74,18 @@
     <div class="topbar bg-white border-bottom">
       <div class="container py-3 d-flex justify-content-between align-items-center">
         <div class="fw-bold">{% block top_title %}🧑‍🔧 Trabajador{% endblock %}</div>
-        <a class="btn btn-outline-danger btn-sm" href="/logout/">Salir</a>
+
+        <div class="d-flex align-items-center gap-2">
+          <!-- ✅ Paso 8: Campanita + contador -->
+          <a class="btn btn-outline-secondary btn-sm notif-btn"
+             href="/dashboard/notificaciones/"
+             title="Notificaciones">
+            🔔
+            <span id="notif-badge" class="notif-badge">0</span>
+          </a>
+
+          <a class="btn btn-outline-danger btn-sm" href="/logout/">Salir</a>
+        </div>
       </div>
     </div>
 
@@ -89,6 +126,36 @@
   console.log("[TRABAJADOR] base_trabajador.html cargado ✅");
 
   // ==============================
+  // ✅ Paso 8: contador de notificaciones (no rompe si no existe endpoint)
+  // ==============================
+  const notifBadge = document.getElementById("notif-badge");
+
+  async function refreshNotifBadge() {
+    if (!notifBadge) return;
+    try {
+      const res = await fetch("/dashboard/notificaciones/unread-count/", {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { "Accept": "application/json" },
+      });
+
+      if (!res.ok) return; // si 404/500, no hacemos nada
+
+      const data = await res.json();
+      const n = Number(data.unread || 0);
+
+      if (n > 0) {
+        notifBadge.textContent = String(n > 99 ? "99+" : n);
+        notifBadge.style.display = "inline-block";
+      } else {
+        notifBadge.style.display = "none";
+      }
+    } catch (e) {
+      // silencioso: no rompe la app si aún no existe backend
+    }
+  }
+
+  // ==============================
   // Helpers
   // ==============================
   const btnInstall = document.getElementById("btn-install");
@@ -118,7 +185,7 @@
     if (!btnInstall) return;
     btnInstall.style.display = "inline-block";
     btnInstall.textContent = "📲 Instalar app";
-    btnInstall.onclick = null; // el listener real se queda aparte
+    btnInstall.onclick = null;
   }
 
   function syncInstallButton() {
@@ -139,7 +206,6 @@
       return;
     }
 
-    // Sin evento: mostramos fallback (esto asegura que “algo” se vea)
     console.log("[PWA] Sin beforeinstallprompt -> fallback visible");
     showFallbackInstallHelp();
   }
@@ -155,7 +221,6 @@
 
     window.addEventListener("load", async () => {
       try {
-        // ✅ Limpieza: si quedó un SW viejo con scope /static/dashboard/
         const regs = await navigator.serviceWorker.getRegistrations();
         for (const r of regs) {
           const scope = (r && r.scope) ? r.scope : "";
@@ -188,7 +253,6 @@
   if (btnInstall) {
     btnInstall.addEventListener("click", async () => {
       if (!deferredPrompt) {
-        // si está en fallback, onclick ya está definido
         console.log("[PWA] click sin deferredPrompt (fallback o no elegible)");
         return;
       }
@@ -208,8 +272,11 @@
     syncInstallButton();
   });
 
-  // ✅ Inicial: no esperamos 1.5s, lo sincronizamos ya
+  // ✅ Inicial
   syncInstallButton();
+  refreshNotifBadge();
+  // refresca cada 30s (suave)
+  setInterval(refreshNotifBadge, 30000);
 </script>
 
 {% block extra_js %}{% endblock %}

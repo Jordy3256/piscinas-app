@@ -12,6 +12,13 @@ SECRET_KEY = os.environ.get("SECRET_KEY") or ("dev-" + get_random_secret_key())
 DEBUG = os.environ.get("DEBUG", "True").strip().lower() == "true"
 
 # =========================
+# PUSH / VAPID (✅ NUEVO)
+# =========================
+VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "").strip()
+VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "").strip()
+VAPID_SUBJECT = os.environ.get("VAPID_SUBJECT", "mailto:admin@piscinas-app.local").strip()
+
+# =========================
 # HOST / RENDER FIX (ROBUSTO)
 # =========================
 RENDER_HOST = os.environ.get("RENDER_EXTERNAL_HOSTNAME")
@@ -20,11 +27,7 @@ ALLOWED_HOSTS = [
     "localhost",
     "127.0.0.1",
     "0.0.0.0",
-
-    # tu dominio exacto
     "piscinas-app.onrender.com",
-
-    # ✅ permite cualquier subdominio de Render
     ".onrender.com",
 ]
 
@@ -37,7 +40,6 @@ if ENV_ALLOWED:
 
 ALLOWED_HOSTS = list(dict.fromkeys(ALLOWED_HOSTS))
 
-# Proxy HTTPS Render
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 USE_X_FORWARDED_HOST = True
 
@@ -49,8 +51,6 @@ CSRF_TRUSTED_ORIGINS = [
 ]
 if RENDER_HOST:
     CSRF_TRUSTED_ORIGINS.append(f"https://{RENDER_HOST}")
-
-# (extra) por si Render usa subdominios distintos
 CSRF_TRUSTED_ORIGINS.append("https://*.onrender.com")
 
 # =========================
@@ -102,6 +102,9 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+
+                # ✅ NUEVO: inyecta VAPID_PUBLIC_KEY a templates
+                "dashboard.context_processors.vapid_public_key",
             ],
         },
     },
@@ -194,7 +197,7 @@ if not DEBUG:
     X_FRAME_OPTIONS = "DENY"
 
 # =========================
-# LOGGING (para ver el motivo exacto del 400)
+# LOGGING
 # =========================
 LOGGING = {
     "version": 1,

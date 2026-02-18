@@ -1,6 +1,6 @@
 /* dashboard/static/dashboard/sw-dashboard.js */
 
-const VERSION = "v1.2.3";
+const VERSION = "v1.3.0"; // 👈 sube versión para forzar update
 
 const CACHE = {
   static: `static-${VERSION}`,
@@ -118,6 +118,75 @@ self.addEventListener("activate", (event) => {
     const allow = new Set([CACHE.static, CACHE.pages, CACHE.images]);
     await Promise.all(keys.map((k) => (!allow.has(k) ? caches.delete(k) : null)));
     await self.clients.claim();
+  })());
+});
+
+// ✅ Permite “forzar update” desde el frontend si lo usas
+self.addEventListener("message", (event) => {
+  if (event.data === "SKIP_WAITING") {
+    log("message: SKIP_WAITING");
+    self.skipWaiting();
+  }
+});
+
+
+// ==============================
+// ✅ PUSH (Paso 7)
+// ==============================
+self.addEventListener("push", (event) => {
+  let payload = {};
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch {
+    try {
+      payload = { title: "Piscinas App", body: event.data ? event.data.text() : "" };
+    } catch {
+      payload = { title: "Piscinas App", body: "" };
+    }
+  }
+
+  const title = payload.title || "Piscinas App";
+  const body = payload.body || payload.message || "Tienes una nueva notificación.";
+  const url = payload.url || "/dashboard/home/";
+
+  const options = {
+    body,
+    icon: "/static/dashboard/icons/icon-192.png",
+    badge: "/static/dashboard/icons/icon-192.png",
+    data: { url },
+    renotify: true,
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+// ==============================
+// ✅ Click en notificación (Paso 8 - parte SW)
+// ==============================
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+
+  const targetUrl =
+    (event.notification && event.notification.data && event.notification.data.url) ||
+    "/dashboard/home/";
+
+  event.waitUntil((async () => {
+    const allClients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+
+    for (const client of allClients) {
+      try {
+        const clientUrl = new URL(client.url);
+        if (clientUrl.origin === self.location.origin) {
+          await client.focus();
+          if (clientUrl.pathname !== targetUrl) {
+            client.navigate(targetUrl);
+          }
+          return;
+        }
+      } catch {}
+    }
+
+    return self.clients.openWindow(targetUrl);
   })());
 });
 

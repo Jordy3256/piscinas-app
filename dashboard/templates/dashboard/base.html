@@ -3,3 +3,68 @@
 {% else %}
   {% extends "dashboard/base_trabajador.html" %}
 {% endif %}
+
+{% block extra_js %}
+<script>
+{% if request.user.is_authenticated %}
+const VAPID_PUBLIC_KEY = "{{ VAPID_PUBLIC_KEY|escapejs }}";
+
+// Convierte clave pública a formato requerido
+function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding)
+        .replace(/-/g, '+')
+        .replace(/_/g, '/');
+
+    const rawData = window.atob(base64);
+    return new Uint8Array([...rawData].map(c => c.charCodeAt(0)));
+}
+
+if ('serviceWorker' in navigator && 'PushManager' in window) {
+
+    navigator.serviceWorker.register("/dashboard/sw.js")
+    .then(registration => {
+
+        return registration.pushManager.getSubscription()
+        .then(subscription => {
+
+            if (subscription) {
+                return subscription;
+            }
+
+            return Notification.requestPermission()
+            .then(permission => {
+
+                if (permission !== "granted") {
+                    console.log("Permiso de notificaciones denegado.");
+                    return null;
+                }
+
+                return registration.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+                });
+            });
+        });
+    })
+    .then(subscription => {
+
+        if (!subscription) return;
+
+        return fetch("/dashboard/save-subscription/", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": "{{ csrf_token }}"
+            },
+            body: JSON.stringify(subscription)
+        });
+
+    })
+    .catch(error => {
+        console.error("Error en registro Push:", error);
+    });
+}
+{% endif %}
+</script>
+{% endblock %}
