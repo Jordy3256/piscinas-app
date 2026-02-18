@@ -1,15 +1,21 @@
+{% load static %}
 <!DOCTYPE html>
-<title>JV AQUA</title>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Login</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <title>JV AQUA | Login</title>
+
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 
-  <link rel="manifest" href="/static/dashboard/manifest.json">
-<meta name="theme-color" content="#0d6efd">
-
+  <!-- ✅ PWA -->
+  <link rel="manifest" href="/dashboard/manifest.json">
+  <meta name="theme-color" content="#0d6efd">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
 </head>
+
 <body class="bg-light">
 
 <div class="container mt-5">
@@ -19,11 +25,12 @@
         <div class="card-body">
           <h4 class="mb-3 text-center">🔐 Iniciar sesión</h4>
 
-          {% if error %}
-            <div class="alert alert-danger">{{ error }}</div>
+          {% if messages %}
+            {% for m in messages %}
+              <div class="alert alert-{{ m.tags }}">{{ m }}</div>
+            {% endfor %}
           {% endif %}
 
-          <!-- IMPORTANTE: action apunta a /login/ y csrf_token dentro -->
           <form method="post" action="/login/">
             {% csrf_token %}
             <input class="form-control mb-2" name="username" placeholder="Usuario" autocomplete="username" required>
@@ -36,10 +43,45 @@
     </div>
   </div>
 </div>
+
 <script>
-  if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("/static/dashboard/sw.js");
-  }
+  // ==========================================================
+  // ✅ IMPORTANTE:
+  // En Login NO registramos SW.
+  // Solo limpiamos SW viejos (/static/...) + caches viejas.
+  // El SW correcto se registra en /dashboard/* desde base_app.html
+  // ==========================================================
+  (function () {
+    if (!("serviceWorker" in navigator)) return;
+
+    window.addEventListener("load", async () => {
+      try {
+        // 1) Unregister cualquier SW viejo que tenga scope /static/
+        const regs = await navigator.serviceWorker.getRegistrations();
+        for (const r of regs) {
+          const scope = (r && r.scope) ? r.scope : "";
+          if (scope.includes("/static/")) {
+            console.log("[SW] 🧹 Unregister viejo:", scope);
+            await r.unregister();
+          }
+        }
+
+        // 2) Limpia caches (por si quedaron assets cacheados por el SW fantasma)
+        if ("caches" in window) {
+          const keys = await caches.keys();
+          for (const k of keys) {
+            if (k.includes("static-") || k.includes("pages-") || k.includes("images-")) {
+              console.log("[CACHE] 🧹 delete:", k);
+              await caches.delete(k);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn("[SW/CACHE] cleanup error:", e);
+      }
+    });
+  })();
 </script>
+
 </body>
 </html>

@@ -12,17 +12,20 @@
     .app-shell { max-width: 900px; margin: 0 auto; }
     .topbar { position: sticky; top: 0; z-index: 1030; backdrop-filter: blur(8px); }
     .bottom-nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 1030; }
-    .spacer-bottom { height: 76px; }
+    .spacer-bottom { height: 88px; }
+
+    /* por defecto oculto; JS decide */
+    .btn-install { display: none; }
+
+    /* evita que el layout “salte” raro */
+    .bottom-nav .btn { white-space: nowrap; }
   </style>
 
   <!-- PWA -->
-  <link rel="manifest" href="/static/dashboard/manifest.json">
+  <link rel="manifest" href="/dashboard/manifest.json">
   <meta name="theme-color" content="#0d6efd">
-
-  <!-- iOS (mejora instalación) -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="PiscinasApp">
 
   {% block extra_head %}{% endblock %}
 </head>
@@ -37,23 +40,12 @@
           <div class="fw-bold">
             {% block top_title %}🧑‍💼 Admin{% endblock %}
           </div>
-
-          <div class="d-flex gap-2 align-items-center">
-            <!-- ✅ Paso 4: botón instalar (solo aparece cuando aplica) -->
-            <button id="pwa-install-btn" class="btn btn-primary btn-sm d-none" type="button">
-              ⬇️ Instalar
-            </button>
-
+          <div class="d-flex gap-2">
             {% block top_actions %}
-              <a class="btn btn-outline-secondary btn-sm" href="/dashboard/">Dashboard</a>
+              <a class="btn btn-outline-secondary btn-sm" href="/dashboard/">Inicio</a>
               <a class="btn btn-outline-danger btn-sm" href="/logout/">Salir</a>
             {% endblock %}
           </div>
-        </div>
-
-        <!-- ✅ Ayuda iOS (solo se muestra en iPhone/iPad cuando no hay prompt) -->
-        <div id="ios-install-hint" class="alert alert-info mt-3 d-none mb-0">
-          En iPhone/iPad: toca <strong>Compartir</strong> → <strong>Agregar a pantalla de inicio</strong>.
         </div>
       </div>
     </div>
@@ -75,11 +67,15 @@
     <!-- Bottom nav -->
     <div class="bottom-nav bg-white border-top">
       <div class="container py-2">
-        <div class="d-flex justify-content-around">
-          <a class="btn btn-light w-100 me-2" href="/dashboard/">📊 Dashboard</a>
-          <a class="btn btn-outline-secondary w-100 me-2" href="/dashboard/operativo/">🧑‍💼 Operativo</a>
-          <a class="btn btn-outline-secondary w-100 me-2" href="/dashboard/finanzas/flujo/">💰 Flujo</a>
-          <a class="btn btn-outline-secondary w-100" href="/admin/" target="_blank">⚙️ Admin</a>
+        <div class="d-flex justify-content-around gap-2 flex-wrap">
+          <a class="btn btn-light flex-fill" href="/dashboard/">🏠 Inicio</a>
+          <a class="btn btn-outline-secondary flex-fill" href="/dashboard/operativo/">🧑‍💼 Operativo</a>
+          <a class="btn btn-outline-secondary flex-fill" href="/dashboard/finanzas/flujo/">💰 Finanzas</a>
+          <a class="btn btn-outline-secondary flex-fill" href="/admin/" target="_blank">⚙️ Admin</a>
+
+          <button id="btn-install" class="btn btn-primary flex-fill btn-install" type="button">
+            📲 Instalar app
+          </button>
         </div>
       </div>
     </div>
@@ -87,46 +83,117 @@
   </div>
 
   <script>
-    // Service Worker
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/static/dashboard/sw.js");
-    }
+    // ==========================
+    // SW register (scope correcto)
+    // ==========================
+    (function () {
+      if (!("serviceWorker" in navigator)) {
+        console.log("[SW] ❌ No soportado");
+        return;
+      }
 
-    // ✅ Paso 4: Instalación PWA (Chrome/Edge/Android/Desktop)
-    let deferredPrompt = null;
-    const installBtn = document.getElementById("pwa-install-btn");
-    const iosHint = document.getElementById("ios-install-hint");
+      window.addEventListener("load", async () => {
+        try {
+          console.log("[SW] registrando /dashboard/sw.js ...");
+          const reg = await navigator.serviceWorker.register("/dashboard/sw.js", { scope: "/dashboard/" });
+          console.log("[SW] ✅ scope:", reg.scope);
+        } catch (e) {
+          console.error("[SW] ❌ error:", e);
+        }
+      });
+    })();
 
-    function isIos() {
-      return /iphone|ipad|ipod/i.test(window.navigator.userAgent);
-    }
-    function isInStandalone() {
-      return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
-    }
+    // ==========================
+    // PWA Install (robusto)
+    // ==========================
+    (function () {
+      let deferredPrompt = null;
+      const btn = document.getElementById("btn-install");
 
-    window.addEventListener("beforeinstallprompt", (e) => {
-      e.preventDefault();
-      deferredPrompt = e;
-      if (!isInStandalone()) installBtn.classList.remove("d-none");
-    });
+      function isStandalone() {
+        return window.matchMedia("(display-mode: standalone)").matches
+          || window.matchMedia("(display-mode: fullscreen)").matches
+          || window.navigator.standalone === true;
+      }
 
-    installBtn?.addEventListener("click", async () => {
-      if (!deferredPrompt) return;
-      installBtn.classList.add("d-none");
-      deferredPrompt.prompt();
-      try { await deferredPrompt.userChoice; } catch (err) {}
-      deferredPrompt = null;
-    });
+      function showBtn(text) {
+        if (!btn) return;
+        btn.style.display = "inline-block";
+        btn.textContent = text;
+      }
 
-    window.addEventListener("appinstalled", () => {
-      deferredPrompt = null;
-      installBtn?.classList.add("d-none");
-    });
+      function hideBtn() {
+        if (!btn) return;
+        btn.style.display = "none";
+      }
 
-    // iOS: no hay beforeinstallprompt. Mostrar hint si NO está instalada.
-    if (isIos() && !isInStandalone()) {
-      iosHint?.classList.remove("d-none");
-    }
+      function sync() {
+        if (!btn) return;
+
+        if (isStandalone()) {
+          console.log("[PWA] ✅ ya instalada -> oculto");
+          hideBtn();
+          return;
+        }
+
+        // si existe evento real
+        if (deferredPrompt) {
+          console.log("[PWA] ✅ listo para instalar (beforeinstallprompt)");
+          showBtn("📲 Instalar app");
+          return;
+        }
+
+        // si no hay evento, lo ocultamos y luego mostramos ayuda (fallback)
+        hideBtn();
+      }
+
+      window.addEventListener("beforeinstallprompt", (e) => {
+        console.log("[PWA] beforeinstallprompt ✅");
+        e.preventDefault();
+        deferredPrompt = e;
+        sync();
+      });
+
+      window.addEventListener("appinstalled", () => {
+        console.log("[PWA] 🎉 appinstalled");
+        deferredPrompt = null;
+        sync();
+      });
+
+      if (btn) {
+        btn.addEventListener("click", async () => {
+          if (isStandalone()) return;
+
+          // si no existe prompt real, mostramos ayuda
+          if (!deferredPrompt) {
+            alert("En Chrome/Edge: menú ⋮ → 'Instalar app' o 'Agregar a pantalla de inicio'.\n\nSi ya está instalada, este botón no aparece.");
+            return;
+          }
+
+          deferredPrompt.prompt();
+          const choice = await deferredPrompt.userChoice;
+          console.log("[PWA] elección:", choice?.outcome);
+
+          deferredPrompt = null;
+          sync();
+        });
+      }
+
+      // inicial
+      sync();
+
+      // fallback si nunca llega beforeinstallprompt
+      window.addEventListener("load", () => {
+        setTimeout(() => {
+          if (!isStandalone() && !deferredPrompt) {
+            console.log("[PWA] ℹ️ no llegó beforeinstallprompt -> fallback");
+            showBtn("📌 Instalar (menú ⋮)");
+          }
+        }, 1500);
+      });
+
+      window.matchMedia("(display-mode: standalone)").addEventListener("change", sync);
+    })();
   </script>
 
   {% block extra_js %}{% endblock %}

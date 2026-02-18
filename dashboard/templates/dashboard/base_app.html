@@ -1,3 +1,4 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -7,14 +8,20 @@
 
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 
-  <link rel="manifest" href="/static/dashboard/manifest.json">
+  <!-- ✅ PWA (SIEMPRE desde /dashboard/) -->
+  <link rel="manifest" href="/dashboard/manifest.json">
   <meta name="theme-color" content="#0d6efd">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
 
   <style>
     .app-shell { max-width: 900px; margin: 0 auto; }
     .topbar { position: sticky; top: 0; z-index: 1030; backdrop-filter: blur(8px); }
     .bottom-nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 1030; }
-    .spacer-bottom { height: 76px; }
+    .spacer-bottom { height: 88px; }
+
+    /* ✅ El botón existe SIEMPRE, JS decide si se muestra */
+    #btn-install { display: none; }
   </style>
 
   {% block extra_head %}{% endblock %}
@@ -54,19 +61,24 @@
     <!-- ✅ Menú fijo abajo (según rol) -->
     <div class="bottom-nav bg-white border-top">
       <div class="container py-2">
-        <div class="d-flex justify-content-around gap-2">
+        <div class="d-flex justify-content-around gap-2 flex-wrap">
 
           <!-- Siempre -->
-          <a class="btn btn-light w-100" href="/dashboard/">🏠 Inicio</a>
+          <a class="btn btn-light flex-fill" href="/dashboard/">🏠 Inicio</a>
 
           {% if es_admin %}
-            <a class="btn btn-outline-secondary w-100" href="/dashboard/operativo/">🧑‍💼 Operativo</a>
-            <a class="btn btn-outline-secondary w-100" href="/dashboard/finanzas/flujo/">💰 Finanzas</a>
+            <a class="btn btn-outline-secondary flex-fill" href="/dashboard/operativo/">🧑‍💼 Operativo</a>
+            <a class="btn btn-outline-secondary flex-fill" href="/dashboard/finanzas/flujo/">💰 Finanzas</a>
           {% else %}
-            <a class="btn btn-outline-secondary w-100" href="/dashboard/">📋 Mis mantenimientos</a>
+            <a class="btn btn-outline-secondary flex-fill" href="/dashboard/">📋 Mis mantenimientos</a>
           {% endif %}
 
-          <a class="btn btn-outline-danger w-100" href="/logout/">🚪 Salir</a>
+          <a class="btn btn-outline-danger flex-fill" href="/logout/">🚪 Salir</a>
+
+          <!-- ✅ Botón instalar (para cualquier rol) -->
+          <button id="btn-install" class="btn btn-primary flex-fill" type="button">
+            📲 Instalar app
+          </button>
 
         </div>
       </div>
@@ -75,9 +87,153 @@
   </div>
 
   <script>
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/static/dashboard/sw.js");
+    // ==========================================================
+    // ✅ SW: registrar SOLO /dashboard/sw.js + limpiar /static/dashboard/
+    // ✅ AUTO-UPDATE: SKIP_WAITING + reload (SIN loop)
+    // ==========================================================
+    (function () {
+      if (!("serviceWorker" in navigator)) return;
+
+      window.addEventListener("load", async () => {
+        try {
+          // 🧹 Limpia SW viejo (scope /static/dashboard/)
+          const regs = await navigator.serviceWorker.getRegistrations();
+          for (const r of regs) {
+            const scope = r?.scope || "";
+            if (scope.includes("/static/dashboard/")) {
+              console.log("[SW] 🧹 Unregister viejo:", scope);
+              await r.unregister();
+            }
+          }
+
+          // ✅ Registro correcto
+          console.log("[SW] 🔄 registrando /dashboard/sw.js ...");
+          const reg = await navigator.serviceWorker.register("/dashboard/sw.js", { scope: "/dashboard/" });
+
+          // ✅ Si aparece una actualización, activar automáticamente
+          reg.addEventListener("updatefound", () => {
+            const nw = reg.installing;
+            if (!nw) return;
+
+            console.log("[SW] 🔄 updatefound");
+
+            nw.addEventListener("statechange", () => {
+              console.log("[SW] newWorker:", nw.state);
+
+              // Si ya existe controller, es update (no primera instalación)
+              if (nw.state === "installed" && navigator.serviceWorker.controller) {
+                console.log("[SW] ✅ Update listo -> SKIP_WAITING");
+                nw.postMessage("SKIP_WAITING");
+              }
+            });
+          });
+
+          // ✅ Evita loop infinito de reload
+          let reloaded = false;
+          navigator.serviceWorker.addEventListener("controllerchange", () => {
+            if (reloaded) return;
+            reloaded = true;
+            console.log("[SW] 🎯 controllerchange -> reload");
+            window.location.reload();
+          });
+
+        } catch (err) {
+          console.error("[SW] ❌ ERROR registrando:", err);
+        }
+      });
+    })();
+
+    // ==========================================================
+    // ✅ PWA Install (evento real + fallback)
+    // ==========================================================
+    let deferredPrompt = null;
+    const btnInstall = document.getElementById("btn-install");
+
+    function isStandalone() {
+      return window.matchMedia("(display-mode: standalone)").matches
+        || window.matchMedia("(display-mode: fullscreen)").matches
+        || window.navigator.standalone === true; // iOS
     }
+
+    function setBtnHidden() {
+      if (!btnInstall) return;
+      btnInstall.style.display = "none";
+      btnInstall.onclick = null;
+    }
+
+    function setBtnReal() {
+      if (!btnInstall) return;
+      btnInstall.style.display = "inline-block";
+      btnInstall.textContent = "📲 Instalar app";
+      btnInstall.onclick = null; // click real está en addEventListener
+    }
+
+    function setBtnFallback() {
+      if (!btnInstall) return;
+      btnInstall.style.display = "inline-block";
+      btnInstall.textContent = "📌 Instalar (menú ⋮ del navegador)";
+      btnInstall.onclick = () => {
+        alert("En Chrome/Edge: menú ⋮ → 'Instalar app' o 'Agregar a pantalla de inicio'.\n\nSi ya está instalada, este botón no aparece.");
+      };
+    }
+
+    function syncInstallButton() {
+      if (!btnInstall) return;
+
+      // Si ya está instalada, no mostramos nada
+      if (isStandalone()) {
+        setBtnHidden();
+        return;
+      }
+
+      // Si el navegador da el evento (instalable), mostramos el botón real
+      if (deferredPrompt) {
+        setBtnReal();
+        return;
+      }
+
+      // Si no hay evento, por defecto oculto (luego fallback)
+      setBtnHidden();
+    }
+
+    window.addEventListener("beforeinstallprompt", (e) => {
+      console.log("[PWA] 📲 beforeinstallprompt detectado");
+      e.preventDefault();
+      deferredPrompt = e;
+      syncInstallButton();
+    });
+
+    if (btnInstall) {
+      btnInstall.addEventListener("click", async () => {
+        if (!deferredPrompt) return; // si está en fallback, onclick ya maneja el alert
+
+        deferredPrompt.prompt();
+        const choice = await deferredPrompt.userChoice;
+        console.log("[PWA] elección usuario:", choice?.outcome);
+
+        deferredPrompt = null;
+        syncInstallButton();
+      });
+    }
+
+    window.addEventListener("appinstalled", () => {
+      console.log("[PWA] 🎉 appinstalled");
+      deferredPrompt = null;
+      syncInstallButton();
+    });
+
+    // Inicial
+    syncInstallButton();
+
+    // Fallback: SOLO si no llegó beforeinstallprompt y NO está instalada
+    window.addEventListener("load", () => {
+      setTimeout(() => {
+        if (!isStandalone() && !deferredPrompt) {
+          console.log("[PWA] ℹ️ no llegó beforeinstallprompt -> fallback help");
+          setBtnFallback();
+        }
+      }, 1500);
+    });
   </script>
 
   {% block extra_js %}{% endblock %}

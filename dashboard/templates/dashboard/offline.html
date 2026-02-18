@@ -11,10 +11,77 @@
 <div class="card shadow-sm">
   <div class="card-body">
     <h5 class="mb-2">Estás sin internet</h5>
+
     <p class="text-muted mb-3">
-      La app no pudo cargar esta página. Cuando vuelvas a tener conexión, recarga.
+      La app no pudo cargar esta página. Cuando vuelvas a tener conexión, presiona <b>Reintentar</b>.
     </p>
-    <a class="btn btn-primary" href="/dashboard/">Ir al inicio</a>
+
+    <div class="d-flex align-items-center gap-2 mb-3">
+      <span id="net-badge" class="badge bg-secondary">Comprobando...</span>
+      <small class="text-muted">Estado de red</small>
+    </div>
+
+    <div class="d-flex flex-wrap gap-2">
+      <button id="btn-retry" class="btn btn-primary" type="button">
+        🔄 Reintentar
+      </button>
+      <a class="btn btn-outline-secondary" href="/dashboard/">
+        🏠 Ir al inicio
+      </a>
+    </div>
+
+    <hr class="my-3">
+
+    <details class="text-muted">
+      <summary>¿Qué puedo hacer mientras estoy offline?</summary>
+      <ul class="mt-2 mb-0">
+        <li>Revisa si tu Wi-Fi o datos móviles están activos.</li>
+        <li>Si ya volvió el internet, presiona <b>Reintentar</b>.</li>
+        <li>Si el problema persiste, cierra y abre la app.</li>
+      </ul>
+    </details>
   </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  (function () {
+    const badge = document.getElementById("net-badge");
+    const btnRetry = document.getElementById("btn-retry");
+
+    function setStatus() {
+      const online = navigator.onLine;
+
+      if (badge) {
+        badge.textContent = online ? "Online" : "Offline";
+        badge.className = "badge " + (online ? "bg-success" : "bg-danger");
+      }
+
+      if (btnRetry) {
+        btnRetry.disabled = !online;
+        btnRetry.title = online ? "" : "Sin conexión: espera a tener internet";
+      }
+    }
+
+    // Reintentar
+    if (btnRetry) {
+      btnRetry.addEventListener("click", () => {
+        // fuerza recarga (útil si el SW ya cacheó algo al volver el internet)
+        window.location.reload();
+      });
+    }
+
+    // Estado inicial
+    setStatus();
+
+    // Cambios de red
+    window.addEventListener("online", () => {
+      setStatus();
+      // Opcional: auto-recargar cuando vuelva internet:
+      // window.location.reload();
+    });
+    window.addEventListener("offline", setStatus);
+  })();
+</script>
 {% endblock %}

@@ -1,0 +1,5 @@
+{% if request.user.is_staff or request.user.is_superuser %}
+  {% extends "dashboard/base_admin.html" %}
+{% else %}
+  {% extends "dashboard/base_trabajador.html" %}
+{% endif %}
