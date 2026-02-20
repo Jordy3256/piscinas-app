@@ -5,8 +5,9 @@ from .views import (
     sw_js_view,
     manifest_json_view,
 
-    # ✅ Push (Paso 4)
+    # ✅ Push
     save_subscription_view,
+    push_status_view,  # ✅ (NUEVO) opcional para verificar
 
     # Core
     home_view,
@@ -39,9 +40,10 @@ urlpatterns = [
     path("offline/", offline_view, name="offline"),
 
     # -----------------------------
-    # ✅ Push (Paso 4)
+    # ✅ Push
     # -----------------------------
     path("save-subscription/", save_subscription_view, name="save_subscription"),
+    path("push/status/", push_status_view, name="push_status"),  # ✅ (NUEVO) opcional
 
     # -----------------------------
     # Home/Dashboard
