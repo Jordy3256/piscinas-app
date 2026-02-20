@@ -13,6 +13,7 @@ from django.http import HttpResponse, JsonResponse
 from django.contrib.staticfiles import finders
 from django.templatetags.static import static
 from django.views.decorators.http import require_POST
+from django.views.decorators.csrf import csrf_exempt  # ✅ NUEVO
 
 from contratos.models import Contrato
 from trabajadores.models import Trabajador
@@ -53,24 +54,33 @@ def es_trabajador(user):
 # -------------------
 @login_required
 @require_POST
+@csrf_exempt  # ✅ IMPORTANTE: evita 403 CSRF en fetch() desde JS
 def save_subscription_view(request):
     """
-    Espera JSON:
+    Espera JSON (PushSubscription.toJSON()):
     {
       "endpoint": "...",
       "keys": { "p256dh": "...", "auth": "..." }
     }
     """
     try:
+        if not request.body:
+            return JsonResponse({"ok": False, "error": "Body vacío."}, status=400)
+
         payload = json.loads(request.body.decode("utf-8"))
+
         endpoint = (payload.get("endpoint") or "").strip()
         keys = payload.get("keys") or {}
         p256dh = (keys.get("p256dh") or "").strip()
         auth = (keys.get("auth") or "").strip()
 
         if not endpoint or not p256dh or not auth:
-            return JsonResponse({"ok": False, "error": "Suscripción incompleta."}, status=400)
+            return JsonResponse(
+                {"ok": False, "error": "Suscripción incompleta (endpoint/keys)."},
+                status=400,
+            )
 
+        # ✅ Un dispositivo = un endpoint. Guardamos/actualizamos para el usuario actual.
         sub, created = PushSubscription.objects.update_or_create(
             user=request.user,
             endpoint=endpoint,
@@ -715,4 +725,6 @@ def ingreso_eliminar_view(request, pk):
 
 @login_required
 def offline_view(request):
-    return render(request, "dashboard/offline.html")
+    # 👇 elige el template sin usar extends condicional
+    tpl = "dashboard/offline_admin.html" if es_admin(request.user) else "dashboard/offline_trabajador.html"
+    return render(request, tpl, {"es_admin": es_admin(request.user)})
