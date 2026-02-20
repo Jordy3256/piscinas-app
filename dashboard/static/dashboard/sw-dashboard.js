@@ -1,6 +1,6 @@
 /* dashboard/static/dashboard/sw-dashboard.js */
 
-const VERSION = "v1.3.0"; // 👈 sube versión para forzar update
+const VERSION = "v1.3.1"; // 👈 sube versión para forzar update
 
 const CACHE = {
   static: `static-${VERSION}`,
@@ -8,9 +8,9 @@ const CACHE = {
   images: `images-${VERSION}`,
 };
 
+// ✅ OJO: /dashboard/ y /dashboard/home/ suelen devolver 302 a /login/ si no hay sesión.
+// Eso rompe cache.addAll. Por eso NO los precacheamos aquí.
 const PRECACHE_URLS = [
-  "/dashboard/",
-  "/dashboard/home/",
   "/dashboard/offline/",
   "/dashboard/manifest.json",
 
@@ -57,7 +57,12 @@ function normalizeNavigate(req) {
   if (url.pathname.startsWith("/dashboard/")) {
     url.search = "";
     url.hash = "";
-    return new Request(url.toString(), { method: "GET", credentials: "same-origin", redirect: "follow" });
+    return new Request(url.toString(), {
+      method: "GET",
+      credentials: "include",
+      redirect: "follow",
+      cache: "no-store",
+    });
   }
   return req;
 }
@@ -95,6 +100,7 @@ async function networkFirst(request, cacheName) {
     if (isHtml(request)) {
       const off = await cache.match("/dashboard/offline/");
       if (off) return off;
+
       const home = await cache.match("/dashboard/home/");
       if (home) return home;
     }
@@ -102,12 +108,39 @@ async function networkFirst(request, cacheName) {
   }
 }
 
+// ✅ Precaching robusto: NO revienta si un recurso falla/redirect/403/404
+async function robustPrecache() {
+  const cache = await caches.open(CACHE.static);
+
+  for (const url of PRECACHE_URLS) {
+    try {
+      const req = new Request(url, {
+        method: "GET",
+        credentials: "include",
+        redirect: "follow",
+        cache: "reload",
+      });
+
+      const res = await fetch(req);
+
+      if (res && res.status === 200) {
+        await cache.put(req, res.clone());
+        log("PRECACHE OK:", url);
+      } else {
+        warn("PRECACHE SKIP:", url, "status:", res?.status);
+      }
+    } catch (e) {
+      warn("PRECACHE FAIL:", url, e);
+    }
+  }
+}
+
 self.addEventListener("install", (event) => {
   log("INSTALL", VERSION, "scope:", self.registration.scope);
   event.waitUntil((async () => {
-    const cache = await caches.open(CACHE.static);
-    await cache.addAll(PRECACHE_URLS.map((u) => new Request(u, { cache: "reload" })));
+    await robustPrecache();
     await self.skipWaiting();
+    log("skipWaiting OK");
   })());
 });
 
@@ -118,6 +151,7 @@ self.addEventListener("activate", (event) => {
     const allow = new Set([CACHE.static, CACHE.pages, CACHE.images]);
     await Promise.all(keys.map((k) => (!allow.has(k) ? caches.delete(k) : null)));
     await self.clients.claim();
+    log("clients.claim OK");
   })());
 });
 
@@ -128,7 +162,6 @@ self.addEventListener("message", (event) => {
     self.skipWaiting();
   }
 });
-
 
 // ==============================
 // ✅ PUSH (Paso 7)
