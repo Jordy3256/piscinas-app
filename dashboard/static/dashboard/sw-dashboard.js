@@ -8,9 +8,9 @@ const CACHE = {
   images: `images-${VERSION}`,
 };
 
-// ✅ OJO: /dashboard/ y /dashboard/home/ suelen devolver 302 a /login/ si no hay sesión.
-// Eso rompe cache.addAll. Por eso NO los precacheamos aquí.
 const PRECACHE_URLS = [
+  "/dashboard/",
+  "/dashboard/home/",
   "/dashboard/offline/",
   "/dashboard/manifest.json",
 
@@ -57,12 +57,7 @@ function normalizeNavigate(req) {
   if (url.pathname.startsWith("/dashboard/")) {
     url.search = "";
     url.hash = "";
-    return new Request(url.toString(), {
-      method: "GET",
-      credentials: "include",
-      redirect: "follow",
-      cache: "no-store",
-    });
+    return new Request(url.toString(), { method: "GET", credentials: "same-origin", redirect: "follow" });
   }
   return req;
 }
@@ -100,7 +95,6 @@ async function networkFirst(request, cacheName) {
     if (isHtml(request)) {
       const off = await cache.match("/dashboard/offline/");
       if (off) return off;
-
       const home = await cache.match("/dashboard/home/");
       if (home) return home;
     }
@@ -108,50 +102,55 @@ async function networkFirst(request, cacheName) {
   }
 }
 
-// ✅ Precaching robusto: NO revienta si un recurso falla/redirect/403/404
-async function robustPrecache() {
-  const cache = await caches.open(CACHE.static);
-
-  for (const url of PRECACHE_URLS) {
-    try {
-      const req = new Request(url, {
-        method: "GET",
-        credentials: "include",
-        redirect: "follow",
-        cache: "reload",
-      });
-
+// ✅ Precaching robusto (SIN addAll)
+async function precacheAll(cache, urls) {
+  const results = await Promise.allSettled(
+    urls.map(async (u) => {
+      const req = new Request(u, { cache: "reload" });
       const res = await fetch(req);
+      if (!res.ok) throw new Error(`${u} -> ${res.status}`);
+      await cache.put(req, res);
+      return u;
+    })
+  );
 
-      if (res && res.status === 200) {
-        await cache.put(req, res.clone());
-        log("PRECACHE OK:", url);
-      } else {
-        warn("PRECACHE SKIP:", url, "status:", res?.status);
-      }
-    } catch (e) {
-      warn("PRECACHE FAIL:", url, e);
-    }
-  }
+  const failed = results
+    .filter(r => r.status === "rejected")
+    .map(r => String(r.reason || "unknown"));
+
+  if (failed.length) warn("PRECACHE failed items:", failed);
 }
 
 self.addEventListener("install", (event) => {
   log("INSTALL", VERSION, "scope:", self.registration.scope);
+
   event.waitUntil((async () => {
-    await robustPrecache();
-    await self.skipWaiting();
-    log("skipWaiting OK");
+    try {
+      const cache = await caches.open(CACHE.static);
+      await precacheAll(cache, PRECACHE_URLS);
+      await self.skipWaiting();
+      log("PRECACHE OK -> skipWaiting");
+    } catch (e) {
+      warn("INSTALL ERROR:", e);
+      // Igual intentamos activar para que no muera en redundant
+      await self.skipWaiting();
+    }
   })());
 });
 
 self.addEventListener("activate", (event) => {
   log("ACTIVATE", VERSION, "scope:", self.registration.scope);
+
   event.waitUntil((async () => {
-    const keys = await caches.keys();
-    const allow = new Set([CACHE.static, CACHE.pages, CACHE.images]);
-    await Promise.all(keys.map((k) => (!allow.has(k) ? caches.delete(k) : null)));
-    await self.clients.claim();
-    log("clients.claim OK");
+    try {
+      const keys = await caches.keys();
+      const allow = new Set([CACHE.static, CACHE.pages, CACHE.images]);
+      await Promise.all(keys.map((k) => (!allow.has(k) ? caches.delete(k) : null)));
+      await self.clients.claim();
+      log("clients.claim OK");
+    } catch (e) {
+      warn("ACTIVATE ERROR:", e);
+    }
   })());
 });
 
@@ -164,7 +163,7 @@ self.addEventListener("message", (event) => {
 });
 
 // ==============================
-// ✅ PUSH (Paso 7)
+// ✅ PUSH
 // ==============================
 self.addEventListener("push", (event) => {
   let payload = {};
@@ -193,9 +192,6 @@ self.addEventListener("push", (event) => {
   event.waitUntil(self.registration.showNotification(title, options));
 });
 
-// ==============================
-// ✅ Click en notificación (Paso 8 - parte SW)
-// ==============================
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
@@ -211,9 +207,7 @@ self.addEventListener("notificationclick", (event) => {
         const clientUrl = new URL(client.url);
         if (clientUrl.origin === self.location.origin) {
           await client.focus();
-          if (clientUrl.pathname !== targetUrl) {
-            client.navigate(targetUrl);
-          }
+          if (clientUrl.pathname !== targetUrl) client.navigate(targetUrl);
           return;
         }
       } catch {}
