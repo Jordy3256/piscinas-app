@@ -11,6 +11,7 @@
   <!-- PWA -->
   <link rel="manifest" href="/dashboard/manifest.json">
   <meta name="theme-color" content="#0d6efd">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
 
@@ -19,11 +20,8 @@
     .topbar { position: sticky; top: 0; z-index: 1030; backdrop-filter: blur(8px); }
     .bottom-nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 1030; }
     .spacer-bottom { height: 90px; }
-
-    /* El botón existe siempre. JS decide si se muestra */
     #btn-install { display: none; }
 
-    /* ✅ Debug visible */
     #template-debug-badge{
       position: fixed;
       right: 10px;
@@ -37,7 +35,6 @@
       opacity: .85;
     }
 
-    /* ✅ Paso 8: campanita */
     .notif-btn {
       position: relative;
       display: inline-flex;
@@ -60,7 +57,7 @@
       text-align: center;
       background: #dc3545;
       color: #fff;
-      display: none; /* se muestra si > 0 */
+      display: none;
     }
   </style>
 
@@ -76,7 +73,6 @@
         <div class="fw-bold">{% block top_title %}🧑‍🔧 Trabajador{% endblock %}</div>
 
         <div class="d-flex align-items-center gap-2">
-          <!-- ✅ Paso 8: Campanita + contador -->
           <a class="btn btn-outline-secondary btn-sm notif-btn"
              href="/dashboard/notificaciones/"
              title="Notificaciones">
@@ -109,9 +105,13 @@
           <a class="btn btn-outline-secondary flex-fill" href="/dashboard/">📋 Mis mantenimientos</a>
           <a class="btn btn-outline-danger flex-fill" href="/logout/">🚪 Salir</a>
 
-          <!-- ✅ Botón instalar -->
           <button id="btn-install" class="btn btn-primary flex-fill" type="button">
             📲 Instalar app
+          </button>
+
+          <!-- ✅ activar push manual -->
+          <button id="btn-enable-push" class="btn btn-outline-primary flex-fill" type="button">
+            🔔 Activar notificaciones
           </button>
         </div>
       </div>
@@ -119,17 +119,15 @@
 
   </div>
 
-  <!-- ✅ Debug visible -->
   <div id="template-debug-badge">BASE_TRABAJADOR ✅</div>
 
 <script>
   console.log("[TRABAJADOR] base_trabajador.html cargado ✅");
 
-  // ==============================
-  // ✅ Paso 8: contador de notificaciones (no rompe si no existe endpoint)
-  // ==============================
+  // ==========================================================
+  // Badge notificaciones
+  // ==========================================================
   const notifBadge = document.getElementById("notif-badge");
-
   async function refreshNotifBadge() {
     if (!notifBadge) return;
     try {
@@ -138,9 +136,7 @@
         credentials: "same-origin",
         headers: { "Accept": "application/json" },
       });
-
-      if (!res.ok) return; // si 404/500, no hacemos nada
-
+      if (!res.ok) return;
       const data = await res.json();
       const n = Number(data.unread || 0);
 
@@ -150,101 +146,156 @@
       } else {
         notifBadge.style.display = "none";
       }
-    } catch (e) {
-      // silencioso: no rompe la app si aún no existe backend
-    }
+    } catch (e) {}
   }
 
-  // ==============================
-  // Helpers
-  // ==============================
+  // ==========================================================
+  // ✅ enablePush SIEMPRE definido
+  // ==========================================================
+  (function () {
+    window.enablePush = async function () {
+      try {
+        if (!("serviceWorker" in navigator)) return console.warn("[SW] no soportado");
+        if (!("PushManager" in window) || !("Notification" in window)) return console.warn("[PUSH] no soportado");
+
+        const reg = await navigator.serviceWorker.ready;
+
+        if (Notification.permission === "denied") {
+          console.warn("[PUSH] permiso denegado");
+          return;
+        }
+
+        if (Notification.permission === "default") {
+          const perm = await Notification.requestPermission();
+          console.log("[PUSH] permission:", perm);
+          if (perm !== "granted") return;
+        }
+
+        const r = await fetch("/dashboard/push/public-key/", { credentials: "same-origin" });
+        if (!r.ok) throw new Error("public-key status " + r.status);
+        const data = await r.json();
+        const publicKey = (data.publicKey || "").replace(/\s+/g, "").trim();
+
+        function urlBase64ToUint8Array(base64String) {
+          base64String = (base64String || "").replace(/\s+/g, "").trim();
+          const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+          const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+          const raw = atob(base64);
+          const out = new Uint8Array(raw.length);
+          for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+          return out;
+        }
+
+        let sub = await reg.pushManager.getSubscription();
+        console.log("[PUSH] current:", sub ? sub.toJSON() : null);
+
+        if (!sub) {
+          sub = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(publicKey),
+          });
+          console.log("[PUSH] new:", sub.toJSON());
+        }
+
+        function getCookie(name) {
+          const value = ; ${document.cookie};
+          const parts = value.split(; ${name}=);
+          if (parts.length === 2) return parts.pop().split(";").shift();
+          return "";
+        }
+
+        const csrftoken = getCookie("csrftoken");
+        const save = await fetch("/dashboard/save-subscription/", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "X-CSRFToken": csrftoken,
+          },
+          body: JSON.stringify(sub.toJSON()),
+        });
+
+        const out = await save.json().catch(() => ({}));
+        console.log("[PUSH] save:", save.status, out);
+
+      } catch (e) {
+        console.error("[enablePush] error:", e);
+      }
+    };
+
+    window.addEventListener("load", () => {
+      const btn = document.getElementById("btn-enable-push");
+      if (btn) btn.addEventListener("click", () => window.enablePush());
+    });
+  })();
+
+  // ==========================================================
+  // ✅ SW register + limpieza SW fantasma
+  // ==========================================================
+  (function () {
+    if (!("serviceWorker" in navigator)) return;
+
+    window.addEventListener("load", async () => {
+      try {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        for (const r of regs) {
+          const scope = r?.scope || "";
+          if (scope.includes("/static/dashboard/")) {
+            console.log("[SW] 🧹 unregister viejo:", scope);
+            await r.unregister();
+          }
+        }
+
+        const reg = await navigator.serviceWorker.register("/dashboard/sw.js", { scope: "/dashboard/" });
+        console.log("[SW] OK scope:", reg.scope);
+
+        await navigator.serviceWorker.ready;
+        console.log("[SW] ready ✅");
+
+        // No auto-forzar, mejor con botón:
+        // window.enablePush();
+
+      } catch (e) {
+        console.error("[SW] error:", e);
+      }
+    });
+  })();
+
+  // ==========================================================
+  // PWA Install events
+  // ==========================================================
   const btnInstall = document.getElementById("btn-install");
   let deferredPrompt = null;
 
   function isStandalone() {
     return window.matchMedia("(display-mode: standalone)").matches
       || window.matchMedia("(display-mode: fullscreen)").matches
-      || window.navigator.standalone === true; // iOS
-  }
-
-  function hideInstallButton() {
-    if (!btnInstall) return;
-    btnInstall.style.display = "none";
-  }
-
-  function showFallbackInstallHelp() {
-    if (!btnInstall) return;
-    btnInstall.style.display = "inline-block";
-    btnInstall.textContent = "📌 Instalar (menú ⋮ del navegador)";
-    btnInstall.onclick = () => {
-      alert("En Chrome/Edge: menú ⋮ → 'Instalar app' o 'Agregar a pantalla de inicio'.\n\nSi ya está instalada, este botón no aparece.");
-    };
-  }
-
-  function showRealInstallButton() {
-    if (!btnInstall) return;
-    btnInstall.style.display = "inline-block";
-    btnInstall.textContent = "📲 Instalar app";
-    btnInstall.onclick = null;
+      || window.navigator.standalone === true;
   }
 
   function syncInstallButton() {
-    if (!btnInstall) {
-      console.warn("[PWA] No existe #btn-install en el DOM");
-      return;
-    }
+    if (!btnInstall) return;
 
     if (isStandalone()) {
-      console.log("[PWA] App ya está en modo standalone -> oculto botón");
-      hideInstallButton();
+      btnInstall.style.display = "none";
       return;
     }
 
     if (deferredPrompt) {
-      console.log("[PWA] beforeinstallprompt capturado -> botón REAL");
-      showRealInstallButton();
+      btnInstall.style.display = "inline-block";
+      btnInstall.textContent = "📲 Instalar app";
       return;
     }
 
-    console.log("[PWA] Sin beforeinstallprompt -> fallback visible");
-    showFallbackInstallHelp();
+    btnInstall.style.display = "inline-block";
+    btnInstall.textContent = "📌 Instalar (menú ⋮)";
+    btnInstall.onclick = () => {
+      alert("En Chrome/Edge: menú ⋮ → 'Instalar app' o 'Agregar a pantalla de inicio'.");
+    };
   }
 
-  // ==============================
-  // Service Worker register + limpieza SW fantasma
-  // ==============================
-  (function () {
-    if (!("serviceWorker" in navigator)) {
-      console.warn("[SW] serviceWorker NO soportado");
-      return;
-    }
-
-    window.addEventListener("load", async () => {
-      try {
-        const regs = await navigator.serviceWorker.getRegistrations();
-        for (const r of regs) {
-          const scope = (r && r.scope) ? r.scope : "";
-          if (scope.includes("/static/dashboard/")) {
-            console.log("[SW] 🧹 Unregister viejo /static/dashboard/:", scope);
-            await r.unregister();
-          }
-        }
-
-        console.log("[SW] registrando /dashboard/sw.js ...");
-        const reg = await navigator.serviceWorker.register("/dashboard/sw.js", { scope: "/dashboard/" });
-        console.log("[SW] OK scope:", reg.scope);
-
-      } catch (err) {
-        console.error("[SW] register error:", err);
-      }
-    });
-  })();
-
-  // ==============================
-  // PWA Install events
-  // ==============================
   window.addEventListener("beforeinstallprompt", (e) => {
-    console.log("[PWA] beforeinstallprompt ✅");
     e.preventDefault();
     deferredPrompt = e;
     syncInstallButton();
@@ -252,30 +303,21 @@
 
   if (btnInstall) {
     btnInstall.addEventListener("click", async () => {
-      if (!deferredPrompt) {
-        console.log("[PWA] click sin deferredPrompt (fallback o no elegible)");
-        return;
-      }
-
+      if (!deferredPrompt) return;
       deferredPrompt.prompt();
-      const choice = await deferredPrompt.userChoice;
-      console.log("[PWA] userChoice:", choice?.outcome);
-
+      await deferredPrompt.userChoice;
       deferredPrompt = null;
       syncInstallButton();
     });
   }
 
   window.addEventListener("appinstalled", () => {
-    console.log("[PWA] appinstalled 🎉");
     deferredPrompt = null;
     syncInstallButton();
   });
 
-  // ✅ Inicial
   syncInstallButton();
   refreshNotifBadge();
-  // refresca cada 30s (suave)
   setInterval(refreshNotifBadge, 30000);
 </script>
 

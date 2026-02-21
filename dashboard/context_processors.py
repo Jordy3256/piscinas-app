@@ -1,4 +1,3 @@
-# dashboard/context_processors.py
 from django.conf import settings
 
 def vapid_public_key(request):

@@ -13,24 +13,20 @@
     .topbar { position: sticky; top: 0; z-index: 1030; backdrop-filter: blur(8px); }
     .bottom-nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 1030; }
     .spacer-bottom { height: 88px; }
-
-    /* por defecto oculto; JS decide */
     .btn-install { display: none; }
-
-    /* evita que el layout “salte” raro */
     .bottom-nav .btn { white-space: nowrap; }
   </style>
 
   <!-- PWA -->
   <link rel="manifest" href="/dashboard/manifest.json">
   <meta name="theme-color" content="#0d6efd">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
 
   {% block extra_head %}{% endblock %}
 </head>
 
-{% block extra_js %}{% endblock %}
 <body class="bg-light">
   <div class="app-shell">
 
@@ -77,6 +73,10 @@
           <button id="btn-install" class="btn btn-primary flex-fill btn-install" type="button">
             📲 Instalar app
           </button>
+
+          <button id="btn-enable-push" class="btn btn-outline-primary flex-fill" type="button">
+            🔔 Activar notificaciones
+          </button>
         </div>
       </div>
     </div>
@@ -84,29 +84,89 @@
   </div>
 
   <script>
-    // ==========================
-    // SW register (scope correcto)
-    // ==========================
-    (function () {
-      if (!("serviceWorker" in navigator)) {
-        console.log("[SW] ❌ No soportado");
-        return;
-      }
+    // ✅ enablePush SIEMPRE definido (no rompe si lo llamas antes)
+    window.enablePush = window.enablePush || (async function () {
+      try {
+        if (!("serviceWorker" in navigator)) return console.warn("[SW] no soportado");
+        if (!("PushManager" in window) || !("Notification" in window)) return console.warn("[PUSH] no soportado");
 
+        const reg = await navigator.serviceWorker.ready;
+
+        if (Notification.permission === "denied") return console.warn("[PUSH] permiso denegado");
+        if (Notification.permission === "default") {
+          const perm = await Notification.requestPermission();
+          console.log("[PUSH] permission:", perm);
+          if (perm !== "granted") return;
+        }
+
+        const r = await fetch("/dashboard/push/public-key/", { credentials: "same-origin" });
+        if (!r.ok) throw new Error("public-key status " + r.status);
+        const data = await r.json();
+        const publicKey = (data.publicKey || "").replace(/\s+/g, "").trim();
+        if (!publicKey) return console.error("[PUSH] publicKey vacía");
+
+        function urlBase64ToUint8Array(s) {
+          s = (s || "").replace(/\s+/g, "").trim();
+          const pad = "=".repeat((4 - (s.length % 4)) % 4);
+          const b64 = (s + pad).replace(/-/g, "+").replace(/_/g, "/");
+          const raw = atob(b64);
+          const out = new Uint8Array(raw.length);
+          for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+          return out;
+        }
+
+        let sub = await reg.pushManager.getSubscription();
+        if (!sub) {
+          sub = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(publicKey),
+          });
+        }
+
+        function getCookie(name) {
+          const v = ; ${document.cookie};
+          const p = v.split(; ${name}=);
+          if (p.length === 2) return p.pop().split(";").shift();
+          return "";
+        }
+
+        const csrftoken = getCookie("csrftoken");
+        const save = await fetch("/dashboard/save-subscription/", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "X-CSRFToken": csrftoken,
+          },
+          body: JSON.stringify(sub.toJSON()),
+        });
+
+        const out = await save.json().catch(() => ({}));
+        console.log("[PUSH] save:", save.status, out);
+      } catch (e) {
+        console.error("[enablePush] error:", e);
+      }
+    });
+
+    window.addEventListener("load", () => {
+      const btn = document.getElementById("btn-enable-push");
+      if (btn) btn.addEventListener("click", () => window.enablePush());
+    });
+
+    // ✅ SW register
+    (function () {
+      if (!("serviceWorker" in navigator)) return;
       window.addEventListener("load", async () => {
         try {
-          console.log("[SW] registrando /dashboard/sw.js ...");
-          const reg = await navigator.serviceWorker.register("/dashboard/sw.js", { scope: "/dashboard/" });
-          console.log("[SW] ✅ scope:", reg.scope);
+          await navigator.serviceWorker.register("/dashboard/sw.js", { scope: "/dashboard/" });
         } catch (e) {
-          console.error("[SW] ❌ error:", e);
+          console.error("[SW] error:", e);
         }
       });
     })();
 
-    // ==========================
-    // PWA Install (robusto)
-    // ==========================
+    // ✅ PWA install
     (function () {
       let deferredPrompt = null;
       const btn = document.getElementById("btn-install");
@@ -116,84 +176,51 @@
           || window.matchMedia("(display-mode: fullscreen)").matches
           || window.navigator.standalone === true;
       }
-
       function showBtn(text) {
         if (!btn) return;
         btn.style.display = "inline-block";
         btn.textContent = text;
       }
-
       function hideBtn() {
         if (!btn) return;
         btn.style.display = "none";
       }
-
       function sync() {
         if (!btn) return;
-
-        if (isStandalone()) {
-          console.log("[PWA] ✅ ya instalada -> oculto");
-          hideBtn();
-          return;
-        }
-
-        // si existe evento real
-        if (deferredPrompt) {
-          console.log("[PWA] ✅ listo para instalar (beforeinstallprompt)");
-          showBtn("📲 Instalar app");
-          return;
-        }
-
-        // si no hay evento, lo ocultamos y luego mostramos ayuda (fallback)
+        if (isStandalone()) return hideBtn();
+        if (deferredPrompt) return showBtn("📲 Instalar app");
         hideBtn();
       }
 
       window.addEventListener("beforeinstallprompt", (e) => {
-        console.log("[PWA] beforeinstallprompt ✅");
         e.preventDefault();
         deferredPrompt = e;
         sync();
       });
-
       window.addEventListener("appinstalled", () => {
-        console.log("[PWA] 🎉 appinstalled");
         deferredPrompt = null;
         sync();
       });
 
       if (btn) {
         btn.addEventListener("click", async () => {
-          if (isStandalone()) return;
-
-          // si no existe prompt real, mostramos ayuda
           if (!deferredPrompt) {
-            alert("En Chrome/Edge: menú ⋮ → 'Instalar app' o 'Agregar a pantalla de inicio'.\n\nSi ya está instalada, este botón no aparece.");
+            alert("En Chrome/Edge: menú ⋮ → 'Instalar app' o 'Agregar a pantalla de inicio'.");
             return;
           }
-
           deferredPrompt.prompt();
-          const choice = await deferredPrompt.userChoice;
-          console.log("[PWA] elección:", choice?.outcome);
-
+          await deferredPrompt.userChoice;
           deferredPrompt = null;
           sync();
         });
       }
 
-      // inicial
       sync();
-
-      // fallback si nunca llega beforeinstallprompt
       window.addEventListener("load", () => {
         setTimeout(() => {
-          if (!isStandalone() && !deferredPrompt) {
-            console.log("[PWA] ℹ️ no llegó beforeinstallprompt -> fallback");
-            showBtn("📌 Instalar (menú ⋮)");
-          }
+          if (!isStandalone() && !deferredPrompt) showBtn("📌 Instalar (menú ⋮)");
         }, 1500);
       });
-
-      window.matchMedia("(display-mode: standalone)").addEventListener("change", sync);
     })();
   </script>
 

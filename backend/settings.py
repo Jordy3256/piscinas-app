@@ -1,4 +1,3 @@
-# backend/settings.py
 from pathlib import Path
 import os
 import dj_database_url
@@ -15,14 +14,10 @@ DEBUG = os.environ.get("DEBUG", "True").strip().lower() == "true"
 # =========================
 # PUSH / VAPID
 # =========================
-# ✅ Tu key fija (fallback) en UNA sola línea (sin saltos)
-VAPID_PUBLIC_KEY_FALLBACK = (
-    "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEBZF7RawIPFcr52cmuprg2qnArf5J"
-    "7DTty7LhVhDo8bzmdP8CyUvcRaepbW1rUtSye8A6vdtlRYk9rqWCO1Zt/g=="
-)
+# ✅ Fallback en formato WEBPUSH (base64url, 87 chars) -> válido para PushManager.subscribe()
+VAPID_PUBLIC_KEY_FALLBACK = "BAWRe0WsCDxXK-dnJrqa4NqpwK3-Sew07cuy4VYQ6PG85nT_AslL3EWnqW1ta1LUsnvAOr3bZUWJPa6lgjtWbf4"
 
 def _clean_key(value: str) -> str:
-    # quita saltos de línea y espacios que rompen JS/base64
     return (value or "").replace("\n", "").replace("\r", "").strip()
 
 VAPID_PUBLIC_KEY = _clean_key(os.environ.get("VAPID_PUBLIC_KEY", "")) or VAPID_PUBLIC_KEY_FALLBACK

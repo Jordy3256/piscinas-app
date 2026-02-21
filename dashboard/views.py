@@ -39,7 +39,7 @@ def es_admin(user):
         "administradores" in grupos
         or "administrador" in grupos
         or "admins" in grupos
-        or "administradores" in grupos  # typo tolerado por si existe así
+        or "adimistradores" in grupos
     )
 
 
@@ -51,13 +51,11 @@ def es_trabajador(user):
 
 
 # -------------------
-# ✅ VAPID Public Key (para JS)
+# ✅ VAPID Public Key para JS
 # GET /dashboard/push/public-key/
-from django.views.decorators.http import require_GET
-from django.http import JsonResponse
-from django.conf import settings
-
+# -------------------
 @require_GET
+@login_required
 def vapid_public_key_view(request):
     key = (getattr(settings, "VAPID_PUBLIC_KEY", "") or "").replace("\n", "").replace("\r", "").strip()
     return JsonResponse({"publicKey": key})
@@ -69,7 +67,7 @@ def vapid_public_key_view(request):
 # -------------------
 @login_required
 @require_POST
-@csrf_exempt  # ✅ evita 403 CSRF si tu fetch() no manda token
+@csrf_exempt  # si NO mandas CSRF token desde JS, esto evita 403
 def save_subscription_view(request):
     """
     Espera JSON (PushSubscription.toJSON()):
@@ -95,10 +93,14 @@ def save_subscription_view(request):
                 status=400,
             )
 
+        # ✅ Un endpoint = un dispositivo/navegador
         sub, created = PushSubscription.objects.update_or_create(
-            user=request.user,
             endpoint=endpoint,
-            defaults={"p256dh": p256dh, "auth": auth},
+            defaults={
+                "user": request.user,
+                "p256dh": p256dh,
+                "auth": auth,
+            },
         )
 
         return JsonResponse({"ok": True, "created": created, "id": sub.id})
@@ -140,13 +142,6 @@ def logout_view(request):
 # ✅ /dashboard/sw.js (SW REAL con scope /dashboard/)
 # -------------------
 def sw_js_view(request):
-    """
-    Sirve el SW REAL desde /dashboard/sw.js para controlar /dashboard/*
-
-    ✅ Importante:
-    - El SW real está en: dashboard/static/dashboard/sw-dashboard.js
-    - Evita usar /static/... para registrar (SW fantasma).
-    """
     path = finders.find("dashboard/sw-dashboard.js")
 
     if path:
@@ -744,11 +739,7 @@ def ingreso_eliminar_view(request, pk):
     return render(request, "dashboard/ingreso_eliminar.html", {"ingreso": ingreso, "es_admin": True})
 
 
-# -------------------
-# Offline
-# -------------------
 @login_required
 def offline_view(request):
-    # ✅ Evita extends condicional (causó TemplateSyntaxError con 'else')
     tpl = "dashboard/offline_admin.html" if es_admin(request.user) else "dashboard/offline_trabajador.html"
     return render(request, tpl, {"es_admin": es_admin(request.user)})
