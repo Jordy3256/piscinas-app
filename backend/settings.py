@@ -1,3 +1,4 @@
+# backend/settings.py
 from pathlib import Path
 import os
 import dj_database_url
@@ -12,11 +13,21 @@ SECRET_KEY = os.environ.get("SECRET_KEY") or ("dev-" + get_random_secret_key())
 DEBUG = os.environ.get("DEBUG", "True").strip().lower() == "true"
 
 # =========================
-# PUSH / VAPID (✅ NUEVO)
+# PUSH / VAPID
 # =========================
-VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "").strip()
-VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "").strip()
-VAPID_SUBJECT = os.environ.get("VAPID_SUBJECT", "mailto:admin@piscinas-app.local").strip()
+# ✅ Tu key fija (fallback) en UNA sola línea (sin saltos)
+VAPID_PUBLIC_KEY_FALLBACK = (
+    "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEBZF7RawIPFcr52cmuprg2qnArf5J"
+    "7DTty7LhVhDo8bzmdP8CyUvcRaepbW1rUtSye8A6vdtlRYk9rqWCO1Zt/g=="
+)
+
+def _clean_key(value: str) -> str:
+    # quita saltos de línea y espacios que rompen JS/base64
+    return (value or "").replace("\n", "").replace("\r", "").strip()
+
+VAPID_PUBLIC_KEY = _clean_key(os.environ.get("VAPID_PUBLIC_KEY", "")) or VAPID_PUBLIC_KEY_FALLBACK
+VAPID_PRIVATE_KEY = _clean_key(os.environ.get("VAPID_PRIVATE_KEY", ""))
+VAPID_SUBJECT = (os.environ.get("VAPID_SUBJECT", "mailto:admin@piscinas-app.local") or "").strip()
 
 # =========================
 # HOST / RENDER FIX (ROBUSTO)
@@ -103,7 +114,7 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
 
-                # ✅ NUEVO: inyecta VAPID_PUBLIC_KEY a templates
+                # ✅ Inyecta VAPID_PUBLIC_KEY a templates
                 "dashboard.context_processors.vapid_public_key",
             ],
         },

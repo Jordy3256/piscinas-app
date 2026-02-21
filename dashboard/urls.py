@@ -1,3 +1,4 @@
+# dashboard/urls.py
 from django.urls import path
 
 from .views import (
@@ -5,8 +6,9 @@ from .views import (
     sw_js_view,
     manifest_json_view,
 
-    # ✅ Push (Paso 4)
+    # ✅ Push
     save_subscription_view,
+    vapid_public_key_view,
 
     # Core
     home_view,
@@ -39,9 +41,10 @@ urlpatterns = [
     path("offline/", offline_view, name="offline"),
 
     # -----------------------------
-    # ✅ Push (Paso 4)
+    # ✅ Push
     # -----------------------------
     path("save-subscription/", save_subscription_view, name="save_subscription"),
+    path("push/public-key/", vapid_public_key_view, name="vapid_public_key"),
 
     # -----------------------------
     # Home/Dashboard
