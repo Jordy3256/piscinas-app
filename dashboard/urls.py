@@ -1,35 +1,64 @@
-# backend/urls.py
-from django.contrib import admin
-from django.urls import path, include
-from django.http import HttpResponse
-from django.shortcuts import redirect
+from django.urls import path
+from .views import (
+    # PWA
+    sw_js_view,
+    manifest_json_view,
 
-from dashboard.views import login_view, logout_view
+    # ✅ Push
+    save_subscription_view,
+    vapid_public_key_view,
 
+    # Core
+    home_view,
+    dashboard_view,
+    offline_view,
 
-def healthz(_request):
-    return HttpResponse("ok", content_type="text/plain")
+    # Mantenimientos
+    mantenimiento_detalle_view,
+    usoinsumo_eliminar_view,
+    usoinsumo_editar_view,
 
+    # Operativo admin
+    admin_operativo_view,
+    asignar_trabajadores_view,
 
-def root_redirect(_request):
-    return redirect("/dashboard/", permanent=False)
-
+    # Finanzas
+    flujo_mensual_view,
+    ingreso_list_view,
+    ingreso_crear_view,
+    ingreso_editar_view,
+    ingreso_eliminar_view,
+)
 
 urlpatterns = [
-    # ✅ Health checks (con y sin slash)
-    path("healthz", healthz),
-    path("healthz/", healthz),
+    # PWA
+    path("sw.js", sw_js_view, name="sw_js"),
+    path("manifest.json", manifest_json_view, name="manifest_json"),
+    path("offline/", offline_view, name="offline"),
 
-    # Admin
-    path("admin/", admin.site.urls),
+    # Push
+    path("save-subscription/", save_subscription_view, name="save_subscription"),
+    path("push/public-key/", vapid_public_key_view, name="vapid_public_key"),
 
-    # Auth
-    path("login/", login_view, name="login"),
-    path("logout/", logout_view, name="logout"),
+    # Home/Dashboard
+    path("home/", home_view, name="home"),
+    path("", dashboard_view, name="dashboard"),
 
-    # Dashboard
-    path("dashboard/", include("dashboard.urls")),
+    # Mantenimientos
+    path("mantenimientos/<int:pk>/", mantenimiento_detalle_view, name="mantenimiento_detalle"),
 
-    # Root -> dashboard
-    path("", root_redirect),
+    # Uso de insumos
+    path("usos/<int:pk>/editar/", usoinsumo_editar_view, name="usoinsumo_editar"),
+    path("usos/<int:pk>/eliminar/", usoinsumo_eliminar_view, name="usoinsumo_eliminar"),
+
+    # Operativo admin
+    path("operativo/", admin_operativo_view, name="admin_operativo"),
+    path("operativo/asignar/<int:pk>/", asignar_trabajadores_view, name="asignar_trabajadores"),
+
+    # Finanzas
+    path("finanzas/flujo/", flujo_mensual_view, name="flujo_mensual"),
+    path("finanzas/ingresos/", ingreso_list_view, name="ingresos_list"),
+    path("finanzas/ingresos/nuevo/", ingreso_crear_view, name="ingreso_crear"),
+    path("finanzas/ingresos/<int:pk>/editar/", ingreso_editar_view, name="ingreso_editar"),
+    path("finanzas/ingresos/<int:pk>/eliminar/", ingreso_eliminar_view, name="ingreso_eliminar"),
 ]

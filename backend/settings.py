@@ -1,3 +1,4 @@
+# backend/settings.py
 from pathlib import Path
 import os
 import dj_database_url
@@ -15,7 +16,9 @@ DEBUG = os.environ.get("DEBUG", "True").strip().lower() == "true"
 # PUSH / VAPID
 # =========================
 # ✅ Fallback en formato WEBPUSH (base64url, 87 chars) -> válido para PushManager.subscribe()
-VAPID_PUBLIC_KEY_FALLBACK = "BAWRe0WsCDxXK-dnJrqa4NqpwK3-Sew07cuy4VYQ6PG85nT_AslL3EWnqW1ta1LUsnvAOr3bZUWJPa6lgjtWbf4"
+VAPID_PUBLIC_KEY_FALLBACK = (
+    "BAWRe0WsCDxXK-dnJrqa4NqpwK3-Sew07cuy4VYQ6PG85nT_AslL3EWnqW1ta1LUsnvAOr3bZUWJPa6lgjtWbf4"
+)
 
 def _clean_key(value: str) -> str:
     return (value or "").replace("\n", "").replace("\r", "").strip()
@@ -44,6 +47,7 @@ ENV_ALLOWED = os.environ.get("ALLOWED_HOSTS", "").strip()
 if ENV_ALLOWED:
     ALLOWED_HOSTS += [h.strip() for h in ENV_ALLOWED.split(",") if h.strip()]
 
+# quita duplicados preservando orden
 ALLOWED_HOSTS = list(dict.fromkeys(ALLOWED_HOSTS))
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
@@ -85,6 +89,8 @@ INSTALLED_APPS = [
 # MIDDLEWARE
 # =========================
 MIDDLEWARE = [
+    # ✅ Health check primero (antes de todo)
+
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
 
@@ -97,6 +103,7 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = "backend.urls"
+WSGI_APPLICATION = "backend.wsgi.application"
 
 TEMPLATES = [
     {
@@ -116,7 +123,6 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = "backend.wsgi.application"
 
 # =========================
 # DATABASE

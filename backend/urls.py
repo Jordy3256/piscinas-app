@@ -1,22 +1,37 @@
+# backend/backend/urls.py
 from django.contrib import admin
 from django.urls import path, include
+from django.http import HttpResponse
 from django.shortcuts import redirect
-from django.conf import settings
-from django.conf.urls.static import static
 
 from dashboard.views import login_view, logout_view
 
+
+# ✅ Health check para Render
+def healthz(_request):
+    return HttpResponse("ok", content_type="text/plain")
+
+
+def root_redirect(_request):
+    # Si quieres raíz -> dashboard
+    return redirect("/dashboard/", permanent=False)
+
+
 urlpatterns = [
-    # Página raíz → Home del dashboard
-    path('', lambda request: redirect('/dashboard/home/')),
+    # ✅ Health checks (con y sin slash)
+    path("healthz", healthz),
+    path("healthz/", healthz),
 
-    path('admin/', admin.site.urls),
-    path('login/', login_view, name='login'),
-    path('logout/', logout_view, name='logout'),
+    # Admin
+    path("admin/", admin.site.urls),
 
-    path('dashboard/', include('dashboard.urls')),
+    # Auth
+    path("login/", login_view, name="login"),
+    path("logout/", logout_view, name="logout"),
+
+    # Dashboard
+    path("dashboard/", include("dashboard.urls")),
+
+    # Root -> dashboard
+    path("", root_redirect),
 ]
-
-# ✅ Servir archivos MEDIA en desarrollo
-if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
