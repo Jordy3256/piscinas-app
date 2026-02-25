@@ -1,20 +1,24 @@
 # dashboard/views.py
+import json
+import logging
 from datetime import date
 from calendar import monthrange
-import json
+from pathlib import Path
 
 from django.conf import settings
-from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
-from django.contrib import messages
-from django.db.models import Sum, Count, Q
-from django.utils.dateparse import parse_date
-from django.http import HttpResponse, JsonResponse
 from django.contrib.staticfiles import finders
+from django.db.models import Sum, Count, Q
+from django.http import HttpResponse, JsonResponse
+from django.shortcuts import render, redirect, get_object_or_404
+from django.shortcuts import redirect
 from django.templatetags.static import static
-from django.views.decorators.http import require_POST, require_GET
-from django.views.decorators.csrf import csrf_exempt
+from django.utils.dateparse import parse_date
+from django.views.decorators.http import require_http_methods
+
+from pywebpush import webpush, WebPushException
 
 from contratos.models import Contrato
 from trabajadores.models import Trabajador
@@ -22,7 +26,13 @@ from inventario.models import Insumo
 from mantenimientos.models import Mantenimiento, UsoInsumo, FotoMantenimiento
 from finanzas.models import Ingreso, Egreso
 
-from .models import PushSubscription
+# ✅ Push subscription model (debe existir en dashboard/models.py)
+try:
+    from .models import PushSubscription
+except Exception:
+    PushSubscription = None
+
+logger = logging.getLogger(__name__)
 
 
 # -------------------
@@ -33,7 +43,6 @@ def es_admin(user):
         return False
     if user.is_superuser:
         return True
-
     grupos = {g.name.strip().lower() for g in user.groups.all()}
     return (
         "administradores" in grupos
@@ -51,76 +60,17 @@ def es_trabajador(user):
 
 
 # -------------------
-# ✅ VAPID Public Key para JS
-# GET /dashboard/push/public-key/
-# -------------------
-@require_GET
-@login_required
-def vapid_public_key_view(request):
-    key = (getattr(settings, "VAPID_PUBLIC_KEY", "") or "").replace("\n", "").replace("\r", "").strip()
-    return JsonResponse({"publicKey": key})
-
-
-# -------------------
-# ✅ Guardar suscripción Push (PWA)
-# POST /dashboard/save-subscription/
-# -------------------
-@login_required
-@require_POST
-@csrf_exempt  # si NO mandas CSRF token desde JS, esto evita 403
-def save_subscription_view(request):
-    """
-    Espera JSON (PushSubscription.toJSON()):
-    {
-      "endpoint": "...",
-      "keys": { "p256dh": "...", "auth": "..." }
-    }
-    """
-    try:
-        if not request.body:
-            return JsonResponse({"ok": False, "error": "Body vacío."}, status=400)
-
-        payload = json.loads(request.body.decode("utf-8"))
-
-        endpoint = (payload.get("endpoint") or "").strip()
-        keys = payload.get("keys") or {}
-        p256dh = (keys.get("p256dh") or "").strip()
-        auth = (keys.get("auth") or "").strip()
-
-        if not endpoint or not p256dh or not auth:
-            return JsonResponse(
-                {"ok": False, "error": "Suscripción incompleta (endpoint/keys)."},
-                status=400,
-            )
-
-        # ✅ Un endpoint = un dispositivo/navegador
-        sub, created = PushSubscription.objects.update_or_create(
-            endpoint=endpoint,
-            defaults={
-                "user": request.user,
-                "p256dh": p256dh,
-                "auth": auth,
-            },
-        )
-
-        return JsonResponse({"ok": True, "created": created, "id": sub.id})
-    except json.JSONDecodeError:
-        return JsonResponse({"ok": False, "error": "JSON inválido."}, status=400)
-    except Exception as e:
-        return JsonResponse({"ok": False, "error": str(e)}, status=500)
-
-
-# -------------------
 # Login / Logout
 # -------------------
 def login_view(request):
+    """✅ Siempre manda 'error' al template para evitar VariableDoesNotExist."""
     ctx = {"error": ""}
 
     if request.method == "POST":
         username = request.POST.get("username", "").strip()
         password = request.POST.get("password", "").strip()
-
         user = authenticate(request, username=username, password=password)
+
         if user is not None:
             login(request, user)
             messages.success(request, "Bienvenido.")
@@ -142,6 +92,12 @@ def logout_view(request):
 # ✅ /dashboard/sw.js (SW REAL con scope /dashboard/)
 # -------------------
 def sw_js_view(request):
+    """
+    Sirve el SW REAL desde /dashboard/sw.js para controlar /dashboard/*
+    ✅ IMPORTANTE:
+    - NO servir /static/dashboard/sw.js aquí (eso revive el SW fantasma).
+    - El SW real vive como archivo: dashboard/static/dashboard/sw-dashboard.js
+    """
     path = finders.find("dashboard/sw-dashboard.js")
 
     if path:
@@ -177,10 +133,30 @@ def manifest_json_view(request):
         "theme_color": "#0d6efd",
         "orientation": "portrait",
         "icons": [
-            {"src": static("dashboard/icons/icon-192.png"), "sizes": "192x192", "type": "image/png", "purpose": "any"},
-            {"src": static("dashboard/icons/icon-192-maskable.png"), "sizes": "192x192", "type": "image/png", "purpose": "maskable"},
-            {"src": static("dashboard/icons/icon-512.png"), "sizes": "512x512", "type": "image/png", "purpose": "any"},
-            {"src": static("dashboard/icons/icon-512-maskable.png"), "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+            {
+                "src": static("dashboard/icons/icon-192.png"),
+                "sizes": "192x192",
+                "type": "image/png",
+                "purpose": "any",
+            },
+            {
+                "src": static("dashboard/icons/icon-192-maskable.png"),
+                "sizes": "192x192",
+                "type": "image/png",
+                "purpose": "maskable",
+            },
+            {
+                "src": static("dashboard/icons/icon-512.png"),
+                "sizes": "512x512",
+                "type": "image/png",
+                "purpose": "any",
+            },
+            {
+                "src": static("dashboard/icons/icon-512-maskable.png"),
+                "sizes": "512x512",
+                "type": "image/png",
+                "purpose": "maskable",
+            },
         ],
     }
 
@@ -191,71 +167,221 @@ def manifest_json_view(request):
     return resp
 
 
+# ==========================================================
+# ✅ PUSH: Public Key + Guardar suscripción + Test push
+# ==========================================================
+def _clean_str(value) -> str:
+    return (value or "").replace("\n", "").replace("\r", "").strip()
+
+
+def _normalize_subscription_payload(data: dict) -> dict:
+    """
+    Acepta:
+    - subscription completo (con endpoint/keys)
+    - dict con {endpoint, keys:{p256dh,auth}}
+    - dict con {subscription: {...}}
+    """
+    if not isinstance(data, dict):
+        return {}
+
+    if "subscription" in data and isinstance(data["subscription"], dict):
+        data = data["subscription"]
+
+    endpoint = _clean_str(data.get("endpoint"))
+    keys = data.get("keys") if isinstance(data.get("keys"), dict) else {}
+
+    p256dh = _clean_str(keys.get("p256dh"))
+    auth = _clean_str(keys.get("auth"))
+
+    if not endpoint or not p256dh or not auth:
+        return {}
+
+    return {"endpoint": endpoint, "p256dh": p256dh, "auth": auth, "raw": data}
+
+
+@login_required
+@require_http_methods(["GET"])
+def vapid_public_key_view(request):
+    key = _clean_str(getattr(settings, "VAPID_PUBLIC_KEY", ""))
+    if not key:
+        return JsonResponse({"publicKey": "", "warning": "VAPID_PUBLIC_KEY vacío"}, status=200)
+    return JsonResponse({"publicKey": key})
+
+
+@login_required
+@require_http_methods(["POST"])
+def save_subscription_view(request):
+    """
+    Guarda la suscripción push del usuario logueado.
+    Requiere CSRF válido.
+    """
+    if PushSubscription is None:
+        return JsonResponse({"ok": False, "error": "Modelo PushSubscription no disponible"}, status=500)
+
+    try:
+        data = json.loads(request.body.decode("utf-8"))
+    except Exception:
+        return JsonResponse({"ok": False, "error": "JSON inválido"}, status=400)
+
+    norm = _normalize_subscription_payload(data)
+    if not norm:
+        return JsonResponse({"ok": False, "error": "Payload incompleto"}, status=400)
+
+    user_agent = request.META.get("HTTP_USER_AGENT", "") or ""
+
+    obj, created = PushSubscription.objects.update_or_create(
+        endpoint=norm["endpoint"],
+        defaults={
+            "user": request.user,
+            "p256dh": norm["p256dh"],
+            "auth": norm["auth"],
+            "user_agent": user_agent,
+        },
+    )
+
+    return JsonResponse(
+        {"ok": True, "created": created, "id": obj.id, "user": request.user.username},
+        status=201 if created else 200,
+    )
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def push_test_view(request):
+    """
+    GET  -> confirma que el endpoint existe (evita 405 en navegador)
+    POST -> envía una notificación push real a todas las subs del usuario
+    """
+    if request.method == "GET":
+        return JsonResponse({"ok": True, "msg": "push_test_view OK. Usa POST para enviar push."})
+
+    if PushSubscription is None:
+        return JsonResponse({"ok": False, "error": "Modelo PushSubscription no disponible"}, status=500)
+
+    # ✅ Usamos archivo (más robusto que PEM en variable)
+    vapid_private_key_path = Path(settings.BASE_DIR) / "vapid_private.pem"
+    if not vapid_private_key_path.exists():
+        return JsonResponse(
+            {"ok": False, "error": "No existe vapid_private.pem en BASE_DIR (junto a manage.py)"},
+            status=500,
+        )
+
+    vapid_subject = (
+        getattr(settings, "VAPID_SUBJECT", "") or "mailto:admin@piscinas-app.local"
+    ).strip()
+
+    payload = json.dumps(
+        {
+            "title": "✅ Prueba Piscinas App",
+            "body": f"Hola {request.user.username}, tu Push está funcionando 🎉",
+            "url": "/dashboard/",
+            # opcional: ayuda si usas renotify en el SW
+            "tag": f"piscinas-{request.user.username}",
+        }
+    )
+
+    subs = PushSubscription.objects.filter(user=request.user).order_by("-created_at")
+    if not subs.exists():
+        return JsonResponse(
+            {"ok": False, "error": "Este usuario no tiene suscripciones guardadas"},
+            status=400,
+        )
+
+    sent = 0
+    failed = 0
+    errors = []
+
+    for s in subs:
+        subscription_info = {
+            "endpoint": s.endpoint,
+            "keys": {"p256dh": s.p256dh, "auth": s.auth},
+        }
+
+        try:
+            webpush(
+                subscription_info=subscription_info,
+                data=payload,
+                vapid_private_key=str(vapid_private_key_path),  # ✅ ruta al pem
+                vapid_claims={"sub": vapid_subject},
+                content_encoding="aes128gcm",
+                ttl=60,
+            )
+            sent += 1
+
+        except WebPushException as ex:
+            failed += 1
+            status = getattr(getattr(ex, "response", None), "status_code", None)
+
+            body = ""
+            try:
+                if ex.response is not None:
+                    body = ex.response.text or ""
+            except Exception:
+                pass
+
+            errors.append(f"{status}: {str(ex)} | body={body}")
+
+            # ✅ limpiar subs expiradas
+            if status in (404, 410):
+                try:
+                    s.delete()
+                except Exception:
+                    pass
+
+        except Exception as ex:
+            failed += 1
+            errors.append(str(ex))
+
+    return JsonResponse({"ok": True, "sent": sent, "failed": failed, "errors": errors[:5]})
+
+
 # -------------------
 # Home
 # -------------------
 @login_required
 def home_view(request):
-    if es_admin(request.user):
-        return render(request, "dashboard/home_admin.html", {"es_admin": True})
-    if es_trabajador(request.user):
-        return render(request, "dashboard/home_trabajador.html", {"es_admin": False})
-    return render(request, "dashboard/no_autorizado.html", status=403)
+    ctx = {"VAPID_PUBLIC_KEY": settings.VAPID_PUBLIC_KEY}
 
+    if es_admin(request.user):
+        ctx["es_admin"] = True
+        return render(request, "dashboard/home_admin.html", ctx)
+
+    if es_trabajador(request.user):
+        ctx["es_admin"] = False
+        return render(request, "dashboard/home_trabajador.html", ctx)
+
+    return render(request, "dashboard/no_autorizado.html", status=403)
 
 # -------------------
 # Dashboard por rol
 # -------------------
 @login_required
 def dashboard_view(request):
-    if es_admin(request.user):
-        total_ingresos = (
-            Contrato.objects.filter(activo=True).aggregate(total=Sum("precio_mensual"))["total"] or 0
-        )
-        total_egresos = Egreso.objects.aggregate(total=Sum("total"))["total"] or 0
-        balance = total_ingresos - total_egresos
+    base_ctx = {"VAPID_PUBLIC_KEY": settings.VAPID_PUBLIC_KEY}
 
-        return render(
-            request,
-            "dashboard/dashboard.html",
-            {
-                "modo": "admin",
-                "total_ingresos": float(total_ingresos),
-                "total_egresos": float(total_egresos),
-                "balance": float(balance),
-                "es_admin": True,
-            },
-        )
+    if es_admin(request.user):
+        ...
+        ctx = {
+            **base_ctx,
+            "modo": "admin",
+            "total_ingresos": float(total_ingresos),
+            "total_egresos": float(total_egresos),
+            "balance": float(balance),
+            "es_admin": True,
+        }
+        return render(request, "dashboard/dashboard.html", ctx)
 
     if es_trabajador(request.user):
-        hoy = date.today()
-        try:
-            trabajador = request.user.trabajador
-            mantenimientos_hoy = (
-                Mantenimiento.objects.filter(trabajadores=trabajador, fecha=hoy)
-                .select_related("cliente", "contrato")
-                .order_by("fecha")
-            )
-            mantenimientos_proximos = (
-                Mantenimiento.objects.filter(trabajadores=trabajador, fecha__gt=hoy)
-                .select_related("cliente", "contrato")
-                .order_by("fecha")[:20]
-            )
-        except Exception:
-            mantenimientos_hoy = Mantenimiento.objects.none()
-            mantenimientos_proximos = Mantenimiento.objects.none()
-
-        return render(
-            request,
-            "dashboard/dashboard_trabajador.html",
-            {
-                "modo": "trabajador",
-                "hoy": hoy,
-                "mantenimientos_hoy": mantenimientos_hoy,
-                "mantenimientos_proximos": mantenimientos_proximos,
-                "es_admin": False,
-            },
-        )
+        ...
+        ctx = {
+            **base_ctx,
+            "modo": "trabajador",
+            "hoy": hoy,
+            "mantenimientos_hoy": mantenimientos_hoy,
+            "mantenimientos_proximos": mantenimientos_proximos,
+            "es_admin": False,
+        }
+        return render(request, "dashboard/dashboard_trabajador.html", ctx)
 
     return render(request, "dashboard/no_autorizado.html", status=403)
 
@@ -270,8 +396,8 @@ def admin_operativo_view(request):
 
     hoy = date.today()
     fecha = hoy
-    modo = (request.GET.get("modo") or "").strip().lower()
 
+    modo = (request.GET.get("modo") or "").strip().lower()
     if modo == "manana":
         fecha = date.fromordinal(hoy.toordinal() + 1)
     elif modo == "semana":
@@ -304,13 +430,13 @@ def admin_operativo_view(request):
     )
 
     resumen_trabajadores = (
-        Mantenimiento.objects.values("trabajadores__id", "trabajadores__user__username")
+        Mantenimiento.objects.values("trabajadores_id", "trabajadoresuser_username")
         .annotate(
             dia=Count("id", filter=Q(fecha=fecha)),
             atrasados=Count("id", filter=Q(fecha__lt=hoy, estado="pendiente")),
             proximos=Count("id", filter=Q(fecha__gt=hoy, estado="pendiente")),
         )
-        .exclude(trabajadores__id__isnull=True)
+        .exclude(trabajadores_id_isnull=True)
         .order_by("-atrasados", "-dia", "-proximos")
     )
 
@@ -381,7 +507,10 @@ def mantenimiento_detalle_view(request, pk):
 
             if hasattr(insumo, "stock"):
                 if insumo.stock < cantidad:
-                    messages.error(request, f"Stock insuficiente de {insumo.nombre}. Disponible: {insumo.stock}")
+                    messages.error(
+                        request,
+                        f"Stock insuficiente de {insumo.nombre}. Disponible: {insumo.stock}",
+                    )
                     return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
                 insumo.stock -= cantidad
                 insumo.save()
@@ -471,7 +600,6 @@ def usoinsumo_eliminar_view(request, pk):
 
     if request.method == "POST":
         insumo = uso.insumo
-
         if hasattr(insumo, "stock"):
             insumo.stock += uso.cantidad
             insumo.save()
@@ -514,7 +642,6 @@ def usoinsumo_editar_view(request, pk):
 
     if request.method == "POST":
         nueva_cantidad_str = request.POST.get("cantidad", "").strip()
-
         try:
             nueva_cantidad = int(nueva_cantidad_str)
             if nueva_cantidad <= 0:
@@ -525,8 +652,8 @@ def usoinsumo_editar_view(request, pk):
 
         anterior = uso.cantidad
         diff = nueva_cantidad - anterior
-        insumo = uso.insumo
 
+        insumo = uso.insumo
         if hasattr(insumo, "stock"):
             if diff > 0 and insumo.stock < diff:
                 messages.error(request, f"Stock insuficiente. Disponible: {insumo.stock}")
@@ -706,7 +833,7 @@ def ingreso_editar_view(request, pk):
 
         fecha = parse_date(fecha_str)
         if not fecha:
-            messages.error(request, "Fecha inválida.")
+            messages.error(request, "Fecha inválido.")
             return redirect(f"/dashboard/finanzas/ingresos/{pk}/editar/")
 
         ingreso.concepto = concepto
@@ -736,10 +863,22 @@ def ingreso_eliminar_view(request, pk):
         messages.success(request, "Ingreso eliminado.")
         return redirect("/dashboard/finanzas/ingresos/")
 
-    return render(request, "dashboard/ingreso_eliminar.html", {"ingreso": ingreso, "es_admin": True})
+    return render(
+        request,
+        "dashboard/ingreso_eliminar.html",
+        {"ingreso": ingreso, "es_admin": True},
+    )
 
 
 @login_required
 def offline_view(request):
-    tpl = "dashboard/offline_admin.html" if es_admin(request.user) else "dashboard/offline_trabajador.html"
-    return render(request, tpl, {"es_admin": es_admin(request.user)})
+    return render(request, "dashboard/offline.html")
+
+@login_required
+@require_http_methods(["GET"])
+def unread_count_view(request):
+    return JsonResponse({"count": 0})
+
+@login_required
+def dashboard_root_view(request):
+    return redirect("home")

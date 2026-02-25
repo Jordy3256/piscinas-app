@@ -1,6 +1,6 @@
 /* dashboard/static/dashboard/sw-dashboard.js */
 
-const VERSION = "v1.3.1"; // 👈 sube versión para forzar update
+const VERSION = "v1.3.2"; // 👈 sube versión para forzar update
 
 // ==========================================================
 // ✅ “Modo dual” (ANTI-SW FANTASMA):
@@ -231,6 +231,11 @@ self.addEventListener("fetch", (event) => {
   if (req.method !== "GET") return;
   if (!isSameOrigin(req.url)) return;
   if (shouldBypassCache(req)) return;
+
+  // ⚠️ NO interceptar navegación principal del dashboard
+if (isHtml(req) && req.url.includes("/dashboard/")) {
+  return; // deja que Django maneje normal
+}
 
   const request = isHtml(req) ? normalizeNavigate(req) : req;
 

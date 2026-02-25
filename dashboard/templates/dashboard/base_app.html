@@ -2,14 +2,18 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
+
+<!-- DEPLOY-MARCA: 2026-02-24-XYZ -->
+
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="csrf-token" content="{{ csrf_token }}">
   <title>{% block title %}Panel{% endblock %}</title>
 
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 
   <!-- ✅ PWA (SIEMPRE desde /dashboard/) -->
-  <link rel="manifest" href="/dashboard/manifest.json">
+  <link rel="manifest" href="/dashboard/manifest.json?v=20260225">
   <meta name="theme-color" content="#0d6efd">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -22,6 +26,10 @@
 
     /* ✅ El botón existe SIEMPRE, JS decide si se muestra */
     #btn-install { display: none; }
+
+    /* ✅ Push */
+    #btn-push-app  { display: none; white-space: nowrap; }
+    #btn-push-test { display: none; white-space: nowrap; }
   </style>
 
   {% block extra_head %}{% endblock %}
@@ -31,13 +39,19 @@
   <div class="app-shell">
 
     <!-- Topbar fijo -->
+     <div class="fw-bold">Panel NUEVO XYZ</div>
     <div class="topbar bg-white border-bottom">
       <div class="container py-3">
         <div class="d-flex justify-content-between align-items-center">
           <div class="fw-bold">{% block top_title %}Panel{% endblock %}</div>
 
           <div class="d-flex gap-2">
-            <a class="btn btn-outline-secondary btn-sm" href="/dashboard/">Inicio</a>
+            <!-- ✅ Notificaciones también aquí -->
+            <button id="btn-push-app" class="btn btn-primary btn-sm" type="button">🔔 Activar</button>
+            <button id="btn-push-test" class="btn btn-outline-primary btn-sm" type="button">🧪 Test Push</button>
+
+            <!-- ✅ Inicio ahora va a /dashboard/home/ -->
+            <a class="btn btn-outline-secondary btn-sm" href="/dashboard/home/">Inicio</a>
             <a class="btn btn-outline-danger btn-sm" href="/logout/">Salir</a>
           </div>
         </div>
@@ -63,8 +77,8 @@
       <div class="container py-2">
         <div class="d-flex justify-content-around gap-2 flex-wrap">
 
-          <!-- Siempre -->
-          <a class="btn btn-light flex-fill" href="/dashboard/">🏠 Inicio</a>
+          <!-- ✅ Inicio ahora va a /dashboard/home/ -->
+          <a class="btn btn-light flex-fill" href="/dashboard/home/">🏠 Inicio</a>
 
           {% if es_admin %}
             <a class="btn btn-outline-secondary flex-fill" href="/dashboard/operativo/">🧑‍💼 Operativo</a>
@@ -88,152 +102,263 @@
 
   <script>
     // ==========================================================
-    // ✅ SW: registrar SOLO /dashboard/sw.js + limpiar /static/dashboard/
-    // ✅ AUTO-UPDATE: SKIP_WAITING + reload (SIN loop)
+    // ✅ Config
     // ==========================================================
-    (function () {
+    const VAPID_PUBLIC_KEY = "{{ VAPID_PUBLIC_KEY|default:''|escapejs }}";
+
+    // ==========================================================
+    // ✅ CSRF robusto (meta -> cookie)
+    // ==========================================================
+    function getCSRFToken() {
+      const meta = document.querySelector('meta[name="csrf-token"]');
+      if (meta && meta.getAttribute("content")) return meta.getAttribute("content") || "";
+      const m = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+      return m ? decodeURIComponent(m[1]) : "";
+    }
+
+    // ==========================================================
+    // ✅ Utils
+    // ==========================================================
+    function urlBase64ToUint8Array(base64UrlString) {
+      if (!base64UrlString || typeof base64UrlString !== "string") return null;
+      const padding = "=".repeat((4 - (base64UrlString.length % 4)) % 4);
+      const base64 = (base64UrlString + padding).replace(/-/g, "+").replace(/_/g, "/");
+      const raw = atob(base64);
+      const out = new Uint8Array(raw.length);
+      for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+      return out;
+    }
+
+    async function unregisterGhostSW() {
       if (!("serviceWorker" in navigator)) return;
-
-      window.addEventListener("load", async () => {
-        try {
-          // 🧹 Limpia SW viejo (scope /static/dashboard/)
-          const regs = await navigator.serviceWorker.getRegistrations();
-          for (const r of regs) {
-            const scope = r?.scope || "";
-            if (scope.includes("/static/dashboard/")) {
-              console.log("[SW] 🧹 Unregister viejo:", scope);
-              await r.unregister();
-            }
-          }
-
-          // ✅ Registro correcto
-          console.log("[SW] 🔄 registrando /dashboard/sw.js ...");
-          const reg = await navigator.serviceWorker.register("/dashboard/sw.js", { scope: "/dashboard/" });
-
-          // ✅ Si aparece una actualización, activar automáticamente
-          reg.addEventListener("updatefound", () => {
-            const nw = reg.installing;
-            if (!nw) return;
-
-            console.log("[SW] 🔄 updatefound");
-
-            nw.addEventListener("statechange", () => {
-              console.log("[SW] newWorker:", nw.state);
-
-              // Si ya existe controller, es update (no primera instalación)
-              if (nw.state === "installed" && navigator.serviceWorker.controller) {
-                console.log("[SW] ✅ Update listo -> SKIP_WAITING");
-                nw.postMessage("SKIP_WAITING");
-              }
-            });
-          });
-
-          // ✅ Evita loop infinito de reload
-          let reloaded = false;
-          navigator.serviceWorker.addEventListener("controllerchange", () => {
-            if (reloaded) return;
-            reloaded = true;
-            console.log("[SW] 🎯 controllerchange -> reload");
-            window.location.reload();
-          });
-
-        } catch (err) {
-          console.error("[SW] ❌ ERROR registrando:", err);
+      const regs = await navigator.serviceWorker.getRegistrations();
+      for (const r of regs) {
+        const scope = r?.scope || "";
+        if (scope.includes("/static/dashboard/")) {
+          console.log("[SW] 🧹 Unregister viejo /static/dashboard/:", scope);
+          await r.unregister();
         }
+      }
+    }
+
+    async function registerSW() {
+      if (!("serviceWorker" in navigator)) return null;
+      await unregisterGhostSW();
+      await navigator.serviceWorker.register("/dashboard/sw.js", { scope: "/dashboard/" });
+      const ready = await navigator.serviceWorker.ready;
+      return ready;
+    }
+
+    // ==========================================================
+    // ✅ Save subscription (según tu urls.py)
+    // ==========================================================
+    async function sendSubscriptionToServer(sub) {
+      const csrftoken = getCSRFToken();
+      const res = await fetch("/dashboard/push/save_subscription/", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": csrftoken,
+          "Accept": "application/json",
+        },
+        body: JSON.stringify(sub.toJSON()),
       });
-    })();
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        console.warn("[PUSH] save_subscription FAILED", res.status, data);
+        return { ok: false, status: res.status, data };
+      }
+      console.log("[PUSH] saved ✅", data);
+      return { ok: true, data };
+    }
+
+    // ==========================================================
+    // ✅ Push logic (App)
+    // ==========================================================
+    const btnPushApp  = document.getElementById("btn-push-app");
+    const btnPushTest = document.getElementById("btn-push-test");
+
+    function show(el) { if (el) el.style.display = "inline-block"; }
+    function hide(el) { if (el) el.style.display = "none"; }
+
+    async function syncPushButtons(reg) {
+      if (!btnPushApp && !btnPushTest) return;
+
+      if (!reg || !("PushManager" in window) || !("Notification" in window)) {
+        hide(btnPushApp); hide(btnPushTest);
+        return;
+      }
+
+      const sub = await reg.pushManager.getSubscription();
+      const granted = (Notification.permission === "granted");
+
+      if (sub && granted) {
+        hide(btnPushApp);
+        show(btnPushTest);
+      } else {
+        show(btnPushApp);
+        hide(btnPushTest);
+      }
+    }
+
+    async function enablePushApp() {
+      try {
+        const reg = await navigator.serviceWorker.ready;
+
+        const perm = await Notification.requestPermission();
+        if (perm !== "granted") {
+          alert("No concediste el permiso de notificaciones.");
+          return;
+        }
+
+        let sub = await reg.pushManager.getSubscription();
+        if (!sub) {
+          const keyBytes = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
+          if (!keyBytes || !keyBytes.length) {
+            alert("VAPID_PUBLIC_KEY inválida (debe ser base64url).");
+            console.error("[PUSH] keyBytes inválido", VAPID_PUBLIC_KEY);
+            return;
+          }
+          sub = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: keyBytes,
+          });
+        }
+
+        const saved = await sendSubscriptionToServer(sub);
+        if (saved.ok) {
+          alert("✅ Notificaciones activadas.");
+          await syncPushButtons(reg);
+        } else {
+          alert("⚠️ Suscripción creada pero no se guardó en el servidor. Revisa consola.");
+        }
+      } catch (e) {
+        console.error("[PUSH] enablePushApp error:", e);
+        alert("Error activando notificaciones. Revisa consola.");
+      }
+    }
+
+    async function sendTestPush() {
+      try {
+        const csrftoken = getCSRFToken();
+        const res = await fetch("/dashboard/push/test/", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {
+            "X-CSRFToken": csrftoken,
+            "Accept": "application/json",
+          },
+        });
+
+        const data = await res.json().catch(() => ({}));
+        console.log("[PUSH TEST]", res.status, data);
+
+        if (res.ok && data.ok) {
+          alert("📨 Push test enviado. Revisa si te llegó la notificación.");
+        } else {
+          alert("⚠️ Falló el push test. Revisa consola/logs.");
+        }
+      } catch (e) {
+        console.error("[PUSH TEST] error:", e);
+        alert("⚠️ Error enviando push test. Revisa consola.");
+      }
+    }
 
     // ==========================================================
     // ✅ PWA Install (evento real + fallback)
     // ==========================================================
-    let deferredPrompt = null;
-    const btnInstall = document.getElementById("btn-install");
+    (function () {
+      let deferredPrompt = null;
+      const btnInstall = document.getElementById("btn-install");
 
-    function isStandalone() {
-      return window.matchMedia("(display-mode: standalone)").matches
-        || window.matchMedia("(display-mode: fullscreen)").matches
-        || window.navigator.standalone === true; // iOS
-    }
+      function isStandalone() {
+        return window.matchMedia("(display-mode: standalone)").matches
+          || window.matchMedia("(display-mode: fullscreen)").matches
+          || window.navigator.standalone === true; // iOS
+      }
 
-    function setBtnHidden() {
-      if (!btnInstall) return;
-      btnInstall.style.display = "none";
-      btnInstall.onclick = null;
-    }
+      function setBtnHidden() {
+        if (!btnInstall) return;
+        btnInstall.style.display = "none";
+        btnInstall.onclick = null;
+      }
 
-    function setBtnReal() {
-      if (!btnInstall) return;
-      btnInstall.style.display = "inline-block";
-      btnInstall.textContent = "📲 Instalar app";
-      btnInstall.onclick = null; // click real está en addEventListener
-    }
+      function setBtnReal() {
+        if (!btnInstall) return;
+        btnInstall.style.display = "inline-block";
+        btnInstall.textContent = "📲 Instalar app";
+        btnInstall.onclick = null;
+      }
 
-    function setBtnFallback() {
-      if (!btnInstall) return;
-      btnInstall.style.display = "inline-block";
-      btnInstall.textContent = "📌 Instalar (menú ⋮ del navegador)";
-      btnInstall.onclick = () => {
-        alert("En Chrome/Edge: menú ⋮ → 'Instalar app' o 'Agregar a pantalla de inicio'.\n\nSi ya está instalada, este botón no aparece.");
-      };
-    }
+      function setBtnFallback() {
+        if (!btnInstall) return;
+        btnInstall.style.display = "inline-block";
+        btnInstall.textContent = "📌 Instalar (menú ⋮ del navegador)";
+        btnInstall.onclick = () => {
+          alert("En Chrome/Edge: menú ⋮ → 'Instalar app' o 'Agregar a pantalla de inicio'.\n\nSi ya está instalada, este botón no aparece.");
+        };
+      }
 
-    function syncInstallButton() {
-      if (!btnInstall) return;
+      function syncInstallButton() {
+        if (!btnInstall) return;
 
-      // Si ya está instalada, no mostramos nada
-      if (isStandalone()) {
+        if (isStandalone()) {
+          setBtnHidden();
+          return;
+        }
+
+        if (deferredPrompt) {
+          setBtnReal();
+          return;
+        }
+
         setBtnHidden();
-        return;
       }
 
-      // Si el navegador da el evento (instalable), mostramos el botón real
-      if (deferredPrompt) {
-        setBtnReal();
-        return;
+      window.addEventListener("beforeinstallprompt", (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        syncInstallButton();
+      });
+
+      if (btnInstall) {
+        btnInstall.addEventListener("click", async () => {
+          if (!deferredPrompt) return;
+          deferredPrompt.prompt();
+          await deferredPrompt.userChoice;
+          deferredPrompt = null;
+          syncInstallButton();
+        });
       }
 
-      // Si no hay evento, por defecto oculto (luego fallback)
-      setBtnHidden();
-    }
-
-    window.addEventListener("beforeinstallprompt", (e) => {
-      console.log("[PWA] 📲 beforeinstallprompt detectado");
-      e.preventDefault();
-      deferredPrompt = e;
-      syncInstallButton();
-    });
-
-    if (btnInstall) {
-      btnInstall.addEventListener("click", async () => {
-        if (!deferredPrompt) return; // si está en fallback, onclick ya maneja el alert
-
-        deferredPrompt.prompt();
-        const choice = await deferredPrompt.userChoice;
-        console.log("[PWA] elección usuario:", choice?.outcome);
-
+      window.addEventListener("appinstalled", () => {
         deferredPrompt = null;
         syncInstallButton();
       });
-    }
 
-    window.addEventListener("appinstalled", () => {
-      console.log("[PWA] 🎉 appinstalled");
-      deferredPrompt = null;
       syncInstallButton();
-    });
 
-    // Inicial
-    syncInstallButton();
+      window.addEventListener("load", () => {
+        setTimeout(() => {
+          if (!isStandalone() && !deferredPrompt) setBtnFallback();
+        }, 1500);
+      });
+    })();
 
-    // Fallback: SOLO si no llegó beforeinstallprompt y NO está instalada
-    window.addEventListener("load", () => {
-      setTimeout(() => {
-        if (!isStandalone() && !deferredPrompt) {
-          console.log("[PWA] ℹ️ no llegó beforeinstallprompt -> fallback help");
-          setBtnFallback();
-        }
-      }, 1500);
-    });
+    // ==========================================================
+    // ✅ Boot
+    // ==========================================================
+    (function () {
+      window.addEventListener("load", async () => {
+        const reg = await registerSW();
+        await syncPushButtons(reg);
+
+        if (btnPushApp)  btnPushApp.addEventListener("click", enablePushApp);
+        if (btnPushTest) btnPushTest.addEventListener("click", sendTestPush);
+      });
+    })();
   </script>
 
   {% block extra_js %}{% endblock %}

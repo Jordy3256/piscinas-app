@@ -1,6 +1,6 @@
 /* dashboard/static/dashboard/sw-dashboard.js */
 
-const VERSION = "v1.3.1"; // 👈 sube versión para forzar update
+const VERSION = "v1.3.2"; // 👈 sube versión para forzar update
 
 const CACHE = {
   static: `static-${VERSION}`,
@@ -132,7 +132,6 @@ self.addEventListener("install", (event) => {
       log("PRECACHE OK -> skipWaiting");
     } catch (e) {
       warn("INSTALL ERROR:", e);
-      // Igual intentamos activar para que no muera en redundant
       await self.skipWaiting();
     }
   })());
@@ -163,30 +162,30 @@ self.addEventListener("message", (event) => {
 });
 
 // ==============================
-// ✅ PUSH
+// ✅ PUSH (ÚNICO LISTENER)
 // ==============================
 self.addEventListener("push", (event) => {
-  let payload = {};
+  let data = {};
   try {
-    payload = event.data ? event.data.json() : {};
-  } catch {
-    try {
-      payload = { title: "Piscinas App", body: event.data ? event.data.text() : "" };
-    } catch {
-      payload = { title: "Piscinas App", body: "" };
-    }
+    data = event.data ? event.data.json() : {};
+  } catch (e) {
+    data = { title: "Piscinas App", body: event.data ? event.data.text() : "Nueva notificación" };
   }
 
-  const title = payload.title || "Piscinas App";
-  const body = payload.body || payload.message || "Tienes una nueva notificación.";
-  const url = payload.url || "/dashboard/home/";
+  const title = data.title || "Piscinas App";
+  const body = data.body || data.message || "Tienes una nueva notificación.";
+  const url = data.url || "/dashboard/home/";
+
+  // ✅ Si usas renotify, tag debe ser NO VACÍO
+  const tag = (data.tag && String(data.tag).trim()) ? String(data.tag).trim() : ("piscinas-" + Date.now());
 
   const options = {
     body,
-    icon: "/static/dashboard/icons/icon-192.png",
-    badge: "/static/dashboard/icons/icon-192.png",
+    icon: data.icon || "/static/dashboard/icons/icon-192.png",
+    badge: data.badge || "/static/dashboard/icons/icon-192.png",
     data: { url },
-    renotify: true,
+    tag,
+    renotify: true, // ✅ seguro porque tag no está vacío
   };
 
   event.waitUntil(self.registration.showNotification(title, options));
@@ -195,26 +194,25 @@ self.addEventListener("push", (event) => {
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
-  const targetUrl =
+  const url =
     (event.notification && event.notification.data && event.notification.data.url) ||
-    "/dashboard/home/";
+    "/dashboard/";
 
-  event.waitUntil((async () => {
-    const allClients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+  event.waitUntil(
+    (async () => {
+      const allClients = await clients.matchAll({ type: "window", includeUncontrolled: true });
 
-    for (const client of allClients) {
-      try {
-        const clientUrl = new URL(client.url);
-        if (clientUrl.origin === self.location.origin) {
-          await client.focus();
-          if (clientUrl.pathname !== targetUrl) client.navigate(targetUrl);
-          return;
+      // Si ya hay una pestaña abierta de tu app, enfócala
+      for (const client of allClients) {
+        if (client.url.includes("/dashboard/") && "focus" in client) {
+          return client.focus();
         }
-      } catch {}
-    }
+      }
 
-    return self.clients.openWindow(targetUrl);
-  })());
+      // Si no, abre una nueva
+      if (clients.openWindow) return clients.openWindow(url);
+    })()
+  );
 });
 
 self.addEventListener("fetch", (event) => {

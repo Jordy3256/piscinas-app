@@ -4,6 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="csrf-token" content="{{ csrf_token }}">
   <title>{% block title %}Admin{% endblock %}</title>
 
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -13,14 +14,18 @@
     .topbar { position: sticky; top: 0; z-index: 1030; backdrop-filter: blur(8px); }
     .bottom-nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 1030; }
     .spacer-bottom { height: 88px; }
+
     .btn-install { display: none; }
     .bottom-nav .btn { white-space: nowrap; }
+
+    /* ✅ Botones push */
+    #btn-push-admin { display: none; white-space: nowrap; }
+    #btn-push-test  { display: none; white-space: nowrap; }
   </style>
 
   <!-- PWA -->
-  <link rel="manifest" href="/dashboard/manifest.json">
+  <link rel="manifest" href="/dashboard/manifest.json?v=20260225">
   <meta name="theme-color" content="#0d6efd">
-  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
 
@@ -37,9 +42,14 @@
           <div class="fw-bold">
             {% block top_title %}🧑‍💼 Admin{% endblock %}
           </div>
+
           <div class="d-flex gap-2">
             {% block top_actions %}
-              <a class="btn btn-outline-secondary btn-sm" href="/dashboard/">Inicio</a>
+              <button id="btn-push-admin" class="btn btn-primary btn-sm" type="button">🔔 Activar</button>
+              <button id="btn-push-test" class="btn btn-outline-primary btn-sm" type="button">🧪 Test Push</button>
+
+              <!-- ✅ Inicio ahora va a /dashboard/home/ -->
+              <a class="btn btn-outline-secondary btn-sm" href="/dashboard/home/">Inicio</a>
               <a class="btn btn-outline-danger btn-sm" href="/logout/">Salir</a>
             {% endblock %}
           </div>
@@ -65,17 +75,14 @@
     <div class="bottom-nav bg-white border-top">
       <div class="container py-2">
         <div class="d-flex justify-content-around gap-2 flex-wrap">
-          <a class="btn btn-light flex-fill" href="/dashboard/">🏠 Inicio</a>
+          <!-- ✅ Inicio ahora va a /dashboard/home/ -->
+          <a class="btn btn-light flex-fill" href="/dashboard/home/">🏠 Inicio</a>
           <a class="btn btn-outline-secondary flex-fill" href="/dashboard/operativo/">🧑‍💼 Operativo</a>
           <a class="btn btn-outline-secondary flex-fill" href="/dashboard/finanzas/flujo/">💰 Finanzas</a>
           <a class="btn btn-outline-secondary flex-fill" href="/admin/" target="_blank">⚙️ Admin</a>
 
           <button id="btn-install" class="btn btn-primary flex-fill btn-install" type="button">
             📲 Instalar app
-          </button>
-
-          <button id="btn-enable-push" class="btn btn-outline-primary flex-fill" type="button">
-            🔔 Activar notificaciones
           </button>
         </div>
       </div>
@@ -84,89 +91,174 @@
   </div>
 
   <script>
-    // ✅ enablePush SIEMPRE definido (no rompe si lo llamas antes)
-    window.enablePush = window.enablePush || (async function () {
-      try {
-        if (!("serviceWorker" in navigator)) return console.warn("[SW] no soportado");
-        if (!("PushManager" in window) || !("Notification" in window)) return console.warn("[PUSH] no soportado");
+    // ==========================================================
+    // ✅ Config
+    // ==========================================================
+    const VAPID_PUBLIC_KEY = "{{ VAPID_PUBLIC_KEY|default:''|escapejs }}";
 
+    // ==========================================================
+    // ✅ CSRF robusto (meta -> cookie)
+    // ==========================================================
+    function getCSRFToken() {
+      const meta = document.querySelector('meta[name="csrf-token"]');
+      if (meta && meta.getAttribute("content")) return meta.getAttribute("content") || "";
+      const m = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+      return m ? decodeURIComponent(m[1]) : "";
+    }
+
+    // ==========================================================
+    // ✅ Utils
+    // ==========================================================
+    function urlBase64ToUint8Array(base64UrlString) {
+      if (!base64UrlString || typeof base64UrlString !== "string") return null;
+      const padding = "=".repeat((4 - (base64UrlString.length % 4)) % 4);
+      const base64 = (base64UrlString + padding).replace(/-/g, "+").replace(/_/g, "/");
+      const raw = atob(base64);
+      const out = new Uint8Array(raw.length);
+      for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+      return out;
+    }
+
+    async function unregisterGhostSW() {
+      if (!("serviceWorker" in navigator)) return;
+      const regs = await navigator.serviceWorker.getRegistrations();
+      for (const r of regs) {
+        const scope = r?.scope || "";
+        if (scope.includes("/static/dashboard/")) {
+          console.log("[SW] 🧹 Unregister viejo /static/dashboard/:", scope);
+          await r.unregister();
+        }
+      }
+    }
+
+    async function registerSW() {
+      if (!("serviceWorker" in navigator)) return null;
+      await unregisterGhostSW();
+      await navigator.serviceWorker.register("/dashboard/sw.js", { scope: "/dashboard/" });
+      const ready = await navigator.serviceWorker.ready;
+      return ready;
+    }
+
+    // ==========================================================
+    // ✅ Save subscription  (✅ URL corregida según tu urls.py)
+    // ==========================================================
+    async function sendSubscriptionToServer(sub) {
+      const csrftoken = getCSRFToken();
+      const res = await fetch("/dashboard/push/save_subscription/", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": csrftoken,
+          "Accept": "application/json",
+        },
+        body: JSON.stringify(sub.toJSON()),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        console.warn("[PUSH] save_subscription FAILED", res.status, data);
+        return { ok: false, status: res.status, data };
+      }
+      console.log("[PUSH] saved ✅", data);
+      return { ok: true, data };
+    }
+
+    // ==========================================================
+    // ✅ Push logic
+    // ==========================================================
+    const btnPushAdmin = document.getElementById("btn-push-admin");
+    const btnPushTest  = document.getElementById("btn-push-test");
+
+    function show(el) { if (el) el.style.display = "inline-block"; }
+    function hide(el) { if (el) el.style.display = "none"; }
+
+    async function syncPushButtons(reg) {
+      if (!btnPushAdmin && !btnPushTest) return;
+
+      if (!reg || !("PushManager" in window) || !("Notification" in window)) {
+        hide(btnPushAdmin); hide(btnPushTest);
+        return;
+      }
+
+      const sub = await reg.pushManager.getSubscription();
+      const granted = (Notification.permission === "granted");
+
+      if (sub && granted) {
+        hide(btnPushAdmin);
+        show(btnPushTest);
+      } else {
+        show(btnPushAdmin);
+        hide(btnPushTest);
+      }
+    }
+
+    async function enablePushAdmin() {
+      try {
         const reg = await navigator.serviceWorker.ready;
 
-        if (Notification.permission === "denied") return console.warn("[PUSH] permiso denegado");
-        if (Notification.permission === "default") {
-          const perm = await Notification.requestPermission();
-          console.log("[PUSH] permission:", perm);
-          if (perm !== "granted") return;
-        }
-
-        const r = await fetch("/dashboard/push/public-key/", { credentials: "same-origin" });
-        if (!r.ok) throw new Error("public-key status " + r.status);
-        const data = await r.json();
-        const publicKey = (data.publicKey || "").replace(/\s+/g, "").trim();
-        if (!publicKey) return console.error("[PUSH] publicKey vacía");
-
-        function urlBase64ToUint8Array(s) {
-          s = (s || "").replace(/\s+/g, "").trim();
-          const pad = "=".repeat((4 - (s.length % 4)) % 4);
-          const b64 = (s + pad).replace(/-/g, "+").replace(/_/g, "/");
-          const raw = atob(b64);
-          const out = new Uint8Array(raw.length);
-          for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
-          return out;
+        const perm = await Notification.requestPermission();
+        if (perm !== "granted") {
+          alert("No concediste el permiso de notificaciones.");
+          return;
         }
 
         let sub = await reg.pushManager.getSubscription();
         if (!sub) {
+          const keyBytes = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
+          if (!keyBytes || !keyBytes.length) {
+            alert("VAPID_PUBLIC_KEY inválida (debe ser base64url).");
+            console.error("[PUSH] keyBytes inválido", VAPID_PUBLIC_KEY);
+            return;
+          }
           sub = await reg.pushManager.subscribe({
             userVisibleOnly: true,
-            applicationServerKey: urlBase64ToUint8Array(publicKey),
+            applicationServerKey: keyBytes,
           });
         }
 
-        function getCookie(name) {
-          const v = ; ${document.cookie};
-          const p = v.split(; ${name}=);
-          if (p.length === 2) return p.pop().split(";").shift();
-          return "";
+        const saved = await sendSubscriptionToServer(sub);
+        if (saved.ok) {
+          alert("✅ Notificaciones activadas.");
+          await syncPushButtons(reg);
+        } else {
+          alert("⚠️ Suscripción creada pero no se guardó en el servidor. Revisa consola.");
         }
+      } catch (e) {
+        console.error("[PUSH] enablePushAdmin error:", e);
+        alert("Error activando notificaciones. Revisa consola.");
+      }
+    }
 
-        const csrftoken = getCookie("csrftoken");
-        const save = await fetch("/dashboard/save-subscription/", {
+    async function sendTestPush() {
+      try {
+        const csrftoken = getCSRFToken();
+        const res = await fetch("/dashboard/push/test/", {
           method: "POST",
           credentials: "same-origin",
           headers: {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
             "X-CSRFToken": csrftoken,
+            "Accept": "application/json",
           },
-          body: JSON.stringify(sub.toJSON()),
         });
 
-        const out = await save.json().catch(() => ({}));
-        console.log("[PUSH] save:", save.status, out);
-      } catch (e) {
-        console.error("[enablePush] error:", e);
-      }
-    });
+        const data = await res.json().catch(() => ({}));
+        console.log("[PUSH TEST]", res.status, data);
 
-    window.addEventListener("load", () => {
-      const btn = document.getElementById("btn-enable-push");
-      if (btn) btn.addEventListener("click", () => window.enablePush());
-    });
-
-    // ✅ SW register
-    (function () {
-      if (!("serviceWorker" in navigator)) return;
-      window.addEventListener("load", async () => {
-        try {
-          await navigator.serviceWorker.register("/dashboard/sw.js", { scope: "/dashboard/" });
-        } catch (e) {
-          console.error("[SW] error:", e);
+        if (res.ok && data.ok) {
+          alert("📨 Push test enviado. Revisa si te llegó la notificación.");
+        } else {
+          alert("⚠️ Falló el push test. Revisa consola/logs.");
         }
-      });
-    })();
+      } catch (e) {
+        console.error("[PUSH TEST] error:", e);
+        alert("⚠️ Error enviando push test. Revisa consola.");
+      }
+    }
 
-    // ✅ PWA install
+    // ==========================================================
+    // ✅ PWA Install
+    // ==========================================================
     (function () {
       let deferredPrompt = null;
       const btn = document.getElementById("btn-install");
@@ -176,15 +268,18 @@
           || window.matchMedia("(display-mode: fullscreen)").matches
           || window.navigator.standalone === true;
       }
+
       function showBtn(text) {
         if (!btn) return;
         btn.style.display = "inline-block";
         btn.textContent = text;
       }
+
       function hideBtn() {
         if (!btn) return;
         btn.style.display = "none";
       }
+
       function sync() {
         if (!btn) return;
         if (isStandalone()) return hideBtn();
@@ -197,6 +292,7 @@
         deferredPrompt = e;
         sync();
       });
+
       window.addEventListener("appinstalled", () => {
         deferredPrompt = null;
         sync();
@@ -204,6 +300,7 @@
 
       if (btn) {
         btn.addEventListener("click", async () => {
+          if (isStandalone()) return;
           if (!deferredPrompt) {
             alert("En Chrome/Edge: menú ⋮ → 'Instalar app' o 'Agregar a pantalla de inicio'.");
             return;
@@ -216,10 +313,30 @@
       }
 
       sync();
+
       window.addEventListener("load", () => {
         setTimeout(() => {
           if (!isStandalone() && !deferredPrompt) showBtn("📌 Instalar (menú ⋮)");
         }, 1500);
+      });
+
+      window.matchMedia("(display-mode: standalone)").addEventListener("change", sync);
+    })();
+
+    // ==========================================================
+    // ✅ Boot
+    // ==========================================================
+    (function () {
+      window.addEventListener("load", async () => {
+        // 1) SW
+        const reg = await registerSW();
+
+        // 2) botones push (estado inicial)
+        await syncPushButtons(reg);
+
+        // 3) listeners
+        if (btnPushAdmin) btnPushAdmin.addEventListener("click", enablePushAdmin);
+        if (btnPushTest)  btnPushTest.addEventListener("click", sendTestPush);
       });
     })();
   </script>
