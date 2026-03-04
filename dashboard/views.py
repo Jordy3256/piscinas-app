@@ -259,13 +259,23 @@ def push_test_view(request):
         return JsonResponse({"ok": False, "error": "Modelo PushSubscription no disponible"}, status=500)
 
     # ✅ Usamos archivo (más robusto que PEM en variable)
-    vapid_private_key_path = Path(settings.BASE_DIR) / "vapid_private.pem"
-    if not vapid_private_key_path.exists():
-        return JsonResponse(
-            {"ok": False, "error": "No existe vapid_private.pem en BASE_DIR (junto a manage.py)"},
-            status=500,
-        )
+    # ✅ Usar clave privada desde settings (env var), NO archivo .pem
+vapid_private_key = getattr(settings, "VAPID_PRIVATE_KEY", "") or ""
+if not vapid_private_key.strip():
+    return JsonResponse(
+        {"ok": False, "error": "VAPID_PRIVATE_KEY vacío en settings/env"},
+        status=400,
+    )
 
+vapid_subject = getattr(settings, "VAPID_SUBJECT", "") or "mailto:admin@piscinas-app.local"
+
+# ... y al llamar webpush:
+webpush(
+    subscription_info=sub_info,
+    data=payload,
+    vapid_private_key=vapid_private_key,   # ✅ string PEM
+    vapid_claims={"sub": vapid_subject},
+)
     vapid_subject = (
         getattr(settings, "VAPID_SUBJECT", "") or "mailto:admin@piscinas-app.local"
     ).strip()
