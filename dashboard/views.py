@@ -349,7 +349,7 @@ def home_view(request):
 # -------------------
 @login_required
 def dashboard_root_view(request):
-    return redirect("/home/")
+    return redirect("/dashboard/home/")
 
 # -------------------
 # Dashboard por rol

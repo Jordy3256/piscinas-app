@@ -14,9 +14,9 @@ from .views import (
     unread_count_view,
 
     # Core
-    dashboard_root_view,
     home_view,
     dashboard_view,
+    dashboard_root_view,
 
     # Mantenimientos
     mantenimiento_detalle_view,
