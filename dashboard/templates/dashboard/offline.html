@@ -1,0 +1,43 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0d6efd">
+  <title>Sin conexión</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    .shell { max-width: 720px; margin: 0 auto; }
+  </style>
+</head>
+<body class="bg-light">
+  <div class="shell">
+    <div class="container py-5">
+      <div class="card shadow-sm">
+        <div class="card-body p-4">
+          <h4 class="mb-2">📴 Estás sin conexión</h4>
+          <p class="text-muted mb-4">
+            No se pudo cargar esta sección porque no hay internet.
+            Cuando vuelvas a tener conexión, intenta nuevamente.
+          </p>
+
+          <div class="d-flex gap-2 flex-wrap">
+            <a class="btn btn-primary" href="/dashboard/home/">🏠 Ir a Inicio</a>
+            <button class="btn btn-outline-secondary" type="button" onclick="location.reload()">
+              🔄 Reintentar
+            </button>
+          </div>
+
+          <hr class="my-4">
+
+          <div class="small text-muted">
+            Tip: si instalaste la app (PWA), abre desde el ícono para mejor experiencia.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
