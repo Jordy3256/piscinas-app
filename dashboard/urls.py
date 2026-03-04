@@ -14,6 +14,7 @@ from .views import (
     unread_count_view,
 
     # Core
+    dashboard_root_view,
     home_view,
     dashboard_view,
 
@@ -49,15 +50,15 @@ urlpatterns = [
     path("push/save_subscription/", save_subscription_view, name="save_subscription"),
     path("push/test/", push_test_view, name="push_test"),
 
-    # 👇 Esto elimina el 404 del badge
+    # 👇 badge
     path("notificaciones/unread-count/", unread_count_view, name="unread_count"),
 
     # ======================
     # Home / Dashboard
     # ======================
-    path("", dashboard_root_view,name="dashboard_root"),
+    path("", dashboard_root_view, name="dashboard_root"),   # /dashboard/ -> /dashboard/home/
     path("home/", home_view, name="home"),
-    path("", dashboard_view, name="dashboard"),
+    path("panel/", dashboard_view, name="dashboard"),       # /dashboard/panel/ (tu dashboard por rol)
 
     # ======================
     # Mantenimientos

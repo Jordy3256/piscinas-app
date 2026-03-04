@@ -258,34 +258,18 @@ def push_test_view(request):
     if PushSubscription is None:
         return JsonResponse({"ok": False, "error": "Modelo PushSubscription no disponible"}, status=500)
 
-    # ✅ Usamos archivo (más robusto que PEM en variable)
-    # ✅ Usar clave privada desde settings (env var), NO archivo .pem
-vapid_private_key = getattr(settings, "VAPID_PRIVATE_KEY", "") or ""
-if not vapid_private_key.strip():
-    return JsonResponse(
-        {"ok": False, "error": "VAPID_PRIVATE_KEY vacío en settings/env"},
-        status=400,
-    )
+    # ✅ VAPID desde settings/env (NO archivo .pem)
+    vapid_private_key = (getattr(settings, "VAPID_PRIVATE_KEY", "") or "").strip()
+    if not vapid_private_key:
+        return JsonResponse({"ok": False, "error": "VAPID_PRIVATE_KEY vacío en settings/env"}, status=500)
 
-vapid_subject = getattr(settings, "VAPID_SUBJECT", "") or "mailto:admin@piscinas-app.local"
-
-# ... y al llamar webpush:
-webpush(
-    subscription_info=sub_info,
-    data=payload,
-    vapid_private_key=vapid_private_key,   # ✅ string PEM
-    vapid_claims={"sub": vapid_subject},
-)
-    vapid_subject = (
-        getattr(settings, "VAPID_SUBJECT", "") or "mailto:admin@piscinas-app.local"
-    ).strip()
+    vapid_subject = (getattr(settings, "VAPID_SUBJECT", "") or "mailto:admin@piscinas-app.local").strip()
 
     payload = json.dumps(
         {
             "title": "✅ Prueba Piscinas App",
             "body": f"Hola {request.user.username}, tu Push está funcionando 🎉",
             "url": "/dashboard/",
-            # opcional: ayuda si usas renotify en el SW
             "tag": f"piscinas-{request.user.username}",
         }
     )
@@ -311,7 +295,7 @@ webpush(
             webpush(
                 subscription_info=subscription_info,
                 data=payload,
-                vapid_private_key=str(vapid_private_key_path),  # ✅ ruta al pem
+                vapid_private_key=vapid_private_key,  # ✅ string PEM en settings/env
                 vapid_claims={"sub": vapid_subject},
                 content_encoding="aes128gcm",
                 ttl=60,
@@ -344,7 +328,6 @@ webpush(
 
     return JsonResponse({"ok": True, "sent": sent, "failed": failed, "errors": errors[:5]})
 
-
 # -------------------
 # Home
 # -------------------
@@ -361,6 +344,13 @@ def home_view(request):
         return render(request, "dashboard/home_trabajador.html", ctx)
 
     return render(request, "dashboard/no_autorizado.html", status=403)
+
+# -------------------
+# Root /dashboard/  -> manda a /dashboard/home/
+# -------------------
+@login_required
+def dashboard_root_view(request):
+    return redirect("/dashboard/home/")
 
 # -------------------
 # Dashboard por rol
