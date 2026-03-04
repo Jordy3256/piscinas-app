@@ -1,6 +1,6 @@
 /* dashboard/static/dashboard/sw-dashboard.js */
 
-const VERSION = "v1.3.2"; // 👈 sube versión para forzar update
+const VERSION = "v1.3.3"; // 👈 sube versión para forzar update
 
 const CACHE = {
   static: `static-${VERSION}`,
@@ -8,11 +8,15 @@ const CACHE = {
   images: `images-${VERSION}`,
 };
 
+// ✅ OJO: NO precachear /dashboard/ porque suele ser 302.
+// En su lugar precacheamos /dashboard/home/ (200 real).
 const PRECACHE_URLS = [
-  "/dashboard/",
   "/dashboard/home/",
   "/dashboard/offline/",
   "/dashboard/manifest.json",
+
+  // si quieres, puedes precachear operativo (siempre que responda 200)
+  "/dashboard/operativo/",
 
   "/static/dashboard/icons/icon-192.png",
   "/static/dashboard/icons/icon-192-maskable.png",
@@ -52,13 +56,29 @@ function shouldBypassCache(request) {
   return false;
 }
 
+// ✅ Normaliza navegación y evita 302:
+// /dashboard/ -> /dashboard/home/
 function normalizeNavigate(req) {
   const url = new URL(req.url);
+
+  if (url.pathname === "/dashboard" || url.pathname === "/dashboard/") {
+    return new Request("/dashboard/home/", {
+      method: "GET",
+      credentials: "same-origin",
+      redirect: "follow",
+    });
+  }
+
   if (url.pathname.startsWith("/dashboard/")) {
     url.search = "";
     url.hash = "";
-    return new Request(url.toString(), { method: "GET", credentials: "same-origin", redirect: "follow" });
+    return new Request(url.toString(), {
+      method: "GET",
+      credentials: "same-origin",
+      redirect: "follow",
+    });
   }
+
   return req;
 }
 
@@ -77,6 +97,7 @@ async function cacheFirst(request, cacheName) {
   const cache = await caches.open(cacheName);
   const cached = await cache.match(request);
   if (cached) return cached;
+
   const fresh = await fetch(request);
   await safePut(cacheName, request, fresh);
   return fresh;
@@ -84,6 +105,7 @@ async function cacheFirst(request, cacheName) {
 
 async function networkFirst(request, cacheName) {
   const cache = await caches.open(cacheName);
+
   try {
     const fresh = await fetch(request);
     await safePut(cacheName, request, fresh);
@@ -92,12 +114,15 @@ async function networkFirst(request, cacheName) {
     const cached = await cache.match(request);
     if (cached) return cached;
 
+    // ✅ fallback offline para HTML
     if (isHtml(request)) {
       const off = await cache.match("/dashboard/offline/");
       if (off) return off;
+
       const home = await cache.match("/dashboard/home/");
       if (home) return home;
     }
+
     throw e;
   }
 }
@@ -108,7 +133,10 @@ async function precacheAll(cache, urls) {
     urls.map(async (u) => {
       const req = new Request(u, { cache: "reload" });
       const res = await fetch(req);
-      if (!res.ok) throw new Error(`${u} -> ${res.status}`);
+
+      // Solo aceptamos 200 para precache (evita meter redirects)
+      if (res.status !== 200) throw new Error(`${u} -> ${res.status}`);
+
       await cache.put(req, res);
       return u;
     })
@@ -177,7 +205,9 @@ self.addEventListener("push", (event) => {
   const url = data.url || "/dashboard/home/";
 
   // ✅ Si usas renotify, tag debe ser NO VACÍO
-  const tag = (data.tag && String(data.tag).trim()) ? String(data.tag).trim() : ("piscinas-" + Date.now());
+  const tag = (data.tag && String(data.tag).trim())
+    ? String(data.tag).trim()
+    : ("piscinas-" + Date.now());
 
   const options = {
     body,
@@ -185,7 +215,7 @@ self.addEventListener("push", (event) => {
     badge: data.badge || "/static/dashboard/icons/icon-192.png",
     data: { url },
     tag,
-    renotify: true, // ✅ seguro porque tag no está vacío
+    renotify: true,
   };
 
   event.waitUntil(self.registration.showNotification(title, options));
@@ -196,20 +226,18 @@ self.addEventListener("notificationclick", (event) => {
 
   const url =
     (event.notification && event.notification.data && event.notification.data.url) ||
-    "/dashboard/";
+    "/dashboard/home/";
 
   event.waitUntil(
     (async () => {
       const allClients = await clients.matchAll({ type: "window", includeUncontrolled: true });
 
-      // Si ya hay una pestaña abierta de tu app, enfócala
       for (const client of allClients) {
         if (client.url.includes("/dashboard/") && "focus" in client) {
           return client.focus();
         }
       }
 
-      // Si no, abre una nueva
       if (clients.openWindow) return clients.openWindow(url);
     })()
   );
@@ -217,6 +245,7 @@ self.addEventListener("notificationclick", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const req = event.request;
+
   if (req.method !== "GET") return;
   if (!isSameOrigin(req.url)) return;
   if (shouldBypassCache(req)) return;
@@ -235,5 +264,6 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(cacheFirst(request, CACHE.static));
     return;
   }
+
   event.respondWith(networkFirst(request, CACHE.pages));
 });
