@@ -5,14 +5,23 @@ import base64
 
 import dj_database_url
 from django.core.management.utils import get_random_secret_key
-from dotenv import load_dotenv
 
 from cryptography.hazmat.primitives import serialization
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# ✅ Cargar variables desde .env (solo local; en Render usa Environment variables)
-load_dotenv(BASE_DIR / ".env")
+# ==========================================================
+# ✅ .env SOLO LOCAL (Render usa Environment Variables)
+# - Evita que el deploy falle si no está instalado python-dotenv
+# - Si lo instalas igual, esto sigue funcionando perfecto
+# ==========================================================
+if os.environ.get("RENDER") != "true":
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(BASE_DIR / ".env")
+    except Exception:
+        # si no existe python-dotenv o no hay .env, no rompemos
+        pass
 
 # =========================
 # BASICO
@@ -69,7 +78,10 @@ VAPID_PRIVATE_PEM = _env_multiline("VAPID_PRIVATE_PEM", "")
 
 # ✅ Lee base64url (navegador) si lo tienes (opcional)
 VAPID_PUBLIC_KEY = _clean_base64url(os.environ.get("VAPID_PUBLIC_KEY", ""))  # webpush/base64url
-VAPID_PRIVATE_KEY = _clean_base64url(os.environ.get("VAPID_PRIVATE_KEY", ""))  # NO recomendado guardarla así
+
+# ❗No recomendado guardar la private key base64url.
+# Si llega, la limpiamos, pero NO la preferimos.
+VAPID_PRIVATE_KEY = _clean_base64url(os.environ.get("VAPID_PRIVATE_KEY", ""))
 
 VAPID_SUBJECT = (os.environ.get("VAPID_SUBJECT", "mailto:admin@piscinas-app.local") or "").strip()
 
@@ -88,10 +100,8 @@ if not VAPID_PUBLIC_KEY:
     else:
         VAPID_PUBLIC_KEY = VAPID_PUBLIC_KEY_FALLBACK
 
-# ✅ Compatibilidad con tu endpoint actual:
-# si tu código sigue validando "VAPID_PRIVATE_KEY / VAPID_PUBLIC_KEY",
-# hacemos que VAPID_PRIVATE_KEY use el PEM real.
-# ✅ Siempre usar PEM para firmar (evita errores ASN.1)
+# ✅ SIEMPRE usar PEM para firmar (pywebpush espera PEM / ruta a PEM)
+# Esto hace match con tu push_test_view que usa settings.VAPID_PRIVATE_KEY como PEM.
 VAPID_PRIVATE_KEY = VAPID_PRIVATE_PEM
 
 # =========================
@@ -118,8 +128,11 @@ if ENV_ALLOWED:
 ALLOWED_HOSTS = list(dict.fromkeys(ALLOWED_HOSTS))
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
+
+# ✅ solo activa cookies secure en prod (en local suele molestar)
+if not DEBUG:
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
 
 # =========================
 # CSRF para Render
@@ -267,8 +280,6 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # SEGURIDAD PRODUCCION
 # =========================
 if not DEBUG:
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
     SECURE_SSL_REDIRECT = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
     SECURE_REFERRER_POLICY = "same-origin"
