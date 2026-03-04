@@ -13,7 +13,6 @@ from django.contrib.staticfiles import finders
 from django.db.models import Sum, Count, Q
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
-from django.shortcuts import redirect
 from django.templatetags.static import static
 from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_http_methods
@@ -350,17 +349,22 @@ def home_view(request):
 # -------------------
 @login_required
 def dashboard_root_view(request):
-    return redirect("/dashboard/home/")
+    return redirect("/home/")
 
 # -------------------
 # Dashboard por rol
 # -------------------
 @login_required
 def dashboard_view(request):
-    base_ctx = {"VAPID_PUBLIC_KEY": settings.VAPID_PUBLIC_KEY}
+    base_ctx = {"VAPID_PUBLIC_KEY": getattr(settings, "VAPID_PUBLIC_KEY", "")}
 
     if es_admin(request.user):
-        ...
+        total_ingresos = (
+            Contrato.objects.filter(activo=True).aggregate(total=Sum("precio_mensual"))["total"] or 0
+        )
+        total_egresos = Egreso.objects.aggregate(total=Sum("total"))["total"] or 0
+        balance = total_ingresos - total_egresos
+
         ctx = {
             **base_ctx,
             "modo": "admin",
@@ -372,7 +376,23 @@ def dashboard_view(request):
         return render(request, "dashboard/dashboard.html", ctx)
 
     if es_trabajador(request.user):
-        ...
+        hoy = date.today()
+        try:
+            trabajador = request.user.trabajador
+            mantenimientos_hoy = (
+                Mantenimiento.objects.filter(trabajadores=trabajador, fecha=hoy)
+                .select_related("cliente", "contrato")
+                .order_by("fecha")
+            )
+            mantenimientos_proximos = (
+                Mantenimiento.objects.filter(trabajadores=trabajador, fecha__gt=hoy)
+                .select_related("cliente", "contrato")
+                .order_by("fecha")[:20]
+            )
+        except Exception:
+            mantenimientos_hoy = Mantenimiento.objects.none()
+            mantenimientos_proximos = Mantenimiento.objects.none()
+
         ctx = {
             **base_ctx,
             "modo": "trabajador",
@@ -878,7 +898,3 @@ def offline_view(request):
 @require_http_methods(["GET"])
 def unread_count_view(request):
     return JsonResponse({"count": 0})
-
-@login_required
-def dashboard_root_view(request):
-    return redirect("home")
