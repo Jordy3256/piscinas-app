@@ -358,10 +358,12 @@ def dashboard_root_view(request):
 def dashboard_view(request):
     base_ctx = {"VAPID_PUBLIC_KEY": getattr(settings, "VAPID_PUBLIC_KEY", "")}
 
+    # ======================
+    # ADMIN
+    # ======================
     if es_admin(request.user):
-        total_ingresos = (
-            Contrato.objects.filter(activo=True).aggregate(total=Sum("precio_mensual"))["total"] or 0
-        )
+        # Totales globales (simple y robusto)
+        total_ingresos = Ingreso.objects.aggregate(total=Sum("total"))["total"] or 0
         total_egresos = Egreso.objects.aggregate(total=Sum("total"))["total"] or 0
         balance = total_ingresos - total_egresos
 
@@ -375,23 +377,28 @@ def dashboard_view(request):
         }
         return render(request, "dashboard/dashboard.html", ctx)
 
+    # ======================
+    # TRABAJADOR
+    # ======================
     if es_trabajador(request.user):
         hoy = date.today()
+
         try:
             trabajador = request.user.trabajador
-            mantenimientos_hoy = (
-                Mantenimiento.objects.filter(trabajadores=trabajador, fecha=hoy)
-                .select_related("cliente", "contrato")
-                .order_by("fecha")
-            )
-            mantenimientos_proximos = (
-                Mantenimiento.objects.filter(trabajadores=trabajador, fecha__gt=hoy)
-                .select_related("cliente", "contrato")
-                .order_by("fecha")[:20]
-            )
         except Exception:
-            mantenimientos_hoy = Mantenimiento.objects.none()
-            mantenimientos_proximos = Mantenimiento.objects.none()
+            return render(request, "dashboard/no_autorizado.html", status=403)
+
+        mantenimientos_hoy = (
+            Mantenimiento.objects.filter(fecha=hoy, trabajadores=trabajador)
+            .select_related("cliente", "contrato")
+            .order_by("estado", "fecha")
+        )
+
+        mantenimientos_proximos = (
+            Mantenimiento.objects.filter(fecha__gt=hoy, trabajadores=trabajador)
+            .select_related("cliente", "contrato")
+            .order_by("fecha")[:30]
+        )
 
         ctx = {
             **base_ctx,
@@ -404,7 +411,6 @@ def dashboard_view(request):
         return render(request, "dashboard/dashboard_trabajador.html", ctx)
 
     return render(request, "dashboard/no_autorizado.html", status=403)
-
 
 # -------------------
 # Operativo Admin
@@ -449,14 +455,15 @@ def admin_operativo_view(request):
         .order_by("fecha")[:30]
     )
 
+    # ✅ Resumen por trabajador (ManyToMany -> usar __)
     resumen_trabajadores = (
-        Mantenimiento.objects.values("trabajadores_id", "trabajadoresuser_username")
+        Mantenimiento.objects.filter(trabajadores__isnull=False)
+        .values("trabajadores__id", "trabajadores__user__username")
         .annotate(
             dia=Count("id", filter=Q(fecha=fecha)),
             atrasados=Count("id", filter=Q(fecha__lt=hoy, estado="pendiente")),
             proximos=Count("id", filter=Q(fecha__gt=hoy, estado="pendiente")),
         )
-        .exclude(trabajadores_id_isnull=True)
         .order_by("-atrasados", "-dia", "-proximos")
     )
 
@@ -473,7 +480,6 @@ def admin_operativo_view(request):
             "es_admin": True,
         },
     )
-
 
 # -------------------
 # Detalle mantenimiento
