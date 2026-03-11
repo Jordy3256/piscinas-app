@@ -1,34 +1,24 @@
 /* dashboard/static/dashboard/sw-dashboard.js */
 
-const VERSION = "v1.3.3"; // 👈 sube versión para forzar update
-
+const VERSION = "v2026-03-11-10";
 const CACHE = {
   static: `static-${VERSION}`,
   pages: `pages-${VERSION}`,
   images: `images-${VERSION}`,
 };
 
-// ✅ OJO: NO precachear /dashboard/ porque suele ser 302.
-// En su lugar precacheamos /dashboard/home/ (200 real).
 const PRECACHE_URLS = [
-  "/dashboard/home/",
   "/dashboard/offline/",
   "/dashboard/manifest.json",
-
-  // si quieres, puedes precachear operativo (siempre que responda 200)
-  "/dashboard/operativo/",
-
   "/static/dashboard/icons/icon-192.png",
   "/static/dashboard/icons/icon-192-maskable.png",
   "/static/dashboard/icons/icon-512.png",
   "/static/dashboard/icons/icon-512-maskable.png",
 ];
 
-function log(...args) { console.log("[SW-DASH]", ...args); }
-function warn(...args) { console.warn("[SW-DASH]", ...args); }
-
 function isSameOrigin(url) {
-  try { return new URL(url).origin === self.location.origin; } catch { return false; }
+  try { return new URL(url).origin === self.location.origin; }
+  catch { return false; }
 }
 
 function isHtml(request) {
@@ -53,33 +43,13 @@ function shouldBypassCache(request) {
   if (url.pathname.startsWith("/admin/")) return true;
   if (url.pathname.startsWith("/logout/")) return true;
   if (url.pathname.startsWith("/login/")) return true;
+
+  // CLAVE: no cachear páginas principales
+  if (url.pathname === "/dashboard/") return true;
+  if (url.pathname === "/dashboard/home/") return true;
+  if (url.pathname === "/dashboard/panel/") return true;
+
   return false;
-}
-
-// ✅ Normaliza navegación y evita 302:
-// /dashboard/ -> /dashboard/home/
-function normalizeNavigate(req) {
-  const url = new URL(req.url);
-
-  if (url.pathname === "/dashboard" || url.pathname === "/dashboard/") {
-    return new Request("/dashboard/home/", {
-      method: "GET",
-      credentials: "same-origin",
-      redirect: "follow",
-    });
-  }
-
-  if (url.pathname.startsWith("/dashboard/")) {
-    url.search = "";
-    url.hash = "";
-    return new Request(url.toString(), {
-      method: "GET",
-      credentials: "same-origin",
-      redirect: "follow",
-    });
-  }
-
-  return req;
 }
 
 async function safePut(cacheName, request, response) {
@@ -89,7 +59,7 @@ async function safePut(cacheName, request, response) {
     const cache = await caches.open(cacheName);
     await cache.put(request, response.clone());
   } catch (e) {
-    warn("safePut error:", e);
+    console.warn("[SW] safePut error:", e);
   }
 }
 
@@ -98,100 +68,78 @@ async function cacheFirst(request, cacheName) {
   const cached = await cache.match(request);
   if (cached) return cached;
 
-  const fresh = await fetch(request);
+  const fresh = await fetch(request, { cache: "no-store" });
   await safePut(cacheName, request, fresh);
   return fresh;
+}
+
+async function networkOnlyHtml(request) {
+  try {
+    return await fetch(request, { cache: "no-store" });
+  } catch (e) {
+    const cache = await caches.open(CACHE.static);
+    const offline = await cache.match("/dashboard/offline/");
+    return offline || new Response("Offline", { status: 503 });
+  }
 }
 
 async function networkFirst(request, cacheName) {
   const cache = await caches.open(cacheName);
 
   try {
-    const fresh = await fetch(request);
+    const fresh = await fetch(request, { cache: "no-store" });
     await safePut(cacheName, request, fresh);
     return fresh;
   } catch (e) {
     const cached = await cache.match(request);
     if (cached) return cached;
 
-    // ✅ fallback offline para HTML
     if (isHtml(request)) {
-      const off = await cache.match("/dashboard/offline/");
+      const off = await caches.open(CACHE.static).then(c => c.match("/dashboard/offline/"));
       if (off) return off;
-
-      const home = await cache.match("/dashboard/home/");
-      if (home) return home;
     }
 
     throw e;
   }
 }
 
-// ✅ Precaching robusto (SIN addAll)
 async function precacheAll(cache, urls) {
-  const results = await Promise.allSettled(
-    urls.map(async (u) => {
+  for (const u of urls) {
+    try {
       const req = new Request(u, { cache: "reload" });
       const res = await fetch(req);
-
-      // Solo aceptamos 200 para precache (evita meter redirects)
-      if (res.status !== 200) throw new Error(`${u} -> ${res.status}`);
-
-      await cache.put(req, res);
-      return u;
-    })
-  );
-
-  const failed = results
-    .filter(r => r.status === "rejected")
-    .map(r => String(r.reason || "unknown"));
-
-  if (failed.length) warn("PRECACHE failed items:", failed);
+      if (res.status === 200) {
+        await cache.put(req, res);
+      }
+    } catch (e) {
+      console.warn("[SW] precache fail:", u, e);
+    }
+  }
 }
 
 self.addEventListener("install", (event) => {
-  log("INSTALL", VERSION, "scope:", self.registration.scope);
-
   event.waitUntil((async () => {
-    try {
-      const cache = await caches.open(CACHE.static);
-      await precacheAll(cache, PRECACHE_URLS);
-      await self.skipWaiting();
-      log("PRECACHE OK -> skipWaiting");
-    } catch (e) {
-      warn("INSTALL ERROR:", e);
-      await self.skipWaiting();
-    }
+    const cache = await caches.open(CACHE.static);
+    await precacheAll(cache, PRECACHE_URLS);
+    await self.skipWaiting();
   })());
 });
 
 self.addEventListener("activate", (event) => {
-  log("ACTIVATE", VERSION, "scope:", self.registration.scope);
-
   event.waitUntil((async () => {
-    try {
-      const keys = await caches.keys();
-      const allow = new Set([CACHE.static, CACHE.pages, CACHE.images]);
-      await Promise.all(keys.map((k) => (!allow.has(k) ? caches.delete(k) : null)));
-      await self.clients.claim();
-      log("clients.claim OK");
-    } catch (e) {
-      warn("ACTIVATE ERROR:", e);
-    }
+    const keys = await caches.keys();
+    const allow = new Set([CACHE.static, CACHE.pages, CACHE.images]);
+    await Promise.all(keys.map((k) => (!allow.has(k) ? caches.delete(k) : null)));
+    await self.clients.claim();
   })());
 });
 
-// ✅ Permite “forzar update” desde el frontend si lo usas
 self.addEventListener("message", (event) => {
   if (event.data === "SKIP_WAITING") {
-    log("message: SKIP_WAITING");
     self.skipWaiting();
   }
 });
 
-// ==============================
-// ✅ PUSH (ÚNICO LISTENER)
-// ==============================
 self.addEventListener("push", (event) => {
   let data = {};
   try {
@@ -203,11 +151,7 @@ self.addEventListener("push", (event) => {
   const title = data.title || "Piscinas App";
   const body = data.body || data.message || "Tienes una nueva notificación.";
   const url = data.url || "/dashboard/home/";
-
-  // ✅ Si usas renotify, tag debe ser NO VACÍO
-  const tag = (data.tag && String(data.tag).trim())
-    ? String(data.tag).trim()
-    : ("piscinas-" + Date.now());
+  const tag = (data.tag && String(data.tag).trim()) ? String(data.tag).trim() : ("piscinas-" + Date.now());
 
   const options = {
     body,
@@ -224,20 +168,16 @@ self.addEventListener("push", (event) => {
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
-  const url =
-    (event.notification && event.notification.data && event.notification.data.url) ||
-    "/dashboard/home/";
+  const url = (event.notification?.data?.url) || "/dashboard/home/";
 
   event.waitUntil(
     (async () => {
       const allClients = await clients.matchAll({ type: "window", includeUncontrolled: true });
-
       for (const client of allClients) {
         if (client.url.includes("/dashboard/") && "focus" in client) {
           return client.focus();
         }
       }
-
       if (clients.openWindow) return clients.openWindow(url);
     })()
   );
@@ -248,22 +188,29 @@ self.addEventListener("fetch", (event) => {
 
   if (req.method !== "GET") return;
   if (!isSameOrigin(req.url)) return;
-  if (shouldBypassCache(req)) return;
 
-  const request = isHtml(req) ? normalizeNavigate(req) : req;
-
-  if (isHtml(request)) {
-    event.respondWith(networkFirst(request, CACHE.pages));
-    return;
-  }
-  if (isImage(request)) {
-    event.respondWith(cacheFirst(request, CACHE.images));
-    return;
-  }
-  if (isStaticAsset(request)) {
-    event.respondWith(cacheFirst(request, CACHE.static));
+  if (shouldBypassCache(req)) {
+    if (isHtml(req)) {
+      event.respondWith(networkOnlyHtml(req));
+      return;
+    }
     return;
   }
 
-  event.respondWith(networkFirst(request, CACHE.pages));
+  if (isHtml(req)) {
+    event.respondWith(networkFirst(req, CACHE.pages));
+    return;
+  }
+
+  if (isImage(req)) {
+    event.respondWith(cacheFirst(req, CACHE.images));
+    return;
+  }
+
+  if (isStaticAsset(req)) {
+    event.respondWith(cacheFirst(req, CACHE.static));
+    return;
+  }
+
+  event.respondWith(networkFirst(req, CACHE.pages));
 });

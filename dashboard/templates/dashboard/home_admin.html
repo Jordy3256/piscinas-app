@@ -1,3 +1,4 @@
+cat > dashboard/templates/dashboard/home_admin.html <<'EOF'
 {% extends "dashboard/base_admin.html" %}
 
 {% block title %}Inicio Admin{% endblock %}
@@ -7,7 +8,7 @@
   <div class="row g-3">
 
     <div class="col-md-6">
-      <a class="text-decoration-none" href="/dashboard/">
+      <a class="text-decoration-none" href="/dashboard/panel/">
         <div class="card shadow-sm h-100">
           <div class="card-body">
             <h5 class="mb-1">📊 Dashboard</h5>
@@ -63,3 +64,4 @@
 
   </div>
 {% endblock %}
+EOF

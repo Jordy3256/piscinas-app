@@ -18,13 +18,11 @@
     .btn-install { display: none; }
     .bottom-nav .btn { white-space: nowrap; }
 
-    /* ✅ Botones push */
     #btn-push-admin { display: none; white-space: nowrap; }
     #btn-push-test  { display: none; white-space: nowrap; }
   </style>
 
-  <!-- PWA -->
-  <link rel="manifest" href="/dashboard/manifest.json?v=20260225">
+  <link rel="manifest" href="/dashboard/manifest.json?v=20260311-10">
   <meta name="theme-color" content="#0d6efd">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -35,7 +33,6 @@
 <body class="bg-light">
   <div class="app-shell">
 
-    <!-- Topbar -->
     <div class="topbar bg-white border-bottom">
       <div class="container py-3">
         <div class="d-flex justify-content-between align-items-center">
@@ -48,7 +45,6 @@
               <button id="btn-push-admin" class="btn btn-primary btn-sm" type="button">🔔 Activar</button>
               <button id="btn-push-test" class="btn btn-outline-primary btn-sm" type="button">🧪 Test Push</button>
 
-              <!-- ✅ Inicio ahora va a /dashboard/home/ -->
               <a class="btn btn-outline-secondary btn-sm" href="/dashboard/home/">Inicio</a>
               <a class="btn btn-outline-danger btn-sm" href="/logout/">Salir</a>
             {% endblock %}
@@ -57,7 +53,6 @@
       </div>
     </div>
 
-    <!-- Contenido -->
     <div class="container py-3">
       {% if messages %}
         <div class="mb-3">
@@ -71,12 +66,11 @@
       <div class="spacer-bottom"></div>
     </div>
 
-    <!-- Bottom nav -->
     <div class="bottom-nav bg-white border-top">
       <div class="container py-2">
         <div class="d-flex justify-content-around gap-2 flex-wrap">
-          <!-- ✅ Inicio ahora va a /dashboard/home/ -->
           <a class="btn btn-light flex-fill" href="/dashboard/home/">🏠 Inicio</a>
+          <a class="btn btn-outline-secondary flex-fill" href="/dashboard/panel/">📊 Dashboard</a>
           <a class="btn btn-outline-secondary flex-fill" href="/dashboard/operativo/">🧑‍💼 Operativo</a>
           <a class="btn btn-outline-secondary flex-fill" href="/dashboard/finanzas/flujo/">💰 Finanzas</a>
           <a class="btn btn-outline-secondary flex-fill" href="/admin/" target="_blank">⚙️ Admin</a>
@@ -91,14 +85,13 @@
   </div>
 
   <script>
-    // ==========================================================
-    // ✅ Config
-    // ==========================================================
-    const VAPID_PUBLIC_KEY = "{{ VAPID_PUBLIC_KEY|default:''|escapejs }}";
+    window.APP_VERSION = "20260311-10";
+  </script>
 
-    // ==========================================================
-    // ✅ CSRF robusto (meta -> cookie)
-    // ==========================================================
+  <script>
+    const VAPID_PUBLIC_KEY = "{{ VAPID_PUBLIC_KEY|default:''|escapejs }}";
+    const SW_URL = "/dashboard/sw.js?v=" + encodeURIComponent(window.APP_VERSION || "1");
+
     function getCSRFToken() {
       const meta = document.querySelector('meta[name="csrf-token"]');
       if (meta && meta.getAttribute("content")) return meta.getAttribute("content") || "";
@@ -106,9 +99,6 @@
       return m ? decodeURIComponent(m[1]) : "";
     }
 
-    // ==========================================================
-    // ✅ Utils
-    // ==========================================================
     function urlBase64ToUint8Array(base64UrlString) {
       if (!base64UrlString || typeof base64UrlString !== "string") return null;
       const padding = "=".repeat((4 - (base64UrlString.length % 4)) % 4);
@@ -125,7 +115,6 @@
       for (const r of regs) {
         const scope = r?.scope || "";
         if (scope.includes("/static/dashboard/")) {
-          console.log("[SW] 🧹 Unregister viejo /static/dashboard/:", scope);
           await r.unregister();
         }
       }
@@ -134,14 +123,10 @@
     async function registerSW() {
       if (!("serviceWorker" in navigator)) return null;
       await unregisterGhostSW();
-      await navigator.serviceWorker.register("/dashboard/sw.js", { scope: "/dashboard/" });
-      const ready = await navigator.serviceWorker.ready;
-      return ready;
+      await navigator.serviceWorker.register(SW_URL, { scope: "/dashboard/" });
+      return await navigator.serviceWorker.ready;
     }
 
-    // ==========================================================
-    // ✅ Save subscription  (✅ URL corregida según tu urls.py)
-    // ==========================================================
     async function sendSubscriptionToServer(sub) {
       const csrftoken = getCSRFToken();
       const res = await fetch("/dashboard/push/save_subscription/", {
@@ -156,17 +141,10 @@
       });
 
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        console.warn("[PUSH] save_subscription FAILED", res.status, data);
-        return { ok: false, status: res.status, data };
-      }
-      console.log("[PUSH] saved ✅", data);
+      if (!res.ok) return { ok: false, status: res.status, data };
       return { ok: true, data };
     }
 
-    // ==========================================================
-    // ✅ Push logic
-    // ==========================================================
     const btnPushAdmin = document.getElementById("btn-push-admin");
     const btnPushTest  = document.getElementById("btn-push-test");
 
@@ -196,21 +174,13 @@
     async function enablePushAdmin() {
       try {
         const reg = await navigator.serviceWorker.ready;
-
         const perm = await Notification.requestPermission();
-        if (perm !== "granted") {
-          alert("No concediste el permiso de notificaciones.");
-          return;
-        }
+        if (perm !== "granted") return;
 
         let sub = await reg.pushManager.getSubscription();
         if (!sub) {
           const keyBytes = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
-          if (!keyBytes || !keyBytes.length) {
-            alert("VAPID_PUBLIC_KEY inválida (debe ser base64url).");
-            console.error("[PUSH] keyBytes inválido", VAPID_PUBLIC_KEY);
-            return;
-          }
+          if (!keyBytes || !keyBytes.length) return;
           sub = await reg.pushManager.subscribe({
             userVisibleOnly: true,
             applicationServerKey: keyBytes,
@@ -218,22 +188,16 @@
         }
 
         const saved = await sendSubscriptionToServer(sub);
-        if (saved.ok) {
-          alert("✅ Notificaciones activadas.");
-          await syncPushButtons(reg);
-        } else {
-          alert("⚠️ Suscripción creada pero no se guardó en el servidor. Revisa consola.");
-        }
+        if (saved.ok) await syncPushButtons(reg);
       } catch (e) {
-        console.error("[PUSH] enablePushAdmin error:", e);
-        alert("Error activando notificaciones. Revisa consola.");
+        console.error(e);
       }
     }
 
     async function sendTestPush() {
       try {
         const csrftoken = getCSRFToken();
-        const res = await fetch("/dashboard/push/test/", {
+        await fetch("/dashboard/push/test/", {
           method: "POST",
           credentials: "same-origin",
           headers: {
@@ -241,104 +205,18 @@
             "Accept": "application/json",
           },
         });
-
-        const data = await res.json().catch(() => ({}));
-        console.log("[PUSH TEST]", res.status, data);
-
-        if (res.ok && data.ok) {
-          alert("📨 Push test enviado. Revisa si te llegó la notificación.");
-        } else {
-          alert("⚠️ Falló el push test. Revisa consola/logs.");
-        }
       } catch (e) {
-        console.error("[PUSH TEST] error:", e);
-        alert("⚠️ Error enviando push test. Revisa consola.");
+        console.error(e);
       }
     }
 
-    // ==========================================================
-    // ✅ PWA Install
-    // ==========================================================
-    (function () {
-      let deferredPrompt = null;
-      const btn = document.getElementById("btn-install");
+    window.addEventListener("load", async () => {
+      const reg = await registerSW();
+      await syncPushButtons(reg);
 
-      function isStandalone() {
-        return window.matchMedia("(display-mode: standalone)").matches
-          || window.matchMedia("(display-mode: fullscreen)").matches
-          || window.navigator.standalone === true;
-      }
-
-      function showBtn(text) {
-        if (!btn) return;
-        btn.style.display = "inline-block";
-        btn.textContent = text;
-      }
-
-      function hideBtn() {
-        if (!btn) return;
-        btn.style.display = "none";
-      }
-
-      function sync() {
-        if (!btn) return;
-        if (isStandalone()) return hideBtn();
-        if (deferredPrompt) return showBtn("📲 Instalar app");
-        hideBtn();
-      }
-
-      window.addEventListener("beforeinstallprompt", (e) => {
-        e.preventDefault();
-        deferredPrompt = e;
-        sync();
-      });
-
-      window.addEventListener("appinstalled", () => {
-        deferredPrompt = null;
-        sync();
-      });
-
-      if (btn) {
-        btn.addEventListener("click", async () => {
-          if (isStandalone()) return;
-          if (!deferredPrompt) {
-            alert("En Chrome/Edge: menú ⋮ → 'Instalar app' o 'Agregar a pantalla de inicio'.");
-            return;
-          }
-          deferredPrompt.prompt();
-          await deferredPrompt.userChoice;
-          deferredPrompt = null;
-          sync();
-        });
-      }
-
-      sync();
-
-      window.addEventListener("load", () => {
-        setTimeout(() => {
-          if (!isStandalone() && !deferredPrompt) showBtn("📌 Instalar (menú ⋮)");
-        }, 1500);
-      });
-
-      window.matchMedia("(display-mode: standalone)").addEventListener("change", sync);
-    })();
-
-    // ==========================================================
-    // ✅ Boot
-    // ==========================================================
-    (function () {
-      window.addEventListener("load", async () => {
-        // 1) SW
-        const reg = await registerSW();
-
-        // 2) botones push (estado inicial)
-        await syncPushButtons(reg);
-
-        // 3) listeners
-        if (btnPushAdmin) btnPushAdmin.addEventListener("click", enablePushAdmin);
-        if (btnPushTest)  btnPushTest.addEventListener("click", sendTestPush);
-      });
-    })();
+      if (btnPushAdmin) btnPushAdmin.addEventListener("click", enablePushAdmin);
+      if (btnPushTest)  btnPushTest.addEventListener("click", sendTestPush);
+    });
   </script>
 
   {% block extra_js %}{% endblock %}

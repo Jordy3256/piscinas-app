@@ -1,9 +1,8 @@
 # dashboard/views.py
 import json
 import logging
-from datetime import date
+from datetime import date, timedelta
 from calendar import monthrange
-from pathlib import Path
 
 from django.conf import settings
 from django.contrib import messages
@@ -15,7 +14,8 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.templatetags.static import static
 from django.utils.dateparse import parse_date
-from django.views.decorators.http import require_http_methods
+from django.utils.http import url_has_allowed_host_and_scheme
+from django.views.decorators.http import require_http_methods, require_GET
 
 from pywebpush import webpush, WebPushException
 
@@ -25,7 +25,6 @@ from inventario.models import Insumo
 from mantenimientos.models import Mantenimiento, UsoInsumo, FotoMantenimiento
 from finanzas.models import Ingreso, Egreso
 
-# ✅ Push subscription model (debe existir en dashboard/models.py)
 try:
     from .models import PushSubscription
 except Exception:
@@ -40,8 +39,10 @@ logger = logging.getLogger(__name__)
 def es_admin(user):
     if not user.is_authenticated:
         return False
-    if user.is_superuser:
+
+    if user.is_superuser or user.is_staff:
         return True
+
     grupos = {g.name.strip().lower() for g in user.groups.all()}
     return (
         "administradores" in grupos
@@ -62,23 +63,37 @@ def es_trabajador(user):
 # Login / Logout
 # -------------------
 def login_view(request):
-    """✅ Siempre manda 'error' al template para evitar VariableDoesNotExist."""
     ctx = {"error": ""}
 
+    next_url = (request.GET.get("next", "") or "").strip()
     if request.method == "POST":
-        username = request.POST.get("username", "").strip()
-        password = request.POST.get("password", "").strip()
+        next_url = (request.POST.get("next", next_url) or "").strip()
+
+    def safe_redirect_target(url: str) -> str:
+        if url and url_has_allowed_host_and_scheme(
+            url=url,
+            allowed_hosts={request.get_host()},
+            require_https=not settings.DEBUG,
+        ):
+            return url
+        return "/dashboard/home/"
+
+    if request.method == "POST":
+        username = (request.POST.get("username", "") or "").strip()
+        password = (request.POST.get("password", "") or "").strip()
         user = authenticate(request, username=username, password=password)
 
         if user is not None:
             login(request, user)
             messages.success(request, "Bienvenido.")
-            return redirect("/dashboard/")
+            return redirect(safe_redirect_target(next_url))
 
         ctx["error"] = "Usuario o contraseña incorrectos"
+        ctx["next"] = next_url
         messages.error(request, ctx["error"])
         return render(request, "dashboard/login.html", ctx)
 
+    ctx["next"] = next_url
     return render(request, "dashboard/login.html", ctx)
 
 
@@ -88,15 +103,9 @@ def logout_view(request):
 
 
 # -------------------
-# ✅ /dashboard/sw.js (SW REAL con scope /dashboard/)
+# /dashboard/sw.js
 # -------------------
 def sw_js_view(request):
-    """
-    Sirve el SW REAL desde /dashboard/sw.js para controlar /dashboard/*
-    ✅ IMPORTANTE:
-    - NO servir /static/dashboard/sw.js aquí (eso revive el SW fantasma).
-    - El SW real vive como archivo: dashboard/static/dashboard/sw-dashboard.js
-    """
     path = finders.find("dashboard/sw-dashboard.js")
 
     if path:
@@ -117,7 +126,7 @@ def sw_js_view(request):
 
 
 # -------------------
-# ✅ Manifest servido por Django
+# Manifest servido por Django
 # -------------------
 def manifest_json_view(request):
     data = {
@@ -167,19 +176,13 @@ def manifest_json_view(request):
 
 
 # ==========================================================
-# ✅ PUSH: Public Key + Guardar suscripción + Test push
+# PUSH
 # ==========================================================
 def _clean_str(value) -> str:
     return (value or "").replace("\n", "").replace("\r", "").strip()
 
 
 def _normalize_subscription_payload(data: dict) -> dict:
-    """
-    Acepta:
-    - subscription completo (con endpoint/keys)
-    - dict con {endpoint, keys:{p256dh,auth}}
-    - dict con {subscription: {...}}
-    """
     if not isinstance(data, dict):
         return {}
 
@@ -210,10 +213,6 @@ def vapid_public_key_view(request):
 @login_required
 @require_http_methods(["POST"])
 def save_subscription_view(request):
-    """
-    Guarda la suscripción push del usuario logueado.
-    Requiere CSRF válido.
-    """
     if PushSubscription is None:
         return JsonResponse({"ok": False, "error": "Modelo PushSubscription no disponible"}, status=500)
 
@@ -247,17 +246,12 @@ def save_subscription_view(request):
 @login_required
 @require_http_methods(["GET", "POST"])
 def push_test_view(request):
-    """
-    GET  -> confirma que el endpoint existe (evita 405 en navegador)
-    POST -> envía una notificación push real a todas las subs del usuario
-    """
     if request.method == "GET":
         return JsonResponse({"ok": True, "msg": "push_test_view OK. Usa POST para enviar push."})
 
     if PushSubscription is None:
         return JsonResponse({"ok": False, "error": "Modelo PushSubscription no disponible"}, status=500)
 
-    # ✅ VAPID desde settings/env (NO archivo .pem)
     vapid_private_key = (getattr(settings, "VAPID_PRIVATE_KEY", "") or "").strip()
     if not vapid_private_key:
         return JsonResponse({"ok": False, "error": "VAPID_PRIVATE_KEY vacío en settings/env"}, status=500)
@@ -268,17 +262,14 @@ def push_test_view(request):
         {
             "title": "✅ Prueba Piscinas App",
             "body": f"Hola {request.user.username}, tu Push está funcionando 🎉",
-            "url": "/dashboard/",
+            "url": "/dashboard/home/",
             "tag": f"piscinas-{request.user.username}",
         }
     )
 
     subs = PushSubscription.objects.filter(user=request.user).order_by("-created_at")
     if not subs.exists():
-        return JsonResponse(
-            {"ok": False, "error": "Este usuario no tiene suscripciones guardadas"},
-            status=400,
-        )
+        return JsonResponse({"ok": False, "error": "Este usuario no tiene suscripciones guardadas"}, status=400)
 
     sent = 0
     failed = 0
@@ -294,7 +285,7 @@ def push_test_view(request):
             webpush(
                 subscription_info=subscription_info,
                 data=payload,
-                vapid_private_key=vapid_private_key,  # ✅ string PEM en settings/env
+                vapid_private_key=vapid_private_key,
                 vapid_claims={"sub": vapid_subject},
                 content_encoding="aes128gcm",
                 ttl=60,
@@ -314,7 +305,6 @@ def push_test_view(request):
 
             errors.append(f"{status}: {str(ex)} | body={body}")
 
-            # ✅ limpiar subs expiradas
             if status in (404, 410):
                 try:
                     s.delete()
@@ -327,12 +317,13 @@ def push_test_view(request):
 
     return JsonResponse({"ok": True, "sent": sent, "failed": failed, "errors": errors[:5]})
 
+
 # -------------------
-# Home
+# INICIO por rol (menú)
 # -------------------
 @login_required
-def home_view(request):
-    ctx = {"VAPID_PUBLIC_KEY": settings.VAPID_PUBLIC_KEY}
+def inicio_view(request):
+    ctx = {"VAPID_PUBLIC_KEY": getattr(settings, "VAPID_PUBLIC_KEY", "")}
 
     if es_admin(request.user):
         ctx["es_admin"] = True
@@ -344,25 +335,23 @@ def home_view(request):
 
     return render(request, "dashboard/no_autorizado.html", status=403)
 
-# -------------------
-# Root /dashboard/  -> manda a /dashboard/home/
-# -------------------
-@login_required
-def dashboard_root_view(request):
-    return redirect("/dashboard/home/")
 
 # -------------------
-# Dashboard por rol
+# /dashboard/home/ = pantalla REAL por rol
+# -------------------
+@login_required
+def home_view(request):
+    return dashboard_view(request)
+
+
+# -------------------
+# /dashboard/ = alias de la pantalla REAL por rol
 # -------------------
 @login_required
 def dashboard_view(request):
     base_ctx = {"VAPID_PUBLIC_KEY": getattr(settings, "VAPID_PUBLIC_KEY", "")}
 
-    # ======================
-    # ADMIN
-    # ======================
     if es_admin(request.user):
-        # Totales globales (simple y robusto)
         total_ingresos = Ingreso.objects.aggregate(total=Sum("total"))["total"] or 0
         total_egresos = Egreso.objects.aggregate(total=Sum("total"))["total"] or 0
         balance = total_ingresos - total_egresos
@@ -377,9 +366,6 @@ def dashboard_view(request):
         }
         return render(request, "dashboard/dashboard.html", ctx)
 
-    # ======================
-    # TRABAJADOR
-    # ======================
     if es_trabajador(request.user):
         hoy = date.today()
 
@@ -412,6 +398,7 @@ def dashboard_view(request):
 
     return render(request, "dashboard/no_autorizado.html", status=403)
 
+
 # -------------------
 # Operativo Admin
 # -------------------
@@ -425,7 +412,7 @@ def admin_operativo_view(request):
 
     modo = (request.GET.get("modo") or "").strip().lower()
     if modo == "manana":
-        fecha = date.fromordinal(hoy.toordinal() + 1)
+        fecha = hoy + timedelta(days=1)
     elif modo == "semana":
         fecha = hoy
     else:
@@ -455,7 +442,6 @@ def admin_operativo_view(request):
         .order_by("fecha")[:30]
     )
 
-    # ✅ Resumen por trabajador (ManyToMany -> usar __)
     resumen_trabajadores = (
         Mantenimiento.objects.filter(trabajadores__isnull=False)
         .values("trabajadores__id", "trabajadores__user__username")
@@ -480,6 +466,7 @@ def admin_operativo_view(request):
             "es_admin": True,
         },
     )
+
 
 # -------------------
 # Detalle mantenimiento
@@ -602,9 +589,6 @@ def mantenimiento_detalle_view(request, pk):
     )
 
 
-# -------------------
-# UsoInsumo - Eliminar
-# -------------------
 @login_required
 def usoinsumo_eliminar_view(request, pk):
     uso = get_object_or_404(UsoInsumo, pk=pk)
@@ -644,9 +628,6 @@ def usoinsumo_eliminar_view(request, pk):
     )
 
 
-# -------------------
-# UsoInsumo - Editar
-# -------------------
 @login_required
 def usoinsumo_editar_view(request, pk):
     uso = get_object_or_404(UsoInsumo, pk=pk)
@@ -705,9 +686,6 @@ def usoinsumo_editar_view(request, pk):
     )
 
 
-# -------------------
-# Asignar trabajadores (Admin)
-# -------------------
 @login_required
 def asignar_trabajadores_view(request, pk):
     if not es_admin(request.user):
@@ -729,9 +707,6 @@ def asignar_trabajadores_view(request, pk):
     )
 
 
-# -------------------
-# Flujo mensual (Admin)
-# -------------------
 @login_required
 def flujo_mensual_view(request):
     if not es_admin(request.user):
@@ -781,9 +756,6 @@ def flujo_mensual_view(request):
     )
 
 
-# -------------------
-# Ingresos manuales (solo admin)
-# -------------------
 @login_required
 def ingreso_list_view(request):
     if not es_admin(request.user):
@@ -896,11 +868,12 @@ def ingreso_eliminar_view(request, pk):
     )
 
 
-@login_required
 def offline_view(request):
     return render(request, "dashboard/offline.html")
 
-@login_required
-@require_http_methods(["GET"])
+
+@require_GET
 def unread_count_view(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({"count": 0})
     return JsonResponse({"count": 0})

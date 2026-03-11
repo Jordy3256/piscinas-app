@@ -15,9 +15,9 @@ staticfiles/
 media/
 .env
 
-# Keys / secrets
+# Keys
 *.pem
-vapid_*.pem
+*.key
 
 # OS/Editors
 .DS_Store

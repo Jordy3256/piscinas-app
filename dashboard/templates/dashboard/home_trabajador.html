@@ -1,10 +1,11 @@
+cat > dashboard/templates/dashboard/home_trabajador.html <<'EOF'
 {% extends "dashboard/base_trabajador.html" %}
 
 {% block title %}Inicio Trabajador{% endblock %}
 {% block top_title %}🏠 Inicio (Trabajador){% endblock %}
 
 {% block content %}
-  <a class="text-decoration-none" href="/dashboard/">
+  <a class="text-decoration-none" href="/dashboard/panel/">
     <div class="card shadow-sm">
       <div class="card-body">
         <h5 class="mb-1">🧑‍🔧 Mis mantenimientos</h5>
@@ -13,3 +14,4 @@
     </div>
   </a>
 {% endblock %}
+EOF

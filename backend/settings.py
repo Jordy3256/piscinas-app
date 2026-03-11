@@ -5,49 +5,41 @@ import base64
 
 import dj_database_url
 from django.core.management.utils import get_random_secret_key
-
 from cryptography.hazmat.primitives import serialization
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # ==========================================================
 # ✅ .env SOLO LOCAL (Render usa Environment Variables)
-# - Evita que el deploy falle si no está instalado python-dotenv
-# - Si lo instalas igual, esto sigue funcionando perfecto
 # ==========================================================
 if os.environ.get("RENDER") != "true":
     try:
         from dotenv import load_dotenv
         load_dotenv(BASE_DIR / ".env")
     except Exception:
-        # si no existe python-dotenv o no hay .env, no rompemos
         pass
 
 # =========================
 # BASICO
 # =========================
+# ✅ OJO: en Render SIEMPRE pon SECRET_KEY en env. Igual dejo fallback.
 SECRET_KEY = os.environ.get("SECRET_KEY") or ("dev-" + get_random_secret_key())
-DEBUG = os.environ.get("DEBUG", "True").strip().lower() == "true"
+
+# ✅ IMPORTANTE: por defecto FALSE (en producción debe ser False)
+DEBUG = os.environ.get("DEBUG", "False").strip().lower() == "true"
+
+# Detecta si estamos en Render (o al menos en HTTPS detrás de proxy)
+RENDER = (os.environ.get("RENDER") or "").strip().lower() == "true"
+RENDER_HOST = os.environ.get("RENDER_EXTERNAL_HOSTNAME")
 
 # =========================
 # PUSH / VAPID
 # =========================
-# Para Web Push hay 2 formatos comunes:
-# 1) PEM (multilínea) para firmar en servidor (private key) y, a veces, public key.
-# 2) Base64URL (87 chars aprox) para el navegador: PushManager.subscribe({applicationServerKey})
-
-# ✅ Fallback en formato WEBPUSH (base64url) -> válido para PushManager.subscribe()
 VAPID_PUBLIC_KEY_FALLBACK = (
     "BG1zLGX1ICKlfEjvz48a-4n2uhtiaUT54GP62cJALk6p0u35Zyyll7ghaXQBduO7BKpjXYLXwMWzL7PAKA0UnP0"
 )
 
 def _strip_bytes_wrapper(value: str) -> str:
-    """
-    Convierte cosas como:
-      b'-----BEGIN ... -----END ...\n'
-    a:
-      -----BEGIN ... -----END ...
-    """
     if not value:
         return ""
     v = value.strip()
@@ -56,12 +48,6 @@ def _strip_bytes_wrapper(value: str) -> str:
     return v
 
 def _env_multiline(name: str, default: str = "") -> str:
-    """
-    Lee variables de entorno que pueden venir:
-    - PEM real con saltos de línea
-    - PEM en una sola línea con \n escapado
-    - bytes-wrapper b'...'
-    """
     raw = os.environ.get(name, default)
     raw = _strip_bytes_wrapper(raw)
     if "\\n" in raw:
@@ -69,23 +55,16 @@ def _env_multiline(name: str, default: str = "") -> str:
     return raw.strip()
 
 def _clean_base64url(value: str) -> str:
-    """Para claves base64url: quitamos espacios/saltos."""
     return (value or "").replace("\n", "").replace("\r", "").replace(" ", "").strip()
 
-# ✅ Lee PEM (servidor)
 VAPID_PUBLIC_PEM = _env_multiline("VAPID_PUBLIC_PEM", "")
 VAPID_PRIVATE_PEM = _env_multiline("VAPID_PRIVATE_PEM", "")
 
-# ✅ Lee base64url (navegador) si lo tienes (opcional)
-VAPID_PUBLIC_KEY = _clean_base64url(os.environ.get("VAPID_PUBLIC_KEY", ""))  # webpush/base64url
-
-# ❗No recomendado guardar la private key base64url.
-# Si llega, la limpiamos, pero NO la preferimos.
+VAPID_PUBLIC_KEY = _clean_base64url(os.environ.get("VAPID_PUBLIC_KEY", ""))
 VAPID_PRIVATE_KEY = _clean_base64url(os.environ.get("VAPID_PRIVATE_KEY", ""))
 
 VAPID_SUBJECT = (os.environ.get("VAPID_SUBJECT", "mailto:admin@piscinas-app.local") or "").strip()
 
-# Si no existe VAPID_PUBLIC_KEY (base64url), intentamos derivarla desde PUBLIC_PEM
 if not VAPID_PUBLIC_KEY:
     if VAPID_PUBLIC_PEM:
         try:
@@ -100,15 +79,12 @@ if not VAPID_PUBLIC_KEY:
     else:
         VAPID_PUBLIC_KEY = VAPID_PUBLIC_KEY_FALLBACK
 
-# ✅ SIEMPRE usar PEM para firmar (pywebpush espera PEM / ruta a PEM)
-# Esto hace match con tu push_test_view que usa settings.VAPID_PRIVATE_KEY como PEM.
+# ✅ pywebpush firma con PEM (string PEM)
 VAPID_PRIVATE_KEY = VAPID_PRIVATE_PEM
 
 # =========================
-# HOST / RENDER FIX (ROBUSTO)
+# HOSTS
 # =========================
-RENDER_HOST = os.environ.get("RENDER_EXTERNAL_HOSTNAME")
-
 ALLOWED_HOSTS = [
     "localhost",
     "127.0.0.1",
@@ -117,7 +93,6 @@ ALLOWED_HOSTS = [
     "piscinas-app-1.onrender.com",
     ".onrender.com",
 ]
-
 if RENDER_HOST:
     ALLOWED_HOSTS.append(RENDER_HOST)
 
@@ -127,12 +102,19 @@ if ENV_ALLOWED:
 
 ALLOWED_HOSTS = list(dict.fromkeys(ALLOWED_HOSTS))
 
+# =========================
+# ✅ PROXY / HTTPS (Render)
+# =========================
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+USE_X_FORWARDED_HOST = True
 
-# ✅ solo activa cookies secure en prod (en local suele molestar)
-if not DEBUG:
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
+# ✅ Cookies (en Render siempre es https)
+# Esto es lo que normalmente causa que “no se pegue el login” si está mal.
+SESSION_COOKIE_SECURE = True if RENDER else (not DEBUG)
+CSRF_COOKIE_SECURE = True if RENDER else (not DEBUG)
+
+SESSION_COOKIE_SAMESITE = "Lax"
+CSRF_COOKIE_SAMESITE = "Lax"
 
 # =========================
 # CSRF para Render
@@ -196,7 +178,6 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
 
-                # ✅ Inyecta VAPID_PUBLIC_KEY (base64url) a templates
                 "dashboard.context_processors.vapid_public_key",
             ],
         },
@@ -271,14 +252,16 @@ MEDIA_ROOT = BASE_DIR / "media"
 # LOGIN
 # =========================
 LOGIN_URL = "/login/"
-LOGIN_REDIRECT_URL = "/dashboard/home/"
+LOGIN_REDIRECT_URL = "/dashboard/"         # ✅ clave: entra a “mis mantenimientos”
 LOGOUT_REDIRECT_URL = "/login/"
 
 # =========================
 # SEGURIDAD PRODUCCION
 # =========================
+# ✅ En Render NO fuerces SSL_REDIRECT (Render ya está en https). Evita loops.
+SECURE_SSL_REDIRECT = False
+
 if not DEBUG:
-    SECURE_SSL_REDIRECT = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
     SECURE_REFERRER_POLICY = "same-origin"
     X_FRAME_OPTIONS = "DENY"
