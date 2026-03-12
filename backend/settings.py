@@ -252,7 +252,7 @@ MEDIA_ROOT = BASE_DIR / "media"
 # LOGIN
 # =========================
 LOGIN_URL = "/login/"
-LOGIN_REDIRECT_URL = "/dashboard/"         # ✅ clave: entra a “mis mantenimientos”
+LOGIN_REDIRECT_URL = "/dashboard/inicio/"         # ✅ clave: entra a “mis mantenimientos”
 LOGOUT_REDIRECT_URL = "/login/"
 
 # =========================
