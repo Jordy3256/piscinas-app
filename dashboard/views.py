@@ -635,6 +635,7 @@ def notificaciones_view(request):
             "notificaciones": notificaciones,
             "no_modelo_notificaciones": no_modelo_notificaciones,
             "es_admin": es_admin(request.user),
+            "base_template": "dashboard/base_admin.html" if es_admin(request.user) else "dashboard/base_trabajador.html",
         },
     )
 
