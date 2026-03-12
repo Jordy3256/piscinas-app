@@ -9,6 +9,7 @@ from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.staticfiles import finders
+from django.db import transaction
 from django.db.models import Sum, Count, Q
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
@@ -76,7 +77,7 @@ def login_view(request):
             require_https=not settings.DEBUG,
         ):
             return url
-        return "/dashboard/home/"
+        return "/dashboard/inicio/"
 
     if request.method == "POST":
         username = (request.POST.get("username", "") or "").strip()
@@ -134,7 +135,7 @@ def manifest_json_view(request):
         "short_name": "Piscinas",
         "description": "Gestión de mantenimientos, operativo y finanzas.",
         "id": "/dashboard/",
-        "start_url": "/dashboard/home/",
+        "start_url": "/dashboard/inicio/",
         "scope": "/dashboard/",
         "display": "standalone",
         "background_color": "#ffffff",
@@ -183,6 +184,12 @@ def _clean_str(value) -> str:
 
 
 def _normalize_subscription_payload(data: dict) -> dict:
+    """
+    Acepta:
+    - subscription completo
+    - dict con {endpoint, keys:{p256dh,auth}}
+    - dict con {subscription: {...}}
+    """
     if not isinstance(data, dict):
         return {}
 
@@ -198,7 +205,29 @@ def _normalize_subscription_payload(data: dict) -> dict:
     if not endpoint or not p256dh or not auth:
         return {}
 
-    return {"endpoint": endpoint, "p256dh": p256dh, "auth": auth, "raw": data}
+    return {
+        "endpoint": endpoint,
+        "p256dh": p256dh,
+        "auth": auth,
+        "raw": data,
+    }
+
+
+def _push_status_code_from_exception(ex) -> int | None:
+    try:
+        return getattr(getattr(ex, "response", None), "status_code", None)
+    except Exception:
+        return None
+
+
+def _push_response_body_from_exception(ex) -> str:
+    try:
+        response = getattr(ex, "response", None)
+        if response is not None:
+            return response.text or ""
+    except Exception:
+        pass
+    return ""
 
 
 @login_required
@@ -206,15 +235,40 @@ def _normalize_subscription_payload(data: dict) -> dict:
 def vapid_public_key_view(request):
     key = _clean_str(getattr(settings, "VAPID_PUBLIC_KEY", ""))
     if not key:
-        return JsonResponse({"publicKey": "", "warning": "VAPID_PUBLIC_KEY vacío"}, status=200)
+        return JsonResponse(
+            {"publicKey": "", "warning": "VAPID_PUBLIC_KEY vacío"},
+            status=200,
+        )
     return JsonResponse({"publicKey": key})
+
+
+@login_required
+@require_http_methods(["GET"])
+def push_status_view(request):
+    if PushSubscription is None:
+        return JsonResponse(
+            {"ok": False, "enabled": False, "count": 0, "error": "Modelo PushSubscription no disponible"},
+            status=500,
+        )
+
+    qs = PushSubscription.objects.filter(user=request.user).order_by("-updated_at", "-created_at")
+    return JsonResponse(
+        {
+            "ok": True,
+            "enabled": qs.exists(),
+            "count": qs.count(),
+        }
+    )
 
 
 @login_required
 @require_http_methods(["POST"])
 def save_subscription_view(request):
     if PushSubscription is None:
-        return JsonResponse({"ok": False, "error": "Modelo PushSubscription no disponible"}, status=500)
+        return JsonResponse(
+            {"ok": False, "error": "Modelo PushSubscription no disponible"},
+            status=500,
+        )
 
     try:
         data = json.loads(request.body.decode("utf-8"))
@@ -225,38 +279,97 @@ def save_subscription_view(request):
     if not norm:
         return JsonResponse({"ok": False, "error": "Payload incompleto"}, status=400)
 
-    user_agent = request.META.get("HTTP_USER_AGENT", "") or ""
+    user_agent = (request.META.get("HTTP_USER_AGENT", "") or "").strip()
 
-    obj, created = PushSubscription.objects.update_or_create(
-        endpoint=norm["endpoint"],
-        defaults={
-            "user": request.user,
-            "p256dh": norm["p256dh"],
-            "auth": norm["auth"],
-            "user_agent": user_agent,
-        },
+    try:
+        with transaction.atomic():
+            obj, created = PushSubscription.objects.update_or_create(
+                endpoint=norm["endpoint"],
+                defaults={
+                    "user": request.user,
+                    "p256dh": norm["p256dh"],
+                    "auth": norm["auth"],
+                    "user_agent": user_agent,
+                },
+            )
+    except Exception as ex:
+        logger.exception("Error guardando push subscription para user=%s", request.user.pk)
+        return JsonResponse(
+            {"ok": False, "error": f"No se pudo guardar la suscripción: {str(ex)}"},
+            status=500,
+        )
+
+    logger.info(
+        "Push subscription guardada user=%s endpoint=%s created=%s",
+        request.user.username,
+        norm["endpoint"][:80],
+        created,
     )
 
     return JsonResponse(
-        {"ok": True, "created": created, "id": obj.id, "user": request.user.username},
+        {
+            "ok": True,
+            "created": created,
+            "updated": not created,
+            "id": obj.id,
+            "user": request.user.username,
+        },
         status=201 if created else 200,
     )
+
+
+@login_required
+@require_http_methods(["POST"])
+def delete_subscription_view(request):
+    if PushSubscription is None:
+        return JsonResponse(
+            {"ok": False, "error": "Modelo PushSubscription no disponible"},
+            status=500,
+        )
+
+    try:
+        data = json.loads(request.body.decode("utf-8"))
+    except Exception:
+        return JsonResponse({"ok": False, "error": "JSON inválido"}, status=400)
+
+    norm = _normalize_subscription_payload(data)
+    endpoint = norm.get("endpoint") if norm else _clean_str(data.get("endpoint"))
+
+    if not endpoint:
+        return JsonResponse({"ok": False, "error": "Endpoint requerido"}, status=400)
+
+    deleted, _ = PushSubscription.objects.filter(
+        user=request.user,
+        endpoint=endpoint,
+    ).delete()
+
+    return JsonResponse({"ok": True, "deleted": bool(deleted)})
 
 
 @login_required
 @require_http_methods(["GET", "POST"])
 def push_test_view(request):
     if request.method == "GET":
-        return JsonResponse({"ok": True, "msg": "push_test_view OK. Usa POST para enviar push."})
+        return JsonResponse(
+            {"ok": True, "msg": "push_test_view OK. Usa POST para enviar push."}
+        )
 
     if PushSubscription is None:
-        return JsonResponse({"ok": False, "error": "Modelo PushSubscription no disponible"}, status=500)
+        return JsonResponse(
+            {"ok": False, "error": "Modelo PushSubscription no disponible"},
+            status=500,
+        )
 
     vapid_private_key = (getattr(settings, "VAPID_PRIVATE_KEY", "") or "").strip()
     if not vapid_private_key:
-        return JsonResponse({"ok": False, "error": "VAPID_PRIVATE_KEY vacío en settings/env"}, status=500)
+        return JsonResponse(
+            {"ok": False, "error": "VAPID_PRIVATE_KEY vacío en settings/env"},
+            status=500,
+        )
 
-    vapid_subject = (getattr(settings, "VAPID_SUBJECT", "") or "mailto:admin@piscinas-app.local").strip()
+    vapid_subject = (
+        getattr(settings, "VAPID_SUBJECT", "") or "mailto:admin@piscinas-app.local"
+    ).strip()
 
     payload = json.dumps(
         {
@@ -267,12 +380,16 @@ def push_test_view(request):
         }
     )
 
-    subs = PushSubscription.objects.filter(user=request.user).order_by("-created_at")
+    subs = PushSubscription.objects.filter(user=request.user).order_by("-updated_at", "-created_at")
     if not subs.exists():
-        return JsonResponse({"ok": False, "error": "Este usuario no tiene suscripciones guardadas"}, status=400)
+        return JsonResponse(
+            {"ok": False, "error": "Este usuario no tiene suscripciones guardadas"},
+            status=400,
+        )
 
     sent = 0
     failed = 0
+    deleted_expired = 0
     errors = []
 
     for s in subs:
@@ -294,28 +411,45 @@ def push_test_view(request):
 
         except WebPushException as ex:
             failed += 1
-            status = getattr(getattr(ex, "response", None), "status_code", None)
+            status = _push_status_code_from_exception(ex)
+            body = _push_response_body_from_exception(ex)
 
-            body = ""
-            try:
-                if ex.response is not None:
-                    body = ex.response.text or ""
-            except Exception:
-                pass
+            logger.warning(
+                "Push fallo user=%s sub_id=%s status=%s endpoint=%s error=%s",
+                request.user.username,
+                s.id,
+                status,
+                s.endpoint[:120],
+                str(ex),
+            )
 
-            errors.append(f"{status}: {str(ex)} | body={body}")
+            errors.append(f"{status}: {str(ex)} | body={body[:300]}")
 
             if status in (404, 410):
                 try:
                     s.delete()
+                    deleted_expired += 1
                 except Exception:
-                    pass
+                    logger.exception("No se pudo borrar sub expirada id=%s", s.id)
 
         except Exception as ex:
             failed += 1
+            logger.exception(
+                "Push error inesperado user=%s sub_id=%s",
+                request.user.username,
+                s.id,
+            )
             errors.append(str(ex))
 
-    return JsonResponse({"ok": True, "sent": sent, "failed": failed, "errors": errors[:5]})
+    return JsonResponse(
+        {
+            "ok": sent > 0,
+            "sent": sent,
+            "failed": failed,
+            "deleted_expired": deleted_expired,
+            "errors": errors[:5],
+        }
+    )
 
 
 # -------------------
