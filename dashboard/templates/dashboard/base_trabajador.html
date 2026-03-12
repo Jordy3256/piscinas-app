@@ -80,11 +80,11 @@
           </button>
 
           <a class="btn btn-outline-secondary btn-sm notif-btn"
-             href="/dashboard/notificaciones/"
-             title="Notificaciones">
-            🔔
-            <span id="notif-badge" class="notif-badge">0</span>
-          </a>
+   href="/dashboard/notificaciones/"
+   title="Notificaciones">
+  🔔
+  <span id="notif-badge" class="notif-badge">0</span>
+</a>
 
           <a class="btn btn-outline-danger btn-sm" href="/logout/">Salir</a>
         </div>
@@ -180,27 +180,31 @@
 
     const notifBadge = document.getElementById("notif-badge");
 
-    async function refreshNotifBadge() {
-      if (!notifBadge) return;
-      try {
-        const res = await fetch("/dashboard/notificaciones/unread-count/", {
-          method: "GET",
-          credentials: "same-origin",
-          headers: { "Accept": "application/json" },
-        });
-        if (!res.ok) return;
+  async function refreshNotifBadge() {
+    if (!notifBadge) return;
 
-        const data = await res.json().catch(() => ({}));
-        const n = Number(data.count || 0);
+    try {
+      const res = await fetch("/dashboard/notificaciones/unread-count/", {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { "Accept": "application/json" },
+      });
 
-        if (n > 0) {
-          notifBadge.textContent = String(n > 99 ? "99+" : n);
-          notifBadge.style.display = "inline-block";
-        } else {
-          notifBadge.style.display = "none";
-        }
-      } catch (e) {}
+      if (!res.ok) return;
+
+      const data = await res.json().catch(() => ({}));
+      const n = Number(data.count || 0);
+
+      if (n > 0) {
+        notifBadge.textContent = String(n > 99 ? "99+" : n);
+        notifBadge.style.display = "inline-block";
+      } else {
+        notifBadge.style.display = "none";
+      }
+    } catch (e) {
+      console.error("Error cargando badge:", e);
     }
+  }
 
     async function sendSubscriptionToServer(sub) {
       const csrftoken = getCSRFToken();

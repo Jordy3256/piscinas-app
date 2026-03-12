@@ -1203,7 +1203,12 @@ def offline_view(request):
 
 @require_GET
 def unread_count_view(request):
-    if not request.user.is_authenticated or Notificacion is None:
+    if not request.user.is_authenticated:
+        return JsonResponse({"count": 0})
+
+    try:
+        from .models import Notificacion
+    except Exception:
         return JsonResponse({"count": 0})
 
     count = Notificacion.objects.filter(user=request.user, leida=False).count()
