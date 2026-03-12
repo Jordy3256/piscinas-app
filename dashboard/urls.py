@@ -6,6 +6,8 @@ from .views import (
     vapid_public_key_view,
     save_subscription_view,
     push_test_view,
+    push_status_view,
+    delete_subscription_view,
     unread_count_view,
     inicio_view,
     home_view,
@@ -29,6 +31,8 @@ urlpatterns = [
 
     path("push/vapid_public_key/", vapid_public_key_view, name="vapid_public_key"),
     path("push/save_subscription/", save_subscription_view, name="save_subscription"),
+    path("push/delete_subscription/", delete_subscription_view, name="delete_subscription"),
+    path("push/status/", push_status_view, name="push_status"),
     path("push/test/", push_test_view, name="push_test"),
 
     path("notificaciones/unread-count/", unread_count_view, name="unread_count"),

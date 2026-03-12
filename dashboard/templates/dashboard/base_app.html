@@ -158,24 +158,28 @@
     function hide(el) { if (el) el.style.display = "none"; }
 
     async function syncPushButtons(reg) {
-      if (!btnPushApp && !btnPushTest) return;
+  if (!btnPushApp && !btnPushTest) return;
 
-      if (!reg || !("PushManager" in window) || !("Notification" in window)) {
-        hide(btnPushApp); hide(btnPushTest);
-        return;
-      }
+  if (!reg || !("PushManager" in window) || !("Notification" in window)) {
+    hide(btnPushApp);
+    hide(btnPushTest);
+    return;
+  }
 
-      const sub = await reg.pushManager.getSubscription();
-      const granted = (Notification.permission === "granted");
+  const browserSub = await reg.pushManager.getSubscription();
+  const granted = (Notification.permission === "granted");
+  const serverStatus = await fetchPushStatus();
 
-      if (sub && granted) {
-        hide(btnPushApp);
-        show(btnPushTest);
-      } else {
-        show(btnPushApp);
-        hide(btnPushTest);
-      }
-    }
+  const enabledEverywhere = !!browserSub && granted && !!serverStatus.enabled;
+
+  if (enabledEverywhere) {
+    hide(btnPushApp);
+    show(btnPushTest);
+  } else {
+    show(btnPushApp);
+    hide(btnPushTest);
+  }
+}
 
     async function enablePushApp() {
       try {
@@ -201,6 +205,21 @@
       }
     }
 
+    async function fetchPushStatus() {
+  try {
+    const res = await fetch("/dashboard/push/status/", {
+      method: "GET",
+      credentials: "same-origin",
+      headers: { "Accept": "application/json" },
+    });
+
+    if (!res.ok) return { ok: false, enabled: false, count: 0 };
+    return await res.json();
+  } catch (e) {
+    return { ok: false, enabled: false, count: 0 };
+  }
+}
+
     async function sendTestPush() {
       try {
         const csrftoken = getCSRFToken();
@@ -216,6 +235,21 @@
         console.error("[PUSH TEST]", e);
       }
     }
+
+    async function fetchPushStatus() {
+  try {
+    const res = await fetch("/dashboard/push/status/", {
+      method: "GET",
+      credentials: "same-origin",
+      headers: { "Accept": "application/json" },
+    });
+
+    if (!res.ok) return { ok: false, enabled: false, count: 0 };
+    return await res.json();
+  } catch (e) {
+    return { ok: false, enabled: false, count: 0 };
+  }
+}
 
     (function () {
       let deferredPrompt = null;

@@ -152,24 +152,28 @@
     function hide(el) { if (el) el.style.display = "none"; }
 
     async function syncPushButtons(reg) {
-      if (!btnPushAdmin && !btnPushTest) return;
+  if (!btnPushAdmin && !btnPushTest) return;
 
-      if (!reg || !("PushManager" in window) || !("Notification" in window)) {
-        hide(btnPushAdmin); hide(btnPushTest);
-        return;
-      }
+  if (!reg || !("PushManager" in window) || !("Notification" in window)) {
+    hide(btnPushAdmin);
+    hide(btnPushTest);
+    return;
+  }
 
-      const sub = await reg.pushManager.getSubscription();
-      const granted = (Notification.permission === "granted");
+  const browserSub = await reg.pushManager.getSubscription();
+  const granted = (Notification.permission === "granted");
+  const serverStatus = await fetchPushStatus();
 
-      if (sub && granted) {
-        hide(btnPushAdmin);
-        show(btnPushTest);
-      } else {
-        show(btnPushAdmin);
-        hide(btnPushTest);
-      }
-    }
+  const enabledEverywhere = !!browserSub && granted && !!serverStatus.enabled;
+
+  if (enabledEverywhere) {
+    hide(btnPushAdmin);
+    show(btnPushTest);
+  } else {
+    show(btnPushAdmin);
+    hide(btnPushTest);
+  }
+}
 
     async function enablePushAdmin() {
       try {
@@ -194,6 +198,21 @@
       }
     }
 
+    async function fetchPushStatus() {
+  try {
+    const res = await fetch("/dashboard/push/status/", {
+      method: "GET",
+      credentials: "same-origin",
+      headers: { "Accept": "application/json" },
+    });
+
+    if (!res.ok) return { ok: false, enabled: false, count: 0 };
+    return await res.json();
+  } catch (e) {
+    return { ok: false, enabled: false, count: 0 };
+  }
+}
+
     async function sendTestPush() {
       try {
         const csrftoken = getCSRFToken();
@@ -209,6 +228,21 @@
         console.error("[PUSH TEST]", e);
       }
     }
+
+    async function fetchPushStatus() {
+  try {
+    const res = await fetch("/dashboard/push/status/", {
+      method: "GET",
+      credentials: "same-origin",
+      headers: { "Accept": "application/json" },
+    });
+
+    if (!res.ok) return { ok: false, enabled: false, count: 0 };
+    return await res.json();
+  } catch (e) {
+    return { ok: false, enabled: false, count: 0 };
+  }
+}
 
     window.addEventListener("load", async () => {
       const reg = await registerSW();

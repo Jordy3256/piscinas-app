@@ -212,23 +212,27 @@
     function hidePushButton() { if (btnPush) btnPush.style.display = "none"; }
 
     async function syncPushButton(reg) {
-      try {
-        if (!btnPush) return;
+  try {
+    if (!btnPush) return;
 
-        if (!reg || !("PushManager" in window) || !("Notification" in window)) {
-          hidePushButton();
-          return;
-        }
-
-        const sub = await reg.pushManager.getSubscription();
-        const granted = (Notification.permission === "granted");
-
-        if (sub && granted) hidePushButton();
-        else showPushButton();
-      } catch (e) {
-        showPushButton();
-      }
+    if (!reg || !("PushManager" in window) || !("Notification" in window)) {
+      hidePushButton();
+      return;
     }
+
+    const browserSub = await reg.pushManager.getSubscription();
+    const granted = (Notification.permission === "granted");
+    const serverStatus = await fetchPushStatus();
+
+    if (browserSub && granted && serverStatus.enabled) {
+      hidePushButton();
+    } else {
+      showPushButton();
+    }
+  } catch (e) {
+    showPushButton();
+  }
+}
 
     async function enablePush() {
       try {
@@ -246,6 +250,36 @@
             applicationServerKey: keyBytes,
           });
         }
+
+        async function fetchPushStatus() {
+  try {
+    const res = await fetch("/dashboard/push/status/", {
+      method: "GET",
+      credentials: "same-origin",
+      headers: { "Accept": "application/json" },
+    });
+
+    if (!res.ok) return { ok: false, enabled: false, count: 0 };
+    return await res.json();
+  } catch (e) {
+    return { ok: false, enabled: false, count: 0 };
+  }
+}
+
+    async function fetchPushStatus() {
+  try {
+    const res = await fetch("/dashboard/push/status/", {
+      method: "GET",
+      credentials: "same-origin",
+      headers: { "Accept": "application/json" },
+    });
+
+    if (!res.ok) return { ok: false, enabled: false, count: 0 };
+    return await res.json();
+  } catch (e) {
+    return { ok: false, enabled: false, count: 0 };
+  }
+}
 
         const saved = await sendSubscriptionToServer(sub);
         if (saved.ok) hidePushButton();
