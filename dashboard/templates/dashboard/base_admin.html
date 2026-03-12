@@ -22,7 +22,7 @@
     #btn-push-test  { display: none; white-space: nowrap; }
   </style>
 
-  <link rel="manifest" href="/dashboard/manifest.json?v=20260311-10">
+  <link rel="manifest" href="/dashboard/manifest.json?v=20260311-20">
   <meta name="theme-color" content="#0d6efd">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -85,7 +85,7 @@
   </div>
 
   <script>
-    window.APP_VERSION = "20260311-10";
+    window.APP_VERSION = "20260311-20";
   </script>
 
   <script>
@@ -190,7 +190,7 @@
         const saved = await sendSubscriptionToServer(sub);
         if (saved.ok) await syncPushButtons(reg);
       } catch (e) {
-        console.error(e);
+        console.error("[PUSH ADMIN]", e);
       }
     }
 
@@ -206,7 +206,7 @@
           },
         });
       } catch (e) {
-        console.error(e);
+        console.error("[PUSH TEST]", e);
       }
     }
 
