@@ -1,0 +1,35 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Notificaciones{% endblock %}
+{% block top_title %}🔔 Notificaciones{% endblock %}
+
+{% block content %}
+
+<div class="card shadow-sm mb-3">
+  <div class="card-body">
+    <div class="fw-bold mb-2">Estado de notificaciones push</div>
+
+    {% if push_enabled %}
+      <div class="alert alert-success mb-0">
+        Tienes las notificaciones activadas en este usuario.
+        <br>
+        Suscripciones registradas: <strong>{{ subs_count }}</strong>
+      </div>
+    {% else %}
+      <div class="alert alert-secondary mb-0">
+        Aún no tienes notificaciones activadas.
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-body">
+    <div class="fw-bold mb-2">Bandeja</div>
+    <div class="text-muted">
+      No tienes notificaciones por ahora.
+    </div>
+  </div>
+</div>
+
+{% endblock %}

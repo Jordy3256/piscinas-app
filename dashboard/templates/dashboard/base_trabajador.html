@@ -9,7 +9,7 @@
 
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 
-  <link rel="manifest" href="/dashboard/manifest.json?v=20260311-20">
+  <link rel="manifest" href="/dashboard/manifest.json?v=20260311-10">
   <meta name="theme-color" content="#0d6efd">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -44,6 +44,7 @@
       height: 38px;
       border-radius: 999px;
     }
+
     .notif-badge {
       position: absolute;
       top: -4px;
@@ -79,8 +80,7 @@
           </button>
 
           <a class="btn btn-outline-secondary btn-sm notif-btn"
-             href="#"
-             onclick="alert('Aún no existe la pantalla /dashboard/notificaciones/.'); return false;"
+             href="/dashboard/notificaciones/"
              title="Notificaciones">
             🔔
             <span id="notif-badge" class="notif-badge">0</span>
@@ -105,7 +105,7 @@
     <div class="bottom-nav bg-white border-top">
       <div class="container py-2">
         <div class="d-flex gap-2 flex-wrap">
-          <a class="btn btn-light flex-fill" href="/dashboard/inicio/">🏠 Inicio</a>
+          <a class="btn btn-light flex-fill" href="/dashboard/home/">🏠 Inicio</a>
           <a class="btn btn-outline-secondary flex-fill" href="/dashboard/home/">📋 Mis mantenimientos</a>
           <a class="btn btn-outline-danger flex-fill" href="/logout/">🚪 Salir</a>
 
@@ -121,7 +121,7 @@
   <div id="template-debug-badge">BASE_TRABAJADOR ✅ 20260311-20</div>
 
   <script>
-    window.APP_VERSION = "20260311-20";
+    window.APP_VERSION = "20260311-10";
   </script>
 
   <script>
@@ -161,6 +161,21 @@
       await unregisterGhostSW();
       await navigator.serviceWorker.register(SW_URL, { scope: "/dashboard/" });
       return await navigator.serviceWorker.ready;
+    }
+
+    async function fetchPushStatus() {
+      try {
+        const res = await fetch("/dashboard/push/status/", {
+          method: "GET",
+          credentials: "same-origin",
+          headers: { "Accept": "application/json" },
+        });
+
+        if (!res.ok) return { ok: false, enabled: false, count: 0 };
+        return await res.json();
+      } catch (e) {
+        return { ok: false, enabled: false, count: 0 };
+      }
     }
 
     const notifBadge = document.getElementById("notif-badge");
@@ -212,27 +227,27 @@
     function hidePushButton() { if (btnPush) btnPush.style.display = "none"; }
 
     async function syncPushButton(reg) {
-  try {
-    if (!btnPush) return;
+      try {
+        if (!btnPush) return;
 
-    if (!reg || !("PushManager" in window) || !("Notification" in window)) {
-      hidePushButton();
-      return;
+        if (!reg || !("PushManager" in window) || !("Notification" in window)) {
+          hidePushButton();
+          return;
+        }
+
+        const browserSub = await reg.pushManager.getSubscription();
+        const granted = (Notification.permission === "granted");
+        const serverStatus = await fetchPushStatus();
+
+        if (browserSub && granted && serverStatus.enabled) {
+          hidePushButton();
+        } else {
+          showPushButton();
+        }
+      } catch (e) {
+        showPushButton();
+      }
     }
-
-    const browserSub = await reg.pushManager.getSubscription();
-    const granted = (Notification.permission === "granted");
-    const serverStatus = await fetchPushStatus();
-
-    if (browserSub && granted && serverStatus.enabled) {
-      hidePushButton();
-    } else {
-      showPushButton();
-    }
-  } catch (e) {
-    showPushButton();
-  }
-}
 
     async function enablePush() {
       try {
@@ -251,40 +266,10 @@
           });
         }
 
-        async function fetchPushStatus() {
-  try {
-    const res = await fetch("/dashboard/push/status/", {
-      method: "GET",
-      credentials: "same-origin",
-      headers: { "Accept": "application/json" },
-    });
-
-    if (!res.ok) return { ok: false, enabled: false, count: 0 };
-    return await res.json();
-  } catch (e) {
-    return { ok: false, enabled: false, count: 0 };
-  }
-}
-
-    async function fetchPushStatus() {
-  try {
-    const res = await fetch("/dashboard/push/status/", {
-      method: "GET",
-      credentials: "same-origin",
-      headers: { "Accept": "application/json" },
-    });
-
-    if (!res.ok) return { ok: false, enabled: false, count: 0 };
-    return await res.json();
-  } catch (e) {
-    return { ok: false, enabled: false, count: 0 };
-  }
-}
-
         const saved = await sendSubscriptionToServer(sub);
         if (saved.ok) hidePushButton();
       } catch (e) {
-        console.error("[PUSH TRABAJADOR]", e);
+        console.error(e);
       }
     }
 

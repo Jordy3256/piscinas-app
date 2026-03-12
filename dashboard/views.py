@@ -213,7 +213,7 @@ def _normalize_subscription_payload(data: dict) -> dict:
     }
 
 
-def _push_status_code_from_exception(ex) -> int | None:
+def _push_status_code_from_exception(ex):
     try:
         return getattr(getattr(ex, "response", None), "status_code", None)
     except Exception:
@@ -531,6 +531,29 @@ def dashboard_view(request):
         return render(request, "dashboard/dashboard_trabajador.html", ctx)
 
     return render(request, "dashboard/no_autorizado.html", status=403)
+
+
+# -------------------
+# Pantalla de notificaciones
+# -------------------
+@login_required
+def notificaciones_view(request):
+    subs_count = 0
+    push_enabled = False
+
+    if PushSubscription is not None:
+        subs_count = PushSubscription.objects.filter(user=request.user).count()
+        push_enabled = subs_count > 0
+
+    return render(
+        request,
+        "dashboard/notificaciones.html",
+        {
+            "subs_count": subs_count,
+            "push_enabled": push_enabled,
+            "es_admin": es_admin(request.user),
+        },
+    )
 
 
 # -------------------
