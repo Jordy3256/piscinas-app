@@ -14,6 +14,7 @@ from django.db.models import Sum, Count, Q
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.templatetags.static import static
+from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_http_methods, require_GET
@@ -27,9 +28,10 @@ from mantenimientos.models import Mantenimiento, UsoInsumo, FotoMantenimiento
 from finanzas.models import Ingreso, Egreso
 
 try:
-    from .models import PushSubscription
+    from .models import PushSubscription, Notificacion
 except Exception:
     PushSubscription = None
+    Notificacion = None
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +60,120 @@ def es_trabajador(user):
         return False
     grupos = {g.name.strip().lower() for g in user.groups.all()}
     return "trabajadores" in grupos or "trabajador" in grupos
+
+
+# -------------------
+# Helpers de notificaciones / push
+# -------------------
+def _crear_notificacion(user, titulo, mensaje, url=""):
+    if Notificacion is None or user is None or not getattr(user, "is_authenticated", False):
+        return None
+
+    try:
+        return Notificacion.objects.create(
+            user=user,
+            titulo=(titulo or "").strip()[:150],
+            mensaje=(mensaje or "").strip(),
+            url=(url or "").strip(),
+        )
+    except Exception:
+        logger.exception("Error creando notificación para user=%s", getattr(user, "pk", None))
+        return None
+
+
+def _push_status_code_from_exception(ex):
+    try:
+        return getattr(getattr(ex, "response", None), "status_code", None)
+    except Exception:
+        return None
+
+
+def _push_response_body_from_exception(ex) -> str:
+    try:
+        response = getattr(ex, "response", None)
+        if response is not None:
+            return response.text or ""
+    except Exception:
+        pass
+    return ""
+
+
+def _enviar_push_a_usuario(user, title, body, url="/dashboard/home/", tag=""):
+    if PushSubscription is None:
+        return {"sent": 0, "failed": 0}
+
+    vapid_private_key = (getattr(settings, "VAPID_PRIVATE_KEY", "") or "").strip()
+    if not vapid_private_key:
+        return {"sent": 0, "failed": 0}
+
+    vapid_subject = (
+        getattr(settings, "VAPID_SUBJECT", "") or "mailto:admin@piscinas-app.local"
+    ).strip()
+
+    subs = PushSubscription.objects.filter(user=user).order_by("-updated_at", "-created_at")
+    if not subs.exists():
+        return {"sent": 0, "failed": 0}
+
+    payload = json.dumps(
+        {
+            "title": title or "Piscinas App",
+            "body": body or "Nueva notificación",
+            "url": url or "/dashboard/home/",
+            "tag": tag or f"piscinas-{user.username}",
+        }
+    )
+
+    sent = 0
+    failed = 0
+
+    for s in subs:
+        subscription_info = {
+            "endpoint": s.endpoint,
+            "keys": {"p256dh": s.p256dh, "auth": s.auth},
+        }
+
+        try:
+            webpush(
+                subscription_info=subscription_info,
+                data=payload,
+                vapid_private_key=vapid_private_key,
+                vapid_claims={"sub": vapid_subject},
+                content_encoding="aes128gcm",
+                ttl=60,
+            )
+            sent += 1
+
+        except WebPushException as ex:
+            failed += 1
+            status = _push_status_code_from_exception(ex)
+            body_resp = _push_response_body_from_exception(ex)
+
+            logger.warning(
+                "Push fallo user=%s sub_id=%s status=%s endpoint=%s error=%s body=%s",
+                user.username,
+                s.id,
+                status,
+                s.endpoint[:120],
+                str(ex),
+                body_resp[:200],
+            )
+
+            if status in (404, 410):
+                try:
+                    s.delete()
+                except Exception:
+                    logger.exception("No se pudo borrar sub expirada id=%s", s.id)
+
+        except Exception:
+            failed += 1
+            logger.exception("Error inesperado enviando push a user=%s", user.username)
+
+    return {"sent": sent, "failed": failed}
+
+
+def _notificar_usuario(user, titulo, mensaje, url="/dashboard/home/", tag=""):
+    _crear_notificacion(user, titulo, mensaje, url)
+    return _enviar_push_a_usuario(user, titulo, mensaje, url=url, tag=tag)
 
 
 # -------------------
@@ -211,23 +327,6 @@ def _normalize_subscription_payload(data: dict) -> dict:
         "auth": auth,
         "raw": data,
     }
-
-
-def _push_status_code_from_exception(ex):
-    try:
-        return getattr(getattr(ex, "response", None), "status_code", None)
-    except Exception:
-        return None
-
-
-def _push_response_body_from_exception(ex) -> str:
-    try:
-        response = getattr(ex, "response", None)
-        if response is not None:
-            return response.text or ""
-    except Exception:
-        pass
-    return ""
 
 
 @login_required
@@ -538,6 +637,25 @@ def dashboard_view(request):
 # -------------------
 @login_required
 def notificaciones_view(request):
+    notificaciones = []
+    unread_before = 0
+
+    if Notificacion is not None:
+        unread_before = Notificacion.objects.filter(user=request.user, leida=False).count()
+        notificaciones = list(
+            Notificacion.objects.filter(user=request.user).order_by("-creada_en")[:100]
+        )
+
+        if unread_before > 0:
+            Notificacion.objects.filter(user=request.user, leida=False).update(
+                leida=True,
+                leida_en=timezone.now(),
+            )
+            for n in notificaciones:
+                if not n.leida:
+                    n.leida = True
+                    n.leida_en = timezone.now()
+
     subs_count = 0
     push_enabled = False
 
@@ -549,6 +667,8 @@ def notificaciones_view(request):
         request,
         "dashboard/notificaciones.html",
         {
+            "notificaciones": notificaciones,
+            "unread_before": unread_before,
             "subs_count": subs_count,
             "push_enabled": push_enabled,
             "es_admin": es_admin(request.user),
@@ -654,11 +774,33 @@ def mantenimiento_detalle_view(request, pk):
         if accion == "marcar_realizado":
             mantenimiento.estado = "realizado"
             mantenimiento.save()
+
+            for trabajador in mantenimiento.trabajadores.select_related("user").all():
+                _notificar_usuario(
+                    trabajador.user,
+                    "Mantenimiento realizado",
+                    f"El mantenimiento de {mantenimiento.cliente} fue marcado como realizado.",
+                    url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
+                    tag=f"mantenimiento-realizado-{mantenimiento.pk}",
+                )
+
+            messages.success(request, "Mantenimiento marcado como realizado.")
             return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
 
         if accion == "marcar_pendiente":
             mantenimiento.estado = "pendiente"
             mantenimiento.save()
+
+            for trabajador in mantenimiento.trabajadores.select_related("user").all():
+                _notificar_usuario(
+                    trabajador.user,
+                    "Mantenimiento pendiente",
+                    f"El mantenimiento de {mantenimiento.cliente} fue marcado como pendiente.",
+                    url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
+                    tag=f"mantenimiento-pendiente-{mantenimiento.pk}",
+                )
+
+            messages.success(request, "Mantenimiento marcado como pendiente.")
             return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
 
         if accion == "agregar_insumo":
@@ -707,6 +849,14 @@ def mantenimiento_detalle_view(request, pk):
                 egreso=egreso,
             )
 
+            for trabajador in mantenimiento.trabajadores.select_related("user").all():
+                _crear_notificacion(
+                    trabajador.user,
+                    "Insumo registrado",
+                    f"Se registró {insumo.nombre} x {cantidad} en {mantenimiento.cliente}.",
+                    url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
+                )
+
             messages.success(request, f"Insumo registrado: {insumo.nombre} x {cantidad}")
             return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
 
@@ -723,6 +873,15 @@ def mantenimiento_detalle_view(request, pk):
                 imagen=imagen,
                 descripcion=descripcion,
             )
+
+            for trabajador in mantenimiento.trabajadores.select_related("user").all():
+                _crear_notificacion(
+                    trabajador.user,
+                    "Nueva foto subida",
+                    f"Se subió una foto al mantenimiento de {mantenimiento.cliente}.",
+                    url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
+                )
+
             messages.success(request, "Foto subida correctamente.")
             return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
 
@@ -852,8 +1011,21 @@ def asignar_trabajadores_view(request, pk):
     trabajadores = Trabajador.objects.select_related("user").all().order_by("user__username")
 
     if request.method == "POST":
+        anteriores_ids = set(mantenimiento.trabajadores.values_list("id", flat=True))
         ids = request.POST.getlist("trabajadores")
         mantenimiento.trabajadores.set(ids)
+
+        nuevos_trabajadores = Trabajador.objects.select_related("user").filter(pk__in=ids).exclude(pk__in=anteriores_ids)
+
+        for trabajador in nuevos_trabajadores:
+            _notificar_usuario(
+                trabajador.user,
+                "Nuevo mantenimiento asignado",
+                f"Se te asignó el mantenimiento de {mantenimiento.cliente} para el {mantenimiento.fecha}.",
+                url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
+                tag=f"asignacion-{mantenimiento.pk}-{trabajador.user.pk}",
+            )
+
         messages.success(request, "Trabajadores asignados correctamente.")
         return redirect("/dashboard/operativo/")
 
@@ -1031,6 +1203,8 @@ def offline_view(request):
 
 @require_GET
 def unread_count_view(request):
-    if not request.user.is_authenticated:
+    if not request.user.is_authenticated or Notificacion is None:
         return JsonResponse({"count": 0})
-    return JsonResponse({"count": 0})
+
+    count = Notificacion.objects.filter(user=request.user, leida=False).count()
+    return JsonResponse({"count": count})
