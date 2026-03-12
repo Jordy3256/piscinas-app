@@ -20,9 +20,35 @@
 
     #btn-push-admin { display: none; white-space: nowrap; }
     #btn-push-test  { display: none; white-space: nowrap; }
+
+    .notif-btn {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 38px;
+      height: 38px;
+      border-radius: 999px;
+    }
+
+    .notif-badge {
+      position: absolute;
+      top: -4px;
+      right: -4px;
+      min-width: 18px;
+      height: 18px;
+      padding: 0 5px;
+      border-radius: 999px;
+      font-size: 11px;
+      line-height: 18px;
+      text-align: center;
+      background: #dc3545;
+      color: #fff;
+      display: none;
+    }
   </style>
 
-  <link rel="manifest" href="/dashboard/manifest.json?v=20260311-20">
+  <link rel="manifest" href="/dashboard/manifest.json?v=20260311-10">
   <meta name="theme-color" content="#0d6efd">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -40,10 +66,17 @@
             {% block top_title %}🧑‍💼 Admin{% endblock %}
           </div>
 
-          <div class="d-flex gap-2">
+          <div class="d-flex gap-2 align-items-center">
             {% block top_actions %}
               <button id="btn-push-admin" class="btn btn-primary btn-sm" type="button">🔔 Activar</button>
               <button id="btn-push-test" class="btn btn-outline-primary btn-sm" type="button">🧪 Test Push</button>
+
+              <a class="btn btn-outline-secondary btn-sm notif-btn"
+                 href="/dashboard/notificaciones/"
+                 title="Notificaciones">
+                🔔
+                <span id="notif-badge" class="notif-badge">0</span>
+              </a>
 
               <a class="btn btn-outline-secondary btn-sm" href="/dashboard/inicio/">Inicio</a>
               <a class="btn btn-outline-danger btn-sm" href="/logout/">Salir</a>
@@ -73,6 +106,7 @@
           <a class="btn btn-outline-secondary flex-fill" href="/dashboard/home/">📊 Dashboard</a>
           <a class="btn btn-outline-secondary flex-fill" href="/dashboard/operativo/">🧑‍💼 Operativo</a>
           <a class="btn btn-outline-secondary flex-fill" href="/dashboard/finanzas/flujo/">💰 Finanzas</a>
+          <a class="btn btn-outline-secondary flex-fill" href="/dashboard/notificaciones/">🔔 Avisos</a>
           <a class="btn btn-outline-secondary flex-fill" href="/admin/" target="_blank">⚙️ Admin</a>
 
           <button id="btn-install" class="btn btn-primary flex-fill btn-install" type="button">
@@ -85,7 +119,7 @@
   </div>
 
   <script>
-    window.APP_VERSION = "20260311-20";
+    window.APP_VERSION = "20260311-10";
   </script>
 
   <script>
@@ -147,33 +181,57 @@
 
     const btnPushAdmin = document.getElementById("btn-push-admin");
     const btnPushTest  = document.getElementById("btn-push-test");
+    const notifBadge   = document.getElementById("notif-badge");
 
     function show(el) { if (el) el.style.display = "inline-block"; }
     function hide(el) { if (el) el.style.display = "none"; }
 
     async function syncPushButtons(reg) {
-  if (!btnPushAdmin && !btnPushTest) return;
+      if (!btnPushAdmin && !btnPushTest) return;
 
-  if (!reg || !("PushManager" in window) || !("Notification" in window)) {
-    hide(btnPushAdmin);
-    hide(btnPushTest);
-    return;
-  }
+      if (!reg || !("PushManager" in window) || !("Notification" in window)) {
+        hide(btnPushAdmin);
+        hide(btnPushTest);
+        return;
+      }
 
-  const browserSub = await reg.pushManager.getSubscription();
-  const granted = (Notification.permission === "granted");
-  const serverStatus = await fetchPushStatus();
+      const sub = await reg.pushManager.getSubscription();
+      const granted = (Notification.permission === "granted");
 
-  const enabledEverywhere = !!browserSub && granted && !!serverStatus.enabled;
+      if (sub && granted) {
+        hide(btnPushAdmin);
+        show(btnPushTest);
+      } else {
+        show(btnPushAdmin);
+        hide(btnPushTest);
+      }
+    }
 
-  if (enabledEverywhere) {
-    hide(btnPushAdmin);
-    show(btnPushTest);
-  } else {
-    show(btnPushAdmin);
-    hide(btnPushTest);
-  }
-}
+    async function refreshNotifBadge() {
+      if (!notifBadge) return;
+
+      try {
+        const res = await fetch("/dashboard/notificaciones/unread-count/", {
+          method: "GET",
+          credentials: "same-origin",
+          headers: { "Accept": "application/json" },
+        });
+
+        if (!res.ok) return;
+
+        const data = await res.json().catch(() => ({}));
+        const n = Number(data.count || 0);
+
+        if (n > 0) {
+          notifBadge.textContent = String(n > 99 ? "99+" : n);
+          notifBadge.style.display = "inline-block";
+        } else {
+          notifBadge.style.display = "none";
+        }
+      } catch (e) {
+        console.error("Error cargando badge:", e);
+      }
+    }
 
     async function enablePushAdmin() {
       try {
@@ -194,24 +252,9 @@
         const saved = await sendSubscriptionToServer(sub);
         if (saved.ok) await syncPushButtons(reg);
       } catch (e) {
-        console.error("[PUSH ADMIN]", e);
+        console.error(e);
       }
     }
-
-    async function fetchPushStatus() {
-  try {
-    const res = await fetch("/dashboard/push/status/", {
-      method: "GET",
-      credentials: "same-origin",
-      headers: { "Accept": "application/json" },
-    });
-
-    if (!res.ok) return { ok: false, enabled: false, count: 0 };
-    return await res.json();
-  } catch (e) {
-    return { ok: false, enabled: false, count: 0 };
-  }
-}
 
     async function sendTestPush() {
       try {
@@ -225,28 +268,16 @@
           },
         });
       } catch (e) {
-        console.error("[PUSH TEST]", e);
+        console.error(e);
       }
     }
-
-    async function fetchPushStatus() {
-  try {
-    const res = await fetch("/dashboard/push/status/", {
-      method: "GET",
-      credentials: "same-origin",
-      headers: { "Accept": "application/json" },
-    });
-
-    if (!res.ok) return { ok: false, enabled: false, count: 0 };
-    return await res.json();
-  } catch (e) {
-    return { ok: false, enabled: false, count: 0 };
-  }
-}
 
     window.addEventListener("load", async () => {
       const reg = await registerSW();
       await syncPushButtons(reg);
+      await refreshNotifBadge();
+
+      setInterval(refreshNotifBadge, 30000);
 
       if (btnPushAdmin) btnPushAdmin.addEventListener("click", enablePushAdmin);
       if (btnPushTest)  btnPushTest.addEventListener("click", sendTestPush);
