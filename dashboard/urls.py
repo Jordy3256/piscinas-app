@@ -22,6 +22,9 @@ from .views import (
     notificaciones_eliminar_todas_view,
     marcar_todas_leidas_view,
 
+    # Actividad
+    actividad_historial_view,
+
     # Core
     inicio_view,
     home_view,
@@ -70,8 +73,13 @@ urlpatterns = [
     path("notificaciones/<int:pk>/leer/", marcar_notificacion_leida_view, name="marcar_notificacion_leida"),
     path("notificaciones/eliminar/<int:pk>/", notificacion_eliminar_view, name="notificacion_eliminar"),
     path("notificaciones/eliminar-todas/", notificaciones_eliminar_todas_view, name="notificaciones_eliminar_todas"),
-    path("notificaciones/marcar-todas/", marcar_todas_leidas_view, name="marcar_todas_leidas"),
+    path("notificaciones/marcar-todas-leidas/", marcar_todas_leidas_view, name="marcar_todas_leidas"),
     path("notificaciones/unread-count/", unread_count_view, name="unread_count"),
+
+    # ======================
+    # Actividad
+    # ======================
+    path("actividad/", actividad_historial_view, name="actividad_historial"),
 
     # ======================
     # Home / Dashboard

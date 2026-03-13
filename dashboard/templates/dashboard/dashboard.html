@@ -118,12 +118,52 @@
   </div>
 </div>
 
+<div class="card shadow-sm mb-3">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+      <div class="fw-bold">🕘 Actividad reciente</div>
+      <a class="btn btn-outline-secondary btn-sm" href="/dashboard/actividad/">Ver historial completo</a>
+    </div>
+
+    {% if actividades_recientes %}
+      <div class="vstack gap-2">
+        {% for a in actividades_recientes %}
+          <div class="border rounded p-2 bg-light">
+            <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
+              <div>
+                <div class="fw-semibold">{{ a.titulo }}</div>
+                <div class="text-muted small">{{ a.descripcion }}</div>
+              </div>
+              <div class="text-muted small">{{ a.creada_en|date:"d/m/Y H:i" }}</div>
+            </div>
+
+            {% if a.user %}
+              <div class="small mt-1">
+                <span class="text-muted">Usuario:</span> {{ a.user.username }}
+              </div>
+            {% endif %}
+
+            {% if a.url %}
+              <div class="mt-2">
+                <a href="{{ a.url }}" class="btn btn-outline-primary btn-sm">Abrir</a>
+              </div>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="text-muted">Aún no hay actividad registrada.</div>
+    {% endif %}
+  </div>
+</div>
+
 <div class="card shadow-sm">
   <div class="card-body">
     <div class="fw-bold mb-2">Accesos rápidos</div>
     <div class="d-flex flex-wrap gap-2">
       <a class="btn btn-outline-dark" href="/dashboard/operativo/">🧑‍💼 Operativo</a>
       <a class="btn btn-outline-dark" href="/dashboard/finanzas/flujo/">💰 Flujo mensual</a>
+      <a class="btn btn-outline-secondary" href="/dashboard/actividad/">🕘 Historial</a>
       <a class="btn btn-outline-secondary" href="/admin/">⚙️ Admin Django</a>
     </div>
   </div>

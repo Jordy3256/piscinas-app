@@ -1,6 +1,5 @@
 from django.db import models
 from django.contrib.auth.models import User
-from django.utils import timezone
 
 
 class PushSubscription(models.Model):
@@ -52,12 +51,31 @@ class Notificacion(models.Model):
             models.Index(fields=["creada_en"]),
         ]
 
-    def marcar_como_leida(self):
-        if not self.leida:
-            self.leida = True
-            self.leida_en = timezone.now()
-            self.save(update_fields=["leida", "leida_en"])
-
     def __str__(self):
         estado = "leída" if self.leida else "no leída"
         return f"{self.user.username} | {self.titulo} | {estado}"
+
+
+class ActividadSistema(models.Model):
+    user = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="actividades_sistema",
+    )
+    titulo = models.CharField(max_length=150)
+    descripcion = models.TextField()
+    url = models.CharField(max_length=255, blank=True, default="")
+    creada_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-creada_en"]
+        indexes = [
+            models.Index(fields=["creada_en"]),
+            models.Index(fields=["user", "creada_en"]),
+        ]
+
+    def __str__(self):
+        actor = self.user.username if self.user else "Sistema"
+        return f"{actor} | {self.titulo} | {self.creada_en:%Y-%m-%d %H:%M}"

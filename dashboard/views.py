@@ -39,6 +39,11 @@ try:
 except Exception:
     Notificacion = None
 
+try:
+    from .models import ActividadSistema
+except Exception:
+    ActividadSistema = None
+
 logger = logging.getLogger(__name__)
 
 
@@ -348,6 +353,25 @@ def _crear_notificacion(user, titulo, mensaje, url="/dashboard/notificaciones/",
             )
 
     return notif
+
+
+def _registrar_actividad(user, titulo, descripcion, url=""):
+    if ActividadSistema is None:
+        return None
+
+    try:
+        return ActividadSistema.objects.create(
+            user=user if getattr(user, "is_authenticated", False) else None,
+            titulo=titulo,
+            descripcion=descripcion,
+            url=url or "",
+        )
+    except Exception:
+        logger.exception(
+            "No se pudo registrar ActividadSistema para user=%s",
+            getattr(user, "username", "unknown"),
+        )
+        return None
 
 
 def _admins_queryset():
@@ -667,6 +691,10 @@ def dashboard_view(request):
         total_pendientes_sin_asignar = pendientes_sin_asignar_qs.count()
         total_atrasados_sin_asignar = atrasados_sin_asignar_qs.count()
 
+        actividades_recientes = []
+        if ActividadSistema is not None:
+            actividades_recientes = list(ActividadSistema.objects.select_related("user").all()[:5])
+
         ctx = {
             **base_ctx,
             "modo": "admin",
@@ -681,6 +709,7 @@ def dashboard_view(request):
                 or total_pendientes_sin_asignar > 0
                 or total_atrasados_sin_asignar > 0
             ),
+            "actividades_recientes": actividades_recientes,
             "es_admin": True,
         }
         return render(request, "dashboard/dashboard.html", ctx)
@@ -885,6 +914,29 @@ def marcar_todas_leidas_view(request):
     return JsonResponse({"ok": True})
 
 
+@login_required
+def actividad_historial_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    if ActividadSistema is None:
+        page_obj = None
+    else:
+        qs = ActividadSistema.objects.select_related("user").all()
+        paginator = Paginator(qs, 20)
+        page_number = request.GET.get("page")
+        page_obj = paginator.get_page(page_number)
+
+    return render(
+        request,
+        "dashboard/actividad_historial.html",
+        {
+            "page_obj": page_obj,
+            "es_admin": True,
+        },
+    )
+
+
 # -------------------
 # Operativo Admin
 # -------------------
@@ -1044,6 +1096,12 @@ def mantenimiento_detalle_view(request, pk):
                 enviar_push=True,
                 excluir_user_id=request.user.id if es_admin(request.user) else None,
             )
+            _registrar_actividad(
+                user=request.user,
+                titulo="Mantenimiento realizado",
+                descripcion=f"{actor} marcó como realizado el mantenimiento de {mantenimiento.cliente}.",
+                url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
+            )
 
             messages.success(request, f"Mantenimiento de {mantenimiento.cliente} marcado como realizado.")
             return redirect(safe_return_url())
@@ -1059,6 +1117,12 @@ def mantenimiento_detalle_view(request, pk):
                 url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
                 enviar_push=False,
                 excluir_user_id=request.user.id if es_admin(request.user) else None,
+            )
+            _registrar_actividad(
+                user=request.user,
+                titulo="Mantenimiento pendiente",
+                descripcion=f"{actor} marcó como pendiente el mantenimiento de {mantenimiento.cliente}.",
+                url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
             )
 
             messages.success(request, f"Mantenimiento de {mantenimiento.cliente} marcado como pendiente.")
@@ -1118,6 +1182,12 @@ def mantenimiento_detalle_view(request, pk):
                 enviar_push=False,
                 excluir_user_id=request.user.id if es_admin(request.user) else None,
             )
+            _registrar_actividad(
+                user=request.user,
+                titulo="Insumo registrado",
+                descripcion=f"{actor} registró {insumo.nombre} x {cantidad} en el mantenimiento de {mantenimiento.cliente}.",
+                url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
+            )
 
             messages.success(request, f"Insumo registrado: {insumo.nombre} x {cantidad}")
             return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
@@ -1143,6 +1213,12 @@ def mantenimiento_detalle_view(request, pk):
                 url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
                 enviar_push=False,
                 excluir_user_id=request.user.id if es_admin(request.user) else None,
+            )
+            _registrar_actividad(
+                user=request.user,
+                titulo="Foto subida",
+                descripcion=f"{actor} subió una foto al mantenimiento de {mantenimiento.cliente}.",
+                url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
             )
 
             messages.success(request, "Foto subida correctamente.")
@@ -1189,6 +1265,9 @@ def usoinsumo_eliminar_view(request, pk):
 
     if request.method == "POST":
         insumo = uso.insumo
+        insumo_nombre = getattr(insumo, "nombre", "Insumo")
+        cantidad = uso.cantidad
+
         if hasattr(insumo, "stock"):
             insumo.stock += uso.cantidad
             insumo.save()
@@ -1205,6 +1284,12 @@ def usoinsumo_eliminar_view(request, pk):
             url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
             enviar_push=False,
             excluir_user_id=request.user.id if es_admin(request.user) else None,
+        )
+        _registrar_actividad(
+            user=request.user,
+            titulo="Insumo eliminado",
+            descripcion=f"{actor} eliminó {insumo_nombre} x {cantidad} del mantenimiento de {mantenimiento.cliente}.",
+            url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
         )
 
         messages.success(request, "Uso de insumo eliminado y stock devuelto.")
@@ -1250,6 +1335,8 @@ def usoinsumo_editar_view(request, pk):
         diff = nueva_cantidad - anterior
 
         insumo = uso.insumo
+        insumo_nombre = getattr(insumo, "nombre", "Insumo")
+
         if hasattr(insumo, "stock"):
             if diff > 0 and insumo.stock < diff:
                 messages.error(request, f"Stock insuficiente. Disponible: {insumo.stock}")
@@ -1272,6 +1359,12 @@ def usoinsumo_editar_view(request, pk):
             url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
             enviar_push=False,
             excluir_user_id=request.user.id if es_admin(request.user) else None,
+        )
+        _registrar_actividad(
+            user=request.user,
+            titulo="Insumo actualizado",
+            descripcion=f"{actor} actualizó {insumo_nombre} de {anterior} a {nueva_cantidad} en el mantenimiento de {mantenimiento.cliente}.",
+            url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
         )
 
         messages.success(request, "Uso de insumo actualizado correctamente.")
@@ -1400,9 +1493,11 @@ def asignar_trabajadores_view(request, pk):
         mantenimiento.trabajadores.set(ids)
 
         asignados = list(mantenimiento.trabajadores.select_related("user").all())
+        nombres_asignados = []
 
         for trabajador in asignados:
             if getattr(trabajador, "user", None):
+                nombres_asignados.append(trabajador.user.username)
                 _crear_notificacion(
                     user=trabajador.user,
                     titulo="🛠 Nuevo mantenimiento asignado",
@@ -1410,6 +1505,15 @@ def asignar_trabajadores_view(request, pk):
                     url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
                     enviar_push=True,
                 )
+
+        actor = request.user.username
+        detalle = ", ".join(nombres_asignados) if nombres_asignados else "sin trabajadores"
+        _registrar_actividad(
+            user=request.user,
+            titulo="Trabajadores asignados",
+            descripcion=f"{actor} actualizó la asignación del mantenimiento de {mantenimiento.cliente}: {detalle}.",
+            url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
+        )
 
         messages.success(request, "Trabajadores asignados correctamente.")
         return redirect("/dashboard/operativo/")
@@ -1518,7 +1622,14 @@ def ingreso_crear_view(request):
             messages.error(request, "Fecha inválida.")
             return redirect("/dashboard/finanzas/ingresos/nuevo/")
 
-        Ingreso.objects.create(concepto=concepto, total=total, fecha=fecha)
+        ingreso = Ingreso.objects.create(concepto=concepto, total=total, fecha=fecha)
+        _registrar_actividad(
+            user=request.user,
+            titulo="Ingreso creado",
+            descripcion=f"{request.user.username} creó el ingreso '{concepto}' por ${total}.",
+            url=f"/dashboard/finanzas/ingresos/{ingreso.pk}/editar/",
+        )
+
         messages.success(request, "Ingreso creado correctamente.")
         return redirect("/dashboard/finanzas/ingresos/")
 
@@ -1559,6 +1670,13 @@ def ingreso_editar_view(request, pk):
         ingreso.fecha = fecha
         ingreso.save()
 
+        _registrar_actividad(
+            user=request.user,
+            titulo="Ingreso actualizado",
+            descripcion=f"{request.user.username} actualizó el ingreso '{concepto}' a ${total}.",
+            url=f"/dashboard/finanzas/ingresos/{pk}/editar/",
+        )
+
         messages.success(request, "Ingreso actualizado.")
         return redirect("/dashboard/finanzas/ingresos/")
 
@@ -1577,6 +1695,15 @@ def ingreso_eliminar_view(request, pk):
     ingreso = get_object_or_404(Ingreso, pk=pk)
 
     if request.method == "POST":
+        concepto = ingreso.concepto
+        total = ingreso.total
+        _registrar_actividad(
+            user=request.user,
+            titulo="Ingreso eliminado",
+            descripcion=f"{request.user.username} eliminó el ingreso '{concepto}' por ${total}.",
+            url="/dashboard/finanzas/ingresos/",
+        )
+
         ingreso.delete()
         messages.success(request, "Ingreso eliminado.")
         return redirect("/dashboard/finanzas/ingresos/")
