@@ -643,9 +643,29 @@ def dashboard_view(request):
     base_ctx = {"VAPID_PUBLIC_KEY": getattr(settings, "VAPID_PUBLIC_KEY", "")}
 
     if es_admin(request.user):
+        hoy = date.today()
+
         total_ingresos = Ingreso.objects.aggregate(total=Sum("total"))["total"] or 0
         total_egresos = Egreso.objects.aggregate(total=Sum("total"))["total"] or 0
         balance = total_ingresos - total_egresos
+
+        mantenimientos_atrasados_qs = Mantenimiento.objects.filter(
+            fecha__lt=hoy,
+            estado="pendiente",
+        )
+        pendientes_sin_asignar_qs = Mantenimiento.objects.filter(
+            estado="pendiente",
+            trabajadores__isnull=True,
+        ).distinct()
+        atrasados_sin_asignar_qs = Mantenimiento.objects.filter(
+            fecha__lt=hoy,
+            estado="pendiente",
+            trabajadores__isnull=True,
+        ).distinct()
+
+        total_atrasados = mantenimientos_atrasados_qs.count()
+        total_pendientes_sin_asignar = pendientes_sin_asignar_qs.count()
+        total_atrasados_sin_asignar = atrasados_sin_asignar_qs.count()
 
         ctx = {
             **base_ctx,
@@ -653,6 +673,14 @@ def dashboard_view(request):
             "total_ingresos": float(total_ingresos),
             "total_egresos": float(total_egresos),
             "balance": float(balance),
+            "total_atrasados": total_atrasados,
+            "total_pendientes_sin_asignar": total_pendientes_sin_asignar,
+            "total_atrasados_sin_asignar": total_atrasados_sin_asignar,
+            "hay_alertas_operativas": (
+                total_atrasados > 0
+                or total_pendientes_sin_asignar > 0
+                or total_atrasados_sin_asignar > 0
+            ),
             "es_admin": True,
         }
         return render(request, "dashboard/dashboard.html", ctx)
