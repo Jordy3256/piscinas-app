@@ -31,6 +31,10 @@
     <a href="/dashboard/notificaciones/historial/" class="btn btn-outline-secondary btn-sm">Ver historial</a>
 
     {% if notificaciones %}
+      <button id="btn-marcar-todas" class="btn btn-outline-success btn-sm">
+        ✓ Marcar todas leídas
+      </button>
+
       <button id="btn-eliminar-todas" class="btn btn-outline-danger btn-sm">
         🗑 Eliminar todas
       </button>
@@ -193,6 +197,34 @@ if (btnEliminarTodas) {
     } catch (e) {
       console.error(e);
       alert("Ocurrió un error al eliminar todas las notificaciones.");
+    }
+  });
+}
+
+const btnMarcarTodas = document.getElementById("btn-marcar-todas");
+if (btnMarcarTodas) {
+  btnMarcarTodas.addEventListener("click", async () => {
+    try {
+      const res = await fetch("/dashboard/notificaciones/marcar-todas/", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "X-CSRFToken": getCSRFToken(),
+          "Accept": "application/json",
+        },
+      });
+
+      if (!res.ok) {
+        alert("No se pudieron marcar como leídas.");
+        return;
+      }
+
+      await refrescarBadgeSiExiste();
+      await refrescarDropdownSiExiste();
+      location.reload();
+    } catch (e) {
+      console.error(e);
+      alert("Ocurrió un error al marcar todas como leídas.");
     }
   });
 }

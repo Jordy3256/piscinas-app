@@ -4,74 +4,239 @@
 {% block top_title %}📜 Historial de notificaciones{% endblock %}
 
 {% block content %}
-<div class="card shadow-sm">
-  <div class="card-body">
-    <div class="fw-bold fs-4 mb-3">Historial completo</div>
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <div class="fw-bold fs-4">Historial completo</div>
+    {% if page_obj %}
+      <div class="text-muted">
+        Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="/dashboard/notificaciones/" class="btn btn-outline-secondary btn-sm">
+      Volver a bandeja
+    </a>
 
     {% if page_obj and page_obj.object_list %}
-      {% for n in page_obj.object_list %}
-        <div class="card shadow-sm mb-3">
-          <div class="card-body">
-            <div class="d-flex justify-content-between align-items-start gap-3 mb-2">
-              <div>
-                <div class="fw-bold fs-5">{{ n.titulo }}</div>
-                <div class="text-muted mt-2">{{ n.mensaje }}</div>
-              </div>
+      <button id="btn-marcar-todas-historial" class="btn btn-outline-success btn-sm">
+        ✓ Marcar todas leídas
+      </button>
 
-              <div class="text-end">
-                {% if n.leida %}
-                  <span class="badge bg-success">Leída</span>
-                {% else %}
-                  <span class="badge bg-danger">Nueva</span>
-                {% endif %}
-              </div>
-            </div>
-
-            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-3">
-              <div class="text-muted">
-                🗓 {{ n.creada_en|date:"d/m/Y H:i" }}
-              </div>
-
-              {% if n.url %}
-                <a href="{{ n.url }}" class="btn btn-outline-primary btn-sm">Abrir</a>
-              {% endif %}
-            </div>
-          </div>
-        </div>
-      {% endfor %}
-
-      <nav class="mt-4">
-        <ul class="pagination justify-content-center">
-          {% if page_obj.has_previous %}
-            <li class="page-item">
-              <a class="page-link" href="?page={{ page_obj.previous_page_number }}">Anterior</a>
-            </li>
-          {% else %}
-            <li class="page-item disabled">
-              <span class="page-link">Anterior</span>
-            </li>
-          {% endif %}
-
-          <li class="page-item disabled">
-            <span class="page-link">
-              Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
-            </span>
-          </li>
-
-          {% if page_obj.has_next %}
-            <li class="page-item">
-              <a class="page-link" href="?page={{ page_obj.next_page_number }}">Siguiente</a>
-            </li>
-          {% else %}
-            <li class="page-item disabled">
-              <span class="page-link">Siguiente</span>
-            </li>
-          {% endif %}
-        </ul>
-      </nav>
-    {% else %}
-      <div class="text-muted">No hay notificaciones registradas.</div>
+      <button id="btn-eliminar-todas-historial" class="btn btn-outline-danger btn-sm">
+        🗑 Eliminar todas
+      </button>
     {% endif %}
   </div>
 </div>
+
+{% if page_obj and page_obj.object_list %}
+  {% for n in page_obj.object_list %}
+    <div class="card shadow-sm mb-3 notif-card" data-id="{{ n.id }}">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start gap-3 mb-2">
+          <div>
+            <div class="fw-bold fs-5">{{ n.titulo }}</div>
+            <div class="text-muted mt-2">{{ n.mensaje }}</div>
+          </div>
+
+          <div class="text-end">
+            {% if n.leida %}
+              <span class="badge bg-success">Leída</span>
+            {% else %}
+              <span class="badge bg-danger">Nueva</span>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-3">
+          <div class="text-muted">
+            🗓 {{ n.creada_en|date:"d/m/Y H:i" }}
+          </div>
+
+          <div class="d-flex gap-2">
+            {% if n.url %}
+              <a href="{{ n.url }}" class="btn btn-outline-primary btn-sm">Abrir</a>
+            {% endif %}
+
+            <button class="btn btn-outline-danger btn-sm btn-eliminar" data-id="{{ n.id }}">
+              🗑
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  {% endfor %}
+
+  <nav class="mt-4">
+    <ul class="pagination justify-content-center flex-wrap">
+      {% if page_obj.has_previous %}
+        <li class="page-item">
+          <a class="page-link" href="?page={{ page_obj.previous_page_number }}">Anterior</a>
+        </li>
+      {% else %}
+        <li class="page-item disabled">
+          <span class="page-link">Anterior</span>
+        </li>
+      {% endif %}
+
+      <li class="page-item disabled">
+        <span class="page-link">
+          Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+        </span>
+      </li>
+
+      {% if page_obj.has_next %}
+        <li class="page-item">
+          <a class="page-link" href="?page={{ page_obj.next_page_number }}">Siguiente</a>
+        </li>
+      {% else %}
+        <li class="page-item disabled">
+          <span class="page-link">Siguiente</span>
+        </li>
+      {% endif %}
+    </ul>
+  </nav>
+{% else %}
+  <div class="card shadow-sm">
+    <div class="card-body">
+      <div class="text-muted">No hay notificaciones registradas.</div>
+    </div>
+  </div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function getCSRFToken() {
+  const meta = document.querySelector('meta[name="csrf-token"]');
+  if (meta && meta.getAttribute("content")) return meta.getAttribute("content") || "";
+  const m = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+  return m ? decodeURIComponent(m[1]) : "";
+}
+
+async function refrescarBadgeSiExiste() {
+  if (typeof refreshNotifBadge === "function") {
+    try {
+      await refreshNotifBadge();
+    } catch (e) {
+      console.error("No se pudo refrescar el badge:", e);
+    }
+  }
+}
+
+async function refrescarDropdownSiExiste() {
+  if (typeof refreshNotifDropdown === "function") {
+    try {
+      await refreshNotifDropdown();
+    } catch (e) {
+      console.error("No se pudo refrescar el dropdown:", e);
+    }
+  }
+}
+
+document.querySelectorAll(".btn-eliminar").forEach((btn) => {
+  btn.addEventListener("click", async () => {
+    const id = btn.dataset.id;
+    if (!id) return;
+
+    const confirmar = confirm("¿Eliminar esta notificación?");
+    if (!confirmar) return;
+
+    try {
+      const res = await fetch(`/dashboard/notificaciones/eliminar/${id}/`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "X-CSRFToken": getCSRFToken(),
+          "Accept": "application/json",
+        },
+      });
+
+      if (!res.ok) {
+        alert("No se pudo eliminar la notificación.");
+        return;
+      }
+
+      const card = btn.closest(".notif-card");
+      if (card) {
+        card.remove();
+      }
+
+      await refrescarBadgeSiExiste();
+      await refrescarDropdownSiExiste();
+
+      const quedanCards = document.querySelectorAll(".notif-card").length;
+      if (quedanCards === 0) {
+        location.reload();
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Ocurrió un error al eliminar la notificación.");
+    }
+  });
+});
+
+const btnEliminarTodasHistorial = document.getElementById("btn-eliminar-todas-historial");
+if (btnEliminarTodasHistorial) {
+  btnEliminarTodasHistorial.addEventListener("click", async () => {
+    const confirmar = confirm("¿Eliminar TODAS las notificaciones?");
+    if (!confirmar) return;
+
+    try {
+      const res = await fetch("/dashboard/notificaciones/eliminar-todas/", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "X-CSRFToken": getCSRFToken(),
+          "Accept": "application/json",
+        },
+      });
+
+      if (!res.ok) {
+        alert("No se pudieron eliminar las notificaciones.");
+        return;
+      }
+
+      await refrescarBadgeSiExiste();
+      await refrescarDropdownSiExiste();
+      location.reload();
+    } catch (e) {
+      console.error(e);
+      alert("Ocurrió un error al eliminar todas las notificaciones.");
+    }
+  });
+}
+
+const btnMarcarTodasHistorial = document.getElementById("btn-marcar-todas-historial");
+if (btnMarcarTodasHistorial) {
+  btnMarcarTodasHistorial.addEventListener("click", async () => {
+    try {
+      const res = await fetch("/dashboard/notificaciones/marcar-todas/", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "X-CSRFToken": getCSRFToken(),
+          "Accept": "application/json",
+        },
+      });
+
+      if (!res.ok) {
+        alert("No se pudieron marcar como leídas.");
+        return;
+      }
+
+      await refrescarBadgeSiExiste();
+      await refrescarDropdownSiExiste();
+      location.reload();
+    } catch (e) {
+      console.error(e);
+      alert("Ocurrió un error al marcar todas como leídas.");
+    }
+  });
+}
+</script>
 {% endblock %}

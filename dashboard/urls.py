@@ -20,6 +20,7 @@ from .views import (
     marcar_notificacion_leida_view,
     notificacion_eliminar_view,
     notificaciones_eliminar_todas_view,
+    marcar_todas_leidas_view,
 
     # Core
     inicio_view,
@@ -69,6 +70,7 @@ urlpatterns = [
     path("notificaciones/<int:pk>/leer/", marcar_notificacion_leida_view, name="marcar_notificacion_leida"),
     path("notificaciones/eliminar/<int:pk>/", notificacion_eliminar_view, name="notificacion_eliminar"),
     path("notificaciones/eliminar-todas/", notificaciones_eliminar_todas_view, name="notificaciones_eliminar_todas"),
+    path("notificaciones/marcar-todas/", marcar_todas_leidas_view, name="marcar_todas_leidas"),
     path("notificaciones/unread-count/", unread_count_view, name="unread_count"),
 
     # ======================

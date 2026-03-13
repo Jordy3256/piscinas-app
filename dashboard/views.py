@@ -749,6 +749,25 @@ def notificaciones_eliminar_todas_view(request):
     return JsonResponse({"ok": True})
 
 
+@login_required
+@require_http_methods(["POST"])
+def marcar_todas_leidas_view(request):
+    if Notificacion is None:
+        return JsonResponse({"ok": False, "error": "Modelo no disponible"}, status=500)
+
+    ahora = timezone.now()
+
+    Notificacion.objects.filter(
+        user=request.user,
+        leida=False,
+    ).update(
+        leida=True,
+        leida_en=ahora,
+    )
+
+    return JsonResponse({"ok": True})
+
+
 # -------------------
 # Operativo Admin
 # -------------------
