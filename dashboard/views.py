@@ -419,6 +419,7 @@ def _mantenimiento_match_busqueda(mantenimiento, q: str) -> bool:
         str(getattr(mantenimiento, "contrato", "") or ""),
         str(getattr(mantenimiento, "estado", "") or ""),
         str(getattr(mantenimiento, "fecha", "") or ""),
+        str(getattr(mantenimiento, "observaciones", "") or ""),
     ]
 
     try:
@@ -1142,6 +1143,102 @@ def actividad_historial_view(request):
         "dashboard/actividad_historial.html",
         {
             "page_obj": page_obj,
+            "es_admin": True,
+        },
+    )
+
+
+# -------------------
+# Historial mantenimientos
+# -------------------
+@login_required
+def mantenimiento_historial_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    q = (request.GET.get("q", "") or "").strip()
+    estado = (request.GET.get("estado", "") or "").strip().lower()
+    cliente_id = (request.GET.get("cliente", "") or "").strip()
+    trabajador_id = (request.GET.get("trabajador", "") or "").strip()
+    fecha_desde_str = (request.GET.get("fecha_desde", "") or "").strip()
+    fecha_hasta_str = (request.GET.get("fecha_hasta", "") or "").strip()
+
+    fecha_desde = parse_date(fecha_desde_str) if fecha_desde_str else None
+    fecha_hasta = parse_date(fecha_hasta_str) if fecha_hasta_str else None
+
+    qs = (
+        Mantenimiento.objects
+        .select_related("cliente", "contrato")
+        .prefetch_related("trabajadores")
+        .order_by("-fecha", "-id")
+    )
+
+    if estado in ["pendiente", "realizado"]:
+        qs = qs.filter(estado=estado)
+
+    if cliente_id.isdigit():
+        qs = qs.filter(cliente_id=int(cliente_id))
+
+    if trabajador_id.isdigit():
+        qs = qs.filter(trabajadores__id=int(trabajador_id))
+
+    if fecha_desde:
+        qs = qs.filter(fecha__gte=fecha_desde)
+
+    if fecha_hasta:
+        qs = qs.filter(fecha__lte=fecha_hasta)
+
+    qs = qs.distinct()
+    items = list(qs)
+
+    if q:
+        items = _filtrar_mantenimientos_por_busqueda(items, q)
+
+    total_historial = len(items)
+    total_realizados_historial = len([m for m in items if getattr(m, "estado", "") == "realizado"])
+    total_pendientes_historial = len([m for m in items if getattr(m, "estado", "") == "pendiente"])
+
+    paginator = Paginator(items, 20)
+    page_number = request.GET.get("page")
+    page_obj = paginator.get_page(page_number)
+
+    clientes_filtro = []
+    clientes_ids = set()
+    for m in Mantenimiento.objects.select_related("cliente").all().order_by("cliente_id"):
+        cid = getattr(m, "cliente_id", None)
+        if cid and cid not in clientes_ids:
+            clientes_ids.add(cid)
+            clientes_filtro.append({
+                "id": cid,
+                "nombre": str(getattr(m, "cliente", "")),
+            })
+
+    trabajadores_filtro = list(
+        Trabajador.objects.select_related("user").all().order_by("user__username")
+    )
+
+    query_params = request.GET.copy()
+    if "page" in query_params:
+        query_params.pop("page")
+    querystring = query_params.urlencode()
+
+    return render(
+        request,
+        "dashboard/mantenimientos_historial.html",
+        {
+            "page_obj": page_obj,
+            "q": q,
+            "estado": estado,
+            "cliente_id": cliente_id,
+            "trabajador_id": trabajador_id,
+            "fecha_desde": fecha_desde_str,
+            "fecha_hasta": fecha_hasta_str,
+            "clientes_filtro": clientes_filtro,
+            "trabajadores_filtro": trabajadores_filtro,
+            "total_historial": total_historial,
+            "total_realizados_historial": total_realizados_historial,
+            "total_pendientes_historial": total_pendientes_historial,
+            "querystring": querystring,
             "es_admin": True,
         },
     )
