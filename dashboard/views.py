@@ -457,6 +457,17 @@ def _resumen_trabajadores_desde_listas(dia_list, atrasados, proximos):
     )
 
 
+def _sin_asignar_count(items):
+    total = 0
+    for m in items:
+        try:
+            if not m.trabajadores.exists():
+                total += 1
+        except Exception:
+            pass
+    return total
+
+
 # ==========================================================
 # PUSH
 # ==========================================================
@@ -928,6 +939,11 @@ def admin_operativo_view(request):
 
     resumen_trabajadores = _resumen_trabajadores_desde_listas(dia_list, atrasados, proximos)
 
+    sin_asignar_dia = _sin_asignar_count(dia_list)
+    sin_asignar_atrasados = _sin_asignar_count(atrasados)
+    sin_asignar_proximos = _sin_asignar_count(proximos)
+    total_sin_asignar = sin_asignar_dia + sin_asignar_atrasados + sin_asignar_proximos
+
     return render(
         request,
         "dashboard/admin_operativo.html",
@@ -943,6 +959,10 @@ def admin_operativo_view(request):
             "atrasados": atrasados,
             "proximos": proximos,
             "resumen_trabajadores": resumen_trabajadores,
+            "sin_asignar_dia": sin_asignar_dia,
+            "sin_asignar_atrasados": sin_asignar_atrasados,
+            "sin_asignar_proximos": sin_asignar_proximos,
+            "total_sin_asignar": total_sin_asignar,
             "es_admin": True,
         },
     )
