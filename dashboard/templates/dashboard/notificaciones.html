@@ -23,11 +23,18 @@
   </div>
 </div>
 
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
   <div class="fw-bold fs-4">Bandeja</div>
-  <div class="d-flex align-items-center gap-2">
+
+  <div class="d-flex align-items-center gap-2 flex-wrap">
     <div class="text-muted">Últimas {{ notificaciones|length }} notificaciones</div>
     <a href="/dashboard/notificaciones/historial/" class="btn btn-outline-secondary btn-sm">Ver historial</a>
+
+    {% if notificaciones %}
+      <button id="btn-eliminar-todas" class="btn btn-outline-danger btn-sm">
+        🗑 Eliminar todas
+      </button>
+    {% endif %}
   </div>
 </div>
 
@@ -41,7 +48,7 @@
   </div>
 {% elif notificaciones %}
   {% for n in notificaciones %}
-    <div class="card shadow-sm mb-3">
+    <div class="card shadow-sm mb-3 notif-card" data-id="{{ n.id }}">
       <div class="card-body">
         <div class="d-flex justify-content-between align-items-start gap-3 mb-2">
           <div>
@@ -63,9 +70,15 @@
             🗓 {{ n.creada_en|date:"d/m/Y H:i" }}
           </div>
 
-          {% if n.url %}
-            <a href="{{ n.url }}" class="btn btn-outline-primary btn-sm">Abrir</a>
-          {% endif %}
+          <div class="d-flex gap-2">
+            {% if n.url %}
+              <a href="{{ n.url }}" class="btn btn-outline-primary btn-sm">Abrir</a>
+            {% endif %}
+
+            <button class="btn btn-outline-danger btn-sm btn-eliminar" data-id="{{ n.id }}">
+              🗑
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -80,4 +93,108 @@
   </div>
 {% endif %}
 
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function getCSRFToken() {
+  const meta = document.querySelector('meta[name="csrf-token"]');
+  if (meta && meta.getAttribute("content")) return meta.getAttribute("content") || "";
+  const m = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+  return m ? decodeURIComponent(m[1]) : "";
+}
+
+async function refrescarBadgeSiExiste() {
+  if (typeof refreshNotifBadge === "function") {
+    try {
+      await refreshNotifBadge();
+    } catch (e) {
+      console.error("No se pudo refrescar el badge:", e);
+    }
+  }
+}
+
+async function refrescarDropdownSiExiste() {
+  if (typeof refreshNotifDropdown === "function") {
+    try {
+      await refreshNotifDropdown();
+    } catch (e) {
+      console.error("No se pudo refrescar el dropdown:", e);
+    }
+  }
+}
+
+document.querySelectorAll(".btn-eliminar").forEach((btn) => {
+  btn.addEventListener("click", async () => {
+    const id = btn.dataset.id;
+    if (!id) return;
+
+    const confirmar = confirm("¿Eliminar esta notificación?");
+    if (!confirmar) return;
+
+    try {
+      const res = await fetch(`/dashboard/notificaciones/eliminar/${id}/`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "X-CSRFToken": getCSRFToken(),
+          "Accept": "application/json",
+        },
+      });
+
+      if (!res.ok) {
+        alert("No se pudo eliminar la notificación.");
+        return;
+      }
+
+      const card = btn.closest(".notif-card");
+      if (card) {
+        card.remove();
+      }
+
+      await refrescarBadgeSiExiste();
+      await refrescarDropdownSiExiste();
+
+      const quedanCards = document.querySelectorAll(".notif-card").length;
+      if (quedanCards === 0) {
+        location.reload();
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Ocurrió un error al eliminar la notificación.");
+    }
+  });
+});
+
+const btnEliminarTodas = document.getElementById("btn-eliminar-todas");
+if (btnEliminarTodas) {
+  btnEliminarTodas.addEventListener("click", async () => {
+    const confirmar = confirm("¿Eliminar TODAS las notificaciones?");
+    if (!confirmar) return;
+
+    try {
+      const res = await fetch("/dashboard/notificaciones/eliminar-todas/", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "X-CSRFToken": getCSRFToken(),
+          "Accept": "application/json",
+        },
+      });
+
+      if (!res.ok) {
+        alert("No se pudieron eliminar las notificaciones.");
+        return;
+      }
+
+      await refrescarBadgeSiExiste();
+      await refrescarDropdownSiExiste();
+      location.reload();
+    } catch (e) {
+      console.error(e);
+      alert("Ocurrió un error al eliminar todas las notificaciones.");
+    }
+  });
+}
+</script>
 {% endblock %}

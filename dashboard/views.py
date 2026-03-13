@@ -727,6 +727,28 @@ def marcar_notificacion_leida_view(request, pk):
     return JsonResponse({"ok": True})
 
 
+@login_required
+@require_http_methods(["POST"])
+def notificacion_eliminar_view(request, pk):
+    if Notificacion is None:
+        return JsonResponse({"ok": False, "error": "Modelo no disponible"}, status=500)
+
+    notificacion = get_object_or_404(Notificacion, pk=pk, user=request.user)
+    notificacion.delete()
+
+    return JsonResponse({"ok": True})
+
+
+@login_required
+@require_http_methods(["POST"])
+def notificaciones_eliminar_todas_view(request):
+    if Notificacion is None:
+        return JsonResponse({"ok": False, "error": "Modelo no disponible"}, status=500)
+
+    Notificacion.objects.filter(user=request.user).delete()
+    return JsonResponse({"ok": True})
+
+
 # -------------------
 # Operativo Admin
 # -------------------
