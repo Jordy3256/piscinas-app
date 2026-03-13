@@ -380,6 +380,84 @@ def _notificar_admins(titulo, mensaje, url="/dashboard/notificaciones/", enviar_
 
 
 # ==========================================================
+# Helpers operativo admin
+# ==========================================================
+def _mantenimiento_match_busqueda(mantenimiento, q: str) -> bool:
+    if not q:
+        return True
+
+    q = q.strip().lower()
+    if not q:
+        return True
+
+    bloques = [
+        str(getattr(mantenimiento, "cliente", "") or ""),
+        str(getattr(mantenimiento, "contrato", "") or ""),
+        str(getattr(mantenimiento, "estado", "") or ""),
+        str(getattr(mantenimiento, "fecha", "") or ""),
+    ]
+
+    try:
+        for trabajador in mantenimiento.trabajadores.all():
+            bloques.append(str(getattr(getattr(trabajador, "user", None), "username", "") or ""))
+    except Exception:
+        pass
+
+    texto = " ".join(bloques).lower()
+    return q in texto
+
+
+def _filtrar_mantenimientos_por_busqueda(items, q: str):
+    if not q:
+        return list(items)
+    return [m for m in items if _mantenimiento_match_busqueda(m, q)]
+
+
+def _resumen_trabajadores_desde_listas(dia_list, atrasados, proximos):
+    resumen = {}
+
+    def asegurar_trabajador(trabajador):
+        trabajador_id = getattr(trabajador, "id", None)
+        username = str(getattr(getattr(trabajador, "user", None), "username", "") or "Sin usuario")
+
+        if trabajador_id not in resumen:
+            resumen[trabajador_id] = {
+                "trabajadores__id": trabajador_id,
+                "trabajadores__user__username": username,
+                "dia": 0,
+                "atrasados": 0,
+                "proximos": 0,
+            }
+        return resumen[trabajador_id]
+
+    for mantenimiento in dia_list:
+        try:
+            for trabajador in mantenimiento.trabajadores.all():
+                asegurar_trabajador(trabajador)["dia"] += 1
+        except Exception:
+            pass
+
+    for mantenimiento in atrasados:
+        try:
+            for trabajador in mantenimiento.trabajadores.all():
+                asegurar_trabajador(trabajador)["atrasados"] += 1
+        except Exception:
+            pass
+
+    for mantenimiento in proximos:
+        try:
+            for trabajador in mantenimiento.trabajadores.all():
+                asegurar_trabajador(trabajador)["proximos"] += 1
+        except Exception:
+            pass
+
+    return sorted(
+        resumen.values(),
+        key=lambda x: (-x["atrasados"], -x["dia"], -x["proximos"], x["trabajadores__user__username"]),
+    )
+
+
+# ==========================================================
 # PUSH
 # ==========================================================
 @login_required
@@ -778,49 +856,77 @@ def admin_operativo_view(request):
 
     hoy = date.today()
     fecha = hoy
-
+    fecha_desde = hoy
+    fecha_hasta = hoy
+    q = (request.GET.get("q", "") or "").strip()
     modo = (request.GET.get("modo") or "").strip().lower()
+
     if modo == "manana":
         fecha = hoy + timedelta(days=1)
+        fecha_desde = fecha
+        fecha_hasta = fecha
+        etiqueta_periodo = f"Mañana ({fecha})"
     elif modo == "semana":
-        fecha = hoy
+        fecha_desde = hoy
+        fecha_hasta = hoy + timedelta(days=6)
+        fecha = fecha_desde
+        etiqueta_periodo = f"Semana ({fecha_desde} a {fecha_hasta})"
+    elif modo == "hoy" or not modo:
+        fecha_get = request.GET.get("fecha")
+        fecha_parseada = parse_date(fecha_get) if fecha_get else None
+
+        if fecha_parseada:
+            fecha = fecha_parseada
+            fecha_desde = fecha_parseada
+            fecha_hasta = fecha_parseada
+            etiqueta_periodo = f"Fecha seleccionada ({fecha_parseada})"
+        else:
+            fecha = hoy
+            fecha_desde = hoy
+            fecha_hasta = hoy
+            modo = "hoy"
+            etiqueta_periodo = f"Hoy ({hoy})"
     else:
         fecha_get = request.GET.get("fecha")
         fecha_parseada = parse_date(fecha_get) if fecha_get else None
         if fecha_parseada:
             fecha = fecha_parseada
+            fecha_desde = fecha_parseada
+            fecha_hasta = fecha_parseada
+            etiqueta_periodo = f"Fecha seleccionada ({fecha_parseada})"
+        else:
+            fecha = hoy
+            fecha_desde = hoy
+            fecha_hasta = hoy
+            modo = "hoy"
+            etiqueta_periodo = f"Hoy ({hoy})"
 
-    dia_list = (
-        Mantenimiento.objects.filter(fecha=fecha)
+    base_dia_qs = (
+        Mantenimiento.objects.filter(fecha__range=(fecha_desde, fecha_hasta))
         .select_related("cliente", "contrato")
         .prefetch_related("trabajadores")
-        .order_by("estado", "fecha")
+        .order_by("fecha", "estado", "id")
     )
 
-    atrasados = (
+    base_atrasados_qs = (
         Mantenimiento.objects.filter(fecha__lt=hoy, estado="pendiente")
         .select_related("cliente", "contrato")
         .prefetch_related("trabajadores")
-        .order_by("fecha")
+        .order_by("fecha", "id")
     )
 
-    proximos = (
+    base_proximos_qs = (
         Mantenimiento.objects.filter(fecha__gt=hoy, estado="pendiente")
         .select_related("cliente", "contrato")
         .prefetch_related("trabajadores")
-        .order_by("fecha")[:30]
+        .order_by("fecha", "id")[:50]
     )
 
-    resumen_trabajadores = (
-        Mantenimiento.objects.filter(trabajadores__isnull=False)
-        .values("trabajadores__id", "trabajadores__user__username")
-        .annotate(
-            dia=Count("id", filter=Q(fecha=fecha)),
-            atrasados=Count("id", filter=Q(fecha__lt=hoy, estado="pendiente")),
-            proximos=Count("id", filter=Q(fecha__gt=hoy, estado="pendiente")),
-        )
-        .order_by("-atrasados", "-dia", "-proximos")
-    )
+    dia_list = _filtrar_mantenimientos_por_busqueda(base_dia_qs, q)
+    atrasados = _filtrar_mantenimientos_por_busqueda(base_atrasados_qs, q)
+    proximos = _filtrar_mantenimientos_por_busqueda(base_proximos_qs, q)
+
+    resumen_trabajadores = _resumen_trabajadores_desde_listas(dia_list, atrasados, proximos)
 
     return render(
         request,
@@ -828,6 +934,11 @@ def admin_operativo_view(request):
         {
             "hoy": hoy,
             "fecha": fecha,
+            "fecha_desde": fecha_desde,
+            "fecha_hasta": fecha_hasta,
+            "modo_actual": modo,
+            "q": q,
+            "etiqueta_periodo": etiqueta_periodo,
             "dia_list": dia_list,
             "atrasados": atrasados,
             "proximos": proximos,
