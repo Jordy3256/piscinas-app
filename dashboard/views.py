@@ -673,14 +673,56 @@ def dashboard_view(request):
         total_egresos = Egreso.objects.aggregate(total=Sum("total"))["total"] or 0
         balance = total_ingresos - total_egresos
 
-        mantenimientos_atrasados_qs = Mantenimiento.objects.filter(
-            fecha__lt=hoy,
-            estado="pendiente",
+        ingresos_hoy = Ingreso.objects.filter(fecha=hoy).aggregate(total=Sum("total"))["total"] or 0
+        egresos_hoy = Egreso.objects.filter(fecha=hoy).aggregate(total=Sum("total"))["total"] or 0
+        balance_hoy = ingresos_hoy - egresos_hoy
+
+        mantenimientos_hoy_qs = (
+            Mantenimiento.objects.filter(fecha=hoy)
+            .select_related("cliente", "contrato")
+            .prefetch_related("trabajadores")
+            .order_by("estado", "id")
         )
+
+        total_mantenimientos_hoy = mantenimientos_hoy_qs.count()
+        realizados_hoy = mantenimientos_hoy_qs.filter(estado="realizado").count()
+        pendientes_hoy = mantenimientos_hoy_qs.filter(estado="pendiente").count()
+
+        trabajadores_activos_hoy = (
+            mantenimientos_hoy_qs
+            .filter(trabajadores__isnull=False)
+            .values("trabajadores")
+            .distinct()
+            .count()
+        )
+
+        if total_mantenimientos_hoy > 0:
+            cumplimiento_hoy = round((realizados_hoy / total_mantenimientos_hoy) * 100, 2)
+        else:
+            cumplimiento_hoy = 0
+
+        if cumplimiento_hoy >= 80:
+            rendimiento_estado_clase = "success"
+        elif cumplimiento_hoy >= 50:
+            rendimiento_estado_clase = "warning"
+        else:
+            rendimiento_estado_clase = "danger"
+
+        mantenimientos_atrasados_qs = (
+            Mantenimiento.objects.filter(
+                fecha__lt=hoy,
+                estado="pendiente",
+            )
+            .select_related("cliente", "contrato")
+            .prefetch_related("trabajadores")
+            .order_by("fecha", "id")
+        )
+
         pendientes_sin_asignar_qs = Mantenimiento.objects.filter(
             estado="pendiente",
             trabajadores__isnull=True,
         ).distinct()
+
         atrasados_sin_asignar_qs = Mantenimiento.objects.filter(
             fecha__lt=hoy,
             estado="pendiente",
@@ -691,6 +733,72 @@ def dashboard_view(request):
         total_pendientes_sin_asignar = pendientes_sin_asignar_qs.count()
         total_atrasados_sin_asignar = atrasados_sin_asignar_qs.count()
 
+        pendientes_hoy_items = list(
+            mantenimientos_hoy_qs.filter(estado="pendiente")[:5]
+        )
+
+        sin_asignar_hoy_items = list(
+            mantenimientos_hoy_qs.filter(estado="pendiente", trabajadores__isnull=True).distinct()[:5]
+        )
+
+        atrasados_urgentes_items = list(
+            mantenimientos_atrasados_qs[:5]
+        )
+
+        requiere_atencion_items = []
+        requiere_atencion_ids = set()
+
+        for m in list(atrasados_sin_asignar_qs[:3]):
+            if m.id not in requiere_atencion_ids:
+                m.es_atrasado = True
+                m.sin_asignar = True
+                requiere_atencion_items.append(m)
+                requiere_atencion_ids.add(m.id)
+
+        for m in sin_asignar_hoy_items:
+            if m.id not in requiere_atencion_ids:
+                m.es_atrasado = m.fecha < hoy
+                m.sin_asignar = True
+                requiere_atencion_items.append(m)
+                requiere_atencion_ids.add(m.id)
+
+        for m in atrasados_urgentes_items:
+            if m.id not in requiere_atencion_ids and len(requiere_atencion_items) < 5:
+                m.es_atrasado = True
+                try:
+                    m.sin_asignar = not m.trabajadores.exists()
+                except Exception:
+                    m.sin_asignar = False
+                requiere_atencion_items.append(m)
+                requiere_atencion_ids.add(m.id)
+
+        total_requieren_atencion = len(requiere_atencion_items)
+
+        atrasados = list(mantenimientos_atrasados_qs)
+        dia_list = list(mantenimientos_hoy_qs)
+        proximos = list(
+            Mantenimiento.objects.filter(fecha__gt=hoy, estado="pendiente")
+            .select_related("cliente", "contrato")
+            .prefetch_related("trabajadores")
+            .order_by("fecha", "id")[:50]
+        )
+
+        resumen_trabajadores = _resumen_trabajadores_desde_listas(dia_list, atrasados, proximos)
+
+        top_trabajadores = []
+        for item in resumen_trabajadores[:5]:
+            carga_hoy = item.get("dia", 0)
+            atrasados_t = item.get("atrasados", 0)
+            proximos_t = item.get("proximos", 0)
+            top_trabajadores.append({
+                "id": item.get("trabajadores__id"),
+                "username": item.get("trabajadores__user__username"),
+                "carga_hoy": carga_hoy,
+                "atrasados": atrasados_t,
+                "proximos": proximos_t,
+                "carga_total": carga_hoy + atrasados_t + proximos_t,
+            })
+
         actividades_recientes = []
         if ActividadSistema is not None:
             actividades_recientes = list(ActividadSistema.objects.select_related("user").all()[:5])
@@ -698,12 +806,28 @@ def dashboard_view(request):
         ctx = {
             **base_ctx,
             "modo": "admin",
+            "hoy": hoy,
             "total_ingresos": float(total_ingresos),
             "total_egresos": float(total_egresos),
             "balance": float(balance),
+            "ingresos_hoy": float(ingresos_hoy),
+            "egresos_hoy": float(egresos_hoy),
+            "balance_hoy": float(balance_hoy),
+            "total_mantenimientos_hoy": total_mantenimientos_hoy,
+            "realizados_hoy": realizados_hoy,
+            "pendientes_hoy": pendientes_hoy,
+            "trabajadores_activos_hoy": trabajadores_activos_hoy,
+            "cumplimiento_hoy": cumplimiento_hoy,
+            "rendimiento_estado_clase": rendimiento_estado_clase,
             "total_atrasados": total_atrasados,
             "total_pendientes_sin_asignar": total_pendientes_sin_asignar,
             "total_atrasados_sin_asignar": total_atrasados_sin_asignar,
+            "pendientes_hoy_items": pendientes_hoy_items,
+            "sin_asignar_hoy_items": sin_asignar_hoy_items,
+            "atrasados_urgentes_items": atrasados_urgentes_items,
+            "requiere_atencion_items": requiere_atencion_items,
+            "total_requieren_atencion": total_requieren_atencion,
+            "top_trabajadores": top_trabajadores,
             "hay_alertas_operativas": (
                 total_atrasados > 0
                 or total_pendientes_sin_asignar > 0
