@@ -1070,94 +1070,115 @@ def admin_operativo_view(request):
         return render(request, "dashboard/no_autorizado.html", status=403)
 
     hoy = date.today()
-    fecha = hoy
-    fecha_desde = hoy
-    fecha_hasta = hoy
+    filtro = (request.GET.get("filtro", "") or "").strip().lower()
     q = (request.GET.get("q", "") or "").strip()
-    modo = (request.GET.get("modo", "") or "").strip().lower()
 
-    if modo == "manana":
-        fecha = hoy + timedelta(days=1)
-        fecha_desde = fecha
-        fecha_hasta = fecha
-        etiqueta_periodo = f"Mañana ({fecha})"
-    elif modo == "semana":
-        fecha_desde = hoy
-        fecha_hasta = hoy + timedelta(days=6)
-        fecha = fecha_desde
-        etiqueta_periodo = f"Semana ({fecha_desde} a {fecha_hasta})"
-    elif modo == "hoy" or not modo:
-        fecha_get = request.GET.get("fecha")
-        fecha_parseada = parse_date(fecha_get) if fecha_get else None
-
-        if fecha_parseada:
-            fecha = fecha_parseada
-            fecha_desde = fecha_parseada
-            fecha_hasta = fecha_parseada
-            etiqueta_periodo = f"Fecha seleccionada ({fecha_parseada})"
-        else:
-            fecha = hoy
-            fecha_desde = hoy
-            fecha_hasta = hoy
-            modo = "hoy"
-            etiqueta_periodo = f"Hoy ({hoy})"
-    else:
-        fecha_get = request.GET.get("fecha")
-        fecha_parseada = parse_date(fecha_get) if fecha_get else None
-        if fecha_parseada:
-            fecha = fecha_parseada
-            fecha_desde = fecha_parseada
-            fecha_hasta = fecha_parseada
-            etiqueta_periodo = f"Fecha seleccionada ({fecha_parseada})"
-        else:
-            fecha = hoy
-            fecha_desde = hoy
-            fecha_hasta = hoy
-            modo = "hoy"
-            etiqueta_periodo = f"Hoy ({hoy})"
-
-    base_dia_qs = (
-        Mantenimiento.objects.filter(fecha__range=(fecha_desde, fecha_hasta))
+    base_qs = (
+        Mantenimiento.objects
         .select_related("cliente", "contrato")
         .prefetch_related("trabajadores")
         .order_by("fecha", "estado", "id")
     )
 
-    base_atrasados_qs = (
-        Mantenimiento.objects.filter(fecha__lt=hoy, estado="pendiente")
-        .select_related("cliente", "contrato")
-        .prefetch_related("trabajadores")
-        .order_by("fecha", "id")
-    )
+    if filtro == "atrasados":
+        dia_list = []
+        atrasados = list(
+            base_qs.filter(
+                fecha__lt=hoy,
+                estado="pendiente"
+            )
+        )
+        proximos = []
+        etiqueta_periodo = "Mantenimientos atrasados"
 
-    base_proximos_qs = (
-        Mantenimiento.objects.filter(fecha__gt=hoy, estado="pendiente")
-        .select_related("cliente", "contrato")
-        .prefetch_related("trabajadores")
-        .order_by("fecha", "id")[:50]
-    )
+    elif filtro == "sin_asignar":
+        dia_list = list(
+            base_qs.filter(
+                fecha=hoy,
+                estado="pendiente",
+                trabajadores__isnull=True
+            ).distinct()
+        )
+        atrasados = list(
+            base_qs.filter(
+                fecha__lt=hoy,
+                estado="pendiente",
+                trabajadores__isnull=True
+            ).distinct()
+        )
+        proximos = []
+        etiqueta_periodo = "Mantenimientos sin asignar"
 
-    dia_list = _filtrar_mantenimientos_por_busqueda(base_dia_qs, q)
-    atrasados = _filtrar_mantenimientos_por_busqueda(base_atrasados_qs, q)
-    proximos = _filtrar_mantenimientos_por_busqueda(base_proximos_qs, q)
+    elif filtro == "pendientes_hoy":
+        dia_list = list(
+            base_qs.filter(
+                fecha=hoy,
+                estado="pendiente"
+            )
+        )
+        atrasados = []
+        proximos = []
+        etiqueta_periodo = "Pendientes de hoy"
+
+    elif filtro == "urgentes":
+        dia_list = list(
+            base_qs.filter(
+                fecha=hoy,
+                estado="pendiente",
+                trabajadores__isnull=True
+            ).distinct()
+        )
+        atrasados = list(
+            base_qs.filter(
+                fecha__lt=hoy,
+                estado="pendiente"
+            )
+        )
+        proximos = []
+        etiqueta_periodo = "Requieren atención inmediata"
+
+    else:
+        dia_list = list(
+            base_qs.filter(fecha=hoy)
+        )
+        atrasados = list(
+            base_qs.filter(
+                fecha__lt=hoy,
+                estado="pendiente"
+            )
+        )
+        proximos = list(
+            base_qs.filter(
+                fecha__gt=hoy,
+                estado="pendiente"
+            )[:50]
+        )
+        etiqueta_periodo = "Operativo de hoy"
+
+    if q:
+        dia_list = _filtrar_mantenimientos_por_busqueda(dia_list, q)
+        atrasados = _filtrar_mantenimientos_por_busqueda(atrasados, q)
+        proximos = _filtrar_mantenimientos_por_busqueda(proximos, q)
 
     resumen_trabajadores = _resumen_trabajadores_desde_listas(dia_list, atrasados, proximos)
 
     sin_asignar_dia = _sin_asignar_count(dia_list)
     sin_asignar_atrasados = _sin_asignar_count(atrasados)
     sin_asignar_proximos = _sin_asignar_count(proximos)
-    total_sin_asignar = sin_asignar_dia + sin_asignar_atrasados + sin_asignar_proximos
+
+    total_sin_asignar = (
+        sin_asignar_dia +
+        sin_asignar_atrasados +
+        sin_asignar_proximos
+    )
 
     return render(
         request,
         "dashboard/admin_operativo.html",
         {
             "hoy": hoy,
-            "fecha": fecha,
-            "fecha_desde": fecha_desde,
-            "fecha_hasta": fecha_hasta,
-            "modo_actual": modo,
             "q": q,
+            "modo_actual": filtro,
             "etiqueta_periodo": etiqueta_periodo,
             "dia_list": dia_list,
             "atrasados": atrasados,
