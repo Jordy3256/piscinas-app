@@ -377,6 +377,142 @@
 </div>
 
 
+<!-- SEMÁFORO DEL EQUIPO -->
+<div class="card shadow-sm mb-3 border-0">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+      <div>
+        <div class="fw-bold fs-5">
+          🚦 Estado del equipo
+        </div>
+        <div class="text-muted small">
+          Vista rápida para decidir a quién asignar el siguiente mantenimiento.
+        </div>
+      </div>
+      <a class="btn btn-outline-primary btn-sm" href="/dashboard/operativo/">
+        Ir a asignaciones
+      </a>
+    </div>
+
+    <div class="row g-3">
+      <div class="col-lg-4">
+        <div class="card border-success shadow-sm h-100">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <div class="fw-bold text-success">🟢 Libres</div>
+              <span class="badge bg-success">{{ total_trabajadores_libres }}</span>
+            </div>
+
+            {% if trabajadores_libres %}
+              <div class="vstack gap-2">
+                {% for t in trabajadores_libres %}
+                <div class="border rounded p-2 bg-light">
+                  <div class="fw-semibold">{{ t.username }}</div>
+                  <div class="small text-muted">
+                    Hoy: {{ t.carga_hoy }} · Atrasados: {{ t.atrasados }} · Próximos: {{ t.proximos }}
+                  </div>
+                </div>
+                {% endfor %}
+              </div>
+            {% else %}
+              <div class="text-muted">
+                No hay trabajadores libres ahora mismo.
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-4">
+        <div class="card border-warning shadow-sm h-100">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <div class="fw-bold text-warning">🟡 Carga media</div>
+              <span class="badge bg-warning text-dark">{{ total_trabajadores_media }}</span>
+            </div>
+
+            {% if trabajadores_media %}
+              <div class="vstack gap-2">
+                {% for t in trabajadores_media %}
+                <div class="border rounded p-2 bg-light">
+                  <div class="fw-semibold">{{ t.username }}</div>
+                  <div class="small text-muted">
+                    Hoy: {{ t.carga_hoy }} · Atrasados: {{ t.atrasados }} · Próximos: {{ t.proximos }}
+                  </div>
+                </div>
+                {% endfor %}
+              </div>
+            {% else %}
+              <div class="text-muted">
+                No hay trabajadores en carga media.
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-4">
+        <div class="card border-danger shadow-sm h-100">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <div class="fw-bold text-danger">🔴 Saturados</div>
+              <span class="badge bg-danger">{{ total_trabajadores_saturados }}</span>
+            </div>
+
+            {% if trabajadores_saturados %}
+              <div class="vstack gap-2">
+                {% for t in trabajadores_saturados %}
+                <div class="border rounded p-2 bg-light">
+                  <div class="fw-semibold">{{ t.username }}</div>
+                  <div class="small text-muted">
+                    Hoy: {{ t.carga_hoy }} · Atrasados: {{ t.atrasados }} · Próximos: {{ t.proximos }}
+                  </div>
+                </div>
+                {% endfor %}
+              </div>
+            {% else %}
+              <div class="text-muted">
+                No hay trabajadores saturados.
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card shadow-sm border-primary mt-3">
+      <div class="card-body">
+        <div class="fw-bold text-primary mb-2">
+          ⭐ Recomendación automática
+        </div>
+
+        {% if trabajador_recomendado %}
+          <div class="fs-5 fw-semibold mb-1">
+            {{ trabajador_recomendado.username }}
+          </div>
+
+          <div class="text-muted mb-2">
+            {{ trabajador_recomendado.motivo }}
+          </div>
+
+          <div class="d-flex flex-wrap gap-2">
+            <span class="badge bg-success">Hoy: {{ trabajador_recomendado.carga_hoy }}</span>
+            <span class="badge bg-warning text-dark">Atrasados: {{ trabajador_recomendado.atrasados }}</span>
+            <span class="badge bg-primary">Próximos: {{ trabajador_recomendado.proximos }}</span>
+            <span class="badge bg-dark">Carga total: {{ trabajador_recomendado.carga_total }}</span>
+          </div>
+        {% else %}
+          <div class="text-muted">
+            No hay una recomendación disponible en este momento.
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+  </div>
+</div>
+
+
 <div class="row g-2 mb-3">
 
   <div class="col-md-4">

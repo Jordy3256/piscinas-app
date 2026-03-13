@@ -492,6 +492,16 @@ def _sin_asignar_count(items):
     return total
 
 
+def _clasificar_estado_trabajador(carga_hoy, atrasados, proximos):
+    carga_total = carga_hoy + atrasados + proximos
+
+    if atrasados > 0 or carga_hoy >= 3 or carga_total >= 6:
+        return "saturado"
+    if carga_hoy >= 2 or carga_total >= 3:
+        return "media"
+    return "libre"
+
+
 # ==========================================================
 # PUSH
 # ==========================================================
@@ -786,18 +796,87 @@ def dashboard_view(request):
         resumen_trabajadores = _resumen_trabajadores_desde_listas(dia_list, atrasados, proximos)
 
         top_trabajadores = []
-        for item in resumen_trabajadores[:5]:
+        trabajadores_libres = []
+        trabajadores_media = []
+        trabajadores_saturados = []
+
+        for item in resumen_trabajadores:
             carga_hoy = item.get("dia", 0)
             atrasados_t = item.get("atrasados", 0)
             proximos_t = item.get("proximos", 0)
-            top_trabajadores.append({
+            carga_total = carga_hoy + atrasados_t + proximos_t
+            estado = _clasificar_estado_trabajador(carga_hoy, atrasados_t, proximos_t)
+
+            trabajador_data = {
                 "id": item.get("trabajadores__id"),
                 "username": item.get("trabajadores__user__username"),
                 "carga_hoy": carga_hoy,
                 "atrasados": atrasados_t,
                 "proximos": proximos_t,
-                "carga_total": carga_hoy + atrasados_t + proximos_t,
-            })
+                "carga_total": carga_total,
+                "estado": estado,
+            }
+
+            top_trabajadores.append(trabajador_data)
+
+            if estado == "libre":
+                trabajadores_libres.append(trabajador_data)
+            elif estado == "media":
+                trabajadores_media.append(trabajador_data)
+            else:
+                trabajadores_saturados.append(trabajador_data)
+
+        top_trabajadores = top_trabajadores[:5]
+        trabajadores_libres = trabajadores_libres[:5]
+        trabajadores_media = trabajadores_media[:5]
+        trabajadores_saturados = trabajadores_saturados[:5]
+
+        total_trabajadores_libres = len([t for t in resumen_trabajadores if _clasificar_estado_trabajador(t.get("dia", 0), t.get("atrasados", 0), t.get("proximos", 0)) == "libre"])
+        total_trabajadores_media = len([t for t in resumen_trabajadores if _clasificar_estado_trabajador(t.get("dia", 0), t.get("atrasados", 0), t.get("proximos", 0)) == "media"])
+        total_trabajadores_saturados = len([t for t in resumen_trabajadores if _clasificar_estado_trabajador(t.get("dia", 0), t.get("atrasados", 0), t.get("proximos", 0)) == "saturado"])
+
+        trabajador_recomendado = None
+        candidatos_recomendados = []
+
+        for item in resumen_trabajadores:
+            carga_hoy = item.get("dia", 0)
+            atrasados_t = item.get("atrasados", 0)
+            proximos_t = item.get("proximos", 0)
+            estado = _clasificar_estado_trabajador(carga_hoy, atrasados_t, proximos_t)
+
+            if estado != "saturado":
+                candidatos_recomendados.append({
+                    "id": item.get("trabajadores__id"),
+                    "username": item.get("trabajadores__user__username"),
+                    "carga_hoy": carga_hoy,
+                    "atrasados": atrasados_t,
+                    "proximos": proximos_t,
+                    "carga_total": carga_hoy + atrasados_t + proximos_t,
+                })
+
+        if candidatos_recomendados:
+            mejor = min(
+                candidatos_recomendados,
+                key=lambda x: (x["atrasados"], x["carga_hoy"], x["carga_total"], x["username"])
+            )
+
+            razones = []
+            if mejor["carga_hoy"] == 0:
+                razones.append("sin mantenimientos hoy")
+            elif mejor["carga_hoy"] == 1:
+                razones.append("solo tiene 1 mantenimiento hoy")
+            else:
+                razones.append(f"tiene {mejor['carga_hoy']} mantenimientos hoy")
+
+            if mejor["atrasados"] == 0:
+                razones.append("sin atrasados")
+            else:
+                razones.append(f"{mejor['atrasados']} atrasados")
+
+            razones.append(f"carga total {mejor['carga_total']}")
+
+            mejor["motivo"] = " · ".join(razones)
+            trabajador_recomendado = mejor
 
         actividades_recientes = []
         if ActividadSistema is not None:
@@ -828,6 +907,13 @@ def dashboard_view(request):
             "requiere_atencion_items": requiere_atencion_items,
             "total_requieren_atencion": total_requieren_atencion,
             "top_trabajadores": top_trabajadores,
+            "trabajadores_libres": trabajadores_libres,
+            "trabajadores_media": trabajadores_media,
+            "trabajadores_saturados": trabajadores_saturados,
+            "total_trabajadores_libres": total_trabajadores_libres,
+            "total_trabajadores_media": total_trabajadores_media,
+            "total_trabajadores_saturados": total_trabajadores_saturados,
+            "trabajador_recomendado": trabajador_recomendado,
             "hay_alertas_operativas": (
                 total_atrasados > 0
                 or total_pendientes_sin_asignar > 0
