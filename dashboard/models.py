@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
+from django.utils import timezone
 
 
 class PushSubscription(models.Model):
@@ -50,6 +51,12 @@ class Notificacion(models.Model):
             models.Index(fields=["user", "creada_en"]),
             models.Index(fields=["creada_en"]),
         ]
+
+    def marcar_como_leida(self):
+        if not self.leida:
+            self.leida = True
+            self.leida_en = timezone.now()
+            self.save(update_fields=["leida", "leida_en"])
 
     def __str__(self):
         estado = "leída" if self.leida else "no leída"

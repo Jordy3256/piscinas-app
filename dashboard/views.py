@@ -15,6 +15,7 @@ from django.db.models import Sum, Count, Q
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.templatetags.static import static
+from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_http_methods, require_GET
@@ -361,8 +362,11 @@ def _admins_queryset():
     return User.objects.filter(id__in=ids_admins)
 
 
-def _notificar_admins(titulo, mensaje, url="/dashboard/notificaciones/", enviar_push=False):
+def _notificar_admins(titulo, mensaje, url="/dashboard/notificaciones/", enviar_push=False, excluir_user_id=None):
     admins = _admins_queryset()
+
+    if excluir_user_id:
+        admins = admins.exclude(id=excluir_user_id)
 
     for admin_user in admins:
         _crear_notificacion(
@@ -612,17 +616,27 @@ def notificaciones_view(request):
     no_modelo_notificaciones = False
 
     if Notificacion is not None:
-        try:
-            notificaciones = list(
-                Notificacion.objects.filter(user=request.user)
-                .order_by("-created_at")[:20]
+        notificaciones = list(
+            Notificacion.objects.filter(user=request.user)
+            .order_by("-creada_en")[:20]
+        )
+
+        ids_no_leidas = [n.id for n in notificaciones if not n.leida]
+        if ids_no_leidas:
+            ahora = timezone.now()
+            Notificacion.objects.filter(
+                id__in=ids_no_leidas,
+                user=request.user,
+                leida=False,
+            ).update(
+                leida=True,
+                leida_en=ahora,
             )
-        except Exception:
-            logger.exception(
-                "Error cargando notificaciones para user=%s",
-                request.user.username,
-            )
-            notificaciones = []
+
+            for n in notificaciones:
+                if n.id in ids_no_leidas:
+                    n.leida = True
+                    n.leida_en = ahora
     else:
         no_modelo_notificaciones = True
 
@@ -745,6 +759,7 @@ def mantenimiento_detalle_view(request, pk):
                 mensaje=f"El mantenimiento de {mantenimiento.cliente} fue marcado como realizado por {actor}.",
                 url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
                 enviar_push=True,
+                excluir_user_id=request.user.id if es_admin(request.user) else None,
             )
 
             return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
@@ -759,6 +774,7 @@ def mantenimiento_detalle_view(request, pk):
                 mensaje=f"El mantenimiento de {mantenimiento.cliente} fue marcado como pendiente por {actor}.",
                 url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
                 enviar_push=False,
+                excluir_user_id=request.user.id if es_admin(request.user) else None,
             )
 
             return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
@@ -815,6 +831,7 @@ def mantenimiento_detalle_view(request, pk):
                 mensaje=f"{actor} registró {insumo.nombre} x {cantidad} en {mantenimiento.cliente}.",
                 url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
                 enviar_push=False,
+                excluir_user_id=request.user.id if es_admin(request.user) else None,
             )
 
             messages.success(request, f"Insumo registrado: {insumo.nombre} x {cantidad}")
@@ -840,6 +857,7 @@ def mantenimiento_detalle_view(request, pk):
                 mensaje=f"{actor} subió una foto en el mantenimiento de {mantenimiento.cliente}.",
                 url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
                 enviar_push=False,
+                excluir_user_id=request.user.id if es_admin(request.user) else None,
             )
 
             messages.success(request, "Foto subida correctamente.")
@@ -901,6 +919,7 @@ def usoinsumo_eliminar_view(request, pk):
             mensaje=f"{actor} eliminó un uso de insumo en {mantenimiento.cliente}.",
             url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
             enviar_push=False,
+            excluir_user_id=request.user.id if es_admin(request.user) else None,
         )
 
         messages.success(request, "Uso de insumo eliminado y stock devuelto.")
@@ -967,6 +986,7 @@ def usoinsumo_editar_view(request, pk):
             mensaje=f"{actor} actualizó un uso de insumo en {mantenimiento.cliente}.",
             url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
             enviar_push=False,
+            excluir_user_id=request.user.id if es_admin(request.user) else None,
         )
 
         messages.success(request, "Uso de insumo actualizado correctamente.")
@@ -1002,13 +1022,6 @@ def asignar_trabajadores_view(request, pk):
                     url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
                     enviar_push=True,
                 )
-
-        _notificar_admins(
-            titulo="👷 Trabajadores asignados",
-            mensaje=f"Se actualizaron trabajadores en el mantenimiento de {mantenimiento.cliente}.",
-            url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
-            enviar_push=False,
-        )
 
         messages.success(request, "Trabajadores asignados correctamente.")
         return redirect("/dashboard/operativo/")
@@ -1186,17 +1199,14 @@ def offline_view(request):
 
 
 @require_GET
+@login_required
 def unread_count_view(request):
-    if not request.user.is_authenticated:
-        return JsonResponse({"count": 0})
-
     if Notificacion is None:
         return JsonResponse({"count": 0})
 
-    try:
-        count = Notificacion.objects.filter(user=request.user, leida=False).count()
-    except Exception:
-        logger.exception("Error obteniendo unread_count para user=%s", request.user.username)
-        count = 0
+    count = Notificacion.objects.filter(
+        user_id=request.user.id,
+        leida=False
+    ).count()
 
     return JsonResponse({"count": count})
