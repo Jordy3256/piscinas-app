@@ -46,6 +46,11 @@
       color: #fff;
       display: none;
     }
+
+    .notif-menu {
+      width: 340px;
+      max-width: calc(100vw - 24px);
+    }
   </style>
 
   <link rel="manifest" href="/dashboard/manifest.json?v=20260311-10">
@@ -71,12 +76,30 @@
               <button id="btn-push-admin" class="btn btn-primary btn-sm" type="button">🔔 Activar</button>
               <button id="btn-push-test" class="btn btn-outline-primary btn-sm" type="button">🧪 Test Push</button>
 
-              <a class="btn btn-outline-secondary btn-sm notif-btn"
-                 href="/dashboard/notificaciones/"
-                 title="Notificaciones">
-                🔔
-                <span id="notif-badge" class="notif-badge">0</span>
-              </a>
+              <div class="dropdown">
+                <a class="btn btn-outline-secondary btn-sm notif-btn dropdown-toggle"
+                   href="#"
+                   id="notifDropdown"
+                   data-bs-toggle="dropdown"
+                   aria-expanded="false"
+                   title="Notificaciones">
+                  🔔
+                  <span id="notif-badge" class="notif-badge">0</span>
+                </a>
+
+                <div class="dropdown-menu dropdown-menu-end p-0 notif-menu" aria-labelledby="notifDropdown">
+                  <div class="p-3 border-bottom fw-bold">Notificaciones</div>
+
+                  <div id="notif-dropdown-list" style="max-height: 360px; overflow-y: auto;">
+                    <div class="p-3 text-muted">Cargando...</div>
+                  </div>
+
+                  <div class="border-top p-2 text-center">
+                    <a href="/dashboard/notificaciones/" class="btn btn-sm btn-outline-primary">Ver bandeja</a>
+                    <a href="/dashboard/notificaciones/historial/" class="btn btn-sm btn-outline-secondary">Historial</a>
+                  </div>
+                </div>
+              </div>
 
               <a class="btn btn-outline-secondary btn-sm" href="/dashboard/inicio/">Inicio</a>
               <a class="btn btn-outline-danger btn-sm" href="/logout/">Salir</a>
@@ -133,6 +156,15 @@
       return m ? decodeURIComponent(m[1]) : "";
     }
 
+    function escapeHtml(value) {
+      return String(value || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
     function urlBase64ToUint8Array(base64UrlString) {
       if (!base64UrlString || typeof base64UrlString !== "string") return null;
       const padding = "=".repeat((4 - (base64UrlString.length % 4)) % 4);
@@ -182,6 +214,7 @@
     const btnPushAdmin = document.getElementById("btn-push-admin");
     const btnPushTest  = document.getElementById("btn-push-test");
     const notifBadge   = document.getElementById("notif-badge");
+    const notifDropdownList = document.getElementById("notif-dropdown-list");
 
     function show(el) { if (el) el.style.display = "inline-block"; }
     function hide(el) { if (el) el.style.display = "none"; }
@@ -233,6 +266,60 @@
       }
     }
 
+    async function refreshNotifDropdown() {
+      if (!notifDropdownList) return;
+
+      try {
+        const res = await fetch("/dashboard/notificaciones/json/", {
+          method: "GET",
+          credentials: "same-origin",
+          headers: { "Accept": "application/json" },
+        });
+
+        if (!res.ok) {
+          notifDropdownList.innerHTML = '<div class="p-3 text-danger">No se pudieron cargar las notificaciones.</div>';
+          return;
+        }
+
+        const data = await res.json().catch(() => ({}));
+        const items = Array.isArray(data.items) ? data.items : [];
+
+        if (!items.length) {
+          notifDropdownList.innerHTML = '<div class="p-3 text-muted">No tienes notificaciones.</div>';
+          return;
+        }
+
+        notifDropdownList.innerHTML = items.map(item => `
+          <a href="${escapeHtml(item.url || "/dashboard/notificaciones/")}"
+             class="d-block text-decoration-none text-dark border-bottom p-3 ${item.leida ? "" : "bg-light"}"
+             onclick="marcarNotifLeida(${item.id})">
+            <div class="fw-bold">${escapeHtml(item.titulo)}</div>
+            <div class="small text-muted mt-1">${escapeHtml(item.mensaje)}</div>
+            <div class="small text-secondary mt-2">${escapeHtml(item.creada_en)}</div>
+          </a>
+        `).join("");
+      } catch (e) {
+        console.error("Error cargando dropdown de notificaciones:", e);
+        notifDropdownList.innerHTML = '<div class="p-3 text-danger">Error cargando notificaciones.</div>';
+      }
+    }
+
+    async function marcarNotifLeida(id) {
+      try {
+        const csrftoken = getCSRFToken();
+        await fetch(`/dashboard/notificaciones/${id}/leer/`, {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {
+            "X-CSRFToken": csrftoken,
+            "Accept": "application/json",
+          },
+        });
+      } catch (e) {
+        console.error("Error marcando notificación como leída:", e);
+      }
+    }
+
     async function enablePushAdmin() {
       try {
         const reg = await navigator.serviceWorker.ready;
@@ -272,18 +359,30 @@
       }
     }
 
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) {
+        refreshNotifBadge();
+        refreshNotifDropdown();
+      }
+    });
+
     window.addEventListener("load", async () => {
       const reg = await registerSW();
       await syncPushButtons(reg);
       await refreshNotifBadge();
+      await refreshNotifDropdown();
 
-      setInterval(refreshNotifBadge, 30000);
+      setInterval(() => {
+        refreshNotifBadge();
+        refreshNotifDropdown();
+      }, 30000);
 
       if (btnPushAdmin) btnPushAdmin.addEventListener("click", enablePushAdmin);
-      if (btnPushTest)  btnPushTest.addEventListener("click", sendTestPush);
+      if (btnPushTest) btnPushTest.addEventListener("click", sendTestPush);
     });
   </script>
 
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   {% block extra_js %}{% endblock %}
 </body>
 </html>

@@ -15,6 +15,9 @@ from .views import (
     # Notificaciones
     unread_count_view,
     notificaciones_view,
+    notificaciones_json_view,
+    notificaciones_historial_view,
+    marcar_notificacion_leida_view,
 
     # Core
     inicio_view,
@@ -59,6 +62,9 @@ urlpatterns = [
     # Notificaciones
     # ======================
     path("notificaciones/", notificaciones_view, name="notificaciones"),
+    path("notificaciones/json/", notificaciones_json_view, name="notificaciones_json"),
+    path("notificaciones/historial/", notificaciones_historial_view, name="notificaciones_historial"),
+    path("notificaciones/<int:pk>/leer/", marcar_notificacion_leida_view, name="marcar_notificacion_leida"),
     path("notificaciones/unread-count/", unread_count_view, name="unread_count"),
 
     # ======================

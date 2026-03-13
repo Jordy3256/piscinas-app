@@ -23,9 +23,12 @@
   </div>
 </div>
 
-<div class="d-flex justify-content-between align-items-center mb-2">
+<div class="d-flex justify-content-between align-items-center mb-3">
   <div class="fw-bold fs-4">Bandeja</div>
-  <div class="text-muted">Últimas {{ notificaciones|length }} notificaciones</div>
+  <div class="d-flex align-items-center gap-2">
+    <div class="text-muted">Últimas {{ notificaciones|length }} notificaciones</div>
+    <a href="/dashboard/notificaciones/historial/" class="btn btn-outline-secondary btn-sm">Ver historial</a>
+  </div>
 </div>
 
 {% if no_modelo_notificaciones %}

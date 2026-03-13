@@ -10,6 +10,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.contrib.staticfiles import finders
+from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Sum, Count, Q
 from django.http import HttpResponse, JsonResponse
@@ -652,6 +653,78 @@ def notificaciones_view(request):
             "base_template": "dashboard/base_admin.html" if es_admin(request.user) else "dashboard/base_trabajador.html",
         },
     )
+
+
+@login_required
+@require_GET
+def notificaciones_json_view(request):
+    if Notificacion is None:
+        return JsonResponse({
+            "ok": True,
+            "items": [],
+            "unread_count": 0,
+        })
+
+    qs = Notificacion.objects.filter(user=request.user).order_by("-creada_en")[:10]
+
+    items = []
+    for n in qs:
+        items.append({
+            "id": n.id,
+            "titulo": n.titulo,
+            "mensaje": n.mensaje,
+            "url": n.url or "/dashboard/notificaciones/",
+            "leida": n.leida,
+            "creada_en": n.creada_en.strftime("%d/%m/%Y %H:%M"),
+        })
+
+    unread_count = Notificacion.objects.filter(
+        user=request.user,
+        leida=False
+    ).count()
+
+    return JsonResponse({
+        "ok": True,
+        "items": items,
+        "unread_count": unread_count,
+    })
+
+
+@login_required
+def notificaciones_historial_view(request):
+    if Notificacion is None:
+        page_obj = None
+    else:
+        qs = Notificacion.objects.filter(user=request.user).order_by("-creada_en")
+        paginator = Paginator(qs, 15)
+        page_number = request.GET.get("page")
+        page_obj = paginator.get_page(page_number)
+
+    return render(
+        request,
+        "dashboard/notificaciones_historial.html",
+        {
+            "page_obj": page_obj,
+            "es_admin": es_admin(request.user),
+            "base_template": "dashboard/base_admin.html" if es_admin(request.user) else "dashboard/base_trabajador.html",
+        },
+    )
+
+
+@login_required
+@require_http_methods(["POST"])
+def marcar_notificacion_leida_view(request, pk):
+    if Notificacion is None:
+        return JsonResponse({"ok": False, "error": "Modelo no disponible"}, status=500)
+
+    notificacion = get_object_or_404(Notificacion, pk=pk, user=request.user)
+
+    if not notificacion.leida:
+        notificacion.leida = True
+        notificacion.leida_en = timezone.now()
+        notificacion.save(update_fields=["leida", "leida_en"])
+
+    return JsonResponse({"ok": True})
 
 
 # -------------------
