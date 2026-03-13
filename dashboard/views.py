@@ -1262,7 +1262,52 @@ def asignar_trabajadores_view(request, pk):
         return render(request, "dashboard/no_autorizado.html", status=403)
 
     mantenimiento = get_object_or_404(Mantenimiento, pk=pk)
-    trabajadores = Trabajador.objects.select_related("user").all().order_by("user__username")
+    trabajadores = list(
+        Trabajador.objects.select_related("user").all().order_by("user__username")
+    )
+    hoy = date.today()
+
+    trabajadores_info = []
+    for trabajador in trabajadores:
+        qs_base = Mantenimiento.objects.filter(trabajadores=trabajador)
+
+        carga_hoy = qs_base.filter(fecha=mantenimiento.fecha).count()
+        atrasados = qs_base.filter(fecha__lt=hoy, estado="pendiente").count()
+        proximos = qs_base.filter(fecha__gt=hoy, estado="pendiente").count()
+
+        carga_total = carga_hoy + atrasados + proximos
+
+        if carga_total <= 1:
+            carga_label = "Más libre"
+            carga_badge = "success"
+        elif carga_total <= 3:
+            carga_label = "Carga media"
+            carga_badge = "warning"
+        else:
+            carga_label = "Carga alta"
+            carga_badge = "danger"
+
+        ya_asignado = mantenimiento.trabajadores.filter(pk=trabajador.pk).exists()
+
+        trabajadores_info.append({
+            "obj": trabajador,
+            "ya_asignado": ya_asignado,
+            "carga_hoy": carga_hoy,
+            "atrasados": atrasados,
+            "proximos": proximos,
+            "carga_total": carga_total,
+            "carga_label": carga_label,
+            "carga_badge": carga_badge,
+        })
+
+    trabajadores_info.sort(
+        key=lambda x: (
+            x["ya_asignado"] is False,
+            x["carga_total"],
+            x["atrasados"],
+            getattr(getattr(x["obj"], "user", None), "username", ""),
+        )
+    )
 
     if request.method == "POST":
         ids = request.POST.getlist("trabajadores")
@@ -1286,7 +1331,12 @@ def asignar_trabajadores_view(request, pk):
     return render(
         request,
         "dashboard/asignar_trabajadores.html",
-        {"m": mantenimiento, "trabajadores": trabajadores, "es_admin": True},
+        {
+            "m": mantenimiento,
+            "trabajadores": trabajadores,
+            "trabajadores_info": trabajadores_info,
+            "es_admin": True,
+        },
     )
 
 
