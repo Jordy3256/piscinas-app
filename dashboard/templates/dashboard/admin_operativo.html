@@ -166,9 +166,19 @@
               </div>
 
               <div class="mt-3 d-flex gap-2 flex-wrap">
+                <form method="post" action="/dashboard/mantenimientos/{{ m.id }}/" class="d-inline">
+                  {% csrf_token %}
+                  <input type="hidden" name="accion" value="marcar_realizado">
+                  <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                  <button class="btn btn-sm btn-success" type="submit">
+                    ✅ Realizado
+                  </button>
+                </form>
+
                 <a class="btn btn-sm btn-outline-primary" href="/dashboard/mantenimientos/{{ m.id }}/">
                   Ver detalle
                 </a>
+
                 <a class="btn btn-sm btn-outline-dark" href="/dashboard/operativo/asignar/{{ m.id }}/">
                   👷 Asignar/Reasignar
                 </a>
@@ -224,9 +234,30 @@
               </div>
 
               <div class="mt-3 d-flex gap-2 flex-wrap">
+                {% if m.estado == "pendiente" %}
+                  <form method="post" action="/dashboard/mantenimientos/{{ m.id }}/" class="d-inline">
+                    {% csrf_token %}
+                    <input type="hidden" name="accion" value="marcar_realizado">
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                    <button class="btn btn-sm btn-success" type="submit">
+                      ✅ Realizado
+                    </button>
+                  </form>
+                {% else %}
+                  <form method="post" action="/dashboard/mantenimientos/{{ m.id }}/" class="d-inline">
+                    {% csrf_token %}
+                    <input type="hidden" name="accion" value="marcar_pendiente">
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                    <button class="btn btn-sm btn-warning" type="submit">
+                      🟡 Pendiente
+                    </button>
+                  </form>
+                {% endif %}
+
                 <a class="btn btn-sm btn-outline-primary" href="/dashboard/mantenimientos/{{ m.id }}/">
                   Ver detalle
                 </a>
+
                 <a class="btn btn-sm btn-outline-dark" href="/dashboard/operativo/asignar/{{ m.id }}/">
                   👷 Asignar/Reasignar
                 </a>
@@ -281,6 +312,7 @@
                 <a class="btn btn-sm btn-outline-primary" href="/dashboard/mantenimientos/{{ m.id }}/">
                   Ver detalle
                 </a>
+
                 <a class="btn btn-sm btn-outline-dark" href="/dashboard/operativo/asignar/{{ m.id }}/">
                   👷 Asignar/Reasignar
                 </a>

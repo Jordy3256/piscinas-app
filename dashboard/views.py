@@ -973,6 +973,16 @@ def mantenimiento_detalle_view(request, pk):
 
     if request.method == "POST":
         accion = request.POST.get("accion")
+        next_url = (request.POST.get("next", "") or "").strip()
+
+        def safe_return_url():
+            if next_url and url_has_allowed_host_and_scheme(
+                url=next_url,
+                allowed_hosts={request.get_host()},
+                require_https=not settings.DEBUG,
+            ):
+                return next_url
+            return f"/dashboard/mantenimientos/{mantenimiento.pk}/"
 
         if accion == "marcar_realizado":
             mantenimiento.estado = "realizado"
@@ -987,7 +997,8 @@ def mantenimiento_detalle_view(request, pk):
                 excluir_user_id=request.user.id if es_admin(request.user) else None,
             )
 
-            return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
+            messages.success(request, f"Mantenimiento de {mantenimiento.cliente} marcado como realizado.")
+            return redirect(safe_return_url())
 
         if accion == "marcar_pendiente":
             mantenimiento.estado = "pendiente"
@@ -1002,7 +1013,8 @@ def mantenimiento_detalle_view(request, pk):
                 excluir_user_id=request.user.id if es_admin(request.user) else None,
             )
 
-            return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
+            messages.success(request, f"Mantenimiento de {mantenimiento.cliente} marcado como pendiente.")
+            return redirect(safe_return_url())
 
         if accion == "agregar_insumo":
             insumo_id = request.POST.get("insumo_id")
