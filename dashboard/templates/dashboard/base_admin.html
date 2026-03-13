@@ -48,7 +48,7 @@
     }
 
     .notif-dropdown-menu {
-      width: 360px;
+      width: 370px;
       max-width: calc(100vw - 24px);
     }
 
@@ -103,6 +103,34 @@
     .notif-toolbar .btn {
       white-space: nowrap;
     }
+
+    .notif-meta {
+      font-size: 0.82rem;
+      color: #6c757d;
+    }
+
+    .notif-section-title {
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: .02em;
+      color: #6c757d;
+      background: #fff;
+      padding: 8px 12px;
+      border-bottom: 1px solid #e9ecef;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    .notif-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: #dc3545;
+      margin-right: 6px;
+      vertical-align: middle;
+    }
   </style>
 
   <link rel="manifest" href="/dashboard/manifest.json?v=20260311-10">
@@ -140,7 +168,10 @@
                 </a>
 
                 <div class="dropdown-menu dropdown-menu-end p-0 notif-dropdown-menu" aria-labelledby="notifDropdown">
-                  <div class="p-3 border-bottom fw-bold">Notificaciones</div>
+                  <div class="p-3 border-bottom">
+                    <div class="fw-bold">Notificaciones</div>
+                    <div id="notif-dropdown-meta" class="notif-meta mt-1">Cargando...</div>
+                  </div>
 
                   <div class="p-2 border-bottom notif-toolbar">
                     <div class="d-flex gap-2 flex-wrap">
@@ -153,7 +184,7 @@
                     </div>
                   </div>
 
-                  <div id="notif-dropdown-list" style="max-height: 360px; overflow-y: auto;">
+                  <div id="notif-dropdown-list" style="max-height: 380px; overflow-y: auto;">
                     <div class="p-3 text-muted">Cargando...</div>
                   </div>
 
@@ -280,6 +311,7 @@
     const btnPushTest  = document.getElementById("btn-push-test");
     const notifBadge   = document.getElementById("notif-badge");
     const notifDropdownList = document.getElementById("notif-dropdown-list");
+    const notifDropdownMeta = document.getElementById("notif-dropdown-meta");
     const dropdownMarcarTodas = document.getElementById("dropdown-marcar-todas");
     const dropdownEliminarTodas = document.getElementById("dropdown-eliminar-todas");
 
@@ -405,29 +437,11 @@
       }
     }
 
-    async function refreshNotifDropdown() {
-      if (!notifDropdownList) return;
-
-      try {
-        const res = await fetch("/dashboard/notificaciones/json/", {
-          method: "GET",
-          credentials: "same-origin",
-          headers: { "Accept": "application/json" },
-        });
-
-        if (!res.ok) {
-          notifDropdownList.innerHTML = '<div class="p-3 text-danger">No se pudieron cargar las notificaciones.</div>';
-          return;
-        }
-
-        const data = await res.json().catch(() => ({}));
-
-        if (!data.items || !data.items.length) {
-          notifDropdownList.innerHTML = '<div class="p-3 text-muted">No tienes notificaciones.</div>';
-          return;
-        }
-
-        notifDropdownList.innerHTML = data.items.map(item => `
+    function renderNotifSection(title, items, unreadSection=false) {
+      if (!items.length) return "";
+      return `
+        <div class="notif-section-title">${unreadSection ? '<span class="notif-dot"></span>' : ''}${escapeHtml(title)}</div>
+        ${items.map(item => `
           <div class="p-3 notif-row ${item.leida ? '' : 'notif-item-unread'}" data-id="${item.id}">
             <div class="d-flex align-items-start">
               <div class="notif-main">
@@ -447,12 +461,53 @@
               </div>
             </div>
           </div>
-        `).join("");
+        `).join("")}
+      `;
+    }
+
+    async function refreshNotifDropdown() {
+      if (!notifDropdownList) return;
+
+      try {
+        const res = await fetch("/dashboard/notificaciones/json/", {
+          method: "GET",
+          credentials: "same-origin",
+          headers: { "Accept": "application/json" },
+        });
+
+        if (!res.ok) {
+          notifDropdownList.innerHTML = '<div class="p-3 text-danger">No se pudieron cargar las notificaciones.</div>';
+          if (notifDropdownMeta) notifDropdownMeta.textContent = "Error cargando.";
+          return;
+        }
+
+        const data = await res.json().catch(() => ({}));
+        const items = Array.isArray(data.items) ? data.items : [];
+        const unreadItems = items.filter(x => !x.leida);
+        const readItems = items.filter(x => x.leida);
+
+        if (notifDropdownMeta) {
+          const total = items.length;
+          const unread = unreadItems.length;
+          notifDropdownMeta.textContent = unread > 0
+            ? `${unread} nueva${unread === 1 ? "" : "s"} de ${total}`
+            : `${total} reciente${total === 1 ? "" : "s"}`;
+        }
+
+        if (!items.length) {
+          notifDropdownList.innerHTML = '<div class="p-3 text-muted">No tienes notificaciones.</div>';
+          return;
+        }
+
+        notifDropdownList.innerHTML =
+          renderNotifSection("Nuevas", unreadItems, true) +
+          renderNotifSection("Recientes", readItems, false);
 
         bindNotifDropdownActions();
       } catch (e) {
         console.error("Error cargando dropdown de notificaciones:", e);
         notifDropdownList.innerHTML = '<div class="p-3 text-danger">Error cargando notificaciones.</div>';
+        if (notifDropdownMeta) notifDropdownMeta.textContent = "Error cargando.";
       }
     }
 
