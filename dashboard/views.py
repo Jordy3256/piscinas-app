@@ -870,7 +870,7 @@ def admin_operativo_view(request):
     fecha_desde = hoy
     fecha_hasta = hoy
     q = (request.GET.get("q", "") or "").strip()
-    modo = (request.GET.get("modo") or "").strip().lower()
+    modo = (request.GET.get("modo", "") or "").strip().lower()
 
     if modo == "manana":
         fecha = hoy + timedelta(days=1)
@@ -1319,17 +1319,53 @@ def asignar_trabajadores_view(request, pk):
             "choque_label": choque_label,
             "choque_badge": choque_badge,
             "clientes_mismo_dia": clientes_mismo_dia,
+            "es_recomendado": False,
         })
 
     trabajadores_info.sort(
         key=lambda x: (
             x["ya_asignado"] is False,
             x["carga_hoy"],
-            x["carga_total"],
             x["atrasados"],
+            x["carga_total"],
             getattr(getattr(x["obj"], "user", None), "username", ""),
         )
     )
+
+    recomendacion = None
+    candidatos = [item for item in trabajadores_info if not item["ya_asignado"]]
+    if not candidatos:
+        candidatos = trabajadores_info
+
+    if candidatos:
+        recomendado = min(
+            candidatos,
+            key=lambda x: (
+                x["carga_hoy"],
+                x["atrasados"],
+                x["carga_total"],
+                getattr(getattr(x["obj"], "user", None), "username", ""),
+            ),
+        )
+        recomendado["es_recomendado"] = True
+
+        razones = []
+        if recomendado["carga_hoy"] == 0:
+            razones.append("no tiene mantenimientos ese día")
+        else:
+            razones.append(f"solo tiene {recomendado['carga_hoy']} ese día")
+
+        if recomendado["atrasados"] == 0:
+            razones.append("no tiene atrasados")
+        else:
+            razones.append(f"tiene {recomendado['atrasados']} atrasados")
+
+        razones.append(f"carga total visible: {recomendado['carga_total']}")
+
+        recomendacion = {
+            "trabajador": recomendado["obj"],
+            "motivo": " · ".join(razones),
+        }
 
     if request.method == "POST":
         ids = request.POST.getlist("trabajadores")
@@ -1357,6 +1393,7 @@ def asignar_trabajadores_view(request, pk):
             "m": mantenimiento,
             "trabajadores": trabajadores,
             "trabajadores_info": trabajadores_info,
+            "recomendacion": recomendacion,
             "es_admin": True,
         },
     )
