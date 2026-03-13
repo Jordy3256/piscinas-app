@@ -47,9 +47,61 @@
       display: none;
     }
 
-    .notif-menu {
-      width: 340px;
+    .notif-dropdown-menu {
+      width: 360px;
       max-width: calc(100vw - 24px);
+    }
+
+    .notif-item-unread {
+      background: #f8f9fa;
+    }
+
+    .notif-row {
+      border-bottom: 1px solid #e9ecef;
+    }
+
+    .notif-row:last-child {
+      border-bottom: 0;
+    }
+
+    .notif-main {
+      min-width: 0;
+      flex: 1 1 auto;
+    }
+
+    .notif-title {
+      font-weight: 600;
+      line-height: 1.2;
+    }
+
+    .notif-message {
+      font-size: 0.86rem;
+      color: #6c757d;
+      margin-top: 4px;
+      word-break: break-word;
+    }
+
+    .notif-date {
+      font-size: 0.78rem;
+      color: #6c757d;
+      margin-top: 6px;
+    }
+
+    .notif-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-left: 10px;
+      flex: 0 0 auto;
+    }
+
+    .notif-actions .btn {
+      padding: 0.2rem 0.45rem;
+      line-height: 1.1;
+    }
+
+    .notif-toolbar .btn {
+      white-space: nowrap;
     }
   </style>
 
@@ -87,8 +139,19 @@
                   <span id="notif-badge" class="notif-badge">0</span>
                 </a>
 
-                <div class="dropdown-menu dropdown-menu-end p-0 notif-menu" aria-labelledby="notifDropdown">
+                <div class="dropdown-menu dropdown-menu-end p-0 notif-dropdown-menu" aria-labelledby="notifDropdown">
                   <div class="p-3 border-bottom fw-bold">Notificaciones</div>
+
+                  <div class="p-2 border-bottom notif-toolbar">
+                    <div class="d-flex gap-2 flex-wrap">
+                      <button id="dropdown-marcar-todas" class="btn btn-outline-success btn-sm" type="button">
+                        ✓ Leer todas
+                      </button>
+                      <button id="dropdown-eliminar-todas" class="btn btn-outline-danger btn-sm" type="button">
+                        🗑 Vaciar
+                      </button>
+                    </div>
+                  </div>
 
                   <div id="notif-dropdown-list" style="max-height: 360px; overflow-y: auto;">
                     <div class="p-3 text-muted">Cargando...</div>
@@ -141,6 +204,8 @@
 
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
   <script>
     window.APP_VERSION = "20260311-10";
   </script>
@@ -157,12 +222,12 @@
     }
 
     function escapeHtml(value) {
-      return String(value || "")
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
     }
 
     function urlBase64ToUint8Array(base64UrlString) {
@@ -215,6 +280,8 @@
     const btnPushTest  = document.getElementById("btn-push-test");
     const notifBadge   = document.getElementById("notif-badge");
     const notifDropdownList = document.getElementById("notif-dropdown-list");
+    const dropdownMarcarTodas = document.getElementById("dropdown-marcar-todas");
+    const dropdownEliminarTodas = document.getElementById("dropdown-eliminar-todas");
 
     function show(el) { if (el) el.style.display = "inline-block"; }
     function hide(el) { if (el) el.style.display = "none"; }
@@ -266,6 +333,78 @@
       }
     }
 
+    async function marcarNotifLeida(id) {
+      try {
+        const csrftoken = getCSRFToken();
+        const res = await fetch(`/dashboard/notificaciones/${id}/leer/`, {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {
+            "X-CSRFToken": csrftoken,
+            "Accept": "application/json",
+          },
+        });
+        return res.ok;
+      } catch (e) {
+        console.error("Error marcando notificación como leída:", e);
+        return false;
+      }
+    }
+
+    async function eliminarNotif(id) {
+      try {
+        const csrftoken = getCSRFToken();
+        const res = await fetch(`/dashboard/notificaciones/eliminar/${id}/`, {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {
+            "X-CSRFToken": csrftoken,
+            "Accept": "application/json",
+          },
+        });
+        return res.ok;
+      } catch (e) {
+        console.error("Error eliminando notificación:", e);
+        return false;
+      }
+    }
+
+    async function marcarTodasLeidas() {
+      try {
+        const csrftoken = getCSRFToken();
+        const res = await fetch("/dashboard/notificaciones/marcar-todas/", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {
+            "X-CSRFToken": csrftoken,
+            "Accept": "application/json",
+          },
+        });
+        return res.ok;
+      } catch (e) {
+        console.error("Error marcando todas como leídas:", e);
+        return false;
+      }
+    }
+
+    async function eliminarTodasNotifs() {
+      try {
+        const csrftoken = getCSRFToken();
+        const res = await fetch("/dashboard/notificaciones/eliminar-todas/", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {
+            "X-CSRFToken": csrftoken,
+            "Accept": "application/json",
+          },
+        });
+        return res.ok;
+      } catch (e) {
+        console.error("Error eliminando todas las notificaciones:", e);
+        return false;
+      }
+    }
+
     async function refreshNotifDropdown() {
       if (!notifDropdownList) return;
 
@@ -282,42 +421,82 @@
         }
 
         const data = await res.json().catch(() => ({}));
-        const items = Array.isArray(data.items) ? data.items : [];
 
-        if (!items.length) {
+        if (!data.items || !data.items.length) {
           notifDropdownList.innerHTML = '<div class="p-3 text-muted">No tienes notificaciones.</div>';
           return;
         }
 
-        notifDropdownList.innerHTML = items.map(item => `
-          <a href="${escapeHtml(item.url || "/dashboard/notificaciones/")}"
-             class="d-block text-decoration-none text-dark border-bottom p-3 ${item.leida ? "" : "bg-light"}"
-             onclick="marcarNotifLeida(${item.id})">
-            <div class="fw-bold">${escapeHtml(item.titulo)}</div>
-            <div class="small text-muted mt-1">${escapeHtml(item.mensaje)}</div>
-            <div class="small text-secondary mt-2">${escapeHtml(item.creada_en)}</div>
-          </a>
+        notifDropdownList.innerHTML = data.items.map(item => `
+          <div class="p-3 notif-row ${item.leida ? '' : 'notif-item-unread'}" data-id="${item.id}">
+            <div class="d-flex align-items-start">
+              <div class="notif-main">
+                <div class="notif-title">${escapeHtml(item.titulo)}</div>
+                <div class="notif-message">${escapeHtml(item.mensaje)}</div>
+                <div class="notif-date">${escapeHtml(item.creada_en)}</div>
+                <div class="mt-2">
+                  <a href="${escapeHtml(item.url)}" class="btn btn-outline-primary btn-sm notif-open-btn" data-id="${item.id}">
+                    Abrir
+                  </a>
+                </div>
+              </div>
+
+              <div class="notif-actions">
+                ${item.leida ? '' : `<button class="btn btn-outline-success btn-sm dropdown-leer-btn" type="button" data-id="${item.id}">✓</button>`}
+                <button class="btn btn-outline-danger btn-sm dropdown-eliminar-btn" type="button" data-id="${item.id}">🗑</button>
+              </div>
+            </div>
+          </div>
         `).join("");
+
+        bindNotifDropdownActions();
       } catch (e) {
         console.error("Error cargando dropdown de notificaciones:", e);
         notifDropdownList.innerHTML = '<div class="p-3 text-danger">Error cargando notificaciones.</div>';
       }
     }
 
-    async function marcarNotifLeida(id) {
-      try {
-        const csrftoken = getCSRFToken();
-        await fetch(`/dashboard/notificaciones/${id}/leer/`, {
-          method: "POST",
-          credentials: "same-origin",
-          headers: {
-            "X-CSRFToken": csrftoken,
-            "Accept": "application/json",
-          },
+    function bindNotifDropdownActions() {
+      document.querySelectorAll(".dropdown-leer-btn").forEach((btn) => {
+        btn.addEventListener("click", async (ev) => {
+          ev.preventDefault();
+          ev.stopPropagation();
+
+          const id = btn.dataset.id;
+          if (!id) return;
+
+          const ok = await marcarNotifLeida(id);
+          if (ok) {
+            await refreshNotifBadge();
+            await refreshNotifDropdown();
+          }
         });
-      } catch (e) {
-        console.error("Error marcando notificación como leída:", e);
-      }
+      });
+
+      document.querySelectorAll(".dropdown-eliminar-btn").forEach((btn) => {
+        btn.addEventListener("click", async (ev) => {
+          ev.preventDefault();
+          ev.stopPropagation();
+
+          const id = btn.dataset.id;
+          if (!id) return;
+
+          const ok = await eliminarNotif(id);
+          if (ok) {
+            await refreshNotifBadge();
+            await refreshNotifDropdown();
+          }
+        });
+      });
+
+      document.querySelectorAll(".notif-open-btn").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const id = btn.dataset.id;
+          if (!id) return;
+          await marcarNotifLeida(id);
+          await refreshNotifBadge();
+        });
+      });
     }
 
     async function enablePushAdmin() {
@@ -359,6 +538,35 @@
       }
     }
 
+    if (dropdownMarcarTodas) {
+      dropdownMarcarTodas.addEventListener("click", async (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+
+        const ok = await marcarTodasLeidas();
+        if (ok) {
+          await refreshNotifBadge();
+          await refreshNotifDropdown();
+        }
+      });
+    }
+
+    if (dropdownEliminarTodas) {
+      dropdownEliminarTodas.addEventListener("click", async (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+
+        const confirmar = confirm("¿Vaciar todas las notificaciones?");
+        if (!confirmar) return;
+
+        const ok = await eliminarTodasNotifs();
+        if (ok) {
+          await refreshNotifBadge();
+          await refreshNotifDropdown();
+        }
+      });
+    }
+
     document.addEventListener("visibilitychange", () => {
       if (!document.hidden) {
         refreshNotifBadge();
@@ -382,7 +590,6 @@
     });
   </script>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   {% block extra_js %}{% endblock %}
 </body>
 </html>
