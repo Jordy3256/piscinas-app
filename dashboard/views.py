@@ -1269,23 +1269,41 @@ def asignar_trabajadores_view(request, pk):
 
     trabajadores_info = []
     for trabajador in trabajadores:
-        qs_base = Mantenimiento.objects.filter(trabajadores=trabajador)
+        qs_base = (
+            Mantenimiento.objects.filter(trabajadores=trabajador)
+            .select_related("cliente", "contrato")
+            .prefetch_related("trabajadores")
+        )
 
-        carga_hoy = qs_base.filter(fecha=mantenimiento.fecha).count()
-        atrasados = qs_base.filter(fecha__lt=hoy, estado="pendiente").count()
-        proximos = qs_base.filter(fecha__gt=hoy, estado="pendiente").count()
+        qs_mismo_dia = qs_base.filter(fecha=mantenimiento.fecha).exclude(pk=mantenimiento.pk).order_by("fecha", "id")
+        carga_hoy = qs_mismo_dia.count()
+        atrasados = qs_base.filter(fecha__lt=hoy, estado="pendiente").exclude(pk=mantenimiento.pk).count()
+        proximos = qs_base.filter(fecha__gt=hoy, estado="pendiente").exclude(pk=mantenimiento.pk).count()
+
+        clientes_mismo_dia = [str(getattr(mh, "cliente", "") or "") for mh in qs_mismo_dia[:5]]
 
         carga_total = carga_hoy + atrasados + proximos
 
-        if carga_total <= 1:
+        if carga_hoy == 0 and carga_total <= 1:
             carga_label = "Más libre"
             carga_badge = "success"
-        elif carga_total <= 3:
+            choque_label = "Sin choque"
+            choque_badge = "success"
+        elif carga_hoy == 1:
             carga_label = "Carga media"
             carga_badge = "warning"
-        else:
+            choque_label = "Ocupación media"
+            choque_badge = "warning"
+        elif carga_hoy >= 2:
             carga_label = "Carga alta"
             carga_badge = "danger"
+            choque_label = "Posible choque"
+            choque_badge = "danger"
+        else:
+            carga_label = "Carga media"
+            carga_badge = "warning"
+            choque_label = "Ocupación media"
+            choque_badge = "warning"
 
         ya_asignado = mantenimiento.trabajadores.filter(pk=trabajador.pk).exists()
 
@@ -1298,11 +1316,15 @@ def asignar_trabajadores_view(request, pk):
             "carga_total": carga_total,
             "carga_label": carga_label,
             "carga_badge": carga_badge,
+            "choque_label": choque_label,
+            "choque_badge": choque_badge,
+            "clientes_mismo_dia": clientes_mismo_dia,
         })
 
     trabajadores_info.sort(
         key=lambda x: (
             x["ya_asignado"] is False,
+            x["carga_hoy"],
             x["carga_total"],
             x["atrasados"],
             getattr(getattr(x["obj"], "user", None), "username", ""),

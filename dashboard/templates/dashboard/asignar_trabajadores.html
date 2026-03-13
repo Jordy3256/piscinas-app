@@ -8,7 +8,7 @@
 </head>
 <body class="bg-light">
 
-<div class="container py-4" style="max-width: 920px;">
+<div class="container py-4" style="max-width: 980px;">
 
   <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
     <div>
@@ -25,7 +25,8 @@
   {% endif %}
 
   <div class="alert alert-info">
-    Selecciona los trabajadores viendo primero su carga actual. Los que aparecen más arriba son los más recomendables.
+    Ahora puedes ver la carga del mismo día y posibles choques antes de asignar.
+    Los trabajadores con menos carga aparecen primero.
   </div>
 
   <div class="card shadow-sm">
@@ -38,7 +39,7 @@
 
           <div class="vstack gap-3">
             {% for item in trabajadores_info %}
-              <label for="t{{ item.obj.id }}" class="card border {% if item.ya_asignado %}border-primary{% else %}border-light{% endif %} shadow-sm">
+              <label for="t{{ item.obj.id }}" class="card border {% if item.choque_badge == 'danger' %}border-danger{% elif item.choque_badge == 'warning' %}border-warning{% else %}border-success{% endif %} shadow-sm">
                 <div class="card-body">
                   <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
                     <div class="d-flex align-items-start gap-3">
@@ -57,6 +58,7 @@
                             <span class="badge text-bg-primary">Ya asignado</span>
                           {% endif %}
                           <span class="badge text-bg-{{ item.carga_badge }}">{{ item.carga_label }}</span>
+                          <span class="badge text-bg-{{ item.choque_badge }}">{{ item.choque_label }}</span>
                         </div>
                       </div>
                     </div>
@@ -70,7 +72,7 @@
                   <div class="row g-2 mt-3">
                     <div class="col-12 col-md-4">
                       <div class="border rounded p-2 bg-light h-100">
-                        <div class="small text-muted">Ese día</div>
+                        <div class="small text-muted">Ese mismo día</div>
                         <div class="fw-bold text-primary">{{ item.carga_hoy }}</div>
                       </div>
                     </div>
@@ -88,6 +90,20 @@
                         <div class="fw-bold">{{ item.proximos }}</div>
                       </div>
                     </div>
+                  </div>
+
+                  <div class="mt-3">
+                    <div class="small fw-bold mb-1">Clientes ya asignados ese día:</div>
+
+                    {% if item.clientes_mismo_dia %}
+                      <div class="d-flex gap-2 flex-wrap">
+                        {% for cliente in item.clientes_mismo_dia %}
+                          <span class="badge text-bg-light border">{{ cliente }}</span>
+                        {% endfor %}
+                      </div>
+                    {% else %}
+                      <div class="text-muted small">No tiene otros mantenimientos asignados ese día.</div>
+                    {% endif %}
                   </div>
                 </div>
               </label>
