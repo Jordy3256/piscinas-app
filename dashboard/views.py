@@ -1316,8 +1316,34 @@ def mantenimiento_detalle_view(request, pk):
             return f"/dashboard/mantenimientos/{mantenimiento.pk}/"
 
         if accion == "marcar_realizado":
+            observacion_cierre = (request.POST.get("observacion_cierre", "") or "").strip()
+            observaciones_actuales = (getattr(mantenimiento, "observaciones", "") or "").strip()
+            tiene_fotos = mantenimiento.fotos.exists()
+            tiene_usos = mantenimiento.usos_insumos.exists()
+
+            if not observaciones_actuales and not observacion_cierre:
+                messages.error(request, "Debes registrar una observación final antes de marcar como realizado.")
+                return redirect(safe_return_url())
+
+            if not tiene_fotos:
+                messages.error(request, "Debes subir al menos una foto antes de marcar como realizado.")
+                return redirect(safe_return_url())
+
+            if not tiene_usos:
+                messages.error(request, "Debes registrar al menos un insumo antes de marcar como realizado.")
+                return redirect(safe_return_url())
+
+            if observacion_cierre:
+                if observaciones_actuales:
+                    mantenimiento.observaciones = f"{observaciones_actuales}\n\n[Cierre]\n{observacion_cierre}"
+                else:
+                    mantenimiento.observaciones = observacion_cierre
+
             mantenimiento.estado = "realizado"
-            mantenimiento.save()
+            if observacion_cierre:
+                mantenimiento.save(update_fields=["estado", "observaciones"])
+            else:
+                mantenimiento.save(update_fields=["estado"])
 
             actor = request.user.username
             _notificar_admins(
@@ -1460,6 +1486,12 @@ def mantenimiento_detalle_view(request, pk):
     total_egresos = sum(e.total for e in lista_egresos) if lista_egresos else 0
     fotos = mantenimiento.fotos.all().order_by("-creada_en")
 
+    observaciones_texto = (getattr(mantenimiento, "observaciones", "") or "").strip()
+    cantidad_fotos = fotos.count()
+    cantidad_usos = lista_usos.count()
+    tiene_observaciones = bool(observaciones_texto)
+    puede_cerrar = tiene_observaciones and cantidad_fotos > 0 and cantidad_usos > 0
+
     return render(
         request,
         "dashboard/mantenimiento_detalle.html",
@@ -1471,6 +1503,10 @@ def mantenimiento_detalle_view(request, pk):
             "total_egresos": total_egresos,
             "es_admin": es_admin(request.user),
             "fotos": fotos,
+            "cantidad_fotos": cantidad_fotos,
+            "cantidad_usos": cantidad_usos,
+            "tiene_observaciones": tiene_observaciones,
+            "puede_cerrar": puede_cerrar,
         },
     )
 
