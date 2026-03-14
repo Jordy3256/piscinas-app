@@ -44,17 +44,116 @@
       <div class="text-muted small">Observaciones</div>
       <div>{{ m.observaciones|default:"(sin observaciones)"|linebreaksbr }}</div>
     </div>
+  </div>
+</div>
 
-    <hr>
+<!-- Validación de cierre -->
+{% if m.estado != "realizado" %}
+<div class="card shadow-sm mb-3 {% if puede_cerrar %}border-success{% else %}border-warning{% endif %}">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+      <div class="fw-bold">
+        {% if puede_cerrar %}
+          ✅ Validación de cierre
+        {% else %}
+          ⚠ Validación de cierre
+        {% endif %}
+      </div>
 
-    <!-- Botones grandes -->
+      {% if puede_cerrar %}
+        <span class="badge bg-success fs-6">Listo para cerrar</span>
+      {% else %}
+        <span class="badge bg-warning text-dark fs-6">Faltan datos</span>
+      {% endif %}
+    </div>
+
+    <div class="row g-2 mb-3">
+      <div class="col-md-4">
+        <div class="border rounded p-3 h-100 {% if tiene_observaciones %}bg-success-subtle border-success{% else %}bg-warning-subtle border-warning{% endif %}">
+          <div class="fw-semibold mb-1">
+            {% if tiene_observaciones %}✅{% else %}⚠{% endif %} Observaciones
+          </div>
+          <div class="small text-muted">
+            {% if tiene_observaciones %}
+              Ya hay observaciones registradas.
+            {% else %}
+              Aún no hay observaciones registradas.
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="col-md-4">
+        <div class="border rounded p-3 h-100 {% if cantidad_fotos > 0 %}bg-success-subtle border-success{% else %}bg-warning-subtle border-warning{% endif %}">
+          <div class="fw-semibold mb-1">
+            {% if cantidad_fotos > 0 %}✅{% else %}⚠{% endif %} Fotos
+          </div>
+          <div class="small text-muted">
+            {% if cantidad_fotos > 0 %}
+              {{ cantidad_fotos }} foto{{ cantidad_fotos|pluralize }} subida{{ cantidad_fotos|pluralize }}.
+            {% else %}
+              Aún no se ha subido ninguna foto.
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="col-md-4">
+        <div class="border rounded p-3 h-100 {% if cantidad_usos > 0 %}bg-success-subtle border-success{% else %}bg-warning-subtle border-warning{% endif %}">
+          <div class="fw-semibold mb-1">
+            {% if cantidad_usos > 0 %}✅{% else %}⚠{% endif %} Insumos
+          </div>
+          <div class="small text-muted">
+            {% if cantidad_usos > 0 %}
+              {{ cantidad_usos }} insumo{{ cantidad_usos|pluralize }} registrado{{ cantidad_usos|pluralize }}.
+            {% else %}
+              Aún no hay insumos registrados.
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {% if not puede_cerrar %}
+    <div class="alert alert-warning mb-0">
+      <div class="fw-semibold mb-1">Antes de cerrar este mantenimiento falta:</div>
+      <ul class="mb-0 ps-3">
+        {% if not tiene_observaciones %}
+          <li>Registrar observaciones.</li>
+        {% endif %}
+        {% if cantidad_fotos == 0 %}
+          <li>Subir al menos una foto.</li>
+        {% endif %}
+        {% if cantidad_usos == 0 %}
+          <li>Registrar al menos un insumo usado.</li>
+        {% endif %}
+      </ul>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+<!-- Acción principal de cierre -->
+<div class="card shadow-sm mb-3">
+  <div class="card-body">
+    <div class="fw-bold mb-2">🎯 Estado del mantenimiento</div>
+
     <div class="d-grid gap-2">
       {% if m.estado != 'realizado' %}
         <form method="post">
           {% csrf_token %}
           <input type="hidden" name="accion" value="marcar_realizado">
-          <button class="btn btn-success btn-lg">✅ Marcar como realizado</button>
+          <button class="btn {% if puede_cerrar %}btn-success{% else %}btn-outline-success{% endif %} btn-lg">
+            ✅ Marcar como realizado
+          </button>
         </form>
+
+        {% if not puede_cerrar %}
+        <div class="small text-muted">
+          El sistema no permitirá cerrarlo hasta que tenga observaciones, al menos una foto y al menos un insumo.
+        </div>
+        {% endif %}
       {% else %}
         <form method="post">
           {% csrf_token %}
