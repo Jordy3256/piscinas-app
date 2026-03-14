@@ -5,14 +5,48 @@
 
 {% block content %}
 
-<div class="card shadow-sm mb-3">
+<style>
+  @media (max-width: 767.98px) {
+    .mobile-stack-actions > * {
+      width: 100%;
+    }
+
+    .mobile-stack-actions .btn,
+    .mobile-stack-actions button {
+      width: 100%;
+    }
+
+    .mobile-card-title {
+      font-size: 1rem;
+    }
+
+    .mobile-photo-img {
+      max-height: 240px !important;
+    }
+
+    .mobile-section-title {
+      font-size: 1rem;
+    }
+
+    .mobile-table-actions .btn {
+      width: 100%;
+      margin-bottom: .35rem;
+    }
+
+    .mobile-tight-card .card-body {
+      padding: 0.9rem;
+    }
+  }
+</style>
+
+<div class="card shadow-sm mb-3 mobile-tight-card">
   <div class="card-body">
     <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
-      <div>
-        <div class="fw-bold fs-5">{{ m.cliente }}</div>
+      <div class="flex-grow-1">
+        <div class="fw-bold fs-5 mobile-card-title">{{ m.cliente }}</div>
         <div class="text-muted small">📅 {{ m.fecha }} · Contrato: {{ m.contrato }}</div>
 
-        <div class="mt-3 d-flex flex-wrap gap-2">
+        <div class="mt-3 d-grid d-sm-flex gap-2">
           {% if m.cliente.telefono %}
           <a class="btn btn-success btn-sm"
              href="https://wa.me/{{ m.cliente.telefono }}"
@@ -31,11 +65,13 @@
         </div>
       </div>
 
-      {% if m.estado == "realizado" %}
-        <span class="badge text-bg-success">Realizado</span>
-      {% else %}
-        <span class="badge text-bg-warning">Pendiente</span>
-      {% endif %}
+      <div class="w-100 w-sm-auto">
+        {% if m.estado == "realizado" %}
+          <span class="badge text-bg-success fs-6">Realizado</span>
+        {% else %}
+          <span class="badge text-bg-warning fs-6">Pendiente</span>
+        {% endif %}
+      </div>
     </div>
 
     <div class="mt-3">
@@ -55,10 +91,10 @@
 {% endif %}
 
 {% if m.estado != "realizado" %}
-<div class="card shadow-sm mb-3 {% if puede_cerrar %}border-success{% else %}border-warning{% endif %}">
+<div class="card shadow-sm mb-3 {% if puede_cerrar %}border-success{% else %}border-warning{% endif %} mobile-tight-card">
   <div class="card-body">
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-      <div class="fw-bold">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+      <div class="fw-bold mobile-section-title">
         {% if puede_cerrar %}
           ✅ Validación de cierre
         {% else %}
@@ -66,15 +102,17 @@
         {% endif %}
       </div>
 
-      {% if puede_cerrar %}
-        <span class="badge bg-success fs-6">Listo para cerrar</span>
-      {% else %}
-        <span class="badge bg-warning text-dark fs-6">Faltan datos</span>
-      {% endif %}
+      <div class="w-100 w-sm-auto">
+        {% if puede_cerrar %}
+          <span class="badge bg-success fs-6">Listo para cerrar</span>
+        {% else %}
+          <span class="badge bg-warning text-dark fs-6">Faltan datos</span>
+        {% endif %}
+      </div>
     </div>
 
     <div class="row g-2 mb-3">
-      <div class="col-md-6">
+      <div class="col-12 col-md-6">
         <div class="border rounded p-3 h-100 {% if cantidad_fotos > 0 %}bg-success-subtle border-success{% else %}bg-warning-subtle border-warning{% endif %}">
           <div class="fw-semibold mb-1">
             {% if cantidad_fotos > 0 %}✅{% else %}⚠{% endif %} Fotos
@@ -89,7 +127,7 @@
         </div>
       </div>
 
-      <div class="col-md-6">
+      <div class="col-12 col-md-6">
         <div class="border rounded p-3 h-100 {% if cantidad_usos > 0 %}bg-success-subtle border-success{% else %}bg-warning-subtle border-warning{% endif %}">
           <div class="fw-semibold mb-1">
             {% if cantidad_usos > 0 %}✅{% else %}⚠{% endif %} Insumos
@@ -109,45 +147,51 @@
       <div class="fw-semibold mb-2">📷 Estado de fotos requeridas</div>
 
       <div class="vstack gap-2">
-        <div class="d-flex justify-content-between align-items-center border rounded px-3 py-2 {% if foto_inicio %}bg-success-subtle border-success{% else %}bg-light{% endif %}">
-          <div>
-            <div class="fw-semibold">1. Inicio de Mantenimiento</div>
-            <div class="small text-muted">Primera foto obligatoria</div>
-          </div>
-          <div>
-            {% if foto_inicio %}
-              <span class="badge bg-success">Subida</span>
-            {% else %}
-              <span class="badge bg-secondary">Pendiente</span>
-            {% endif %}
-          </div>
-        </div>
-
-        <div class="d-flex justify-content-between align-items-center border rounded px-3 py-2 {% if foto_fin %}bg-success-subtle border-success{% else %}bg-light{% endif %}">
-          <div>
-            <div class="fw-semibold">2. Fin de Mantenimiento</div>
-            <div class="small text-muted">Segunda foto obligatoria</div>
-          </div>
-          <div>
-            {% if foto_fin %}
-              <span class="badge bg-success">Subida</span>
-            {% else %}
-              <span class="badge bg-secondary">Pendiente</span>
-            {% endif %}
+        <div class="border rounded px-3 py-2 {% if foto_inicio %}bg-success-subtle border-success{% else %}bg-light{% endif %}">
+          <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
+            <div>
+              <div class="fw-semibold">1. Inicio de Mantenimiento</div>
+              <div class="small text-muted">Primera foto obligatoria</div>
+            </div>
+            <div>
+              {% if foto_inicio %}
+                <span class="badge bg-success">Subida</span>
+              {% else %}
+                <span class="badge bg-secondary">Pendiente</span>
+              {% endif %}
+            </div>
           </div>
         </div>
 
-        <div class="d-flex justify-content-between align-items-center border rounded px-3 py-2 {% if foto_nivel %}bg-success-subtle border-success{% else %}bg-light{% endif %}">
-          <div>
-            <div class="fw-semibold">3. Nivel PH y Cl</div>
-            <div class="small text-muted">Tercera foto obligatoria</div>
+        <div class="border rounded px-3 py-2 {% if foto_fin %}bg-success-subtle border-success{% else %}bg-light{% endif %}">
+          <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
+            <div>
+              <div class="fw-semibold">2. Fin de Mantenimiento</div>
+              <div class="small text-muted">Segunda foto obligatoria</div>
+            </div>
+            <div>
+              {% if foto_fin %}
+                <span class="badge bg-success">Subida</span>
+              {% else %}
+                <span class="badge bg-secondary">Pendiente</span>
+              {% endif %}
+            </div>
           </div>
-          <div>
-            {% if foto_nivel %}
-              <span class="badge bg-success">Subida</span>
-            {% else %}
-              <span class="badge bg-secondary">Pendiente</span>
-            {% endif %}
+        </div>
+
+        <div class="border rounded px-3 py-2 {% if foto_nivel %}bg-success-subtle border-success{% else %}bg-light{% endif %}">
+          <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
+            <div>
+              <div class="fw-semibold">3. Nivel PH y Cl</div>
+              <div class="small text-muted">Tercera foto obligatoria</div>
+            </div>
+            <div>
+              {% if foto_nivel %}
+                <span class="badge bg-success">Subida</span>
+              {% else %}
+                <span class="badge bg-secondary">Pendiente</span>
+              {% endif %}
+            </div>
           </div>
         </div>
       </div>
@@ -170,7 +214,7 @@
 </div>
 {% endif %}
 
-<div class="card shadow-sm mb-3">
+<div class="card shadow-sm mb-3 mobile-tight-card">
   <div class="card-body">
     <div class="fw-bold mb-2">🎯 Estado del mantenimiento</div>
 
@@ -200,11 +244,11 @@
   </div>
 </div>
 
-<div class="card shadow-sm mb-3 border-info">
+<div class="card shadow-sm mb-3 border-info mobile-tight-card">
   <div class="card-body">
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
-      <div class="fw-bold">🗂 Historial reciente del cliente</div>
-      <a class="btn btn-outline-info btn-sm" href="/dashboard/mantenimientos/historial/?cliente={{ m.cliente.id }}">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+      <div class="fw-bold mobile-section-title">🗂 Historial reciente del cliente</div>
+      <a class="btn btn-outline-info btn-sm w-100 w-sm-auto" href="/dashboard/mantenimientos/historial/?cliente={{ m.cliente.id }}">
         Ver historial completo
       </a>
     </div>
@@ -214,7 +258,7 @@
         {% for h in historial_cliente_reciente %}
           <div class="border rounded p-3 bg-light">
             <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
-              <div>
+              <div class="flex-grow-1">
                 <div class="fw-semibold">
                   {{ h.fecha|date:"d/m/Y" }} · {{ h.contrato }}
                 </div>
@@ -228,8 +272,8 @@
                 </div>
               </div>
 
-              <div>
-                <a href="/dashboard/mantenimientos/{{ h.id }}/" class="btn btn-outline-primary btn-sm">
+              <div class="w-100 w-sm-auto">
+                <a href="/dashboard/mantenimientos/{{ h.id }}/" class="btn btn-outline-primary btn-sm w-100">
                   Abrir
                 </a>
               </div>
@@ -260,7 +304,7 @@
   </div>
 </div>
 
-<div class="card shadow-sm mb-3 {% if esta_realizado %}border-secondary{% endif %}">
+<div class="card shadow-sm mb-3 {% if esta_realizado %}border-secondary{% endif %} mobile-tight-card">
   <div class="card-body">
     <div class="fw-bold mb-2">🧪 Registrar insumo usado</div>
 
@@ -294,7 +338,7 @@
   </div>
 </div>
 
-<div class="card shadow-sm mb-3 {% if esta_realizado %}border-secondary{% endif %}">
+<div class="card shadow-sm mb-3 {% if esta_realizado %}border-secondary{% endif %} mobile-tight-card">
   <div class="card-body">
     <div class="fw-bold mb-3">📸 Subir fotos requeridas</div>
 
@@ -307,7 +351,7 @@
     <div class="row g-3">
       <div class="col-12 col-lg-4">
         <div class="border rounded p-3 h-100 {% if foto_inicio %}bg-success-subtle border-success{% elif esta_realizado %}bg-light{% endif %}">
-          <div class="d-flex justify-content-between align-items-center mb-2">
+          <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap mb-2">
             <div class="fw-semibold">Inicio de Mantenimiento</div>
             {% if foto_inicio %}
               <span class="badge bg-success">Subida</span>
@@ -319,7 +363,7 @@
           {% if foto_inicio %}
             <div class="small text-muted mb-2">Esta foto ya fue subida.</div>
             <a href="{{ foto_inicio.imagen.url }}" target="_blank" class="text-decoration-none">
-              <img src="{{ foto_inicio.imagen.url }}" class="img-fluid rounded border w-100 mb-2" alt="Inicio de Mantenimiento" style="object-fit: cover; max-height: 220px;">
+              <img src="{{ foto_inicio.imagen.url }}" class="img-fluid rounded border w-100 mb-2 mobile-photo-img" alt="Inicio de Mantenimiento" style="object-fit: cover; max-height: 220px;">
             </a>
             {% if esta_realizado %}
               <button type="button" class="btn btn-sm btn-outline-secondary w-100" disabled>🔒 Eliminación bloqueada</button>
@@ -353,7 +397,7 @@
 
       <div class="col-12 col-lg-4">
         <div class="border rounded p-3 h-100 {% if foto_fin %}bg-success-subtle border-success{% elif esta_realizado %}bg-light{% endif %}">
-          <div class="d-flex justify-content-between align-items-center mb-2">
+          <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap mb-2">
             <div class="fw-semibold">Fin de Mantenimiento</div>
             {% if foto_fin %}
               <span class="badge bg-success">Subida</span>
@@ -365,7 +409,7 @@
           {% if foto_fin %}
             <div class="small text-muted mb-2">Esta foto ya fue subida.</div>
             <a href="{{ foto_fin.imagen.url }}" target="_blank" class="text-decoration-none">
-              <img src="{{ foto_fin.imagen.url }}" class="img-fluid rounded border w-100 mb-2" alt="Fin de Mantenimiento" style="object-fit: cover; max-height: 220px;">
+              <img src="{{ foto_fin.imagen.url }}" class="img-fluid rounded border w-100 mb-2 mobile-photo-img" alt="Fin de Mantenimiento" style="object-fit: cover; max-height: 220px;">
             </a>
             {% if esta_realizado %}
               <button type="button" class="btn btn-sm btn-outline-secondary w-100" disabled>🔒 Eliminación bloqueada</button>
@@ -399,7 +443,7 @@
 
       <div class="col-12 col-lg-4">
         <div class="border rounded p-3 h-100 {% if foto_nivel %}bg-success-subtle border-success{% elif esta_realizado %}bg-light{% endif %}">
-          <div class="d-flex justify-content-between align-items-center mb-2">
+          <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap mb-2">
             <div class="fw-semibold">Nivel PH y Cl</div>
             {% if foto_nivel %}
               <span class="badge bg-success">Subida</span>
@@ -411,7 +455,7 @@
           {% if foto_nivel %}
             <div class="small text-muted mb-2">Esta foto ya fue subida.</div>
             <a href="{{ foto_nivel.imagen.url }}" target="_blank" class="text-decoration-none">
-              <img src="{{ foto_nivel.imagen.url }}" class="img-fluid rounded border w-100 mb-2" alt="Nivel PH y Cl" style="object-fit: cover; max-height: 220px;">
+              <img src="{{ foto_nivel.imagen.url }}" class="img-fluid rounded border w-100 mb-2 mobile-photo-img" alt="Nivel PH y Cl" style="object-fit: cover; max-height: 220px;">
             </a>
             {% if esta_realizado %}
               <button type="button" class="btn btn-sm btn-outline-secondary w-100" disabled>🔒 Eliminación bloqueada</button>
@@ -450,7 +494,7 @@
   </div>
 </div>
 
-<div class="card shadow-sm mb-3">
+<div class="card shadow-sm mb-3 mobile-tight-card">
   <div class="card-body">
     <div class="fw-bold mb-2">🖼️ Fotos</div>
 
@@ -464,7 +508,7 @@
               </div>
 
               <a href="{{ f.imagen.url }}" target="_blank" class="text-decoration-none">
-                <img src="{{ f.imagen.url }}" class="img-fluid rounded border w-100" alt="{{ f.descripcion }}" style="object-fit: cover; max-height: 280px;">
+                <img src="{{ f.imagen.url }}" class="img-fluid rounded border w-100 mobile-photo-img" alt="{{ f.descripcion }}" style="object-fit: cover; max-height: 280px;">
               </a>
 
               <div class="small text-muted mt-2">{{ f.descripcion }}</div>
@@ -493,12 +537,12 @@
   </div>
 </div>
 
-<div class="card shadow-sm mb-3 {% if esta_realizado %}border-secondary{% endif %}">
+<div class="card shadow-sm mb-3 {% if esta_realizado %}border-secondary{% endif %} mobile-tight-card">
   <div class="card-body">
     <div class="fw-bold mb-2">🧪 Insumos usados</div>
 
     {% if lista_usos %}
-      <div class="table-responsive">
+      <div class="table-responsive d-none d-md-block">
         <table class="table table-sm table-striped mb-0 align-middle">
           <thead>
             <tr>
@@ -526,6 +570,25 @@
           </tbody>
         </table>
       </div>
+
+      <div class="d-md-none vstack gap-2">
+        {% for u in lista_usos %}
+        <div class="border rounded p-3 bg-light">
+          <div class="fw-semibold">{{ u.insumo }}</div>
+          <div class="small text-muted">Cantidad: {{ u.cantidad }}</div>
+
+          <div class="mt-3 mobile-table-actions">
+            {% if esta_realizado %}
+              <button type="button" class="btn btn-sm btn-outline-secondary" disabled>🔒 Editar</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary" disabled>🔒 Eliminar</button>
+            {% else %}
+              <a class="btn btn-sm btn-outline-primary" href="/dashboard/usos/{{ u.id }}/editar/">Editar</a>
+              <a class="btn btn-sm btn-outline-danger" href="/dashboard/usos/{{ u.id }}/eliminar/">Eliminar</a>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
     {% else %}
       <div class="text-muted">No hay insumos registrados en este mantenimiento.</div>
     {% endif %}
@@ -533,12 +596,12 @@
 </div>
 
 {% if es_admin %}
-<div class="card shadow-sm mb-3">
+<div class="card shadow-sm mb-3 mobile-tight-card">
   <div class="card-body">
     <div class="fw-bold mb-2">💸 Egresos (solo admin)</div>
 
     {% if lista_egresos %}
-      <div class="table-responsive">
+      <div class="table-responsive d-none d-md-block">
         <table class="table table-sm table-striped mb-2">
           <thead>
             <tr>
@@ -558,7 +621,18 @@
           </tbody>
         </table>
       </div>
-      <div><strong>Total egresos:</strong> {{ total_egresos }}</div>
+
+      <div class="d-md-none vstack gap-2">
+        {% for e in lista_egresos %}
+        <div class="border rounded p-3 bg-light">
+          <div class="fw-semibold">{{ e.insumo }}</div>
+          <div class="small text-muted">Cantidad: {{ e.cantidad }}</div>
+          <div class="small text-muted">Total: {{ e.total }}</div>
+        </div>
+        {% endfor %}
+      </div>
+
+      <div class="mt-3"><strong>Total egresos:</strong> {{ total_egresos }}</div>
     {% else %}
       <div class="text-muted">No hay egresos registrados.</div>
     {% endif %}
