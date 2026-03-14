@@ -2128,6 +2128,9 @@ def asignar_trabajadores_view(request, pk):
     )
 
 
+# -------------------
+# Finanzas - Flujo mensual
+# -------------------
 @login_required
 def flujo_mensual_view(request):
     if not es_admin(request.user):
@@ -2202,6 +2205,9 @@ def flujo_mensual_view(request):
     )
 
 
+# -------------------
+# Finanzas - Egresos manuales
+# -------------------
 @login_required
 def egreso_manual_crear_view(request):
     if not es_admin(request.user):
@@ -2281,6 +2287,9 @@ def egreso_manual_eliminar_view(request, pk):
     return redirect(f"/dashboard/finanzas/flujo/?anio={fecha.year}&mes={fecha.month}")
 
 
+# -------------------
+# Finanzas - Ingresos
+# -------------------
 @login_required
 def ingreso_list_view(request):
     if not es_admin(request.user):
@@ -2413,6 +2422,213 @@ def ingreso_eliminar_view(request, pk):
         request,
         "dashboard/ingreso_eliminar.html",
         {"ingreso": ingreso, "es_admin": True},
+    )
+
+
+# -------------------
+# Finanzas - Movimientos recurrentes
+# -------------------
+@login_required
+def movimientos_recurrentes_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    if request.method == "POST":
+        tipo = (request.POST.get("tipo", "") or "").strip()
+        concepto = (request.POST.get("concepto", "") or "").strip()
+        monto_str = (request.POST.get("monto", "") or "").strip()
+        frecuencia = (request.POST.get("frecuencia", "") or "").strip()
+        proxima_fecha_str = (request.POST.get("proxima_fecha", "") or "").strip()
+        activo = request.POST.get("activo") == "on"
+
+        if tipo not in ["ingreso", "egreso"]:
+            messages.error(request, "Tipo de movimiento inválido.")
+            return redirect("/dashboard/finanzas/recurrentes/")
+
+        if frecuencia not in ["mensual", "semanal"]:
+            messages.error(request, "Frecuencia inválida.")
+            return redirect("/dashboard/finanzas/recurrentes/")
+
+        if not concepto:
+            messages.error(request, "Debes escribir un concepto.")
+            return redirect("/dashboard/finanzas/recurrentes/")
+
+        try:
+            monto = float(monto_str)
+            if monto <= 0:
+                raise ValueError
+        except Exception:
+            messages.error(request, "Monto inválido.")
+            return redirect("/dashboard/finanzas/recurrentes/")
+
+        proxima_fecha = parse_date(proxima_fecha_str)
+        if not proxima_fecha:
+            messages.error(request, "Fecha inválida.")
+            return redirect("/dashboard/finanzas/recurrentes/")
+
+        mov = MovimientoRecurrente.objects.create(
+            tipo=tipo,
+            concepto=concepto,
+            monto=monto,
+            frecuencia=frecuencia,
+            proxima_fecha=proxima_fecha,
+            activo=activo,
+        )
+
+        _registrar_actividad(
+            user=request.user,
+            titulo="Movimiento recurrente creado",
+            descripcion=f"{request.user.username} creó el movimiento recurrente '{concepto}' por ${monto}.",
+            url="/dashboard/finanzas/recurrentes/",
+        )
+
+        messages.success(request, "Movimiento recurrente creado correctamente.")
+        return redirect("/dashboard/finanzas/recurrentes/")
+
+    movimientos = MovimientoRecurrente.objects.all().order_by("activo", "proxima_fecha", "-id")
+    total_activos = movimientos.filter(activo=True).count()
+    total_inactivos = movimientos.filter(activo=False).count()
+    total_ingresos = movimientos.filter(tipo="ingreso", activo=True).count()
+    total_egresos = movimientos.filter(tipo="egreso", activo=True).count()
+
+    return render(
+        request,
+        "dashboard/movimientos_recurrentes.html",
+        {
+            "movimientos": movimientos,
+            "total_activos": total_activos,
+            "total_inactivos": total_inactivos,
+            "total_ingresos": total_ingresos,
+            "total_egresos": total_egresos,
+            "hoy": date.today(),
+            "es_admin": True,
+        },
+    )
+
+
+@login_required
+def movimiento_recurrente_editar_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    movimiento = get_object_or_404(MovimientoRecurrente, pk=pk)
+
+    if request.method == "POST":
+        tipo = (request.POST.get("tipo", "") or "").strip()
+        concepto = (request.POST.get("concepto", "") or "").strip()
+        monto_str = (request.POST.get("monto", "") or "").strip()
+        frecuencia = (request.POST.get("frecuencia", "") or "").strip()
+        proxima_fecha_str = (request.POST.get("proxima_fecha", "") or "").strip()
+        activo = request.POST.get("activo") == "on"
+
+        if tipo not in ["ingreso", "egreso"]:
+            messages.error(request, "Tipo inválido.")
+            return redirect(f"/dashboard/finanzas/recurrentes/{pk}/editar/")
+
+        if frecuencia not in ["mensual", "semanal"]:
+            messages.error(request, "Frecuencia inválida.")
+            return redirect(f"/dashboard/finanzas/recurrentes/{pk}/editar/")
+
+        if not concepto:
+            messages.error(request, "Debes escribir un concepto.")
+            return redirect(f"/dashboard/finanzas/recurrentes/{pk}/editar/")
+
+        try:
+            monto = float(monto_str)
+            if monto <= 0:
+                raise ValueError
+        except Exception:
+            messages.error(request, "Monto inválido.")
+            return redirect(f"/dashboard/finanzas/recurrentes/{pk}/editar/")
+
+        proxima_fecha = parse_date(proxima_fecha_str)
+        if not proxima_fecha:
+            messages.error(request, "Fecha inválida.")
+            return redirect(f"/dashboard/finanzas/recurrentes/{pk}/editar/")
+
+        movimiento.tipo = tipo
+        movimiento.concepto = concepto
+        movimiento.monto = monto
+        movimiento.frecuencia = frecuencia
+        movimiento.proxima_fecha = proxima_fecha
+        movimiento.activo = activo
+        movimiento.save()
+
+        _registrar_actividad(
+            user=request.user,
+            titulo="Movimiento recurrente actualizado",
+            descripcion=f"{request.user.username} actualizó el movimiento recurrente '{concepto}'.",
+            url="/dashboard/finanzas/recurrentes/",
+        )
+
+        messages.success(request, "Movimiento recurrente actualizado correctamente.")
+        return redirect("/dashboard/finanzas/recurrentes/")
+
+    return render(
+        request,
+        "dashboard/movimiento_recurrente_form.html",
+        {
+            "movimiento": movimiento,
+            "modo": "editar",
+            "es_admin": True,
+        },
+    )
+
+
+@login_required
+def movimiento_recurrente_toggle_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    movimiento = get_object_or_404(MovimientoRecurrente, pk=pk)
+
+    if request.method == "POST":
+        movimiento.activo = not movimiento.activo
+        movimiento.save(update_fields=["activo"])
+
+        estado = "activado" if movimiento.activo else "desactivado"
+
+        _registrar_actividad(
+            user=request.user,
+            titulo="Movimiento recurrente actualizado",
+            descripcion=f"{request.user.username} {estado} el movimiento recurrente '{movimiento.concepto}'.",
+            url="/dashboard/finanzas/recurrentes/",
+        )
+
+        messages.success(request, f"Movimiento recurrente {estado} correctamente.")
+
+    return redirect("/dashboard/finanzas/recurrentes/")
+
+
+@login_required
+def movimiento_recurrente_eliminar_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    movimiento = get_object_or_404(MovimientoRecurrente, pk=pk)
+
+    if request.method == "POST":
+        concepto = movimiento.concepto
+
+        _registrar_actividad(
+            user=request.user,
+            titulo="Movimiento recurrente eliminado",
+            descripcion=f"{request.user.username} eliminó el movimiento recurrente '{concepto}'.",
+            url="/dashboard/finanzas/recurrentes/",
+        )
+
+        movimiento.delete()
+        messages.success(request, "Movimiento recurrente eliminado correctamente.")
+        return redirect("/dashboard/finanzas/recurrentes/")
+
+    return render(
+        request,
+        "dashboard/movimiento_recurrente_form.html",
+        {
+            "movimiento": movimiento,
+            "modo": "eliminar",
+            "es_admin": True,
+        },
     )
 
 

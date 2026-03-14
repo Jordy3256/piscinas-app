@@ -49,6 +49,12 @@ from .views import (
     ingreso_eliminar_view,
     egreso_manual_crear_view,
     egreso_manual_eliminar_view,
+
+    # Recurrentes
+    movimientos_recurrentes_view,
+    movimiento_recurrente_editar_view,
+    movimiento_recurrente_toggle_view,
+    movimiento_recurrente_eliminar_view,
 )
 
 urlpatterns = [
@@ -117,4 +123,12 @@ urlpatterns = [
     path("finanzas/ingresos/<int:pk>/eliminar/", ingreso_eliminar_view, name="ingreso_eliminar"),
     path("finanzas/egresos/manual/nuevo/", egreso_manual_crear_view, name="egreso_manual_crear"),
     path("finanzas/egresos/manual/<int:pk>/eliminar/", egreso_manual_eliminar_view, name="egreso_manual_eliminar"),
+
+    # ======================
+    # Movimientos recurrentes
+    # ======================
+    path("finanzas/recurrentes/", movimientos_recurrentes_view, name="movimientos_recurrentes"),
+    path("finanzas/recurrentes/<int:pk>/editar/", movimiento_recurrente_editar_view, name="movimiento_recurrente_editar"),
+    path("finanzas/recurrentes/<int:pk>/toggle/", movimiento_recurrente_toggle_view, name="movimiento_recurrente_toggle"),
+    path("finanzas/recurrentes/<int:pk>/eliminar/", movimiento_recurrente_eliminar_view, name="movimiento_recurrente_eliminar"),
 ]
