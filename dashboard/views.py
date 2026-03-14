@@ -88,9 +88,9 @@ def _nombre_foto_valido(nombre: str) -> bool:
 
 
 # -------------------
-# Helpers fechas
+# Helpers de fechas recurrentes
 # -------------------
-def _sumar_un_mes(fecha_base: date) -> date:
+def _sumar_un_mes(fecha_base):
     nuevo_mes = fecha_base.month + 1
     nuevo_anio = fecha_base.year
 
@@ -98,26 +98,69 @@ def _sumar_un_mes(fecha_base: date) -> date:
         nuevo_mes = 1
         nuevo_anio += 1
 
-    ultimo_dia_nuevo_mes = monthrange(nuevo_anio, nuevo_mes)[1]
-    nuevo_dia = min(fecha_base.day, ultimo_dia_nuevo_mes)
+    ultimo_dia = monthrange(nuevo_anio, nuevo_mes)[1]
+    nuevo_dia = min(fecha_base.day, ultimo_dia)
+
     return date(nuevo_anio, nuevo_mes, nuevo_dia)
 
 
-def _siguiente_fecha_recurrente(fecha_actual: date, frecuencia: str) -> date:
+def _siguiente_fecha_recurrente(fecha_actual, frecuencia):
     if frecuencia == "semanal":
         return fecha_actual + timedelta(days=7)
     return _sumar_un_mes(fecha_actual)
 
 
-# ==========================================================
-# FINANZAS - MOVIMIENTOS RECURRENTES
-# ==========================================================
+# -------------------
+# Helpers egresos manuales
+# -------------------
+def _egreso_es_manual(egreso):
+    try:
+        return bool(getattr(egreso, "es_manual"))
+    except Exception:
+        pass
+
+    mantenimiento_id = getattr(egreso, "mantenimiento_id", None)
+    insumo_id = getattr(egreso, "insumo_id", None)
+    return mantenimiento_id is None and insumo_id is None
+
+
+def _crear_egreso_manual(concepto, categoria, total, fecha):
+    kwargs = {
+        "cantidad": 1,
+        "costo_unitario": total,
+        "fecha": fecha,
+    }
+
+    # Compatibilidad con modelos donde estos campos sí existen
+    try:
+        kwargs["mantenimiento"] = None
+    except Exception:
+        pass
+
+    try:
+        kwargs["insumo"] = None
+    except Exception:
+        pass
+
+    # Campos opcionales según tu modelo actual
+    if hasattr(Egreso, "concepto"):
+        kwargs["concepto"] = concepto
+    if hasattr(Egreso, "categoria"):
+        kwargs["categoria"] = categoria or "Manual"
+
+    egreso = Egreso.objects.create(**kwargs)
+    return egreso
+
+
+# -------------------
+# Automatización de movimientos recurrentes
+# -------------------
 def procesar_movimientos_recurrentes():
     hoy = date.today()
 
     movimientos = MovimientoRecurrente.objects.filter(
         activo=True,
-        proxima_fecha__lte=hoy,
+        proxima_fecha__lte=hoy
     ).order_by("proxima_fecha", "id")
 
     for mov in movimientos:
@@ -128,17 +171,14 @@ def procesar_movimientos_recurrentes():
                 Ingreso.objects.create(
                     concepto=mov.concepto,
                     total=mov.monto,
-                    fecha=fecha_mov,
+                    fecha=fecha_mov
                 )
 
             elif mov.tipo == "egreso":
-                Egreso.objects.create(
-                    mantenimiento=None,
-                    insumo=None,
+                _crear_egreso_manual(
                     concepto=mov.concepto,
                     categoria="Recurrente",
-                    cantidad=1,
-                    costo_unitario=mov.monto,
+                    total=mov.monto,
                     fecha=fecha_mov,
                 )
 
@@ -2102,11 +2142,30 @@ def flujo_mensual_view(request):
     primer_dia = date(anio, mes, 1)
     ultimo_dia = date(anio, mes, monthrange(anio, mes)[1])
 
-    ingresos_qs = Ingreso.objects.filter(fecha__range=(primer_dia, ultimo_dia)).order_by("fecha")
-    egresos_qs = Egreso.objects.filter(fecha__range=(primer_dia, ultimo_dia)).order_by("fecha")
+    ingresos_qs = Ingreso.objects.filter(
+        fecha__range=(primer_dia, ultimo_dia)
+    ).order_by("fecha", "id")
+
+    egresos_qs = Egreso.objects.filter(
+        fecha__range=(primer_dia, ultimo_dia)
+    ).select_related(
+        "insumo",
+        "mantenimiento",
+        "mantenimiento__cliente",
+    ).order_by("fecha", "id")
+
+    egresos_manuales_qs = [
+        e for e in egresos_qs if _egreso_es_manual(e)
+    ]
+
+    egresos_automaticos_qs = [
+        e for e in egresos_qs if not _egreso_es_manual(e)
+    ]
 
     total_ingresos = ingresos_qs.aggregate(total=Sum("total"))["total"] or 0
     total_egresos = egresos_qs.aggregate(total=Sum("total"))["total"] or 0
+    total_egresos_manuales = sum(float(getattr(e, "total", 0) or 0) for e in egresos_manuales_qs)
+    total_egresos_automaticos = sum(float(getattr(e, "total", 0) or 0) for e in egresos_automaticos_qs)
     balance = total_ingresos - total_egresos
 
     dias, ingresos_por_dia, egresos_por_dia = [], [], []
@@ -2128,8 +2187,12 @@ def flujo_mensual_view(request):
             "ultimo_dia": ultimo_dia,
             "ingresos_qs": ingresos_qs,
             "egresos_qs": egresos_qs,
+            "egresos_manuales_qs": egresos_manuales_qs,
+            "egresos_automaticos_qs": egresos_automaticos_qs,
             "total_ingresos": float(total_ingresos),
             "total_egresos": float(total_egresos),
+            "total_egresos_manuales": float(total_egresos_manuales),
+            "total_egresos_automaticos": float(total_egresos_automaticos),
             "balance": float(balance),
             "dias": dias,
             "ingresos_por_dia": ingresos_por_dia,
@@ -2137,6 +2200,85 @@ def flujo_mensual_view(request):
             "es_admin": True,
         },
     )
+
+
+@login_required
+def egreso_manual_crear_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    if request.method != "POST":
+        return redirect("/dashboard/finanzas/flujo/")
+
+    concepto = (request.POST.get("concepto", "") or "").strip()
+    categoria = (request.POST.get("categoria", "") or "").strip()
+    total_str = (request.POST.get("total", "") or "").strip()
+    fecha_str = (request.POST.get("fecha", "") or "").strip()
+    next_url = (request.POST.get("next", "") or "").strip()
+
+    if not concepto:
+        messages.error(request, "Debes escribir un concepto para el egreso.")
+        return redirect(next_url or "/dashboard/finanzas/flujo/")
+
+    try:
+        total = float(total_str)
+        if total <= 0:
+            raise ValueError
+    except Exception:
+        messages.error(request, "Total inválido para el egreso.")
+        return redirect(next_url or "/dashboard/finanzas/flujo/")
+
+    fecha = parse_date(fecha_str)
+    if not fecha:
+        messages.error(request, "Fecha inválida para el egreso.")
+        return redirect(next_url or "/dashboard/finanzas/flujo/")
+
+    _crear_egreso_manual(
+        concepto=concepto,
+        categoria=categoria,
+        total=total,
+        fecha=fecha,
+    )
+
+    _registrar_actividad(
+        user=request.user,
+        titulo="Egreso manual creado",
+        descripcion=f"{request.user.username} registró el egreso manual '{concepto}' por ${total}.",
+        url=f"/dashboard/finanzas/flujo/?anio={fecha.year}&mes={fecha.month}",
+    )
+
+    messages.success(request, "Egreso manual registrado correctamente.")
+    return redirect(next_url or f"/dashboard/finanzas/flujo/?anio={fecha.year}&mes={fecha.month}")
+
+
+@login_required
+def egreso_manual_eliminar_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    egreso = get_object_or_404(Egreso, pk=pk)
+
+    if not _egreso_es_manual(egreso):
+        messages.error(request, "Solo se pueden eliminar egresos manuales desde esta pantalla.")
+        return redirect("/dashboard/finanzas/flujo/")
+
+    if request.method != "POST":
+        return redirect(f"/dashboard/finanzas/flujo/?anio={egreso.fecha.year}&mes={egreso.fecha.month}")
+
+    concepto = getattr(egreso, "concepto", "") or "Egreso manual"
+    total = egreso.total
+    fecha = egreso.fecha
+
+    _registrar_actividad(
+        user=request.user,
+        titulo="Egreso manual eliminado",
+        descripcion=f"{request.user.username} eliminó el egreso manual '{concepto}' por ${total}.",
+        url=f"/dashboard/finanzas/flujo/?anio={fecha.year}&mes={fecha.month}",
+    )
+
+    egreso.delete()
+    messages.success(request, "Egreso manual eliminado.")
+    return redirect(f"/dashboard/finanzas/flujo/?anio={fecha.year}&mes={fecha.month}")
 
 
 @login_required
