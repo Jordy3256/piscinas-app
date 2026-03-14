@@ -1614,6 +1614,15 @@ def mantenimiento_detalle_view(request, pk):
     total_egresos = sum(e.total for e in lista_egresos) if lista_egresos else 0
     fotos = mantenimiento.fotos.all().order_by("-creada_en")
 
+    historial_cliente_reciente = (
+        Mantenimiento.objects
+        .filter(cliente=mantenimiento.cliente)
+        .exclude(pk=mantenimiento.pk)
+        .select_related("cliente", "contrato")
+        .prefetch_related("trabajadores")
+        .order_by("-fecha", "-id")[:5]
+    )
+
     observaciones_texto = (getattr(mantenimiento, "observaciones", "") or "").strip()
     cantidad_fotos = fotos.count()
     cantidad_usos = lista_usos.count()
@@ -1635,6 +1644,7 @@ def mantenimiento_detalle_view(request, pk):
             "cantidad_usos": cantidad_usos,
             "tiene_observaciones": tiene_observaciones,
             "puede_cerrar": puede_cerrar,
+            "historial_cliente_reciente": historial_cliente_reciente,
         },
     )
 
