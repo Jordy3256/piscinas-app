@@ -5,7 +5,17 @@
 
 {% block content %}
 
-<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+<style>
+  @media (max-width: 767.98px) {
+    .notif-mobile-actions .btn,
+    .notif-mobile-actions button,
+    .notif-mobile-actions a {
+      width: 100%;
+    }
+  }
+</style>
+
+<div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
   <div>
     <div class="fw-bold fs-4">Historial completo</div>
     {% if page_obj %}
@@ -15,7 +25,7 @@
     {% endif %}
   </div>
 
-  <div class="d-flex gap-2 flex-wrap">
+  <div class="d-grid d-md-flex gap-2 w-100 w-md-auto notif-mobile-actions">
     <a href="/dashboard/notificaciones/" class="btn btn-outline-secondary btn-sm">
       Volver a bandeja
     </a>
@@ -36,13 +46,13 @@
   {% for n in page_obj.object_list %}
     <div class="card shadow-sm mb-3 notif-card" data-id="{{ n.id }}">
       <div class="card-body">
-        <div class="d-flex justify-content-between align-items-start gap-3 mb-2">
-          <div>
+        <div class="d-flex justify-content-between align-items-start gap-3 mb-2 flex-wrap">
+          <div class="flex-grow-1">
             <div class="fw-bold fs-5">{{ n.titulo }}</div>
             <div class="text-muted mt-2">{{ n.mensaje }}</div>
           </div>
 
-          <div class="text-end">
+          <div class="w-100 w-md-auto text-md-end">
             {% if n.leida %}
               <span class="badge bg-success">Leída</span>
             {% else %}
@@ -51,18 +61,18 @@
           </div>
         </div>
 
-        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-3">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mt-3">
           <div class="text-muted">
             🗓 {{ n.creada_en|date:"d/m/Y H:i" }}
           </div>
 
-          <div class="d-flex gap-2">
+          <div class="d-grid d-md-flex gap-2 w-100 w-md-auto notif-mobile-actions">
             {% if n.url %}
               <a href="{{ n.url }}" class="btn btn-outline-primary btn-sm">Abrir</a>
             {% endif %}
 
             <button class="btn btn-outline-danger btn-sm btn-eliminar" data-id="{{ n.id }}">
-              🗑
+              🗑 Eliminar
             </button>
           </div>
         </div>

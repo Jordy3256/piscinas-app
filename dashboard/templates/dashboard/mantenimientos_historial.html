@@ -5,9 +5,32 @@
 
 {% block content %}
 
+<style>
+  @media (max-width: 767.98px) {
+    .historial-mobile-actions .btn,
+    .historial-mobile-actions a {
+      width: 100%;
+    }
+
+    .historial-table-desktop {
+      display: none;
+    }
+
+    .historial-cards-mobile {
+      display: block;
+    }
+  }
+
+  @media (min-width: 768px) {
+    .historial-cards-mobile {
+      display: none;
+    }
+  }
+</style>
+
 <div class="card shadow-sm mb-3 border-0">
   <div class="card-body">
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
       <div>
         <div class="fw-bold fs-5">Filtros rápidos</div>
         <div class="text-muted small">
@@ -15,7 +38,7 @@
         </div>
       </div>
 
-      <a href="/dashboard/mantenimientos/historial/" class="btn btn-outline-secondary btn-sm">
+      <a href="/dashboard/mantenimientos/historial/" class="btn btn-outline-secondary btn-sm w-100 w-md-auto">
         Limpiar todo
       </a>
     </div>
@@ -61,7 +84,7 @@
     <form method="get" class="row g-2">
       <input type="hidden" name="filtro" value="{{ filtro }}">
 
-      <div class="col-md-3">
+      <div class="col-12 col-md-3">
         <label class="form-label small text-muted">Buscar</label>
         <input
           type="text"
@@ -72,7 +95,7 @@
         >
       </div>
 
-      <div class="col-md-2">
+      <div class="col-12 col-md-2">
         <label class="form-label small text-muted">Estado</label>
         <select name="estado" class="form-select">
           <option value="">Todos</option>
@@ -81,7 +104,7 @@
         </select>
       </div>
 
-      <div class="col-md-2">
+      <div class="col-12 col-md-2">
         <label class="form-label small text-muted">Cliente</label>
         <select name="cliente" class="form-select">
           <option value="">Todos</option>
@@ -93,7 +116,7 @@
         </select>
       </div>
 
-      <div class="col-md-2">
+      <div class="col-12 col-md-2">
         <label class="form-label small text-muted">Trabajador</label>
         <select name="trabajador" class="form-select">
           <option value="">Todos</option>
@@ -105,18 +128,18 @@
         </select>
       </div>
 
-      <div class="col-md-1">
+      <div class="col-6 col-md-1">
         <label class="form-label small text-muted">Desde</label>
         <input type="date" name="fecha_desde" class="form-control" value="{{ fecha_desde }}">
       </div>
 
-      <div class="col-md-1">
+      <div class="col-6 col-md-1">
         <label class="form-label small text-muted">Hasta</label>
         <input type="date" name="fecha_hasta" class="form-control" value="{{ fecha_hasta }}">
       </div>
 
-      <div class="col-md-1 d-grid">
-        <label class="form-label small text-muted">&nbsp;</label>
+      <div class="col-12 col-md-1 d-grid">
+        <label class="form-label small text-muted d-none d-md-block">&nbsp;</label>
         <button class="btn btn-primary" type="submit">Filtrar</button>
       </div>
 
@@ -130,7 +153,7 @@
 </div>
 
 <div class="row g-2 mb-3">
-  <div class="col-md-2">
+  <div class="col-6 col-md-2">
     <div class="card shadow-sm">
       <div class="card-body">
         <div class="text-muted small">Total encontrados</div>
@@ -139,7 +162,7 @@
     </div>
   </div>
 
-  <div class="col-md-2">
+  <div class="col-6 col-md-2">
     <div class="card shadow-sm border-success">
       <div class="card-body">
         <div class="text-muted small">Realizados</div>
@@ -148,7 +171,7 @@
     </div>
   </div>
 
-  <div class="col-md-2">
+  <div class="col-6 col-md-2">
     <div class="card shadow-sm border-warning">
       <div class="card-body">
         <div class="text-muted small">Pendientes</div>
@@ -157,7 +180,7 @@
     </div>
   </div>
 
-  <div class="col-md-3">
+  <div class="col-6 col-md-3">
     <div class="card shadow-sm border-danger">
       <div class="card-body">
         <div class="text-muted small">Atrasados</div>
@@ -166,7 +189,7 @@
     </div>
   </div>
 
-  <div class="col-md-3">
+  <div class="col-12 col-md-3">
     <div class="card shadow-sm border-dark">
       <div class="card-body">
         <div class="text-muted small">Sin asignar</div>
@@ -181,7 +204,8 @@
     <div class="fw-bold mb-3">Resultados</div>
 
     {% if page_obj and page_obj.object_list %}
-      <div class="table-responsive">
+
+      <div class="table-responsive historial-table-desktop">
         <table class="table table-striped table-sm align-middle">
           <thead>
             <tr>
@@ -228,9 +252,56 @@
         </table>
       </div>
 
+      <div class="historial-cards-mobile vstack gap-2">
+        {% for m in page_obj.object_list %}
+        <div class="border rounded p-3 bg-light">
+          <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
+            <div class="flex-grow-1">
+              <div class="fw-bold">{{ m.cliente }}</div>
+              <div class="small text-muted mt-1">
+                📅 {{ m.fecha|date:"d/m/Y" }}
+              </div>
+              <div class="small text-muted">
+                Contrato: {{ m.contrato }}
+              </div>
+            </div>
+
+            <div class="d-flex flex-wrap gap-1">
+              {% if m.estado == "realizado" %}
+                <span class="badge bg-success">Realizado</span>
+              {% else %}
+                <span class="badge bg-warning text-dark">Pendiente</span>
+              {% endif %}
+
+              {% if m.estado == "pendiente" and m.fecha < today %}
+                <span class="badge bg-danger">Atrasado</span>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="small mt-3">
+            <strong>Trabajadores:</strong>
+            <div class="mt-1 d-flex flex-wrap gap-1">
+              {% for t in m.trabajadores.all %}
+                <span class="badge bg-light text-dark border">{{ t.user.username }}</span>
+              {% empty %}
+                <span class="text-muted">Sin asignar</span>
+              {% endfor %}
+            </div>
+          </div>
+
+          <div class="mt-3 d-grid historial-mobile-actions">
+            <a href="/dashboard/mantenimientos/{{ m.id }}/" class="btn btn-outline-primary btn-sm">
+              Abrir
+            </a>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+
       {% if page_obj.has_other_pages %}
       <nav class="mt-3">
-        <ul class="pagination pagination-sm mb-0">
+        <ul class="pagination pagination-sm mb-0 flex-wrap">
           {% if page_obj.has_previous %}
           <li class="page-item">
             <a class="page-link" href="?page=1{% if querystring %}&{{ querystring }}{% endif %}">Primera</a>
