@@ -75,7 +75,7 @@
           </div>
           <div class="small text-muted">
             {% if cantidad_fotos > 0 %}
-              {{ cantidad_fotos }} foto{{ cantidad_fotos|pluralize }} subida{{ cantidad_fotos|pluralize }}.
+              {{ cantidad_fotos }} de 3 foto{{ cantidad_fotos|pluralize }} subida{{ cantidad_fotos|pluralize }}.
             {% else %}
               Aún no se ha subido ninguna foto.
             {% endif %}
@@ -240,24 +240,39 @@
 <!-- Subir foto -->
 <div class="card shadow-sm mb-3">
   <div class="card-body">
-    <div class="fw-bold mb-2">📸 Subir foto del mantenimiento</div>
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+      <div class="fw-bold">📸 Subir foto del mantenimiento</div>
+      <span class="badge {% if puede_subir_fotos %}bg-primary{% else %}bg-danger{% endif %}">
+        {{ cantidad_fotos }}/3 fotos
+      </span>
+    </div>
 
-    <form method="post" enctype="multipart/form-data" class="row g-2">
-      {% csrf_token %}
-      <input type="hidden" name="accion" value="subir_foto">
+    {% if puede_subir_fotos %}
+      <form method="post" enctype="multipart/form-data" class="row g-2">
+        {% csrf_token %}
+        <input type="hidden" name="accion" value="subir_foto">
 
-      <div class="col-12">
-        <input class="form-control form-control-lg" type="file" name="imagen" accept="image/*" required>
+        <div class="col-12">
+          <input class="form-control form-control-lg" type="file" name="imagen" accept="image/*" required>
+        </div>
+
+        <div class="col-12">
+          <input class="form-control" type="text" name="descripcion" placeholder="Descripción (opcional)">
+        </div>
+
+        <div class="col-12">
+          <button class="btn btn-dark btn-lg w-100" type="submit">Subir foto</button>
+        </div>
+      </form>
+
+      <div class="small text-muted mt-2">
+        Puedes subir máximo 3 fotos por mantenimiento.
       </div>
-
-      <div class="col-12">
-        <input class="form-control" type="text" name="descripcion" placeholder="Descripción (opcional)">
+    {% else %}
+      <div class="alert alert-warning mb-0">
+        Ya se alcanzó el máximo de 3 fotos para este mantenimiento. Si deseas subir otra, primero elimina una.
       </div>
-
-      <div class="col-12">
-        <button class="btn btn-dark btn-lg w-100" type="submit">Subir foto</button>
-      </div>
-    </form>
+    {% endif %}
   </div>
 </div>
 
@@ -267,16 +282,27 @@
     <div class="fw-bold mb-2">🖼️ Fotos</div>
 
     {% if fotos %}
-      <div class="row g-2">
+      <div class="row g-3">
         {% for f in fotos %}
-          <div class="col-6">
-            <a href="{{ f.imagen.url }}" target="_blank" class="text-decoration-none">
-              <img src="{{ f.imagen.url }}" class="img-fluid rounded border" alt="Foto">
-            </a>
+          <div class="col-12 col-sm-6">
+            <div class="border rounded p-2 h-100">
+              <a href="{{ f.imagen.url }}" target="_blank" class="text-decoration-none">
+                <img src="{{ f.imagen.url }}" class="img-fluid rounded border w-100" alt="Foto" style="object-fit: cover; max-height: 280px;">
+              </a>
 
-            {% if f.descripcion %}
-              <div class="small text-muted mt-1">{{ f.descripcion }}</div>
-            {% endif %}
+              {% if f.descripcion %}
+                <div class="small text-muted mt-2">{{ f.descripcion }}</div>
+              {% endif %}
+
+              <div class="mt-2 d-grid">
+                <form method="post" action="/dashboard/fotos/{{ f.id }}/eliminar/" onsubmit="return confirm('¿Seguro que deseas eliminar esta foto?');">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-sm btn-outline-danger w-100">
+                    🗑 Eliminar foto
+                  </button>
+                </form>
+              </div>
+            </div>
           </div>
         {% endfor %}
       </div>

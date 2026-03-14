@@ -1563,6 +1563,11 @@ def mantenimiento_detalle_view(request, pk):
             return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
 
         if accion == "subir_foto":
+            cantidad_fotos_actual = mantenimiento.fotos.count()
+            if cantidad_fotos_actual >= 3:
+                messages.error(request, "Solo se permiten máximo 3 fotos por mantenimiento.")
+                return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
+
             imagen = request.FILES.get("imagen")
             descripcion = request.POST.get("descripcion", "").strip()
 
@@ -1611,6 +1616,7 @@ def mantenimiento_detalle_view(request, pk):
     cantidad_fotos = fotos.count()
     cantidad_usos = lista_usos.count()
     puede_cerrar = cantidad_fotos > 0 and cantidad_usos > 0
+    puede_subir_fotos = cantidad_fotos < 3
 
     return render(
         request,
@@ -1626,9 +1632,62 @@ def mantenimiento_detalle_view(request, pk):
             "cantidad_fotos": cantidad_fotos,
             "cantidad_usos": cantidad_usos,
             "puede_cerrar": puede_cerrar,
+            "puede_subir_fotos": puede_subir_fotos,
             "historial_cliente_reciente": historial_cliente_reciente,
         },
     )
+
+
+@login_required
+def foto_mantenimiento_eliminar_view(request, pk):
+    foto = get_object_or_404(FotoMantenimiento, pk=pk)
+    mantenimiento = foto.mantenimiento
+
+    if es_admin(request.user):
+        permitido = True
+    elif es_trabajador(request.user):
+        try:
+            trabajador = request.user.trabajador
+            permitido = mantenimiento.trabajadores.filter(pk=trabajador.pk).exists()
+        except Exception:
+            permitido = False
+    else:
+        permitido = False
+
+    if not permitido:
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    if request.method == "POST":
+        actor = request.user.username
+        cliente_nombre = str(mantenimiento.cliente)
+        foto_id = foto.pk
+
+        try:
+            if foto.imagen:
+                foto.imagen.delete(save=False)
+        except Exception:
+            logger.exception("No se pudo borrar el archivo físico de la foto id=%s", foto_id)
+
+        foto.delete()
+
+        _notificar_admins(
+            titulo="🗑 Foto eliminada",
+            mensaje=f"{actor} eliminó una foto del mantenimiento de {cliente_nombre}.",
+            url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
+            enviar_push=False,
+            excluir_user_id=request.user.id if es_admin(request.user) else None,
+        )
+        _registrar_actividad(
+            user=request.user,
+            titulo="Foto eliminada",
+            descripcion=f"{actor} eliminó una foto del mantenimiento de {cliente_nombre}.",
+            url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
+        )
+
+        messages.success(request, "Foto eliminada correctamente.")
+        return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
+
+    return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
 
 
 @login_required

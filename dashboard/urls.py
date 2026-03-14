@@ -33,6 +33,7 @@ from .views import (
     # Mantenimientos
     mantenimiento_detalle_view,
     mantenimiento_historial_view,
+    foto_mantenimiento_eliminar_view,
     usoinsumo_eliminar_view,
     usoinsumo_editar_view,
 
@@ -94,6 +95,7 @@ urlpatterns = [
     # ======================
     path("mantenimientos/historial/", mantenimiento_historial_view, name="mantenimiento_historial"),
     path("mantenimientos/<int:pk>/", mantenimiento_detalle_view, name="mantenimiento_detalle"),
+    path("fotos/<int:pk>/eliminar/", foto_mantenimiento_eliminar_view, name="foto_mantenimiento_eliminar"),
     path("usos/<int:pk>/editar/", usoinsumo_editar_view, name="usoinsumo_editar"),
     path("usos/<int:pk>/eliminar/", usoinsumo_eliminar_view, name="usoinsumo_eliminar"),
 
