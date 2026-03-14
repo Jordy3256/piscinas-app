@@ -1,3 +1,5 @@
+from datetime import date
+
 from django.db import models
 from inventario.models import Insumo
 from clientes.models import Cliente
@@ -5,30 +7,50 @@ from contratos.models import Contrato
 
 
 # =====================================================
-# EGRESOS (ya lo tenías, no se modifica la lógica)
+# EGRESOS
 # =====================================================
 class Egreso(models.Model):
     mantenimiento = models.ForeignKey(
         'mantenimientos.Mantenimiento',
         on_delete=models.CASCADE,
-        related_name='egresos'
+        related_name='egresos',
+        null=True,
+        blank=True
     )
-    insumo = models.ForeignKey(Insumo, on_delete=models.PROTECT)
-    cantidad = models.PositiveIntegerField()
+    insumo = models.ForeignKey(
+        Insumo,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True
+    )
+
+    concepto = models.CharField(max_length=120, blank=True, default="")
+    categoria = models.CharField(max_length=80, blank=True, default="")
+
+    cantidad = models.PositiveIntegerField(default=1)
     costo_unitario = models.DecimalField(max_digits=10, decimal_places=2)
     total = models.DecimalField(max_digits=12, decimal_places=2)
-    fecha = models.DateField(auto_now_add=True)
+    fecha = models.DateField(default=date.today)
+
+    @property
+    def es_manual(self):
+        return not self.mantenimiento_id and not self.insumo_id
 
     def save(self, *args, **kwargs):
         self.total = self.cantidad * self.costo_unitario
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"{self.insumo.nombre} - {self.total}"
+        if self.concepto:
+            return f"{self.concepto} - {self.total}"
+        if self.insumo:
+            return f"{self.insumo.nombre} - {self.total}"
+        return f"Egreso - {self.total}"
 
     class Meta:
         verbose_name = "Egreso"
         verbose_name_plural = "Egresos"
+        ordering = ["-fecha", "-id"]
 
 
 # =====================================================

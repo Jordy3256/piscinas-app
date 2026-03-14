@@ -47,6 +47,8 @@ from .views import (
     ingreso_crear_view,
     ingreso_editar_view,
     ingreso_eliminar_view,
+    egreso_manual_crear_view,
+    egreso_manual_eliminar_view,
 )
 
 urlpatterns = [
@@ -113,4 +115,6 @@ urlpatterns = [
     path("finanzas/ingresos/nuevo/", ingreso_crear_view, name="ingreso_crear"),
     path("finanzas/ingresos/<int:pk>/editar/", ingreso_editar_view, name="ingreso_editar"),
     path("finanzas/ingresos/<int:pk>/eliminar/", ingreso_eliminar_view, name="ingreso_eliminar"),
+    path("finanzas/egresos/manual/nuevo/", egreso_manual_crear_view, name="egreso_manual_crear"),
+    path("finanzas/egresos/manual/<int:pk>/eliminar/", egreso_manual_eliminar_view, name="egreso_manual_eliminar"),
 ]
