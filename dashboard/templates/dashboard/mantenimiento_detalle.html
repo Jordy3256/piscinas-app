@@ -104,6 +104,11 @@
           <div>
             <div class="fw-semibold">1. Inicio de Mantenimiento</div>
             <div class="small text-muted">Primera foto obligatoria</div>
+            {% if foto_inicio %}
+              <div class="small text-secondary mt-1">
+                Subida: {{ foto_inicio.creada_en|date:"d/m/Y H:i" }}
+              </div>
+            {% endif %}
           </div>
           <div>
             {% if foto_inicio %}
@@ -118,6 +123,11 @@
           <div>
             <div class="fw-semibold">2. Fin de Mantenimiento</div>
             <div class="small text-muted">Segunda foto obligatoria</div>
+            {% if foto_fin %}
+              <div class="small text-secondary mt-1">
+                Subida: {{ foto_fin.creada_en|date:"d/m/Y H:i" }}
+              </div>
+            {% endif %}
           </div>
           <div>
             {% if foto_fin %}
@@ -132,6 +142,11 @@
           <div>
             <div class="fw-semibold">3. Nivel PH y Cl</div>
             <div class="small text-muted">Tercera foto obligatoria</div>
+            {% if foto_nivel %}
+              <div class="small text-secondary mt-1">
+                Subida: {{ foto_nivel.creada_en|date:"d/m/Y H:i" }}
+              </div>
+            {% endif %}
           </div>
           <div>
             {% if foto_nivel %}
@@ -296,7 +311,10 @@
           </div>
 
           {% if foto_inicio %}
-            <div class="small text-muted mb-2">Esta foto ya fue subida.</div>
+            <div class="small text-muted mb-1">Esta foto ya fue subida.</div>
+            <div class="small text-secondary mb-2">
+              Subida: {{ foto_inicio.creada_en|date:"d/m/Y H:i" }}
+            </div>
             <a href="{{ foto_inicio.imagen.url }}" target="_blank" class="text-decoration-none">
               <img src="{{ foto_inicio.imagen.url }}" class="img-fluid rounded border w-100 mb-2" alt="Inicio de Mantenimiento" style="object-fit: cover; max-height: 220px;">
             </a>
@@ -334,7 +352,10 @@
           </div>
 
           {% if foto_fin %}
-            <div class="small text-muted mb-2">Esta foto ya fue subida.</div>
+            <div class="small text-muted mb-1">Esta foto ya fue subida.</div>
+            <div class="small text-secondary mb-2">
+              Subida: {{ foto_fin.creada_en|date:"d/m/Y H:i" }}
+            </div>
             <a href="{{ foto_fin.imagen.url }}" target="_blank" class="text-decoration-none">
               <img src="{{ foto_fin.imagen.url }}" class="img-fluid rounded border w-100 mb-2" alt="Fin de Mantenimiento" style="object-fit: cover; max-height: 220px;">
             </a>
@@ -372,7 +393,10 @@
           </div>
 
           {% if foto_nivel %}
-            <div class="small text-muted mb-2">Esta foto ya fue subida.</div>
+            <div class="small text-muted mb-1">Esta foto ya fue subida.</div>
+            <div class="small text-secondary mb-2">
+              Subida: {{ foto_nivel.creada_en|date:"d/m/Y H:i" }}
+            </div>
             <a href="{{ foto_nivel.imagen.url }}" target="_blank" class="text-decoration-none">
               <img src="{{ foto_nivel.imagen.url }}" class="img-fluid rounded border w-100 mb-2" alt="Nivel PH y Cl" style="object-fit: cover; max-height: 220px;">
             </a>
@@ -423,6 +447,9 @@
               </a>
 
               <div class="small text-muted mt-2">{{ f.descripcion }}</div>
+              <div class="small text-secondary mt-1">
+                Subida: {{ f.creada_en|date:"d/m/Y H:i" }}
+              </div>
 
               <div class="mt-2 d-grid">
                 <form method="post" action="/dashboard/fotos/{{ f.id }}/eliminar/" onsubmit="return confirm('¿Seguro que deseas eliminar esta foto?');">
