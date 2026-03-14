@@ -45,6 +45,15 @@
   </div>
 </div>
 
+{% if esta_realizado %}
+<div class="alert alert-secondary border shadow-sm">
+  <div class="fw-bold mb-1">🔒 Mantenimiento bloqueado</div>
+  <div>
+    Este mantenimiento ya fue marcado como realizado. No se pueden modificar fotos ni insumos hasta volverlo a pendiente.
+  </div>
+</div>
+{% endif %}
+
 {% if m.estado != "realizado" %}
 <div class="card shadow-sm mb-3 {% if puede_cerrar %}border-success{% else %}border-warning{% endif %}">
   <div class="card-body">
@@ -104,11 +113,6 @@
           <div>
             <div class="fw-semibold">1. Inicio de Mantenimiento</div>
             <div class="small text-muted">Primera foto obligatoria</div>
-            {% if foto_inicio %}
-              <div class="small text-secondary mt-1">
-                Subida: {{ foto_inicio.creada_en|date:"d/m/Y H:i" }}
-              </div>
-            {% endif %}
           </div>
           <div>
             {% if foto_inicio %}
@@ -123,11 +127,6 @@
           <div>
             <div class="fw-semibold">2. Fin de Mantenimiento</div>
             <div class="small text-muted">Segunda foto obligatoria</div>
-            {% if foto_fin %}
-              <div class="small text-secondary mt-1">
-                Subida: {{ foto_fin.creada_en|date:"d/m/Y H:i" }}
-              </div>
-            {% endif %}
           </div>
           <div>
             {% if foto_fin %}
@@ -142,11 +141,6 @@
           <div>
             <div class="fw-semibold">3. Nivel PH y Cl</div>
             <div class="small text-muted">Tercera foto obligatoria</div>
-            {% if foto_nivel %}
-              <div class="small text-secondary mt-1">
-                Subida: {{ foto_nivel.creada_en|date:"d/m/Y H:i" }}
-              </div>
-            {% endif %}
           </div>
           <div>
             {% if foto_nivel %}
@@ -266,41 +260,53 @@
   </div>
 </div>
 
-<div class="card shadow-sm mb-3">
+<div class="card shadow-sm mb-3 {% if esta_realizado %}border-secondary{% endif %}">
   <div class="card-body">
     <div class="fw-bold mb-2">🧪 Registrar insumo usado</div>
 
-    <form method="post" class="row g-2">
-      {% csrf_token %}
-      <input type="hidden" name="accion" value="agregar_insumo">
-
-      <div class="col-12">
-        <select class="form-select form-select-lg" name="insumo_id" required>
-          <option value="">-- Selecciona un insumo --</option>
-          {% for i in insumos %}
-            <option value="{{ i.id }}">{{ i.nombre }}</option>
-          {% endfor %}
-        </select>
+    {% if esta_realizado %}
+      <div class="alert alert-secondary mb-0">
+        Este mantenimiento está bloqueado. Para registrar nuevos insumos primero debes volverlo a pendiente.
       </div>
+    {% else %}
+      <form method="post" class="row g-2">
+        {% csrf_token %}
+        <input type="hidden" name="accion" value="agregar_insumo">
 
-      <div class="col-12">
-        <input class="form-control form-control-lg" type="number" name="cantidad" min="1" placeholder="Cantidad" required>
-      </div>
+        <div class="col-12">
+          <select class="form-select form-select-lg" name="insumo_id" required>
+            <option value="">-- Selecciona un insumo --</option>
+            {% for i in insumos %}
+              <option value="{{ i.id }}">{{ i.nombre }}</option>
+            {% endfor %}
+          </select>
+        </div>
 
-      <div class="col-12">
-        <button class="btn btn-primary btn-lg w-100" type="submit">Agregar insumo</button>
-      </div>
-    </form>
+        <div class="col-12">
+          <input class="form-control form-control-lg" type="number" name="cantidad" min="1" placeholder="Cantidad" required>
+        </div>
+
+        <div class="col-12">
+          <button class="btn btn-primary btn-lg w-100" type="submit">Agregar insumo</button>
+        </div>
+      </form>
+    {% endif %}
   </div>
 </div>
 
-<div class="card shadow-sm mb-3">
+<div class="card shadow-sm mb-3 {% if esta_realizado %}border-secondary{% endif %}">
   <div class="card-body">
     <div class="fw-bold mb-3">📸 Subir fotos requeridas</div>
 
+    {% if esta_realizado %}
+      <div class="alert alert-secondary mb-3">
+        Este mantenimiento está bloqueado. Para subir o eliminar fotos primero debes volverlo a pendiente.
+      </div>
+    {% endif %}
+
     <div class="row g-3">
       <div class="col-12 col-lg-4">
-        <div class="border rounded p-3 h-100 {% if foto_inicio %}bg-success-subtle border-success{% endif %}">
+        <div class="border rounded p-3 h-100 {% if foto_inicio %}bg-success-subtle border-success{% elif esta_realizado %}bg-light{% endif %}">
           <div class="d-flex justify-content-between align-items-center mb-2">
             <div class="fw-semibold">Inicio de Mantenimiento</div>
             {% if foto_inicio %}
@@ -311,37 +317,42 @@
           </div>
 
           {% if foto_inicio %}
-            <div class="small text-muted mb-1">Esta foto ya fue subida.</div>
-            <div class="small text-secondary mb-2">
-              Subida: {{ foto_inicio.creada_en|date:"d/m/Y H:i" }}
-            </div>
+            <div class="small text-muted mb-2">Esta foto ya fue subida.</div>
             <a href="{{ foto_inicio.imagen.url }}" target="_blank" class="text-decoration-none">
               <img src="{{ foto_inicio.imagen.url }}" class="img-fluid rounded border w-100 mb-2" alt="Inicio de Mantenimiento" style="object-fit: cover; max-height: 220px;">
             </a>
-            <form method="post" action="/dashboard/fotos/{{ foto_inicio.id }}/eliminar/" onsubmit="return confirm('¿Seguro que deseas eliminar esta foto?');">
-              {% csrf_token %}
-              <button type="submit" class="btn btn-sm btn-outline-danger w-100">🗑 Eliminar foto</button>
-            </form>
+            {% if esta_realizado %}
+              <button type="button" class="btn btn-sm btn-outline-secondary w-100" disabled>🔒 Eliminación bloqueada</button>
+            {% else %}
+              <form method="post" action="/dashboard/fotos/{{ foto_inicio.id }}/eliminar/" onsubmit="return confirm('¿Seguro que deseas eliminar esta foto?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-danger w-100">🗑 Eliminar foto</button>
+              </form>
+            {% endif %}
           {% else %}
-            <form method="post" enctype="multipart/form-data" class="row g-2">
-              {% csrf_token %}
-              <input type="hidden" name="accion" value="subir_foto">
-              <input type="hidden" name="tipo_foto" value="Inicio de Mantenimiento">
+            {% if esta_realizado %}
+              <button type="button" class="btn btn-outline-secondary w-100" disabled>🔒 Subida bloqueada</button>
+            {% else %}
+              <form method="post" enctype="multipart/form-data" class="row g-2">
+                {% csrf_token %}
+                <input type="hidden" name="accion" value="subir_foto">
+                <input type="hidden" name="tipo_foto" value="Inicio de Mantenimiento">
 
-              <div class="col-12">
-                <input class="form-control" type="file" name="imagen" accept="image/*" required>
-              </div>
+                <div class="col-12">
+                  <input class="form-control" type="file" name="imagen" accept="image/*" required>
+                </div>
 
-              <div class="col-12">
-                <button class="btn btn-dark w-100" type="submit">Subir esta foto</button>
-              </div>
-            </form>
+                <div class="col-12">
+                  <button class="btn btn-dark w-100" type="submit">Subir esta foto</button>
+                </div>
+              </form>
+            {% endif %}
           {% endif %}
         </div>
       </div>
 
       <div class="col-12 col-lg-4">
-        <div class="border rounded p-3 h-100 {% if foto_fin %}bg-success-subtle border-success{% endif %}">
+        <div class="border rounded p-3 h-100 {% if foto_fin %}bg-success-subtle border-success{% elif esta_realizado %}bg-light{% endif %}">
           <div class="d-flex justify-content-between align-items-center mb-2">
             <div class="fw-semibold">Fin de Mantenimiento</div>
             {% if foto_fin %}
@@ -352,37 +363,42 @@
           </div>
 
           {% if foto_fin %}
-            <div class="small text-muted mb-1">Esta foto ya fue subida.</div>
-            <div class="small text-secondary mb-2">
-              Subida: {{ foto_fin.creada_en|date:"d/m/Y H:i" }}
-            </div>
+            <div class="small text-muted mb-2">Esta foto ya fue subida.</div>
             <a href="{{ foto_fin.imagen.url }}" target="_blank" class="text-decoration-none">
               <img src="{{ foto_fin.imagen.url }}" class="img-fluid rounded border w-100 mb-2" alt="Fin de Mantenimiento" style="object-fit: cover; max-height: 220px;">
             </a>
-            <form method="post" action="/dashboard/fotos/{{ foto_fin.id }}/eliminar/" onsubmit="return confirm('¿Seguro que deseas eliminar esta foto?');">
-              {% csrf_token %}
-              <button type="submit" class="btn btn-sm btn-outline-danger w-100">🗑 Eliminar foto</button>
-            </form>
+            {% if esta_realizado %}
+              <button type="button" class="btn btn-sm btn-outline-secondary w-100" disabled>🔒 Eliminación bloqueada</button>
+            {% else %}
+              <form method="post" action="/dashboard/fotos/{{ foto_fin.id }}/eliminar/" onsubmit="return confirm('¿Seguro que deseas eliminar esta foto?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-danger w-100">🗑 Eliminar foto</button>
+              </form>
+            {% endif %}
           {% else %}
-            <form method="post" enctype="multipart/form-data" class="row g-2">
-              {% csrf_token %}
-              <input type="hidden" name="accion" value="subir_foto">
-              <input type="hidden" name="tipo_foto" value="Fin de Mantenimiento">
+            {% if esta_realizado %}
+              <button type="button" class="btn btn-outline-secondary w-100" disabled>🔒 Subida bloqueada</button>
+            {% else %}
+              <form method="post" enctype="multipart/form-data" class="row g-2">
+                {% csrf_token %}
+                <input type="hidden" name="accion" value="subir_foto">
+                <input type="hidden" name="tipo_foto" value="Fin de Mantenimiento">
 
-              <div class="col-12">
-                <input class="form-control" type="file" name="imagen" accept="image/*" required>
-              </div>
+                <div class="col-12">
+                  <input class="form-control" type="file" name="imagen" accept="image/*" required>
+                </div>
 
-              <div class="col-12">
-                <button class="btn btn-dark w-100" type="submit">Subir esta foto</button>
-              </div>
-            </form>
+                <div class="col-12">
+                  <button class="btn btn-dark w-100" type="submit">Subir esta foto</button>
+                </div>
+              </form>
+            {% endif %}
           {% endif %}
         </div>
       </div>
 
       <div class="col-12 col-lg-4">
-        <div class="border rounded p-3 h-100 {% if foto_nivel %}bg-success-subtle border-success{% endif %}">
+        <div class="border rounded p-3 h-100 {% if foto_nivel %}bg-success-subtle border-success{% elif esta_realizado %}bg-light{% endif %}">
           <div class="d-flex justify-content-between align-items-center mb-2">
             <div class="fw-semibold">Nivel PH y Cl</div>
             {% if foto_nivel %}
@@ -393,31 +409,36 @@
           </div>
 
           {% if foto_nivel %}
-            <div class="small text-muted mb-1">Esta foto ya fue subida.</div>
-            <div class="small text-secondary mb-2">
-              Subida: {{ foto_nivel.creada_en|date:"d/m/Y H:i" }}
-            </div>
+            <div class="small text-muted mb-2">Esta foto ya fue subida.</div>
             <a href="{{ foto_nivel.imagen.url }}" target="_blank" class="text-decoration-none">
               <img src="{{ foto_nivel.imagen.url }}" class="img-fluid rounded border w-100 mb-2" alt="Nivel PH y Cl" style="object-fit: cover; max-height: 220px;">
             </a>
-            <form method="post" action="/dashboard/fotos/{{ foto_nivel.id }}/eliminar/" onsubmit="return confirm('¿Seguro que deseas eliminar esta foto?');">
-              {% csrf_token %}
-              <button type="submit" class="btn btn-sm btn-outline-danger w-100">🗑 Eliminar foto</button>
-            </form>
+            {% if esta_realizado %}
+              <button type="button" class="btn btn-sm btn-outline-secondary w-100" disabled>🔒 Eliminación bloqueada</button>
+            {% else %}
+              <form method="post" action="/dashboard/fotos/{{ foto_nivel.id }}/eliminar/" onsubmit="return confirm('¿Seguro que deseas eliminar esta foto?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-danger w-100">🗑 Eliminar foto</button>
+              </form>
+            {% endif %}
           {% else %}
-            <form method="post" enctype="multipart/form-data" class="row g-2">
-              {% csrf_token %}
-              <input type="hidden" name="accion" value="subir_foto">
-              <input type="hidden" name="tipo_foto" value="Nivel PH y Cl">
+            {% if esta_realizado %}
+              <button type="button" class="btn btn-outline-secondary w-100" disabled>🔒 Subida bloqueada</button>
+            {% else %}
+              <form method="post" enctype="multipart/form-data" class="row g-2">
+                {% csrf_token %}
+                <input type="hidden" name="accion" value="subir_foto">
+                <input type="hidden" name="tipo_foto" value="Nivel PH y Cl">
 
-              <div class="col-12">
-                <input class="form-control" type="file" name="imagen" accept="image/*" required>
-              </div>
+                <div class="col-12">
+                  <input class="form-control" type="file" name="imagen" accept="image/*" required>
+                </div>
 
-              <div class="col-12">
-                <button class="btn btn-dark w-100" type="submit">Subir esta foto</button>
-              </div>
-            </form>
+                <div class="col-12">
+                  <button class="btn btn-dark w-100" type="submit">Subir esta foto</button>
+                </div>
+              </form>
+            {% endif %}
           {% endif %}
         </div>
       </div>
@@ -447,17 +468,20 @@
               </a>
 
               <div class="small text-muted mt-2">{{ f.descripcion }}</div>
-              <div class="small text-secondary mt-1">
-                Subida: {{ f.creada_en|date:"d/m/Y H:i" }}
-              </div>
 
               <div class="mt-2 d-grid">
-                <form method="post" action="/dashboard/fotos/{{ f.id }}/eliminar/" onsubmit="return confirm('¿Seguro que deseas eliminar esta foto?');">
-                  {% csrf_token %}
-                  <button type="submit" class="btn btn-sm btn-outline-danger w-100">
-                    🗑 Eliminar foto
+                {% if esta_realizado %}
+                  <button type="button" class="btn btn-sm btn-outline-secondary w-100" disabled>
+                    🔒 Eliminación bloqueada
                   </button>
-                </form>
+                {% else %}
+                  <form method="post" action="/dashboard/fotos/{{ f.id }}/eliminar/" onsubmit="return confirm('¿Seguro que deseas eliminar esta foto?');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-outline-danger w-100">
+                      🗑 Eliminar foto
+                    </button>
+                  </form>
+                {% endif %}
               </div>
             </div>
           </div>
@@ -469,7 +493,7 @@
   </div>
 </div>
 
-<div class="card shadow-sm mb-3">
+<div class="card shadow-sm mb-3 {% if esta_realizado %}border-secondary{% endif %}">
   <div class="card-body">
     <div class="fw-bold mb-2">🧪 Insumos usados</div>
 
@@ -489,8 +513,13 @@
               <td>{{ u.insumo }}</td>
               <td>{{ u.cantidad }}</td>
               <td class="text-nowrap">
-                <a class="btn btn-sm btn-outline-primary" href="/dashboard/usos/{{ u.id }}/editar/">Editar</a>
-                <a class="btn btn-sm btn-outline-danger" href="/dashboard/usos/{{ u.id }}/eliminar/">Eliminar</a>
+                {% if esta_realizado %}
+                  <button type="button" class="btn btn-sm btn-outline-secondary" disabled>🔒 Editar</button>
+                  <button type="button" class="btn btn-sm btn-outline-secondary" disabled>🔒 Eliminar</button>
+                {% else %}
+                  <a class="btn btn-sm btn-outline-primary" href="/dashboard/usos/{{ u.id }}/editar/">Editar</a>
+                  <a class="btn btn-sm btn-outline-danger" href="/dashboard/usos/{{ u.id }}/eliminar/">Eliminar</a>
+                {% endif %}
               </td>
             </tr>
             {% endfor %}

@@ -1443,6 +1443,7 @@ def mantenimiento_detalle_view(request, pk):
         return render(request, "dashboard/no_autorizado.html", status=403)
 
     insumos = Insumo.objects.all().order_by("nombre")
+    esta_realizado = mantenimiento.estado == "realizado"
 
     if request.method == "POST":
         accion = request.POST.get("accion")
@@ -1510,6 +1511,10 @@ def mantenimiento_detalle_view(request, pk):
             )
 
             messages.success(request, f"Mantenimiento de {mantenimiento.cliente} marcado como pendiente.")
+            return redirect(safe_return_url())
+
+        if esta_realizado:
+            messages.error(request, "Este mantenimiento está realizado y bloqueado para cambios. Debes volverlo a pendiente para editarlo.")
             return redirect(safe_return_url())
 
         if accion == "agregar_insumo":
@@ -1642,7 +1647,7 @@ def mantenimiento_detalle_view(request, pk):
     cantidad_fotos = len(fotos)
     cantidad_usos = lista_usos.count()
     puede_cerrar = cantidad_fotos > 0 and cantidad_usos > 0
-    puede_subir_fotos = cantidad_fotos < 3
+    puede_subir_fotos = cantidad_fotos < 3 and not esta_realizado
 
     foto_inicio = fotos_por_nombre.get("Inicio de Mantenimiento")
     foto_fin = fotos_por_nombre.get("Fin de Mantenimiento")
@@ -1663,6 +1668,7 @@ def mantenimiento_detalle_view(request, pk):
             "cantidad_usos": cantidad_usos,
             "puede_cerrar": puede_cerrar,
             "puede_subir_fotos": puede_subir_fotos,
+            "esta_realizado": esta_realizado,
             "foto_inicio": foto_inicio,
             "foto_fin": foto_fin,
             "foto_nivel": foto_nivel,
@@ -1689,6 +1695,10 @@ def foto_mantenimiento_eliminar_view(request, pk):
 
     if not permitido:
         return render(request, "dashboard/no_autorizado.html", status=403)
+
+    if mantenimiento.estado == "realizado":
+        messages.error(request, "Este mantenimiento está realizado y bloqueado para cambios. Debes volverlo a pendiente para editarlo.")
+        return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
 
     if request.method == "POST":
         actor = request.user.username
@@ -1742,6 +1752,10 @@ def usoinsumo_eliminar_view(request, pk):
 
     if not permitido:
         return render(request, "dashboard/no_autorizado.html", status=403)
+
+    if mantenimiento.estado == "realizado":
+        messages.error(request, "Este mantenimiento está realizado y bloqueado para cambios. Debes volverlo a pendiente para editarlo.")
+        return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
 
     if request.method == "POST":
         insumo = uso.insumo
@@ -1800,6 +1814,10 @@ def usoinsumo_editar_view(request, pk):
 
     if not permitido:
         return render(request, "dashboard/no_autorizado.html", status=403)
+
+    if mantenimiento.estado == "realizado":
+        messages.error(request, "Este mantenimiento está realizado y bloqueado para cambios. Debes volverlo a pendiente para editarlo.")
+        return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
 
     if request.method == "POST":
         nueva_cantidad_str = request.POST.get("cantidad", "").strip()
