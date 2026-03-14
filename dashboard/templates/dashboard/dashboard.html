@@ -216,9 +216,14 @@
           Lo más importante para resolver hoy.
         </div>
       </div>
-      <a class="btn btn-outline-dark btn-sm" href="/dashboard/operativo/">
-        Ver operativo completo
-      </a>
+      <div class="d-flex gap-2 flex-wrap">
+        <a class="btn btn-outline-secondary btn-sm" href="/dashboard/mantenimientos/historial/">
+          🗂 Ver historial
+        </a>
+        <a class="btn btn-outline-dark btn-sm" href="/dashboard/operativo/">
+          Ver operativo completo
+        </a>
+      </div>
     </div>
 
     <div class="row g-3">
@@ -258,7 +263,10 @@
                     <a href="/dashboard/mantenimientos/{{ m.id }}/" class="btn btn-outline-secondary btn-sm">
                       Abrir
                     </a>
-                    <a href="/dashboard/asignar/{{ m.id }}/" class="btn btn-outline-primary btn-sm">
+                    <a href="/dashboard/operativo/?filtro=urgentes" class="btn btn-outline-danger btn-sm">
+                      Ver lista
+                    </a>
+                    <a href="/dashboard/operativo/asignar/{{ m.id }}/" class="btn btn-outline-primary btn-sm">
                       Resolver
                     </a>
                   </div>
@@ -311,7 +319,7 @@
                     <a href="/dashboard/mantenimientos/{{ m.id }}/" class="btn btn-outline-secondary btn-sm">
                       Abrir
                     </a>
-                    <a href="/dashboard/asignar/{{ m.id }}/" class="btn btn-outline-primary btn-sm">
+                    <a href="/dashboard/operativo/asignar/{{ m.id }}/" class="btn btn-outline-primary btn-sm">
                       Asignar
                     </a>
                   </div>
@@ -389,9 +397,14 @@
           Vista rápida para decidir a quién asignar el siguiente mantenimiento.
         </div>
       </div>
-      <a class="btn btn-outline-primary btn-sm" href="/dashboard/operativo/">
-        Ir a asignaciones
-      </a>
+      <div class="d-flex gap-2 flex-wrap">
+        <a class="btn btn-outline-secondary btn-sm" href="/dashboard/mantenimientos/historial/">
+          🗂 Historial
+        </a>
+        <a class="btn btn-outline-primary btn-sm" href="/dashboard/operativo/">
+          Ir a asignaciones
+        </a>
+      </div>
     </div>
 
     <div class="row g-3">
@@ -513,6 +526,33 @@
 </div>
 
 
+<!-- ACCESO RÁPIDO AL HISTORIAL -->
+<div class="card shadow-sm mb-3 border-info">
+  <div class="card-body d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div>
+      <div class="fw-bold fs-5 text-info">
+        🗂 Historial de mantenimientos
+      </div>
+      <div class="text-muted">
+        Consulta mantenimientos realizados y pendientes con filtros por cliente, trabajador, fecha y estado.
+      </div>
+    </div>
+
+    <div class="d-flex gap-2 flex-wrap">
+      <a class="btn btn-info text-white" href="/dashboard/mantenimientos/historial/">
+        Abrir historial
+      </a>
+      <a class="btn btn-outline-info" href="/dashboard/mantenimientos/historial/?estado=pendiente">
+        Ver pendientes
+      </a>
+      <a class="btn btn-outline-info" href="/dashboard/mantenimientos/historial/?estado=realizado">
+        Ver realizados
+      </a>
+    </div>
+  </div>
+</div>
+
+
 <div class="row g-2 mb-3">
 
   <div class="col-md-4">
@@ -622,9 +662,14 @@
         🕘 Actividad reciente
       </div>
 
-      <a class="btn btn-outline-secondary btn-sm" href="/dashboard/actividad/">
-        Ver historial completo
-      </a>
+      <div class="d-flex gap-2 flex-wrap">
+        <a class="btn btn-outline-secondary btn-sm" href="/dashboard/mantenimientos/historial/">
+          🗂 Historial
+        </a>
+        <a class="btn btn-outline-secondary btn-sm" href="/dashboard/actividad/">
+          Ver historial completo
+        </a>
+      </div>
 
     </div>
 
@@ -700,12 +745,16 @@
         🧑‍💼 Operativo
       </a>
 
+      <a class="btn btn-outline-dark" href="/dashboard/mantenimientos/historial/">
+        🗂 Historial mantenimientos
+      </a>
+
       <a class="btn btn-outline-dark" href="/dashboard/finanzas/flujo/">
         💰 Flujo mensual
       </a>
 
       <a class="btn btn-outline-secondary" href="/dashboard/actividad/">
-        🕘 Historial
+        🕘 Historial actividad
       </a>
 
       <a class="btn btn-outline-secondary" href="/admin/">
