@@ -1449,10 +1449,6 @@ def mantenimiento_detalle_view(request, pk):
             tiene_fotos = mantenimiento.fotos.exists()
             tiene_usos = mantenimiento.usos_insumos.exists()
 
-            if not observaciones_actuales and not observacion_cierre:
-                messages.error(request, "Debes registrar una observación final antes de marcar como realizado.")
-                return redirect(safe_return_url())
-
             if not tiene_fotos:
                 messages.error(request, "Debes subir al menos una foto antes de marcar como realizado.")
                 return redirect(safe_return_url())
@@ -1623,11 +1619,11 @@ def mantenimiento_detalle_view(request, pk):
         .order_by("-fecha", "-id")[:5]
     )
 
-    observaciones_texto = (getattr(mantenimiento, "observaciones", "") or "").strip()
     cantidad_fotos = fotos.count()
     cantidad_usos = lista_usos.count()
-    tiene_observaciones = bool(observaciones_texto)
-    puede_cerrar = tiene_observaciones and cantidad_fotos > 0 and cantidad_usos > 0
+
+    # ahora solo requiere fotos e insumos
+    puede_cerrar = cantidad_fotos > 0 and cantidad_usos > 0
 
     return render(
         request,

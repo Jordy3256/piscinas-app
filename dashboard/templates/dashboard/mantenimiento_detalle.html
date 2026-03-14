@@ -68,20 +68,6 @@
     </div>
 
     <div class="row g-2 mb-3">
-      <div class="col-md-4">
-        <div class="border rounded p-3 h-100 {% if tiene_observaciones %}bg-success-subtle border-success{% else %}bg-warning-subtle border-warning{% endif %}">
-          <div class="fw-semibold mb-1">
-            {% if tiene_observaciones %}✅{% else %}⚠{% endif %} Observaciones
-          </div>
-          <div class="small text-muted">
-            {% if tiene_observaciones %}
-              Ya hay observaciones registradas.
-            {% else %}
-              Aún no hay observaciones registradas.
-            {% endif %}
-          </div>
-        </div>
-      </div>
 
       <div class="col-md-4">
         <div class="border rounded p-3 h-100 {% if cantidad_fotos > 0 %}bg-success-subtle border-success{% else %}bg-warning-subtle border-warning{% endif %}">
@@ -118,9 +104,6 @@
     <div class="alert alert-warning mb-0">
       <div class="fw-semibold mb-1">Antes de cerrar este mantenimiento falta:</div>
       <ul class="mb-0 ps-3">
-        {% if not tiene_observaciones %}
-          <li>Registrar observaciones.</li>
-        {% endif %}
         {% if cantidad_fotos == 0 %}
           <li>Subir al menos una foto.</li>
         {% endif %}
