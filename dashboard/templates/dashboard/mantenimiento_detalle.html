@@ -13,7 +13,6 @@
         <div class="fw-bold fs-5">{{ m.cliente }}</div>
         <div class="text-muted small">📅 {{ m.fecha }} · Contrato: {{ m.contrato }}</div>
 
-        <!-- Acciones rápidas WhatsApp / Ubicación -->
         <div class="mt-3 d-flex flex-wrap gap-2">
           {% if m.cliente.telefono %}
           <a class="btn btn-success btn-sm"
@@ -47,7 +46,6 @@
   </div>
 </div>
 
-<!-- Validación de cierre -->
 {% if m.estado != "realizado" %}
 <div class="card shadow-sm mb-3 {% if puede_cerrar %}border-success{% else %}border-warning{% endif %}">
   <div class="card-body">
@@ -116,7 +114,6 @@
 </div>
 {% endif %}
 
-<!-- Acción principal de cierre -->
 <div class="card shadow-sm mb-3">
   <div class="card-body">
     <div class="fw-bold mb-2">🎯 Estado del mantenimiento</div>
@@ -147,7 +144,6 @@
   </div>
 </div>
 
-<!-- Historial reciente del cliente -->
 <div class="card shadow-sm mb-3 border-info">
   <div class="card-body">
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
@@ -208,7 +204,6 @@
   </div>
 </div>
 
-<!-- Registrar insumo -->
 <div class="card shadow-sm mb-3">
   <div class="card-body">
     <div class="fw-bold mb-2">🧪 Registrar insumo usado</div>
@@ -237,7 +232,6 @@
   </div>
 </div>
 
-<!-- Subir foto -->
 <div class="card shadow-sm mb-3">
   <div class="card-body">
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
@@ -257,7 +251,15 @@
         </div>
 
         <div class="col-12">
-          <input class="form-control" type="text" name="descripcion" placeholder="Descripción (opcional)">
+          <div class="alert alert-info mb-0">
+            {% if cantidad_fotos == 0 %}
+              La foto que subirás será: <strong>Inicio de Mantenimiento</strong>
+            {% elif cantidad_fotos == 1 %}
+              La foto que subirás será: <strong>Fin de Mantenimiento</strong>
+            {% elif cantidad_fotos == 2 %}
+              La foto que subirás será: <strong>Nivel PH y Cl</strong>
+            {% endif %}
+          </div>
         </div>
 
         <div class="col-12">
@@ -266,7 +268,7 @@
       </form>
 
       <div class="small text-muted mt-2">
-        Puedes subir máximo 3 fotos por mantenimiento.
+        Las fotos se guardan automáticamente con nombres fijos y en este orden.
       </div>
     {% else %}
       <div class="alert alert-warning mb-0">
@@ -276,7 +278,6 @@
   </div>
 </div>
 
-<!-- Galería de fotos -->
 <div class="card shadow-sm mb-3">
   <div class="card-body">
     <div class="fw-bold mb-2">🖼️ Fotos</div>
@@ -286,13 +287,35 @@
         {% for f in fotos %}
           <div class="col-12 col-sm-6">
             <div class="border rounded p-2 h-100">
+              <div class="mb-2">
+                <span class="badge bg-dark">
+                  {% if forloop.counter == 1 %}
+                    Inicio de Mantenimiento
+                  {% elif forloop.counter == 2 %}
+                    Fin de Mantenimiento
+                  {% elif forloop.counter == 3 %}
+                    Nivel PH y Cl
+                  {% else %}
+                    Foto {{ forloop.counter }}
+                  {% endif %}
+                </span>
+              </div>
+
               <a href="{{ f.imagen.url }}" target="_blank" class="text-decoration-none">
                 <img src="{{ f.imagen.url }}" class="img-fluid rounded border w-100" alt="Foto" style="object-fit: cover; max-height: 280px;">
               </a>
 
-              {% if f.descripcion %}
-                <div class="small text-muted mt-2">{{ f.descripcion }}</div>
-              {% endif %}
+              <div class="small text-muted mt-2">
+                {% if forloop.counter == 1 %}
+                  Inicio de Mantenimiento
+                {% elif forloop.counter == 2 %}
+                  Fin de Mantenimiento
+                {% elif forloop.counter == 3 %}
+                  Nivel PH y Cl
+                {% else %}
+                  {{ f.descripcion }}
+                {% endif %}
+              </div>
 
               <div class="mt-2 d-grid">
                 <form method="post" action="/dashboard/fotos/{{ f.id }}/eliminar/" onsubmit="return confirm('¿Seguro que deseas eliminar esta foto?');">
@@ -312,7 +335,6 @@
   </div>
 </div>
 
-<!-- Insumos usados -->
 <div class="card shadow-sm mb-3">
   <div class="card-body">
     <div class="fw-bold mb-2">🧪 Insumos usados</div>
@@ -347,7 +369,6 @@
   </div>
 </div>
 
-<!-- Egresos solo admin -->
 {% if es_admin %}
 <div class="card shadow-sm mb-3">
   <div class="card-body">

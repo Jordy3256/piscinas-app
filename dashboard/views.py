@@ -1569,11 +1569,17 @@ def mantenimiento_detalle_view(request, pk):
                 return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
 
             imagen = request.FILES.get("imagen")
-            descripcion = request.POST.get("descripcion", "").strip()
 
             if not imagen:
                 messages.error(request, "Debes seleccionar una imagen.")
                 return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
+
+            descripciones_fijas = [
+                "Inicio de Mantenimiento",
+                "Fin de Mantenimiento",
+                "Nivel PH y Cl",
+            ]
+            descripcion = descripciones_fijas[cantidad_fotos_actual]
 
             FotoMantenimiento.objects.create(
                 mantenimiento=mantenimiento,
@@ -1592,17 +1598,17 @@ def mantenimiento_detalle_view(request, pk):
             _registrar_actividad(
                 user=request.user,
                 titulo="Foto subida",
-                descripcion=f"{actor} subió una foto al mantenimiento de {mantenimiento.cliente}.",
+                descripcion=f"{actor} subió una foto al mantenimiento de {mantenimiento.cliente}: {descripcion}.",
                 url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
             )
 
-            messages.success(request, "Foto subida correctamente.")
+            messages.success(request, f"Foto subida correctamente: {descripcion}.")
             return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
 
     lista_usos = mantenimiento.usos_insumos.all()
     lista_egresos = mantenimiento.egresos.all() if hasattr(mantenimiento, "egresos") else []
     total_egresos = sum(e.total for e in lista_egresos) if lista_egresos else 0
-    fotos = mantenimiento.fotos.all().order_by("-creada_en")
+    fotos = mantenimiento.fotos.all().order_by("creada_en", "id")
 
     historial_cliente_reciente = (
         Mantenimiento.objects
