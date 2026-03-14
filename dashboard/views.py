@@ -131,7 +131,6 @@ def _crear_egreso_manual(concepto, categoria, total, fecha):
         "fecha": fecha,
     }
 
-    # Compatibilidad con modelos donde estos campos sí existen
     try:
         kwargs["mantenimiento"] = None
     except Exception:
@@ -142,7 +141,6 @@ def _crear_egreso_manual(concepto, categoria, total, fecha):
     except Exception:
         pass
 
-    # Campos opcionales según tu modelo actual
     if hasattr(Egreso, "concepto"):
         kwargs["concepto"] = concepto
     if hasattr(Egreso, "categoria"):
@@ -163,7 +161,13 @@ def procesar_movimientos_recurrentes():
         proxima_fecha__lte=hoy
     ).order_by("proxima_fecha", "id")
 
+    total_ingresos = 0
+    total_egresos = 0
+    movimientos_procesados = 0
+
     for mov in movimientos:
+        generado_este_movimiento = 0
+
         while mov.activo and mov.proxima_fecha <= hoy:
             fecha_mov = mov.proxima_fecha
 
@@ -173,6 +177,8 @@ def procesar_movimientos_recurrentes():
                     total=mov.monto,
                     fecha=fecha_mov
                 )
+                total_ingresos += 1
+                generado_este_movimiento += 1
 
             elif mov.tipo == "egreso":
                 _crear_egreso_manual(
@@ -181,9 +187,21 @@ def procesar_movimientos_recurrentes():
                     total=mov.monto,
                     fecha=fecha_mov,
                 )
+                total_egresos += 1
+                generado_este_movimiento += 1
 
             mov.proxima_fecha = _siguiente_fecha_recurrente(fecha_mov, mov.frecuencia)
             mov.save(update_fields=["proxima_fecha"])
+
+        if generado_este_movimiento > 0:
+            movimientos_procesados += 1
+
+    return {
+        "movimientos_procesados": movimientos_procesados,
+        "ingresos_generados": total_ingresos,
+        "egresos_generados": total_egresos,
+        "total_generados": total_ingresos + total_egresos,
+    }
 
 
 # -------------------
@@ -310,12 +328,6 @@ def _clean_str(value) -> str:
 
 
 def _normalize_subscription_payload(data: dict) -> dict:
-    """
-    Acepta:
-    - subscription completo
-    - dict con {endpoint, keys:{p256dh,auth}}
-    - dict con {subscription: {...}}
-    """
     if not isinstance(data, dict):
         return {}
 
@@ -2128,9 +2140,6 @@ def asignar_trabajadores_view(request, pk):
     )
 
 
-# -------------------
-# Finanzas - Flujo mensual
-# -------------------
 @login_required
 def flujo_mensual_view(request):
     if not es_admin(request.user):
@@ -2205,9 +2214,6 @@ def flujo_mensual_view(request):
     )
 
 
-# -------------------
-# Finanzas - Egresos manuales
-# -------------------
 @login_required
 def egreso_manual_crear_view(request):
     if not es_admin(request.user):
@@ -2287,9 +2293,6 @@ def egreso_manual_eliminar_view(request, pk):
     return redirect(f"/dashboard/finanzas/flujo/?anio={fecha.year}&mes={fecha.month}")
 
 
-# -------------------
-# Finanzas - Ingresos
-# -------------------
 @login_required
 def ingreso_list_view(request):
     if not es_admin(request.user):
@@ -2466,7 +2469,7 @@ def movimientos_recurrentes_view(request):
             messages.error(request, "Fecha inválida.")
             return redirect("/dashboard/finanzas/recurrentes/")
 
-        mov = MovimientoRecurrente.objects.create(
+        MovimientoRecurrente.objects.create(
             tipo=tipo,
             concepto=concepto,
             monto=monto,
@@ -2490,6 +2493,7 @@ def movimientos_recurrentes_view(request):
     total_inactivos = movimientos.filter(activo=False).count()
     total_ingresos = movimientos.filter(tipo="ingreso", activo=True).count()
     total_egresos = movimientos.filter(tipo="egreso", activo=True).count()
+    pendientes = movimientos.filter(activo=True, proxima_fecha__lte=date.today()).count()
 
     return render(
         request,
@@ -2500,10 +2504,42 @@ def movimientos_recurrentes_view(request):
             "total_inactivos": total_inactivos,
             "total_ingresos": total_ingresos,
             "total_egresos": total_egresos,
+            "pendientes": pendientes,
             "hoy": date.today(),
             "es_admin": True,
         },
     )
+
+
+@login_required
+@require_http_methods(["POST"])
+def movimientos_recurrentes_procesar_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    resultado = procesar_movimientos_recurrentes()
+
+    _registrar_actividad(
+        user=request.user,
+        titulo="Recurrentes procesados",
+        descripcion=(
+            f"{request.user.username} ejecutó los movimientos recurrentes: "
+            f"{resultado['total_generados']} generados "
+            f"({resultado['ingresos_generados']} ingresos, {resultado['egresos_generados']} egresos)."
+        ),
+        url="/dashboard/finanzas/recurrentes/",
+    )
+
+    if resultado["total_generados"] > 0:
+        messages.success(
+            request,
+            f"Proceso completado: {resultado['total_generados']} movimientos generados "
+            f"({resultado['ingresos_generados']} ingresos y {resultado['egresos_generados']} egresos)."
+        )
+    else:
+        messages.info(request, "No había movimientos recurrentes pendientes por procesar.")
+
+    return redirect("/dashboard/finanzas/recurrentes/")
 
 
 @login_required
@@ -2576,27 +2612,26 @@ def movimiento_recurrente_editar_view(request, pk):
 
 
 @login_required
+@require_http_methods(["POST"])
 def movimiento_recurrente_toggle_view(request, pk):
     if not es_admin(request.user):
         return render(request, "dashboard/no_autorizado.html", status=403)
 
     movimiento = get_object_or_404(MovimientoRecurrente, pk=pk)
 
-    if request.method == "POST":
-        movimiento.activo = not movimiento.activo
-        movimiento.save(update_fields=["activo"])
+    movimiento.activo = not movimiento.activo
+    movimiento.save(update_fields=["activo"])
 
-        estado = "activado" if movimiento.activo else "desactivado"
+    estado = "activado" if movimiento.activo else "desactivado"
 
-        _registrar_actividad(
-            user=request.user,
-            titulo="Movimiento recurrente actualizado",
-            descripcion=f"{request.user.username} {estado} el movimiento recurrente '{movimiento.concepto}'.",
-            url="/dashboard/finanzas/recurrentes/",
-        )
+    _registrar_actividad(
+        user=request.user,
+        titulo="Movimiento recurrente actualizado",
+        descripcion=f"{request.user.username} {estado} el movimiento recurrente '{movimiento.concepto}'.",
+        url="/dashboard/finanzas/recurrentes/",
+    )
 
-        messages.success(request, f"Movimiento recurrente {estado} correctamente.")
-
+    messages.success(request, f"Movimiento recurrente {estado} correctamente.")
     return redirect("/dashboard/finanzas/recurrentes/")
 
 

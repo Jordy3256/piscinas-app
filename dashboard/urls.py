@@ -52,6 +52,7 @@ from .views import (
 
     # Recurrentes
     movimientos_recurrentes_view,
+    movimientos_recurrentes_procesar_view,
     movimiento_recurrente_editar_view,
     movimiento_recurrente_toggle_view,
     movimiento_recurrente_eliminar_view,
@@ -128,6 +129,7 @@ urlpatterns = [
     # Movimientos recurrentes
     # ======================
     path("finanzas/recurrentes/", movimientos_recurrentes_view, name="movimientos_recurrentes"),
+    path("finanzas/recurrentes/procesar/", movimientos_recurrentes_procesar_view, name="movimientos_recurrentes_procesar"),
     path("finanzas/recurrentes/<int:pk>/editar/", movimiento_recurrente_editar_view, name="movimiento_recurrente_editar"),
     path("finanzas/recurrentes/<int:pk>/toggle/", movimiento_recurrente_toggle_view, name="movimiento_recurrente_toggle"),
     path("finanzas/recurrentes/<int:pk>/eliminar/", movimiento_recurrente_eliminar_view, name="movimiento_recurrente_eliminar"),

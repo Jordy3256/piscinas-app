@@ -2,15 +2,22 @@
 
 {% block content %}
 <div class="container py-4">
-    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
         <div>
             <h2 class="mb-1">Movimientos recurrentes</h2>
             <p class="text-muted mb-0">Administra ingresos y egresos automáticos del sistema.</p>
         </div>
+
+        <form method="post" action="{% url 'movimientos_recurrentes_procesar' %}">
+            {% csrf_token %}
+            <button class="btn btn-success">
+                ⚙️ Procesar recurrentes ahora
+            </button>
+        </form>
     </div>
 
     <div class="row g-3 mb-4">
-        <div class="col-md-3">
+        <div class="col-md-2 col-6">
             <div class="card shadow-sm border-0">
                 <div class="card-body">
                     <div class="text-muted small">Activos</div>
@@ -18,7 +25,8 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
+
+        <div class="col-md-2 col-6">
             <div class="card shadow-sm border-0">
                 <div class="card-body">
                     <div class="text-muted small">Inactivos</div>
@@ -26,7 +34,8 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
+
+        <div class="col-md-2 col-6">
             <div class="card shadow-sm border-0">
                 <div class="card-body">
                     <div class="text-muted small">Ingresos activos</div>
@@ -34,11 +43,21 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
+
+        <div class="col-md-2 col-6">
             <div class="card shadow-sm border-0">
                 <div class="card-body">
                     <div class="text-muted small">Egresos activos</div>
                     <div class="fs-4 fw-bold">{{ total_egresos }}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4 col-12">
+            <div class="card shadow-sm border-0 border-warning">
+                <div class="card-body">
+                    <div class="text-muted small">Pendientes por procesar hoy</div>
+                    <div class="fs-4 fw-bold text-warning">{{ pendientes }}</div>
                 </div>
             </div>
         </div>
@@ -131,7 +150,12 @@
                             <td>{{ m.concepto }}</td>
                             <td>${{ m.monto }}</td>
                             <td>{{ m.get_frecuencia_display }}</td>
-                            <td>{{ m.proxima_fecha|date:"d/m/Y" }}</td>
+                            <td>
+                                {{ m.proxima_fecha|date:"d/m/Y" }}
+                                {% if m.activo and m.proxima_fecha <= hoy %}
+                                    <span class="badge bg-warning text-dark ms-1">Pendiente</span>
+                                {% endif %}
+                            </td>
                             <td>
                                 {% if m.activo %}
                                     <span class="badge bg-primary">Activo</span>
