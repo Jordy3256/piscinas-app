@@ -68,8 +68,7 @@
     </div>
 
     <div class="row g-2 mb-3">
-
-      <div class="col-md-4">
+      <div class="col-md-6">
         <div class="border rounded p-3 h-100 {% if cantidad_fotos > 0 %}bg-success-subtle border-success{% else %}bg-warning-subtle border-warning{% endif %}">
           <div class="fw-semibold mb-1">
             {% if cantidad_fotos > 0 %}✅{% else %}⚠{% endif %} Fotos
@@ -84,7 +83,7 @@
         </div>
       </div>
 
-      <div class="col-md-4">
+      <div class="col-md-6">
         <div class="border rounded p-3 h-100 {% if cantidad_usos > 0 %}bg-success-subtle border-success{% else %}bg-warning-subtle border-warning{% endif %}">
           <div class="fw-semibold mb-1">
             {% if cantidad_usos > 0 %}✅{% else %}⚠{% endif %} Insumos
@@ -134,7 +133,7 @@
 
         {% if not puede_cerrar %}
         <div class="small text-muted">
-          El sistema no permitirá cerrarlo hasta que tenga observaciones, al menos una foto y al menos un insumo.
+          El sistema no permitirá cerrarlo hasta que tenga al menos una foto y al menos un insumo.
         </div>
         {% endif %}
       {% else %}

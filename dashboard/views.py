@@ -1444,8 +1444,6 @@ def mantenimiento_detalle_view(request, pk):
             return f"/dashboard/mantenimientos/{mantenimiento.pk}/"
 
         if accion == "marcar_realizado":
-            observacion_cierre = (request.POST.get("observacion_cierre", "") or "").strip()
-            observaciones_actuales = (getattr(mantenimiento, "observaciones", "") or "").strip()
             tiene_fotos = mantenimiento.fotos.exists()
             tiene_usos = mantenimiento.usos_insumos.exists()
 
@@ -1457,17 +1455,8 @@ def mantenimiento_detalle_view(request, pk):
                 messages.error(request, "Debes registrar al menos un insumo antes de marcar como realizado.")
                 return redirect(safe_return_url())
 
-            if observacion_cierre:
-                if observaciones_actuales:
-                    mantenimiento.observaciones = f"{observaciones_actuales}\n\n[Cierre]\n{observacion_cierre}"
-                else:
-                    mantenimiento.observaciones = observacion_cierre
-
             mantenimiento.estado = "realizado"
-            if observacion_cierre:
-                mantenimiento.save(update_fields=["estado", "observaciones"])
-            else:
-                mantenimiento.save(update_fields=["estado"])
+            mantenimiento.save(update_fields=["estado"])
 
             actor = request.user.username
             _notificar_admins(
@@ -1621,8 +1610,6 @@ def mantenimiento_detalle_view(request, pk):
 
     cantidad_fotos = fotos.count()
     cantidad_usos = lista_usos.count()
-
-    # ahora solo requiere fotos e insumos
     puede_cerrar = cantidad_fotos > 0 and cantidad_usos > 0
 
     return render(
@@ -1638,7 +1625,6 @@ def mantenimiento_detalle_view(request, pk):
             "fotos": fotos,
             "cantidad_fotos": cantidad_fotos,
             "cantidad_usos": cantidad_usos,
-            "tiene_observaciones": tiene_observaciones,
             "puede_cerrar": puede_cerrar,
             "historial_cliente_reciente": historial_cliente_reciente,
         },
