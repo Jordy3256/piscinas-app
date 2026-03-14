@@ -74,6 +74,20 @@ def es_trabajador(user):
 
 
 # -------------------
+# Fotos requeridas
+# -------------------
+FOTOS_REQUERIDAS = [
+    "Inicio de Mantenimiento",
+    "Fin de Mantenimiento",
+    "Nivel PH y Cl",
+]
+
+
+def _nombre_foto_valido(nombre: str) -> bool:
+    return nombre in FOTOS_REQUERIDAS
+
+
+# -------------------
 # Login / Logout
 # -------------------
 def login_view(request):
@@ -1563,34 +1577,37 @@ def mantenimiento_detalle_view(request, pk):
             return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
 
         if accion == "subir_foto":
-            cantidad_fotos_actual = mantenimiento.fotos.count()
-            if cantidad_fotos_actual >= 3:
-                messages.error(request, "Solo se permiten máximo 3 fotos por mantenimiento.")
-                return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
-
             imagen = request.FILES.get("imagen")
+            tipo_foto = (request.POST.get("tipo_foto", "") or "").strip()
 
             if not imagen:
                 messages.error(request, "Debes seleccionar una imagen.")
                 return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
 
-            descripciones_fijas = [
-                "Inicio de Mantenimiento",
-                "Fin de Mantenimiento",
-                "Nivel PH y Cl",
-            ]
-            descripcion = descripciones_fijas[cantidad_fotos_actual]
+            if not _nombre_foto_valido(tipo_foto):
+                messages.error(request, "Tipo de foto inválido.")
+                return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
+
+            cantidad_fotos_actual = mantenimiento.fotos.count()
+            if cantidad_fotos_actual >= 3 and not mantenimiento.fotos.filter(descripcion=tipo_foto).exists():
+                messages.error(request, "Solo se permiten máximo 3 fotos por mantenimiento.")
+                return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
+
+            foto_existente = mantenimiento.fotos.filter(descripcion=tipo_foto).first()
+            if foto_existente:
+                messages.error(request, f"La foto '{tipo_foto}' ya fue subida. Si deseas cambiarla, elimínala primero.")
+                return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
 
             FotoMantenimiento.objects.create(
                 mantenimiento=mantenimiento,
                 imagen=imagen,
-                descripcion=descripcion,
+                descripcion=tipo_foto,
             )
 
             actor = request.user.username
             _notificar_admins(
                 titulo="📸 Nueva foto subida",
-                mensaje=f"{actor} subió una foto en el mantenimiento de {mantenimiento.cliente}.",
+                mensaje=f"{actor} subió la foto '{tipo_foto}' en el mantenimiento de {mantenimiento.cliente}.",
                 url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
                 enviar_push=False,
                 excluir_user_id=request.user.id if es_admin(request.user) else None,
@@ -1598,17 +1615,20 @@ def mantenimiento_detalle_view(request, pk):
             _registrar_actividad(
                 user=request.user,
                 titulo="Foto subida",
-                descripcion=f"{actor} subió una foto al mantenimiento de {mantenimiento.cliente}: {descripcion}.",
+                descripcion=f"{actor} subió la foto '{tipo_foto}' al mantenimiento de {mantenimiento.cliente}.",
                 url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
             )
 
-            messages.success(request, f"Foto subida correctamente: {descripcion}.")
+            messages.success(request, f"Foto subida correctamente: {tipo_foto}.")
             return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
 
     lista_usos = mantenimiento.usos_insumos.all()
     lista_egresos = mantenimiento.egresos.all() if hasattr(mantenimiento, "egresos") else []
     total_egresos = sum(e.total for e in lista_egresos) if lista_egresos else 0
-    fotos = mantenimiento.fotos.all().order_by("creada_en", "id")
+
+    fotos_qs = mantenimiento.fotos.all()
+    fotos_por_nombre = {f.descripcion: f for f in fotos_qs if _nombre_foto_valido(f.descripcion)}
+    fotos = [fotos_por_nombre[nombre] for nombre in FOTOS_REQUERIDAS if nombre in fotos_por_nombre]
 
     historial_cliente_reciente = (
         Mantenimiento.objects
@@ -1619,10 +1639,14 @@ def mantenimiento_detalle_view(request, pk):
         .order_by("-fecha", "-id")[:5]
     )
 
-    cantidad_fotos = fotos.count()
+    cantidad_fotos = len(fotos)
     cantidad_usos = lista_usos.count()
     puede_cerrar = cantidad_fotos > 0 and cantidad_usos > 0
     puede_subir_fotos = cantidad_fotos < 3
+
+    foto_inicio = fotos_por_nombre.get("Inicio de Mantenimiento")
+    foto_fin = fotos_por_nombre.get("Fin de Mantenimiento")
+    foto_nivel = fotos_por_nombre.get("Nivel PH y Cl")
 
     return render(
         request,
@@ -1639,6 +1663,9 @@ def mantenimiento_detalle_view(request, pk):
             "cantidad_usos": cantidad_usos,
             "puede_cerrar": puede_cerrar,
             "puede_subir_fotos": puede_subir_fotos,
+            "foto_inicio": foto_inicio,
+            "foto_fin": foto_fin,
+            "foto_nivel": foto_nivel,
             "historial_cliente_reciente": historial_cliente_reciente,
         },
     )
@@ -1667,6 +1694,7 @@ def foto_mantenimiento_eliminar_view(request, pk):
         actor = request.user.username
         cliente_nombre = str(mantenimiento.cliente)
         foto_id = foto.pk
+        foto_nombre = foto.descripcion or "foto"
 
         try:
             if foto.imagen:
@@ -1678,7 +1706,7 @@ def foto_mantenimiento_eliminar_view(request, pk):
 
         _notificar_admins(
             titulo="🗑 Foto eliminada",
-            mensaje=f"{actor} eliminó una foto del mantenimiento de {cliente_nombre}.",
+            mensaje=f"{actor} eliminó la foto '{foto_nombre}' del mantenimiento de {cliente_nombre}.",
             url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
             enviar_push=False,
             excluir_user_id=request.user.id if es_admin(request.user) else None,
@@ -1686,7 +1714,7 @@ def foto_mantenimiento_eliminar_view(request, pk):
         _registrar_actividad(
             user=request.user,
             titulo="Foto eliminada",
-            descripcion=f"{actor} eliminó una foto del mantenimiento de {cliente_nombre}.",
+            descripcion=f"{actor} eliminó la foto '{foto_nombre}' del mantenimiento de {cliente_nombre}.",
             url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
         )
 

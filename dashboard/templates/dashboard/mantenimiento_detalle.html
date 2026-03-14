@@ -5,7 +5,6 @@
 
 {% block content %}
 
-<!-- Card info -->
 <div class="card shadow-sm mb-3">
   <div class="card-body">
     <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
@@ -97,18 +96,17 @@
       </div>
     </div>
 
-    <!-- Estado exacto de las 3 fotos -->
     <div class="border rounded p-3 mb-3">
       <div class="fw-semibold mb-2">📷 Estado de fotos requeridas</div>
 
       <div class="vstack gap-2">
-        <div class="d-flex justify-content-between align-items-center border rounded px-3 py-2 {% if cantidad_fotos >= 1 %}bg-success-subtle border-success{% else %}bg-light{% endif %}">
+        <div class="d-flex justify-content-between align-items-center border rounded px-3 py-2 {% if foto_inicio %}bg-success-subtle border-success{% else %}bg-light{% endif %}">
           <div>
             <div class="fw-semibold">1. Inicio de Mantenimiento</div>
             <div class="small text-muted">Primera foto obligatoria</div>
           </div>
           <div>
-            {% if cantidad_fotos >= 1 %}
+            {% if foto_inicio %}
               <span class="badge bg-success">Subida</span>
             {% else %}
               <span class="badge bg-secondary">Pendiente</span>
@@ -116,13 +114,13 @@
           </div>
         </div>
 
-        <div class="d-flex justify-content-between align-items-center border rounded px-3 py-2 {% if cantidad_fotos >= 2 %}bg-success-subtle border-success{% else %}bg-light{% endif %}">
+        <div class="d-flex justify-content-between align-items-center border rounded px-3 py-2 {% if foto_fin %}bg-success-subtle border-success{% else %}bg-light{% endif %}">
           <div>
             <div class="fw-semibold">2. Fin de Mantenimiento</div>
             <div class="small text-muted">Segunda foto obligatoria</div>
           </div>
           <div>
-            {% if cantidad_fotos >= 2 %}
+            {% if foto_fin %}
               <span class="badge bg-success">Subida</span>
             {% else %}
               <span class="badge bg-secondary">Pendiente</span>
@@ -130,13 +128,13 @@
           </div>
         </div>
 
-        <div class="d-flex justify-content-between align-items-center border rounded px-3 py-2 {% if cantidad_fotos >= 3 %}bg-success-subtle border-success{% else %}bg-light{% endif %}">
+        <div class="d-flex justify-content-between align-items-center border rounded px-3 py-2 {% if foto_nivel %}bg-success-subtle border-success{% else %}bg-light{% endif %}">
           <div>
             <div class="fw-semibold">3. Nivel PH y Cl</div>
             <div class="small text-muted">Tercera foto obligatoria</div>
           </div>
           <div>
-            {% if cantidad_fotos >= 3 %}
+            {% if foto_nivel %}
               <span class="badge bg-success">Subida</span>
             {% else %}
               <span class="badge bg-secondary">Pendiente</span>
@@ -283,47 +281,127 @@
 
 <div class="card shadow-sm mb-3">
   <div class="card-body">
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
-      <div class="fw-bold">📸 Subir foto del mantenimiento</div>
-      <span class="badge {% if puede_subir_fotos %}bg-primary{% else %}bg-danger{% endif %}">
-        {{ cantidad_fotos }}/3 fotos
-      </span>
-    </div>
+    <div class="fw-bold mb-3">📸 Subir fotos requeridas</div>
 
-    {% if puede_subir_fotos %}
-      <form method="post" enctype="multipart/form-data" class="row g-2">
-        {% csrf_token %}
-        <input type="hidden" name="accion" value="subir_foto">
-
-        <div class="col-12">
-          <input class="form-control form-control-lg" type="file" name="imagen" accept="image/*" required>
-        </div>
-
-        <div class="col-12">
-          <div class="alert alert-info mb-0">
-            {% if cantidad_fotos == 0 %}
-              La foto que subirás será: <strong>Inicio de Mantenimiento</strong>
-            {% elif cantidad_fotos == 1 %}
-              La foto que subirás será: <strong>Fin de Mantenimiento</strong>
-            {% elif cantidad_fotos == 2 %}
-              La foto que subirás será: <strong>Nivel PH y Cl</strong>
+    <div class="row g-3">
+      <div class="col-12 col-lg-4">
+        <div class="border rounded p-3 h-100 {% if foto_inicio %}bg-success-subtle border-success{% endif %}">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <div class="fw-semibold">Inicio de Mantenimiento</div>
+            {% if foto_inicio %}
+              <span class="badge bg-success">Subida</span>
+            {% else %}
+              <span class="badge bg-secondary">Pendiente</span>
             {% endif %}
           </div>
-        </div>
 
-        <div class="col-12">
-          <button class="btn btn-dark btn-lg w-100" type="submit">Subir foto</button>
-        </div>
-      </form>
+          {% if foto_inicio %}
+            <div class="small text-muted mb-2">Esta foto ya fue subida.</div>
+            <a href="{{ foto_inicio.imagen.url }}" target="_blank" class="text-decoration-none">
+              <img src="{{ foto_inicio.imagen.url }}" class="img-fluid rounded border w-100 mb-2" alt="Inicio de Mantenimiento" style="object-fit: cover; max-height: 220px;">
+            </a>
+            <form method="post" action="/dashboard/fotos/{{ foto_inicio.id }}/eliminar/" onsubmit="return confirm('¿Seguro que deseas eliminar esta foto?');">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-outline-danger w-100">🗑 Eliminar foto</button>
+            </form>
+          {% else %}
+            <form method="post" enctype="multipart/form-data" class="row g-2">
+              {% csrf_token %}
+              <input type="hidden" name="accion" value="subir_foto">
+              <input type="hidden" name="tipo_foto" value="Inicio de Mantenimiento">
 
-      <div class="small text-muted mt-2">
-        Las fotos se guardan automáticamente con nombres fijos y en este orden.
+              <div class="col-12">
+                <input class="form-control" type="file" name="imagen" accept="image/*" required>
+              </div>
+
+              <div class="col-12">
+                <button class="btn btn-dark w-100" type="submit">Subir esta foto</button>
+              </div>
+            </form>
+          {% endif %}
+        </div>
       </div>
-    {% else %}
-      <div class="alert alert-warning mb-0">
-        Ya se alcanzó el máximo de 3 fotos para este mantenimiento. Si deseas subir otra, primero elimina una.
+
+      <div class="col-12 col-lg-4">
+        <div class="border rounded p-3 h-100 {% if foto_fin %}bg-success-subtle border-success{% endif %}">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <div class="fw-semibold">Fin de Mantenimiento</div>
+            {% if foto_fin %}
+              <span class="badge bg-success">Subida</span>
+            {% else %}
+              <span class="badge bg-secondary">Pendiente</span>
+            {% endif %}
+          </div>
+
+          {% if foto_fin %}
+            <div class="small text-muted mb-2">Esta foto ya fue subida.</div>
+            <a href="{{ foto_fin.imagen.url }}" target="_blank" class="text-decoration-none">
+              <img src="{{ foto_fin.imagen.url }}" class="img-fluid rounded border w-100 mb-2" alt="Fin de Mantenimiento" style="object-fit: cover; max-height: 220px;">
+            </a>
+            <form method="post" action="/dashboard/fotos/{{ foto_fin.id }}/eliminar/" onsubmit="return confirm('¿Seguro que deseas eliminar esta foto?');">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-outline-danger w-100">🗑 Eliminar foto</button>
+            </form>
+          {% else %}
+            <form method="post" enctype="multipart/form-data" class="row g-2">
+              {% csrf_token %}
+              <input type="hidden" name="accion" value="subir_foto">
+              <input type="hidden" name="tipo_foto" value="Fin de Mantenimiento">
+
+              <div class="col-12">
+                <input class="form-control" type="file" name="imagen" accept="image/*" required>
+              </div>
+
+              <div class="col-12">
+                <button class="btn btn-dark w-100" type="submit">Subir esta foto</button>
+              </div>
+            </form>
+          {% endif %}
+        </div>
       </div>
-    {% endif %}
+
+      <div class="col-12 col-lg-4">
+        <div class="border rounded p-3 h-100 {% if foto_nivel %}bg-success-subtle border-success{% endif %}">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <div class="fw-semibold">Nivel PH y Cl</div>
+            {% if foto_nivel %}
+              <span class="badge bg-success">Subida</span>
+            {% else %}
+              <span class="badge bg-secondary">Pendiente</span>
+            {% endif %}
+          </div>
+
+          {% if foto_nivel %}
+            <div class="small text-muted mb-2">Esta foto ya fue subida.</div>
+            <a href="{{ foto_nivel.imagen.url }}" target="_blank" class="text-decoration-none">
+              <img src="{{ foto_nivel.imagen.url }}" class="img-fluid rounded border w-100 mb-2" alt="Nivel PH y Cl" style="object-fit: cover; max-height: 220px;">
+            </a>
+            <form method="post" action="/dashboard/fotos/{{ foto_nivel.id }}/eliminar/" onsubmit="return confirm('¿Seguro que deseas eliminar esta foto?');">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-outline-danger w-100">🗑 Eliminar foto</button>
+            </form>
+          {% else %}
+            <form method="post" enctype="multipart/form-data" class="row g-2">
+              {% csrf_token %}
+              <input type="hidden" name="accion" value="subir_foto">
+              <input type="hidden" name="tipo_foto" value="Nivel PH y Cl">
+
+              <div class="col-12">
+                <input class="form-control" type="file" name="imagen" accept="image/*" required>
+              </div>
+
+              <div class="col-12">
+                <button class="btn btn-dark w-100" type="submit">Subir esta foto</button>
+              </div>
+            </form>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="small text-muted mt-3">
+      Cada bloque controla su propia foto. Si eliminas una, podrás volver a subir exactamente esa misma.
+    </div>
   </div>
 </div>
 
@@ -334,37 +412,17 @@
     {% if fotos %}
       <div class="row g-3">
         {% for f in fotos %}
-          <div class="col-12 col-sm-6">
+          <div class="col-12 col-sm-6 col-lg-4">
             <div class="border rounded p-2 h-100">
               <div class="mb-2">
-                <span class="badge bg-dark">
-                  {% if forloop.counter == 1 %}
-                    Inicio de Mantenimiento
-                  {% elif forloop.counter == 2 %}
-                    Fin de Mantenimiento
-                  {% elif forloop.counter == 3 %}
-                    Nivel PH y Cl
-                  {% else %}
-                    Foto {{ forloop.counter }}
-                  {% endif %}
-                </span>
+                <span class="badge bg-dark">{{ f.descripcion }}</span>
               </div>
 
               <a href="{{ f.imagen.url }}" target="_blank" class="text-decoration-none">
-                <img src="{{ f.imagen.url }}" class="img-fluid rounded border w-100" alt="Foto" style="object-fit: cover; max-height: 280px;">
+                <img src="{{ f.imagen.url }}" class="img-fluid rounded border w-100" alt="{{ f.descripcion }}" style="object-fit: cover; max-height: 280px;">
               </a>
 
-              <div class="small text-muted mt-2">
-                {% if forloop.counter == 1 %}
-                  Inicio de Mantenimiento
-                {% elif forloop.counter == 2 %}
-                  Fin de Mantenimiento
-                {% elif forloop.counter == 3 %}
-                  Nivel PH y Cl
-                {% else %}
-                  {{ f.descripcion }}
-                {% endif %}
-              </div>
+              <div class="small text-muted mt-2">{{ f.descripcion }}</div>
 
               <div class="mt-2 d-grid">
                 <form method="post" action="/dashboard/fotos/{{ f.id }}/eliminar/" onsubmit="return confirm('¿Seguro que deseas eliminar esta foto?');">
