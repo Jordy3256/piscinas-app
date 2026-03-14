@@ -5,11 +5,62 @@
 
 {% block content %}
 
+<div class="card shadow-sm mb-3 border-0">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+      <div>
+        <div class="fw-bold fs-5">Filtros rápidos</div>
+        <div class="text-muted small">
+          Usa accesos rápidos para revisar hoy, pendientes, realizados, atrasados o sin asignar.
+        </div>
+      </div>
+
+      <a href="/dashboard/mantenimientos/historial/" class="btn btn-outline-secondary btn-sm">
+        Limpiar todo
+      </a>
+    </div>
+
+    <div class="d-flex flex-wrap gap-2">
+      <a href="/dashboard/mantenimientos/historial/"
+         class="btn btn-sm {% if not filtro and not estado %}btn-dark{% else %}btn-outline-dark{% endif %}">
+        Todos
+      </a>
+
+      <a href="/dashboard/mantenimientos/historial/?filtro=hoy"
+         class="btn btn-sm {% if filtro == 'hoy' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+        Hoy
+      </a>
+
+      <a href="/dashboard/mantenimientos/historial/?filtro=pendientes"
+         class="btn btn-sm {% if filtro == 'pendientes' or estado == 'pendiente' %}btn-warning text-dark{% else %}btn-outline-warning{% endif %}">
+        Pendientes
+      </a>
+
+      <a href="/dashboard/mantenimientos/historial/?filtro=realizados"
+         class="btn btn-sm {% if filtro == 'realizados' or estado == 'realizado' %}btn-success{% else %}btn-outline-success{% endif %}">
+        Realizados
+      </a>
+
+      <a href="/dashboard/mantenimientos/historial/?filtro=atrasados"
+         class="btn btn-sm {% if filtro == 'atrasados' %}btn-danger{% else %}btn-outline-danger{% endif %}">
+        Atrasados
+      </a>
+
+      <a href="/dashboard/mantenimientos/historial/?filtro=sin_asignar"
+         class="btn btn-sm {% if filtro == 'sin_asignar' %}btn-dark{% else %}btn-outline-dark{% endif %}">
+        Sin asignar
+      </a>
+    </div>
+  </div>
+</div>
+
 <div class="card shadow-sm mb-3">
   <div class="card-body">
-    <div class="fw-bold mb-3">Filtros</div>
+    <div class="fw-bold mb-3">Filtros detallados</div>
 
     <form method="get" class="row g-2">
+      <input type="hidden" name="filtro" value="{{ filtro }}">
+
       <div class="col-md-3">
         <label class="form-label small text-muted">Buscar</label>
         <input
@@ -79,7 +130,7 @@
 </div>
 
 <div class="row g-2 mb-3">
-  <div class="col-md-4">
+  <div class="col-md-2">
     <div class="card shadow-sm">
       <div class="card-body">
         <div class="text-muted small">Total encontrados</div>
@@ -88,7 +139,7 @@
     </div>
   </div>
 
-  <div class="col-md-4">
+  <div class="col-md-2">
     <div class="card shadow-sm border-success">
       <div class="card-body">
         <div class="text-muted small">Realizados</div>
@@ -97,11 +148,29 @@
     </div>
   </div>
 
-  <div class="col-md-4">
+  <div class="col-md-2">
     <div class="card shadow-sm border-warning">
       <div class="card-body">
         <div class="text-muted small">Pendientes</div>
         <div class="fs-4 fw-bold text-warning">{{ total_pendientes_historial }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-3">
+    <div class="card shadow-sm border-danger">
+      <div class="card-body">
+        <div class="text-muted small">Atrasados</div>
+        <div class="fs-4 fw-bold text-danger">{{ total_atrasados_historial }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-3">
+    <div class="card shadow-sm border-dark">
+      <div class="card-body">
+        <div class="text-muted small">Sin asignar</div>
+        <div class="fs-4 fw-bold">{{ total_sin_asignar_historial }}</div>
       </div>
     </div>
   </div>
@@ -136,17 +205,17 @@
                 {% else %}
                   <span class="badge bg-warning text-dark">Pendiente</span>
                 {% endif %}
+
+                {% if m.estado == "pendiente" and m.fecha < today %}
+                  <span class="badge bg-danger">Atrasado</span>
+                {% endif %}
               </td>
               <td>
-                {% if m.trabajadores.all %}
-                  {% for t in m.trabajadores.all %}
-                    <span class="badge bg-light text-dark border">{{ t.user.username }}</span>
-                  {% empty %}
-                    <span class="text-muted">Sin asignar</span>
-                  {% endfor %}
-                {% else %}
+                {% for t in m.trabajadores.all %}
+                  <span class="badge bg-light text-dark border">{{ t.user.username }}</span>
+                {% empty %}
                   <span class="text-muted">Sin asignar</span>
-                {% endif %}
+                {% endfor %}
               </td>
               <td>
                 <a href="/dashboard/mantenimientos/{{ m.id }}/" class="btn btn-outline-primary btn-sm">

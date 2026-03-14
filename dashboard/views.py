@@ -1156,8 +1156,11 @@ def mantenimiento_historial_view(request):
     if not es_admin(request.user):
         return render(request, "dashboard/no_autorizado.html", status=403)
 
+    hoy = date.today()
+
     q = (request.GET.get("q", "") or "").strip()
     estado = (request.GET.get("estado", "") or "").strip().lower()
+    filtro = (request.GET.get("filtro", "") or "").strip().lower()
     cliente_id = (request.GET.get("cliente", "") or "").strip()
     trabajador_id = (request.GET.get("trabajador", "") or "").strip()
     fecha_desde_str = (request.GET.get("fecha_desde", "") or "").strip()
@@ -1172,6 +1175,23 @@ def mantenimiento_historial_view(request):
         .prefetch_related("trabajadores")
         .order_by("-fecha", "-id")
     )
+
+    if filtro == "hoy":
+        qs = qs.filter(fecha=hoy)
+
+    elif filtro == "pendientes":
+        qs = qs.filter(estado="pendiente")
+        estado = "pendiente"
+
+    elif filtro == "realizados":
+        qs = qs.filter(estado="realizado")
+        estado = "realizado"
+
+    elif filtro == "atrasados":
+        qs = qs.filter(fecha__lt=hoy, estado="pendiente")
+
+    elif filtro == "sin_asignar":
+        qs = qs.filter(trabajadores__isnull=True).distinct()
 
     if estado in ["pendiente", "realizado"]:
         qs = qs.filter(estado=estado)
@@ -1197,6 +1217,14 @@ def mantenimiento_historial_view(request):
     total_historial = len(items)
     total_realizados_historial = len([m for m in items if getattr(m, "estado", "") == "realizado"])
     total_pendientes_historial = len([m for m in items if getattr(m, "estado", "") == "pendiente"])
+    total_atrasados_historial = len([
+        m for m in items
+        if getattr(m, "estado", "") == "pendiente" and getattr(m, "fecha", hoy) < hoy
+    ])
+    total_sin_asignar_historial = len([
+        m for m in items
+        if not m.trabajadores.exists()
+    ])
 
     paginator = Paginator(items, 20)
     page_number = request.GET.get("page")
@@ -1229,6 +1257,7 @@ def mantenimiento_historial_view(request):
             "page_obj": page_obj,
             "q": q,
             "estado": estado,
+            "filtro": filtro,
             "cliente_id": cliente_id,
             "trabajador_id": trabajador_id,
             "fecha_desde": fecha_desde_str,
@@ -1238,6 +1267,8 @@ def mantenimiento_historial_view(request):
             "total_historial": total_historial,
             "total_realizados_historial": total_realizados_historial,
             "total_pendientes_historial": total_pendientes_historial,
+            "total_atrasados_historial": total_atrasados_historial,
+            "total_sin_asignar_historial": total_sin_asignar_historial,
             "querystring": querystring,
             "es_admin": True,
         },
