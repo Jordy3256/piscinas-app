@@ -4,8 +4,6 @@ import logging
 from datetime import date, timedelta
 from calendar import monthrange
 
-from dateutil.relativedelta import relativedelta
-
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
@@ -87,6 +85,65 @@ FOTOS_REQUERIDAS = [
 
 def _nombre_foto_valido(nombre: str) -> bool:
     return nombre in FOTOS_REQUERIDAS
+
+
+# -------------------
+# Helpers fechas
+# -------------------
+def _sumar_un_mes(fecha_base: date) -> date:
+    nuevo_mes = fecha_base.month + 1
+    nuevo_anio = fecha_base.year
+
+    if nuevo_mes > 12:
+        nuevo_mes = 1
+        nuevo_anio += 1
+
+    ultimo_dia_nuevo_mes = monthrange(nuevo_anio, nuevo_mes)[1]
+    nuevo_dia = min(fecha_base.day, ultimo_dia_nuevo_mes)
+    return date(nuevo_anio, nuevo_mes, nuevo_dia)
+
+
+def _siguiente_fecha_recurrente(fecha_actual: date, frecuencia: str) -> date:
+    if frecuencia == "semanal":
+        return fecha_actual + timedelta(days=7)
+    return _sumar_un_mes(fecha_actual)
+
+
+# ==========================================================
+# FINANZAS - MOVIMIENTOS RECURRENTES
+# ==========================================================
+def procesar_movimientos_recurrentes():
+    hoy = date.today()
+
+    movimientos = MovimientoRecurrente.objects.filter(
+        activo=True,
+        proxima_fecha__lte=hoy,
+    ).order_by("proxima_fecha", "id")
+
+    for mov in movimientos:
+        while mov.activo and mov.proxima_fecha <= hoy:
+            fecha_mov = mov.proxima_fecha
+
+            if mov.tipo == "ingreso":
+                Ingreso.objects.create(
+                    concepto=mov.concepto,
+                    total=mov.monto,
+                    fecha=fecha_mov,
+                )
+
+            elif mov.tipo == "egreso":
+                Egreso.objects.create(
+                    mantenimiento=None,
+                    insumo=None,
+                    concepto=mov.concepto,
+                    categoria="Recurrente",
+                    cantidad=1,
+                    costo_unitario=mov.monto,
+                    fecha=fecha_mov,
+                )
+
+            mov.proxima_fecha = _siguiente_fecha_recurrente(fecha_mov, mov.frecuencia)
+            mov.save(update_fields=["proxima_fecha"])
 
 
 # -------------------
@@ -517,50 +574,6 @@ def _clasificar_estado_trabajador(carga_hoy, atrasados, proximos):
     if carga_hoy >= 2 or carga_total >= 3:
         return "media"
     return "libre"
-
-
-# ==========================================================
-# FINANZAS - MOVIMIENTOS RECURRENTES
-# ==========================================================
-def _siguiente_fecha_recurrente(fecha_actual, frecuencia):
-    if frecuencia == "mensual":
-        return fecha_actual + relativedelta(months=1)
-    if frecuencia == "semanal":
-        return fecha_actual + relativedelta(weeks=1)
-    return fecha_actual + relativedelta(months=1)
-
-
-def procesar_movimientos_recurrentes():
-    hoy = date.today()
-
-    movimientos = MovimientoRecurrente.objects.filter(
-        activo=True,
-        proxima_fecha__lte=hoy,
-    ).order_by("proxima_fecha", "id")
-
-    for mov in movimientos:
-        while mov.activo and mov.proxima_fecha <= hoy:
-            fecha_mov = mov.proxima_fecha
-
-            if mov.tipo == "ingreso":
-                Ingreso.objects.create(
-                    concepto=mov.concepto,
-                    total=mov.monto,
-                    fecha=fecha_mov,
-                )
-            elif mov.tipo == "egreso":
-                Egreso.objects.create(
-                    mantenimiento=None,
-                    insumo=None,
-                    concepto=mov.concepto,
-                    categoria="Recurrente",
-                    cantidad=1,
-                    costo_unitario=mov.monto,
-                    fecha=fecha_mov,
-                )
-
-            mov.proxima_fecha = _siguiente_fecha_recurrente(fecha_mov, mov.frecuencia)
-            mov.save(update_fields=["proxima_fecha"])
 
 
 # ==========================================================
