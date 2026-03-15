@@ -151,6 +151,73 @@ def _crear_egreso_manual(concepto, categoria, total, fecha):
 
 
 # -------------------
+# Helpers notificaciones recurrentes
+# -------------------
+def _notificacion_recurrente_ya_existe_hoy(user, titulo, mensaje, url):
+    if Notificacion is None:
+        return False
+
+    hoy = timezone.localdate()
+
+    try:
+        return Notificacion.objects.filter(
+            user=user,
+            titulo=titulo,
+            mensaje=mensaje,
+            url=url,
+            creada_en__date=hoy,
+        ).exists()
+    except Exception:
+        return False
+
+
+def notificar_movimientos_recurrentes_proximos():
+    """
+    Recordatorio automático 1 día antes.
+    Se ejecuta al entrar a vistas admin para avisar cobros/pagos próximos.
+    """
+    hoy = date.today()
+    manana = hoy + timedelta(days=1)
+
+    movimientos = MovimientoRecurrente.objects.filter(
+        activo=True,
+        proxima_fecha=manana
+    ).order_by("proxima_fecha", "id")
+
+    if not movimientos.exists():
+        return
+
+    admins = _admins_queryset()
+    url = "/dashboard/finanzas/recurrentes/"
+
+    for mov in movimientos:
+        if mov.tipo == "ingreso":
+            titulo = "💰 Cobro recurrente próximo"
+            mensaje = (
+                f"Mañana debes cobrar '{mov.concepto}' por ${mov.monto} "
+                f"(fecha {mov.proxima_fecha})."
+            )
+        else:
+            titulo = "💸 Pago recurrente próximo"
+            mensaje = (
+                f"Mañana debes pagar '{mov.concepto}' por ${mov.monto} "
+                f"(fecha {mov.proxima_fecha})."
+            )
+
+        for admin_user in admins:
+            if _notificacion_recurrente_ya_existe_hoy(admin_user, titulo, mensaje, url):
+                continue
+
+            _crear_notificacion(
+                user=admin_user,
+                titulo=titulo,
+                mensaje=mensaje,
+                url=url,
+                enviar_push=True,
+            )
+
+
+# -------------------
 # Automatización de movimientos recurrentes
 # -------------------
 def procesar_movimientos_recurrentes():
@@ -177,8 +244,16 @@ def procesar_movimientos_recurrentes():
                     total=mov.monto,
                     fecha=fecha_mov
                 )
+
                 total_ingresos += 1
                 generado_este_movimiento += 1
+
+                _notificar_admins(
+                    titulo="💰 Ingreso recurrente generado",
+                    mensaje=f"Se generó el ingreso recurrente '{mov.concepto}' por ${mov.monto} (fecha {fecha_mov}).",
+                    url="/dashboard/finanzas/flujo/",
+                    enviar_push=True,
+                )
 
             elif mov.tipo == "egreso":
                 _crear_egreso_manual(
@@ -187,8 +262,16 @@ def procesar_movimientos_recurrentes():
                     total=mov.monto,
                     fecha=fecha_mov,
                 )
+
                 total_egresos += 1
                 generado_este_movimiento += 1
+
+                _notificar_admins(
+                    titulo="💸 Pago recurrente generado",
+                    mensaje=f"Se registró el egreso recurrente '{mov.concepto}' por ${mov.monto} (fecha {fecha_mov}).",
+                    url="/dashboard/finanzas/flujo/",
+                    enviar_push=True,
+                )
 
             mov.proxima_fecha = _siguiente_fecha_recurrente(fecha_mov, mov.frecuencia)
             mov.save(update_fields=["proxima_fecha"])
@@ -778,6 +861,7 @@ def inicio_view(request):
 
     if es_admin(request.user):
         ctx["es_admin"] = True
+        notificar_movimientos_recurrentes_proximos()
         return render(request, "dashboard/home_admin.html", ctx)
 
     if es_trabajador(request.user):
@@ -804,6 +888,7 @@ def dashboard_view(request):
 
     if es_admin(request.user):
         hoy = date.today()
+        notificar_movimientos_recurrentes_proximos()
 
         total_ingresos = Ingreso.objects.aggregate(total=Sum("total"))["total"] or 0
         total_egresos = Egreso.objects.aggregate(total=Sum("total"))["total"] or 0
@@ -2145,6 +2230,7 @@ def flujo_mensual_view(request):
     if not es_admin(request.user):
         return render(request, "dashboard/no_autorizado.html", status=403)
 
+    notificar_movimientos_recurrentes_proximos()
     procesar_movimientos_recurrentes()
 
     hoy = date.today()
@@ -2435,6 +2521,8 @@ def ingreso_eliminar_view(request, pk):
 def movimientos_recurrentes_view(request):
     if not es_admin(request.user):
         return render(request, "dashboard/no_autorizado.html", status=403)
+
+    notificar_movimientos_recurrentes_proximos()
 
     if request.method == "POST":
         tipo = (request.POST.get("tipo", "") or "").strip()
