@@ -46,6 +46,14 @@ except Exception:
 
 logger = logging.getLogger(__name__)
 
+MESES_ES = [
+    "",
+    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+]
+
+DIAS_SEMANA_ES = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
+
 
 # -------------------
 # Helpers de roles
@@ -296,13 +304,85 @@ def notificar_trabajadores_mantenimientos_hoy():
 # -------------------
 # Helpers calendario visual
 # -------------------
-def _build_calendario_mantenimientos(anio, mes, trabajador=None):
+def _trabajadores_resumen_mantenimiento(mantenimiento):
+    nombres = []
+    try:
+        for trabajador in mantenimiento.trabajadores.all():
+            username = str(getattr(getattr(trabajador, "user", None), "username", "") or "").strip()
+            if username:
+                nombres.append(username)
+    except Exception:
+        pass
+
+    if not nombres:
+        return "Sin asignar"
+
+    if len(nombres) <= 2:
+        return ", ".join(nombres)
+
+    return f"{', '.join(nombres[:2])} +{len(nombres) - 2}"
+
+
+def _calendario_estado_item(mantenimiento, hoy_local):
+    estado = str(getattr(mantenimiento, "estado", "") or "").lower()
+    fecha_m = getattr(mantenimiento, "fecha", None)
+
+    sin_asignar = False
+    try:
+        sin_asignar = not mantenimiento.trabajadores.exists()
+    except Exception:
+        sin_asignar = False
+
+    atrasado = estado == "pendiente" and fecha_m and fecha_m < hoy_local
+
+    if atrasado and sin_asignar:
+        return {
+            "badge": "Atrasado · sin asignar",
+            "badge_clase": "dark",
+            "item_clase": "calendar-item-critico",
+            "prioridad": 0,
+        }
+
+    if atrasado:
+        return {
+            "badge": "Atrasado",
+            "badge_clase": "danger",
+            "item_clase": "calendar-item-atrasado",
+            "prioridad": 1,
+        }
+
+    if sin_asignar:
+        return {
+            "badge": "Sin asignar",
+            "badge_clase": "warning",
+            "item_clase": "calendar-item-sin-asignar",
+            "prioridad": 2,
+        }
+
+    if estado == "realizado":
+        return {
+            "badge": "Realizado",
+            "badge_clase": "success",
+            "item_clase": "calendar-item-realizado",
+            "prioridad": 4,
+        }
+
+    return {
+        "badge": "Pendiente",
+        "badge_clase": "primary",
+        "item_clase": "calendar-item-pendiente",
+        "prioridad": 3,
+    }
+
+
+def _build_calendario_mantenimientos(anio, mes, trabajador=None, limite_items_por_dia=6):
     primer_dia, ultimo_dia = _inicio_fin_mes(anio, mes)
+    hoy_local = timezone.localdate()
 
     qs = (
         Mantenimiento.objects.filter(fecha__range=(primer_dia, ultimo_dia))
         .select_related("cliente", "contrato")
-        .prefetch_related("trabajadores")
+        .prefetch_related("trabajadores", "trabajadores__user")
         .order_by("fecha", "estado", "id")
     )
 
@@ -318,6 +398,7 @@ def _build_calendario_mantenimientos(anio, mes, trabajador=None):
     semanas = []
     for semana in monthcalendar(anio, mes):
         fila = []
+
         for dia in semana:
             if dia == 0:
                 fila.append({
@@ -330,50 +411,148 @@ def _build_calendario_mantenimientos(anio, mes, trabajador=None):
                     "pendientes": 0,
                     "atrasados": 0,
                     "sin_asignar": 0,
+                    "total_visible": 0,
+                    "total_ocultos": 0,
+                    "hay_mas": False,
+                    "clase_dia": "calendar-empty",
+                    "resumen": "",
+                    "titulo": "",
                 })
                 continue
 
             fecha_actual = date(anio, mes, dia)
             items = por_fecha.get(fecha_actual, [])
-            realizados = len([m for m in items if getattr(m, "estado", "") == "realizado"])
-            pendientes = len([m for m in items if getattr(m, "estado", "") == "pendiente"])
-            atrasados = len([
-                m for m in items
-                if getattr(m, "estado", "") == "pendiente" and fecha_actual < timezone.localdate()
-            ])
 
+            items_enriquecidos = []
+            realizados = 0
+            pendientes = 0
+            atrasados = 0
             sin_asignar = 0
+
             for m in items:
+                estado = str(getattr(m, "estado", "") or "").lower()
+                if estado == "realizado":
+                    realizados += 1
+                if estado == "pendiente":
+                    pendientes += 1
+
                 try:
-                    if not m.trabajadores.exists():
-                        sin_asignar += 1
+                    m_sin_asignar = not m.trabajadores.exists()
                 except Exception:
-                    pass
+                    m_sin_asignar = False
+
+                if m_sin_asignar:
+                    sin_asignar += 1
+
+                m_atrasado = estado == "pendiente" and fecha_actual < hoy_local
+                if m_atrasado:
+                    atrasados += 1
+
+                estado_info = _calendario_estado_item(m, hoy_local)
+
+                items_enriquecidos.append({
+                    "id": m.id,
+                    "cliente": str(getattr(m, "cliente", "") or "Cliente"),
+                    "contrato": str(getattr(m, "contrato", "") or "Sin contrato"),
+                    "estado": estado,
+                    "estado_label": estado_info["badge"],
+                    "estado_badge_clase": estado_info["badge_clase"],
+                    "item_clase": estado_info["item_clase"],
+                    "prioridad": estado_info["prioridad"],
+                    "fecha": fecha_actual,
+                    "fecha_label": fecha_actual.strftime("%d/%m/%Y"),
+                    "trabajadores_resumen": _trabajadores_resumen_mantenimiento(m),
+                    "sin_asignar": m_sin_asignar,
+                    "atrasado": m_atrasado,
+                    "url": f"/dashboard/mantenimientos/{m.id}/",
+                })
+
+            items_enriquecidos.sort(
+                key=lambda x: (x["prioridad"], x["cliente"], x["id"])
+            )
+
+            items_visibles = items_enriquecidos[:limite_items_por_dia]
+            total = len(items_enriquecidos)
+            total_visible = len(items_visibles)
+            total_ocultos = max(total - total_visible, 0)
+            hay_mas = total_ocultos > 0
+
+            if atrasados > 0 and sin_asignar > 0:
+                clase_dia = "calendar-day-critical"
+            elif atrasados > 0:
+                clase_dia = "calendar-day-danger"
+            elif sin_asignar > 0:
+                clase_dia = "calendar-day-warning"
+            elif pendientes > 0:
+                clase_dia = "calendar-day-primary"
+            elif realizados > 0:
+                clase_dia = "calendar-day-success"
+            else:
+                clase_dia = "calendar-day-empty"
+
+            if total == 0:
+                resumen = "Sin mantenimientos"
+            else:
+                partes = [f"{total} total"]
+                if pendientes > 0:
+                    partes.append(f"{pendientes} pendientes")
+                if realizados > 0:
+                    partes.append(f"{realizados} realizados")
+                if atrasados > 0:
+                    partes.append(f"{atrasados} atrasados")
+                if sin_asignar > 0:
+                    partes.append(f"{sin_asignar} sin asignar")
+                resumen = " · ".join(partes)
 
             fila.append({
                 "dia": dia,
                 "fecha": fecha_actual,
-                "es_hoy": fecha_actual == timezone.localdate(),
-                "items": items[:4],
-                "total": len(items),
+                "es_hoy": fecha_actual == hoy_local,
+                "items": items_visibles,
+                "items_todos": items_enriquecidos,
+                "total": total,
                 "realizados": realizados,
                 "pendientes": pendientes,
                 "atrasados": atrasados,
                 "sin_asignar": sin_asignar,
+                "total_visible": total_visible,
+                "total_ocultos": total_ocultos,
+                "hay_mas": hay_mas,
+                "clase_dia": clase_dia,
+                "resumen": resumen,
+                "titulo": f"{dia} de {MESES_ES[mes]} de {anio}",
             })
+
         semanas.append(fila)
 
     total_mes = len(mantenimientos)
     total_realizados = len([m for m in mantenimientos if getattr(m, "estado", "") == "realizado"])
     total_pendientes = len([m for m in mantenimientos if getattr(m, "estado", "") == "pendiente"])
+    total_atrasados = len([
+        m for m in mantenimientos
+        if getattr(m, "estado", "") == "pendiente" and getattr(m, "fecha", hoy_local) < hoy_local
+    ])
+    total_sin_asignar = 0
+    for m in mantenimientos:
+        try:
+            if not m.trabajadores.exists():
+                total_sin_asignar += 1
+        except Exception:
+            pass
 
     return {
         "anio": anio,
         "mes": mes,
+        "mes_nombre": MESES_ES[mes],
+        "titulo_periodo": f"{MESES_ES[mes]} {anio}",
+        "dias_semana": DIAS_SEMANA_ES,
         "semanas": semanas,
         "total_mes": total_mes,
         "total_realizados": total_realizados,
         "total_pendientes": total_pendientes,
+        "total_atrasados": total_atrasados,
+        "total_sin_asignar": total_sin_asignar,
+        "limite_items_por_dia": limite_items_por_dia,
     }
 
 

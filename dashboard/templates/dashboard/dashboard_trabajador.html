@@ -25,32 +25,40 @@
     .worker-summary .card-body {
       padding: .9rem;
     }
+
+    .worker-calendar-wrap {
+      overflow-x: auto;
+    }
+
+    .worker-calendar-table {
+      min-width: 920px;
+    }
   }
 
-  .mini-calendario th,
-  .mini-calendario td {
+  .worker-calendar-table th,
+  .worker-calendar-table td {
     vertical-align: top;
   }
 
-  .mini-calendario .dia-box {
+  .worker-calendar-day {
     min-height: 118px;
   }
 
-  .mini-calendario .dia-numero {
+  .worker-calendar-num {
     font-size: 0.95rem;
     font-weight: 700;
   }
 
-  .mini-calendario .dia-hoy {
+  .worker-calendar-hoy {
     border: 2px solid #0d6efd !important;
     background: #eef5ff;
   }
 
-  .mini-calendario .dia-vacio {
+  .worker-calendar-vacio {
     background: #f8f9fa;
   }
 
-  .mini-calendario .mini-item {
+  .worker-calendar-item {
     font-size: 0.78rem;
     line-height: 1.2;
   }
@@ -137,8 +145,8 @@
       </div>
     </div>
 
-    <div class="table-responsive mini-calendario">
-      <table class="table table-bordered align-middle">
+    <div class="table-responsive worker-calendar-wrap">
+      <table class="table table-bordered align-middle worker-calendar-table">
         <thead class="table-light text-center">
           <tr>
             <th>Lun</th>
@@ -154,11 +162,11 @@
           {% for semana in calendario_trabajador.semanas %}
           <tr>
             {% for dia in semana %}
-            <td class="{% if dia.dia == 0 %}dia-vacio{% endif %}">
+            <td class="{% if dia.dia == 0 %}worker-calendar-vacio{% endif %}">
               {% if dia.dia > 0 %}
-              <div class="border rounded p-2 dia-box {% if dia.es_hoy %}dia-hoy{% endif %}">
+              <div class="border rounded p-2 worker-calendar-day {% if dia.es_hoy %}worker-calendar-hoy{% endif %}">
                 <div class="d-flex justify-content-between align-items-start mb-2">
-                  <span class="dia-numero">{{ dia.dia }}</span>
+                  <span class="worker-calendar-num">{{ dia.dia }}</span>
                   {% if dia.total > 0 %}
                   <span class="badge bg-primary">{{ dia.total }}</span>
                   {% endif %}
@@ -176,10 +184,16 @@
                 </div>
                 {% endif %}
 
+                {% if dia.atrasados > 0 %}
+                <div class="small text-danger fw-semibold">
+                  🚨 {{ dia.atrasados }} atrasado{{ dia.atrasados|pluralize }}
+                </div>
+                {% endif %}
+
                 {% if dia.items %}
                 <div class="mt-2 vstack gap-1">
                   {% for m in dia.items %}
-                  <a href="/dashboard/mantenimientos/{{ m.id }}/" class="text-decoration-none mini-item">
+                  <a href="/dashboard/mantenimientos/{{ m.id }}/" class="text-decoration-none worker-calendar-item">
                     <div class="border rounded p-1 bg-light">
                       <div class="fw-semibold text-dark">
                         {{ m.cliente }}

@@ -5,6 +5,25 @@
 
 {% block content %}
 
+<style>
+  @media (max-width: 767.98px) {
+    .flujo-card .card-body {
+      padding: 1rem;
+    }
+
+    .flujo-actions .btn,
+    .flujo-actions a,
+    .flujo-actions button {
+      width: 100%;
+    }
+
+    .flujo-kpi .fs-4,
+    .flujo-kpi .fs-5 {
+      font-size: 1.45rem !important;
+    }
+  }
+</style>
+
 <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
   <div>
     <div class="text-muted small">Selecciona mes y año</div>
@@ -28,9 +47,9 @@
   </form>
 </div>
 
-<div class="row g-2 mb-3">
+<div class="row g-2 mb-3 flujo-kpi">
   <div class="col-12 col-md-4">
-    <div class="card shadow-sm border-success">
+    <div class="card shadow-sm border-success flujo-card">
       <div class="card-body">
         <div class="text-muted small">Ingresos del mes</div>
         <div class="fs-4 fw-bold text-success">${{ resumen_mes_actual.ingresos|floatformat:2 }}</div>
@@ -46,7 +65,7 @@
   </div>
 
   <div class="col-12 col-md-4">
-    <div class="card shadow-sm border-danger">
+    <div class="card shadow-sm border-danger flujo-card">
       <div class="card-body">
         <div class="text-muted small">Egresos del mes</div>
         <div class="fs-4 fw-bold text-danger">${{ resumen_mes_actual.egresos|floatformat:2 }}</div>
@@ -62,7 +81,7 @@
   </div>
 
   <div class="col-12 col-md-4">
-    <div class="card shadow-sm border-primary">
+    <div class="card shadow-sm border-primary flujo-card">
       <div class="card-body">
         <div class="text-muted small">Balance del mes</div>
         <div class="fs-4 fw-bold {% if resumen_mes_actual.balance < 0 %}text-danger{% else %}text-primary{% endif %}">
@@ -80,9 +99,9 @@
   </div>
 </div>
 
-<div class="row g-2 mb-3">
+<div class="row g-2 mb-3 flujo-kpi">
   <div class="col-12 col-md-3">
-    <div class="card shadow-sm">
+    <div class="card shadow-sm flujo-card">
       <div class="card-body">
         <div class="text-muted small">Total ingresos</div>
         <div class="fs-4 fw-bold">${{ total_ingresos|floatformat:2 }}</div>
@@ -91,7 +110,7 @@
   </div>
 
   <div class="col-12 col-md-3">
-    <div class="card shadow-sm">
+    <div class="card shadow-sm flujo-card">
       <div class="card-body">
         <div class="text-muted small">Total egresos</div>
         <div class="fs-4 fw-bold text-danger">${{ total_egresos|floatformat:2 }}</div>
@@ -100,7 +119,7 @@
   </div>
 
   <div class="col-12 col-md-3">
-    <div class="card shadow-sm border-warning">
+    <div class="card shadow-sm border-warning flujo-card">
       <div class="card-body">
         <div class="text-muted small">Egresos manuales</div>
         <div class="fs-4 fw-bold text-warning">${{ total_egresos_manuales|floatformat:2 }}</div>
@@ -109,7 +128,7 @@
   </div>
 
   <div class="col-12 col-md-3">
-    <div class="card shadow-sm border-secondary">
+    <div class="card shadow-sm border-secondary flujo-card">
       <div class="card-body">
         <div class="text-muted small">Egresos automáticos</div>
         <div class="fs-4 fw-bold">${{ total_egresos_automaticos|floatformat:2 }}</div>
@@ -118,9 +137,9 @@
   </div>
 </div>
 
-<div class="row g-2 mb-3">
+<div class="row g-2 mb-3 flujo-kpi">
   <div class="col-12">
-    <div class="card shadow-sm">
+    <div class="card shadow-sm flujo-card">
       <div class="card-body">
         <div class="text-muted small">Balance</div>
         {% if balance >= 0 %}
@@ -133,7 +152,7 @@
   </div>
 </div>
 
-<div class="card shadow-sm mb-3 border-warning">
+<div class="card shadow-sm mb-3 border-warning flujo-card">
   <div class="card-body">
     <div class="fw-bold mb-3">🧾 Registrar egreso manual</div>
 
@@ -197,7 +216,7 @@
 
 <div class="row g-3 mb-3">
   <div class="col-12 col-lg-6">
-    <div class="card shadow-sm h-100">
+    <div class="card shadow-sm h-100 flujo-card">
       <div class="card-body">
         <div class="fw-bold mb-3">🏆 Top ingresos del mes</div>
 
@@ -223,7 +242,7 @@
   </div>
 
   <div class="col-12 col-lg-6">
-    <div class="card shadow-sm h-100">
+    <div class="card shadow-sm h-100 flujo-card">
       <div class="card-body">
         <div class="fw-bold mb-3">💸 Top egresos del mes</div>
 
@@ -260,7 +279,7 @@
   </div>
 </div>
 
-<div class="card shadow-sm mb-3">
+<div class="card shadow-sm mb-3 flujo-card">
   <div class="card-body">
     <div class="fw-bold mb-2">📈 Balance acumulado del mes</div>
 
@@ -295,7 +314,7 @@
   </div>
 </div>
 
-<div class="card shadow-sm mb-3">
+<div class="card shadow-sm mb-3 flujo-card">
   <div class="card-body">
     <div class="fw-bold mb-2">📅 Detalle del mes</div>
 

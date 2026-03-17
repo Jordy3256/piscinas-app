@@ -31,14 +31,34 @@ class PushSubscription(models.Model):
 
 
 class Notificacion(models.Model):
+    TIPO_CHOICES = [
+        ("general", "General"),
+        ("mantenimiento_hoy", "Mantenimiento hoy"),
+        ("mantenimiento_manana", "Mantenimiento mañana"),
+    ]
+
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
         related_name="notificaciones",
     )
+
     titulo = models.CharField(max_length=150)
     mensaje = models.TextField()
     url = models.CharField(max_length=255, blank=True, default="")
+
+    tipo = models.CharField(
+        max_length=50,
+        choices=TIPO_CHOICES,
+        default="general",
+    )
+
+    referencia_id = models.IntegerField(
+        blank=True,
+        null=True,
+        help_text="ID del objeto relacionado (ej: mantenimiento)",
+    )
+
     leida = models.BooleanField(default=False)
     creada_en = models.DateTimeField(auto_now_add=True)
     leida_en = models.DateTimeField(blank=True, null=True)
@@ -49,6 +69,11 @@ class Notificacion(models.Model):
             models.Index(fields=["user", "leida"]),
             models.Index(fields=["user", "creada_en"]),
             models.Index(fields=["creada_en"]),
+            models.Index(fields=["tipo"]),
+            models.Index(fields=["referencia_id"]),
+        ]
+        unique_together = [
+            ("user", "tipo", "referencia_id")
         ]
 
     def __str__(self):
