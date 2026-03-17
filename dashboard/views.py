@@ -2,7 +2,7 @@
 import json
 import logging
 from datetime import date, timedelta
-from calendar import monthrange
+from calendar import monthrange, monthcalendar
 
 from django.conf import settings
 from django.contrib import messages
@@ -110,6 +110,24 @@ def _siguiente_fecha_recurrente(fecha_actual, frecuencia):
     return _sumar_un_mes(fecha_actual)
 
 
+def _inicio_fin_mes(anio, mes):
+    primer_dia = date(anio, mes, 1)
+    ultimo_dia = date(anio, mes, monthrange(anio, mes)[1])
+    return primer_dia, ultimo_dia
+
+
+def _mes_anterior(anio, mes):
+    if mes == 1:
+        return anio - 1, 12
+    return anio, mes - 1
+
+
+def _mes_siguiente(anio, mes):
+    if mes == 12:
+        return anio + 1, 1
+    return anio, mes + 1
+
+
 # -------------------
 # Helpers egresos manuales
 # -------------------
@@ -171,6 +189,27 @@ def _notificacion_recurrente_ya_existe_hoy(user, titulo, mensaje, url):
         return False
 
 
+def _notificacion_mantenimiento_hoy_ya_existe(user, mantenimiento):
+    if Notificacion is None:
+        return False
+
+    hoy = timezone.localdate()
+    titulo = "📅 Mantenimiento para hoy"
+    mensaje = f"Hoy te toca el mantenimiento de {mantenimiento.cliente}."
+    url = f"/dashboard/mantenimientos/{mantenimiento.pk}/"
+
+    try:
+        return Notificacion.objects.filter(
+            user=user,
+            titulo=titulo,
+            mensaje=mensaje,
+            url=url,
+            creada_en__date=hoy,
+        ).exists()
+    except Exception:
+        return False
+
+
 def notificar_movimientos_recurrentes_proximos():
     """
     Recordatorio automático 1 día antes.
@@ -215,6 +254,161 @@ def notificar_movimientos_recurrentes_proximos():
                 url=url,
                 enviar_push=True,
             )
+
+
+def notificar_trabajadores_mantenimientos_hoy():
+    """
+    Envía notificación al trabajador el mismo día del mantenimiento.
+    Evita duplicados por día/mantenimiento.
+    """
+    hoy = timezone.localdate()
+
+    mantenimientos_hoy = (
+        Mantenimiento.objects.filter(fecha=hoy)
+        .select_related("cliente", "contrato")
+        .prefetch_related("trabajadores", "trabajadores__user")
+        .order_by("id")
+    )
+
+    for mantenimiento in mantenimientos_hoy:
+        try:
+            trabajadores = mantenimiento.trabajadores.all()
+        except Exception:
+            trabajadores = []
+
+        for trabajador in trabajadores:
+            user = getattr(trabajador, "user", None)
+            if not user or not getattr(user, "is_active", False):
+                continue
+
+            if _notificacion_mantenimiento_hoy_ya_existe(user, mantenimiento):
+                continue
+
+            _crear_notificacion(
+                user=user,
+                titulo="📅 Mantenimiento para hoy",
+                mensaje=f"Hoy te toca el mantenimiento de {mantenimiento.cliente}.",
+                url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
+                enviar_push=True,
+            )
+
+
+# -------------------
+# Helpers calendario visual
+# -------------------
+def _build_calendario_mantenimientos(anio, mes, trabajador=None):
+    primer_dia, ultimo_dia = _inicio_fin_mes(anio, mes)
+
+    qs = (
+        Mantenimiento.objects.filter(fecha__range=(primer_dia, ultimo_dia))
+        .select_related("cliente", "contrato")
+        .prefetch_related("trabajadores")
+        .order_by("fecha", "estado", "id")
+    )
+
+    if trabajador is not None:
+        qs = qs.filter(trabajadores=trabajador)
+
+    mantenimientos = list(qs)
+
+    por_fecha = {}
+    for mantenimiento in mantenimientos:
+        por_fecha.setdefault(mantenimiento.fecha, []).append(mantenimiento)
+
+    semanas = []
+    for semana in monthcalendar(anio, mes):
+        fila = []
+        for dia in semana:
+            if dia == 0:
+                fila.append({
+                    "dia": 0,
+                    "fecha": None,
+                    "es_hoy": False,
+                    "items": [],
+                    "total": 0,
+                    "realizados": 0,
+                    "pendientes": 0,
+                    "atrasados": 0,
+                    "sin_asignar": 0,
+                })
+                continue
+
+            fecha_actual = date(anio, mes, dia)
+            items = por_fecha.get(fecha_actual, [])
+            realizados = len([m for m in items if getattr(m, "estado", "") == "realizado"])
+            pendientes = len([m for m in items if getattr(m, "estado", "") == "pendiente"])
+            atrasados = len([
+                m for m in items
+                if getattr(m, "estado", "") == "pendiente" and fecha_actual < timezone.localdate()
+            ])
+
+            sin_asignar = 0
+            for m in items:
+                try:
+                    if not m.trabajadores.exists():
+                        sin_asignar += 1
+                except Exception:
+                    pass
+
+            fila.append({
+                "dia": dia,
+                "fecha": fecha_actual,
+                "es_hoy": fecha_actual == timezone.localdate(),
+                "items": items[:4],
+                "total": len(items),
+                "realizados": realizados,
+                "pendientes": pendientes,
+                "atrasados": atrasados,
+                "sin_asignar": sin_asignar,
+            })
+        semanas.append(fila)
+
+    total_mes = len(mantenimientos)
+    total_realizados = len([m for m in mantenimientos if getattr(m, "estado", "") == "realizado"])
+    total_pendientes = len([m for m in mantenimientos if getattr(m, "estado", "") == "pendiente"])
+
+    return {
+        "anio": anio,
+        "mes": mes,
+        "semanas": semanas,
+        "total_mes": total_mes,
+        "total_realizados": total_realizados,
+        "total_pendientes": total_pendientes,
+    }
+
+
+# -------------------
+# Helpers financiero
+# -------------------
+def _resumen_financiero_rango(fecha_inicio, fecha_fin):
+    ingresos_total = Ingreso.objects.filter(
+        fecha__range=(fecha_inicio, fecha_fin)
+    ).aggregate(total=Sum("total"))["total"] or 0
+
+    egresos_total = Egreso.objects.filter(
+        fecha__range=(fecha_inicio, fecha_fin)
+    ).aggregate(total=Sum("total"))["total"] or 0
+
+    balance_total = ingresos_total - egresos_total
+
+    return {
+        "ingresos": float(ingresos_total),
+        "egresos": float(egresos_total),
+        "balance": float(balance_total),
+    }
+
+
+def _variacion_porcentual(actual, anterior):
+    try:
+        actual = float(actual or 0)
+        anterior = float(anterior or 0)
+        if anterior == 0:
+            if actual == 0:
+                return 0.0
+            return 100.0
+        return round(((actual - anterior) / anterior) * 100, 2)
+    except Exception:
+        return 0.0
 
 
 # -------------------
@@ -862,10 +1056,12 @@ def inicio_view(request):
     if es_admin(request.user):
         ctx["es_admin"] = True
         notificar_movimientos_recurrentes_proximos()
+        notificar_trabajadores_mantenimientos_hoy()
         return render(request, "dashboard/home_admin.html", ctx)
 
     if es_trabajador(request.user):
         ctx["es_admin"] = False
+        notificar_trabajadores_mantenimientos_hoy()
         return render(request, "dashboard/home_trabajador.html", ctx)
 
     return render(request, "dashboard/no_autorizado.html", status=403)
@@ -889,6 +1085,7 @@ def dashboard_view(request):
     if es_admin(request.user):
         hoy = date.today()
         notificar_movimientos_recurrentes_proximos()
+        notificar_trabajadores_mantenimientos_hoy()
 
         total_ingresos = Ingreso.objects.aggregate(total=Sum("total"))["total"] or 0
         total_egresos = Egreso.objects.aggregate(total=Sum("total"))["total"] or 0
@@ -897,6 +1094,41 @@ def dashboard_view(request):
         ingresos_hoy = Ingreso.objects.filter(fecha=hoy).aggregate(total=Sum("total"))["total"] or 0
         egresos_hoy = Egreso.objects.filter(fecha=hoy).aggregate(total=Sum("total"))["total"] or 0
         balance_hoy = ingresos_hoy - egresos_hoy
+
+        anio_cal = int(request.GET.get("anio_cal", hoy.year))
+        mes_cal = int(request.GET.get("mes_cal", hoy.month))
+        anio_cal_ant, mes_cal_ant = _mes_anterior(anio_cal, mes_cal)
+        anio_cal_sig, mes_cal_sig = _mes_siguiente(anio_cal, mes_cal)
+
+        calendario_admin = _build_calendario_mantenimientos(anio_cal, mes_cal)
+
+        primer_dia_mes_actual, ultimo_dia_mes_actual = _inicio_fin_mes(hoy.year, hoy.month)
+        anio_mes_anterior, mes_mes_anterior = _mes_anterior(hoy.year, hoy.month)
+        primer_dia_mes_anterior, ultimo_dia_mes_anterior = _inicio_fin_mes(anio_mes_anterior, mes_mes_anterior)
+
+        resumen_mes_actual = _resumen_financiero_rango(primer_dia_mes_actual, ultimo_dia_mes_actual)
+        resumen_mes_anterior = _resumen_financiero_rango(primer_dia_mes_anterior, ultimo_dia_mes_anterior)
+
+        variacion_ingresos_mes = _variacion_porcentual(
+            resumen_mes_actual["ingresos"],
+            resumen_mes_anterior["ingresos"],
+        )
+        variacion_egresos_mes = _variacion_porcentual(
+            resumen_mes_actual["egresos"],
+            resumen_mes_anterior["egresos"],
+        )
+        variacion_balance_mes = _variacion_porcentual(
+            resumen_mes_actual["balance"],
+            resumen_mes_anterior["balance"],
+        )
+
+        recurrentes_proximos_7_dias = list(
+            MovimientoRecurrente.objects.filter(
+                activo=True,
+                proxima_fecha__gte=hoy,
+                proxima_fecha__lte=hoy + timedelta(days=7)
+            ).order_by("proxima_fecha", "id")[:10]
+        )
 
         mantenimientos_hoy_qs = (
             Mantenimiento.objects.filter(fecha=hoy)
@@ -1042,9 +1274,18 @@ def dashboard_view(request):
         trabajadores_media = trabajadores_media[:5]
         trabajadores_saturados = trabajadores_saturados[:5]
 
-        total_trabajadores_libres = len([t for t in resumen_trabajadores if _clasificar_estado_trabajador(t.get("dia", 0), t.get("atrasados", 0), t.get("proximos", 0)) == "libre"])
-        total_trabajadores_media = len([t for t in resumen_trabajadores if _clasificar_estado_trabajador(t.get("dia", 0), t.get("atrasados", 0), t.get("proximos", 0)) == "media"])
-        total_trabajadores_saturados = len([t for t in resumen_trabajadores if _clasificar_estado_trabajador(t.get("dia", 0), t.get("atrasados", 0), t.get("proximos", 0)) == "saturado"])
+        total_trabajadores_libres = len([
+            t for t in resumen_trabajadores
+            if _clasificar_estado_trabajador(t.get("dia", 0), t.get("atrasados", 0), t.get("proximos", 0)) == "libre"
+        ])
+        total_trabajadores_media = len([
+            t for t in resumen_trabajadores
+            if _clasificar_estado_trabajador(t.get("dia", 0), t.get("atrasados", 0), t.get("proximos", 0)) == "media"
+        ])
+        total_trabajadores_saturados = len([
+            t for t in resumen_trabajadores
+            if _clasificar_estado_trabajador(t.get("dia", 0), t.get("atrasados", 0), t.get("proximos", 0)) == "saturado"
+        ])
 
         trabajador_recomendado = None
         candidatos_recomendados = []
@@ -1103,6 +1344,19 @@ def dashboard_view(request):
             "ingresos_hoy": float(ingresos_hoy),
             "egresos_hoy": float(egresos_hoy),
             "balance_hoy": float(balance_hoy),
+            "resumen_mes_actual": resumen_mes_actual,
+            "resumen_mes_anterior": resumen_mes_anterior,
+            "variacion_ingresos_mes": variacion_ingresos_mes,
+            "variacion_egresos_mes": variacion_egresos_mes,
+            "variacion_balance_mes": variacion_balance_mes,
+            "recurrentes_proximos_7_dias": recurrentes_proximos_7_dias,
+            "anio_cal": anio_cal,
+            "mes_cal": mes_cal,
+            "anio_cal_ant": anio_cal_ant,
+            "mes_cal_ant": mes_cal_ant,
+            "anio_cal_sig": anio_cal_sig,
+            "mes_cal_sig": mes_cal_sig,
+            "calendario_admin": calendario_admin,
             "total_mantenimientos_hoy": total_mantenimientos_hoy,
             "realizados_hoy": realizados_hoy,
             "pendientes_hoy": pendientes_hoy,
@@ -1137,11 +1391,19 @@ def dashboard_view(request):
 
     if es_trabajador(request.user):
         hoy = date.today()
+        notificar_trabajadores_mantenimientos_hoy()
 
         try:
             trabajador = request.user.trabajador
         except Exception:
             return render(request, "dashboard/no_autorizado.html", status=403)
+
+        anio_cal = int(request.GET.get("anio_cal", hoy.year))
+        mes_cal = int(request.GET.get("mes_cal", hoy.month))
+        anio_cal_ant, mes_cal_ant = _mes_anterior(anio_cal, mes_cal)
+        anio_cal_sig, mes_cal_sig = _mes_siguiente(anio_cal, mes_cal)
+
+        calendario_trabajador = _build_calendario_mantenimientos(anio_cal, mes_cal, trabajador=trabajador)
 
         mantenimientos_hoy = (
             Mantenimiento.objects.filter(fecha=hoy, trabajadores=trabajador)
@@ -1155,12 +1417,30 @@ def dashboard_view(request):
             .order_by("fecha")[:30]
         )
 
+        mantenimientos_atrasados = (
+            Mantenimiento.objects.filter(
+                fecha__lt=hoy,
+                estado="pendiente",
+                trabajadores=trabajador
+            )
+            .select_related("cliente", "contrato")
+            .order_by("fecha", "id")[:20]
+        )
+
         ctx = {
             **base_ctx,
             "modo": "trabajador",
             "hoy": hoy,
             "mantenimientos_hoy": mantenimientos_hoy,
             "mantenimientos_proximos": mantenimientos_proximos,
+            "mantenimientos_atrasados": mantenimientos_atrasados,
+            "anio_cal": anio_cal,
+            "mes_cal": mes_cal,
+            "anio_cal_ant": anio_cal_ant,
+            "mes_cal_ant": mes_cal_ant,
+            "anio_cal_sig": anio_cal_sig,
+            "mes_cal_sig": mes_cal_sig,
+            "calendario_trabajador": calendario_trabajador,
             "es_admin": False,
         }
         return render(request, "dashboard/dashboard_trabajador.html", ctx)
@@ -1388,18 +1668,14 @@ def mantenimiento_historial_view(request):
 
     if filtro == "hoy":
         qs = qs.filter(fecha=hoy)
-
     elif filtro == "pendientes":
         qs = qs.filter(estado="pendiente")
         estado = "pendiente"
-
     elif filtro == "realizados":
         qs = qs.filter(estado="realizado")
         estado = "realizado"
-
     elif filtro == "atrasados":
         qs = qs.filter(fecha__lt=hoy, estado="pendiente")
-
     elif filtro == "sin_asignar":
         qs = qs.filter(trabajadores__isnull=True).distinct()
 
@@ -1496,6 +1772,11 @@ def admin_operativo_view(request):
     hoy = date.today()
     filtro = (request.GET.get("filtro", "") or "").strip().lower()
     q = (request.GET.get("q", "") or "").strip()
+
+    anio_cal = int(request.GET.get("anio_cal", hoy.year))
+    mes_cal = int(request.GET.get("mes_cal", hoy.month))
+    anio_cal_ant, mes_cal_ant = _mes_anterior(anio_cal, mes_cal)
+    anio_cal_sig, mes_cal_sig = _mes_siguiente(anio_cal, mes_cal)
 
     base_qs = (
         Mantenimiento.objects
@@ -1596,6 +1877,8 @@ def admin_operativo_view(request):
         sin_asignar_proximos
     )
 
+    calendario_operativo = _build_calendario_mantenimientos(anio_cal, mes_cal)
+
     return render(
         request,
         "dashboard/admin_operativo.html",
@@ -1612,6 +1895,13 @@ def admin_operativo_view(request):
             "sin_asignar_atrasados": sin_asignar_atrasados,
             "sin_asignar_proximos": sin_asignar_proximos,
             "total_sin_asignar": total_sin_asignar,
+            "anio_cal": anio_cal,
+            "mes_cal": mes_cal,
+            "anio_cal_ant": anio_cal_ant,
+            "mes_cal_ant": mes_cal_ant,
+            "anio_cal_sig": anio_cal_sig,
+            "mes_cal_sig": mes_cal_sig,
+            "calendario_operativo": calendario_operativo,
             "es_admin": True,
         },
     )
@@ -2240,6 +2530,10 @@ def flujo_mensual_view(request):
     primer_dia = date(anio, mes, 1)
     ultimo_dia = date(anio, mes, monthrange(anio, mes)[1])
 
+    anio_anterior, mes_anterior = _mes_anterior(anio, mes)
+    primer_dia_anterior = date(anio_anterior, mes_anterior, 1)
+    ultimo_dia_anterior = date(anio_anterior, mes_anterior, monthrange(anio_anterior, mes_anterior)[1])
+
     ingresos_qs = Ingreso.objects.filter(
         fecha__range=(primer_dia, ultimo_dia)
     ).order_by("fecha", "id")
@@ -2266,14 +2560,38 @@ def flujo_mensual_view(request):
     total_egresos_automaticos = sum(float(getattr(e, "total", 0) or 0) for e in egresos_automaticos_qs)
     balance = total_ingresos - total_egresos
 
-    dias, ingresos_por_dia, egresos_por_dia = [], [], []
+    resumen_mes_actual = _resumen_financiero_rango(primer_dia, ultimo_dia)
+    resumen_mes_anterior = _resumen_financiero_rango(primer_dia_anterior, ultimo_dia_anterior)
+
+    variacion_ingresos_mes = _variacion_porcentual(
+        resumen_mes_actual["ingresos"],
+        resumen_mes_anterior["ingresos"],
+    )
+    variacion_egresos_mes = _variacion_porcentual(
+        resumen_mes_actual["egresos"],
+        resumen_mes_anterior["egresos"],
+    )
+    variacion_balance_mes = _variacion_porcentual(
+        resumen_mes_actual["balance"],
+        resumen_mes_anterior["balance"],
+    )
+
+    dias, ingresos_por_dia, egresos_por_dia, balance_por_dia = [], [], [], []
+    balance_acumulado = 0.0
     for d in range(1, ultimo_dia.day + 1):
         fecha_d = date(anio, mes, d)
         ing_d = ingresos_qs.filter(fecha=fecha_d).aggregate(total=Sum("total"))["total"] or 0
         egr_d = egresos_qs.filter(fecha=fecha_d).aggregate(total=Sum("total"))["total"] or 0
+        balance_d = float(ing_d) - float(egr_d)
+        balance_acumulado += balance_d
+
         dias.append(str(d))
         ingresos_por_dia.append(float(ing_d))
         egresos_por_dia.append(float(egr_d))
+        balance_por_dia.append(float(balance_acumulado))
+
+    top_ingresos = list(ingresos_qs.order_by("-total", "-fecha", "-id")[:5])
+    top_egresos = sorted(list(egresos_qs), key=lambda x: float(getattr(x, "total", 0) or 0), reverse=True)[:5]
 
     return render(
         request,
@@ -2283,6 +2601,8 @@ def flujo_mensual_view(request):
             "mes": mes,
             "primer_dia": primer_dia,
             "ultimo_dia": ultimo_dia,
+            "anio_anterior": anio_anterior,
+            "mes_anterior": mes_anterior,
             "ingresos_qs": ingresos_qs,
             "egresos_qs": egresos_qs,
             "egresos_manuales_qs": egresos_manuales_qs,
@@ -2292,9 +2612,17 @@ def flujo_mensual_view(request):
             "total_egresos_manuales": float(total_egresos_manuales),
             "total_egresos_automaticos": float(total_egresos_automaticos),
             "balance": float(balance),
+            "resumen_mes_actual": resumen_mes_actual,
+            "resumen_mes_anterior": resumen_mes_anterior,
+            "variacion_ingresos_mes": variacion_ingresos_mes,
+            "variacion_egresos_mes": variacion_egresos_mes,
+            "variacion_balance_mes": variacion_balance_mes,
             "dias": dias,
             "ingresos_por_dia": ingresos_por_dia,
             "egresos_por_dia": egresos_por_dia,
+            "balance_por_dia": balance_por_dia,
+            "top_ingresos": top_ingresos,
+            "top_egresos": top_egresos,
             "es_admin": True,
         },
     )
