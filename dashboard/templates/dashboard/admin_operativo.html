@@ -28,15 +28,6 @@
     .mobile-worker-cards {
       display: block;
     }
-
-    .calendar-grid {
-      display: block;
-      overflow-x: auto;
-    }
-
-    .calendar-table {
-      min-width: 980px;
-    }
   }
 
   @media (min-width: 768px) {
@@ -45,162 +36,32 @@
     }
   }
 
-  .calendar-grid {
-    width: 100%;
-  }
-
-  .calendar-table {
-    width: 100%;
-    border-collapse: separate;
-    border-spacing: 0;
-  }
-
-  .calendar-table th,
-  .calendar-table td {
+  .mini-calendario th,
+  .mini-calendario td {
     vertical-align: top;
   }
 
-  .calendar-table thead th {
-    background: #f8f9fa;
-    text-align: center;
-    font-size: .86rem;
+  .mini-calendario .dia-box {
+    min-height: 118px;
+  }
+
+  .mini-calendario .dia-numero {
+    font-size: 0.95rem;
     font-weight: 700;
-    color: #495057;
-    border: 1px solid #dee2e6;
-    padding: .75rem .35rem;
   }
 
-  .calendar-day-cell {
-    width: 14.285%;
-    min-height: 165px;
-    background: #fff;
-    border: 1px solid #dee2e6;
-    padding: .45rem;
-  }
-
-  .calendar-day-empty {
-    background: #f8f9fa;
-  }
-
-  .calendar-day-box {
-    min-height: 160px;
-    border-radius: .8rem;
-    padding: .55rem;
-    border: 1px solid transparent;
-    transition: .18s ease;
-  }
-
-  .calendar-day-box:hover {
-    box-shadow: 0 .2rem .7rem rgba(0, 0, 0, .08);
-  }
-
-  .calendar-day-number {
-    font-size: .98rem;
-    font-weight: 700;
-    color: #212529;
-  }
-
-  .calendar-day-hoy {
+  .mini-calendario .dia-hoy {
     border: 2px solid #0d6efd !important;
     background: #eef5ff;
   }
 
-  .calendar-day-primary {
-    background: #f7fbff;
+  .mini-calendario .dia-vacio {
+    background: #f8f9fa;
   }
 
-  .calendar-day-success {
-    background: #f3fff7;
-  }
-
-  .calendar-day-warning {
-    background: #fffaf0;
-  }
-
-  .calendar-day-danger {
-    background: #fff5f5;
-  }
-
-  .calendar-day-critical {
-    background: #fff0f0;
-  }
-
-  .calendar-day-empty-state {
-    color: #6c757d;
-    font-size: .8rem;
-  }
-
-  .calendar-day-summary {
-    font-size: .74rem;
-    color: #6c757d;
+  .mini-calendario .mini-item {
+    font-size: 0.78rem;
     line-height: 1.2;
-  }
-
-  .calendar-item {
-    display: block;
-    border-radius: .7rem;
-    padding: .45rem .5rem;
-    text-decoration: none;
-    border: 1px solid #dee2e6;
-    background: #fff;
-    transition: .16s ease;
-    color: inherit;
-  }
-
-  .calendar-item:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 .2rem .65rem rgba(0, 0, 0, .08);
-    color: inherit;
-  }
-
-  .calendar-item-realizado {
-    border-left: 4px solid #198754;
-  }
-
-  .calendar-item-pendiente {
-    border-left: 4px solid #0d6efd;
-  }
-
-  .calendar-item-sin-asignar {
-    border-left: 4px solid #ffc107;
-  }
-
-  .calendar-item-atrasado {
-    border-left: 4px solid #dc3545;
-  }
-
-  .calendar-item-critico {
-    border-left: 4px solid #212529;
-    background: #fff8f8;
-  }
-
-  .calendar-item-title {
-    font-size: .78rem;
-    font-weight: 700;
-    line-height: 1.15;
-    color: #212529;
-  }
-
-  .calendar-item-meta {
-    font-size: .72rem;
-    color: #6c757d;
-    line-height: 1.15;
-  }
-
-  .calendar-item-workers {
-    font-size: .71rem;
-    color: #495057;
-    line-height: 1.15;
-  }
-
-  .calendar-more {
-    font-size: .75rem;
-    font-weight: 600;
-  }
-
-  .calendar-legend-badge {
-    min-width: 120px;
-    text-align: center;
   }
 </style>
 
@@ -276,8 +137,6 @@
   <div class="card-body">
     <form class="row g-2 align-items-end" method="get">
       <input type="hidden" name="filtro" value="{{ modo_actual }}">
-      <input type="hidden" name="anio_cal" value="{{ anio_cal }}">
-      <input type="hidden" name="mes_cal" value="{{ mes_cal }}">
 
       <div class="col-12 col-md-4">
         <label class="form-label mb-1">Buscar</label>
@@ -297,27 +156,27 @@
       <div class="col-12 col-md-6">
         <div class="d-grid d-md-flex gap-2">
           <a class="btn {% if not modo_actual %}btn-primary{% else %}btn-outline-secondary{% endif %}"
-             href="/dashboard/operativo/?anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}{% if q %}&q={{ q|urlencode }}{% endif %}">
+             href="/dashboard/operativo/{% if q %}?q={{ q|urlencode }}{% endif %}">
             Hoy
           </a>
 
           <a class="btn {% if modo_actual == 'pendientes_hoy' %}btn-primary{% else %}btn-outline-secondary{% endif %}"
-             href="/dashboard/operativo/?filtro=pendientes_hoy&anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}{% if q %}&q={{ q|urlencode }}{% endif %}">
+             href="/dashboard/operativo/?filtro=pendientes_hoy{% if q %}&q={{ q|urlencode }}{% endif %}">
             Pendientes hoy
           </a>
 
           <a class="btn {% if modo_actual == 'sin_asignar' %}btn-primary{% else %}btn-outline-secondary{% endif %}"
-             href="/dashboard/operativo/?filtro=sin_asignar&anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}{% if q %}&q={{ q|urlencode }}{% endif %}">
+             href="/dashboard/operativo/?filtro=sin_asignar{% if q %}&q={{ q|urlencode }}{% endif %}">
             Sin asignar
           </a>
 
           <a class="btn {% if modo_actual == 'atrasados' %}btn-primary{% else %}btn-outline-secondary{% endif %}"
-             href="/dashboard/operativo/?filtro=atrasados&anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}{% if q %}&q={{ q|urlencode }}{% endif %}">
+             href="/dashboard/operativo/?filtro=atrasados{% if q %}&q={{ q|urlencode }}{% endif %}">
             Atrasados
           </a>
 
           <a class="btn {% if modo_actual == 'urgentes' %}btn-primary{% else %}btn-outline-secondary{% endif %}"
-             href="/dashboard/operativo/?filtro=urgentes&anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}{% if q %}&q={{ q|urlencode }}{% endif %}">
+             href="/dashboard/operativo/?filtro=urgentes{% if q %}&q={{ q|urlencode }}{% endif %}">
             Urgentes
           </a>
         </div>
@@ -332,7 +191,7 @@
       ⚠ Atención: hay <strong>{{ total_sin_asignar }}</strong> mantenimientos sin trabajador asignado en los resultados actuales.
     </div>
     <div class="d-grid d-md-flex gap-2">
-      <a class="btn btn-sm btn-outline-danger" href="/dashboard/operativo/?filtro=sin_asignar&anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}{% if q %}&q={{ q|urlencode }}{% endif %}">
+      <a class="btn btn-sm btn-outline-danger" href="/dashboard/operativo/?filtro=sin_asignar{% if q %}&q={{ q|urlencode }}{% endif %}">
         Revisar
       </a>
       <a class="btn btn-sm btn-outline-dark" href="/dashboard/mantenimientos/historial/?estado=pendiente{% if q %}&q={{ q|urlencode }}{% endif %}">
@@ -365,7 +224,7 @@
     <div class="card shadow-sm border-secondary">
       <div class="card-body py-3">
         <div class="text-muted small">Próximos</div>
-        <div class="fs-4 fw-bold">{{ proximos|length }}</div>
+        <div class="fs-4 fw-bold">{{ total_proximos }}</div>
       </div>
     </div>
   </div>
@@ -436,39 +295,25 @@
       <div>
         <div class="fw-bold">📅 Calendario operativo</div>
         <div class="text-muted small">
-          Vista mensual mejorada para revisar carga, pendientes y asignaciones.
+          Vista mensual de mantenimientos para revisar carga, pendientes y asignaciones.
         </div>
       </div>
 
       <div class="d-grid d-md-flex gap-2 w-100 w-md-auto">
-        <a class="btn btn-outline-secondary btn-sm" href="?anio_cal={{ anio_cal_ant }}&mes_cal={{ mes_cal_ant }}{% if modo_actual %}&filtro={{ modo_actual }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}">
+        <a class="btn btn-outline-secondary btn-sm" href="?anio_cal={{ anio_cal_ant }}&mes_cal={{ mes_cal_ant }}{% if modo_actual %}&filtro={{ modo_actual }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}{% if ver_mas_proximos %}&ver_mas_proximos=1{% endif %}">
           ← Mes anterior
         </a>
-        <a class="btn btn-outline-primary btn-sm" href="?anio_cal={{ hoy.year }}&mes_cal={{ hoy.month }}{% if modo_actual %}&filtro={{ modo_actual }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}">
+        <a class="btn btn-outline-primary btn-sm" href="?anio_cal={{ hoy.year }}&mes_cal={{ hoy.month }}{% if modo_actual %}&filtro={{ modo_actual }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}{% if ver_mas_proximos %}&ver_mas_proximos=1{% endif %}">
           Hoy
         </a>
-        <a class="btn btn-outline-secondary btn-sm" href="?anio_cal={{ anio_cal_sig }}&mes_cal={{ mes_cal_sig }}{% if modo_actual %}&filtro={{ modo_actual }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}">
+        <a class="btn btn-outline-secondary btn-sm" href="?anio_cal={{ anio_cal_sig }}&mes_cal={{ mes_cal_sig }}{% if modo_actual %}&filtro={{ modo_actual }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}{% if ver_mas_proximos %}&ver_mas_proximos=1{% endif %}">
           Mes siguiente →
         </a>
       </div>
     </div>
 
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-      <div class="fw-bold">
-        {{ calendario_operativo.titulo_periodo }}
-      </div>
-
-      <div class="d-flex flex-wrap gap-2">
-        <span class="badge bg-primary calendar-legend-badge">Pendiente</span>
-        <span class="badge bg-success calendar-legend-badge">Realizado</span>
-        <span class="badge bg-warning text-dark calendar-legend-badge">Sin asignar</span>
-        <span class="badge bg-danger calendar-legend-badge">Atrasado</span>
-        <span class="badge bg-dark calendar-legend-badge">Crítico</span>
-      </div>
-    </div>
-
     <div class="row g-2 mb-3">
-      <div class="col-6 col-md-3">
+      <div class="col-12 col-md-4">
         <div class="card shadow-sm border-primary">
           <div class="card-body py-3">
             <div class="text-muted small">Total del mes</div>
@@ -477,7 +322,7 @@
         </div>
       </div>
 
-      <div class="col-6 col-md-3">
+      <div class="col-12 col-md-4">
         <div class="card shadow-sm border-success">
           <div class="card-body py-3">
             <div class="text-muted small">Realizados</div>
@@ -486,7 +331,7 @@
         </div>
       </div>
 
-      <div class="col-6 col-md-3">
+      <div class="col-12 col-md-4">
         <div class="card shadow-sm border-warning">
           <div class="card-body py-3">
             <div class="text-muted small">Pendientes</div>
@@ -494,104 +339,76 @@
           </div>
         </div>
       </div>
-
-      <div class="col-6 col-md-3">
-        <div class="card shadow-sm border-danger">
-          <div class="card-body py-3">
-            <div class="text-muted small">Atrasados</div>
-            <div class="fs-4 fw-bold text-danger">{{ calendario_operativo.total_atrasados }}</div>
-          </div>
-        </div>
-      </div>
     </div>
 
-    <div class="row g-2 mb-3">
-      <div class="col-12 col-md-4">
-        <div class="card shadow-sm border-dark">
-          <div class="card-body py-3">
-            <div class="text-muted small">Sin asignar en el mes</div>
-            <div class="fs-4 fw-bold">{{ calendario_operativo.total_sin_asignar }}</div>
-          </div>
-        </div>
-      </div>
-      <div class="col-12 col-md-8">
-        <div class="card shadow-sm border-info">
-          <div class="card-body py-3">
-            <div class="text-muted small mb-1">Cómo leer el calendario</div>
-            <div class="small text-muted">
-              Puedes detectar rápidamente días cargados, atrasados, pendientes y mantenimientos sin asignar. Cada bloque permite abrir el detalle del mantenimiento directamente.
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="calendar-grid">
-      <table class="calendar-table">
-        <thead>
+    <div class="table-responsive mini-calendario">
+      <table class="table table-bordered align-middle">
+        <thead class="table-light text-center">
           <tr>
-            {% for dia_semana in calendario_operativo.dias_semana %}
-            <th>{{ dia_semana }}</th>
-            {% endfor %}
+            <th>Lun</th>
+            <th>Mar</th>
+            <th>Mié</th>
+            <th>Jue</th>
+            <th>Vie</th>
+            <th>Sáb</th>
+            <th>Dom</th>
           </tr>
         </thead>
         <tbody>
           {% for semana in calendario_operativo.semanas %}
           <tr>
             {% for dia in semana %}
-            <td class="calendar-day-cell {% if dia.dia == 0 %}calendar-day-empty{% endif %}">
+            <td class="{% if dia.dia == 0 %}dia-vacio{% endif %}">
               {% if dia.dia > 0 %}
-              <div class="calendar-day-box {{ dia.clase_dia }} {% if dia.es_hoy %}calendar-day-hoy{% endif %}">
-                <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
-                  <div class="calendar-day-number">
-                    {{ dia.dia }}
-                  </div>
-
+              <div class="border rounded p-2 dia-box {% if dia.es_hoy %}dia-hoy{% endif %}">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                  <span class="dia-numero">{{ dia.dia }}</span>
                   {% if dia.total > 0 %}
-                  <span class="badge bg-primary">
-                    {{ dia.total }}
-                  </span>
+                  <span class="badge bg-primary">{{ dia.total }}</span>
                   {% endif %}
                 </div>
 
-                <div class="calendar-day-summary mb-2">
-                  {{ dia.resumen }}
+                {% if dia.realizados > 0 %}
+                <div class="small text-success fw-semibold">
+                  ✅ {{ dia.realizados }} realizado{{ dia.realizados|pluralize }}
                 </div>
+                {% endif %}
+
+                {% if dia.pendientes > 0 %}
+                <div class="small text-warning fw-semibold">
+                  ⏳ {{ dia.pendientes }} pendiente{{ dia.pendientes|pluralize }}
+                </div>
+                {% endif %}
+
+                {% if dia.atrasados > 0 %}
+                <div class="small text-danger fw-semibold">
+                  🚨 {{ dia.atrasados }} atrasado{{ dia.atrasados|pluralize }}
+                </div>
+                {% endif %}
+
+                {% if dia.sin_asignar > 0 %}
+                <div class="small text-dark fw-semibold">
+                  👷 {{ dia.sin_asignar }} sin asignar
+                </div>
+                {% endif %}
 
                 {% if dia.items %}
-                <div class="vstack gap-2">
-                  {% for item in dia.items %}
-                  <a href="{{ item.url }}" class="calendar-item {{ item.item_clase }}">
-                    <div class="d-flex justify-content-between align-items-start gap-2 mb-1">
-                      <div class="calendar-item-title">
-                        {{ item.cliente }}
+                <div class="mt-2 vstack gap-1">
+                  {% for m in dia.items %}
+                  <a href="/dashboard/mantenimientos/{{ m.id }}/" class="text-decoration-none mini-item">
+                    <div class="border rounded p-1 bg-light">
+                      <div class="fw-semibold text-dark">
+                        {{ m.cliente }}
                       </div>
-                      <span class="badge bg-{{ item.estado_badge_clase }}">
-                        {{ item.estado_label }}
-                      </span>
-                    </div>
-
-                    <div class="calendar-item-meta">
-                      {{ item.contrato }}
-                    </div>
-
-                    <div class="calendar-item-workers mt-1">
-                      👷 {{ item.trabajadores_resumen }}
+                      <div class="text-muted">
+                        {{ m.estado|capfirst }}
+                      </div>
                     </div>
                   </a>
                   {% endfor %}
                 </div>
-
-                {% if dia.hay_mas %}
-                <div class="mt-2">
-                  <a href="/dashboard/mantenimientos/historial/?fecha_desde={{ dia.fecha|date:'Y-m-d' }}&fecha_hasta={{ dia.fecha|date:'Y-m-d' }}"
-                     class="btn btn-outline-secondary btn-sm w-100 calendar-more">
-                    Ver {{ dia.total_ocultos }} más
-                  </a>
-                </div>
-                {% endif %}
                 {% else %}
-                <div class="calendar-day-empty-state mt-3">
+                <div class="small text-muted mt-2">
                   Sin mantenimientos
                 </div>
                 {% endif %}
@@ -846,6 +663,20 @@
           </div>
         {% endfor %}
       </div>
+
+      {% if hay_mas_proximos %}
+      <div class="mt-3 d-grid d-md-inline-block">
+        {% if ver_mas_proximos %}
+        <a class="btn btn-outline-secondary btn-sm" href="?{% if modo_actual %}filtro={{ modo_actual }}&{% endif %}{% if q %}q={{ q|urlencode }}&{% endif %}anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}">
+          Ver menos
+        </a>
+        {% else %}
+        <a class="btn btn-outline-primary btn-sm" href="?{% if modo_actual %}filtro={{ modo_actual }}&{% endif %}{% if q %}q={{ q|urlencode }}&{% endif %}anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}&ver_mas_proximos=1">
+          Ver más
+        </a>
+        {% endif %}
+      </div>
+      {% endif %}
     {% else %}
       <div class="text-muted">No hay próximos pendientes.</div>
     {% endif %}

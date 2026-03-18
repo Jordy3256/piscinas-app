@@ -12,7 +12,7 @@ from django.contrib.auth.models import User
 from django.contrib.staticfiles import finders
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Sum, Count, Q
+from django.db.models import Sum
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.templatetags.static import static
@@ -23,7 +23,6 @@ from django.views.decorators.http import require_http_methods, require_GET
 
 from pywebpush import webpush, WebPushException
 
-from contratos.models import Contrato
 from trabajadores.models import Trabajador
 from inventario.models import Insumo
 from mantenimientos.models import Mantenimiento, UsoInsumo, FotoMantenimiento
@@ -45,14 +44,6 @@ except Exception:
     ActividadSistema = None
 
 logger = logging.getLogger(__name__)
-
-MESES_ES = [
-    "",
-    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
-]
-
-DIAS_SEMANA_ES = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
 
 
 # -------------------
@@ -304,85 +295,13 @@ def notificar_trabajadores_mantenimientos_hoy():
 # -------------------
 # Helpers calendario visual
 # -------------------
-def _trabajadores_resumen_mantenimiento(mantenimiento):
-    nombres = []
-    try:
-        for trabajador in mantenimiento.trabajadores.all():
-            username = str(getattr(getattr(trabajador, "user", None), "username", "") or "").strip()
-            if username:
-                nombres.append(username)
-    except Exception:
-        pass
-
-    if not nombres:
-        return "Sin asignar"
-
-    if len(nombres) <= 2:
-        return ", ".join(nombres)
-
-    return f"{', '.join(nombres[:2])} +{len(nombres) - 2}"
-
-
-def _calendario_estado_item(mantenimiento, hoy_local):
-    estado = str(getattr(mantenimiento, "estado", "") or "").lower()
-    fecha_m = getattr(mantenimiento, "fecha", None)
-
-    sin_asignar = False
-    try:
-        sin_asignar = not mantenimiento.trabajadores.exists()
-    except Exception:
-        sin_asignar = False
-
-    atrasado = estado == "pendiente" and fecha_m and fecha_m < hoy_local
-
-    if atrasado and sin_asignar:
-        return {
-            "badge": "Atrasado · sin asignar",
-            "badge_clase": "dark",
-            "item_clase": "calendar-item-critico",
-            "prioridad": 0,
-        }
-
-    if atrasado:
-        return {
-            "badge": "Atrasado",
-            "badge_clase": "danger",
-            "item_clase": "calendar-item-atrasado",
-            "prioridad": 1,
-        }
-
-    if sin_asignar:
-        return {
-            "badge": "Sin asignar",
-            "badge_clase": "warning",
-            "item_clase": "calendar-item-sin-asignar",
-            "prioridad": 2,
-        }
-
-    if estado == "realizado":
-        return {
-            "badge": "Realizado",
-            "badge_clase": "success",
-            "item_clase": "calendar-item-realizado",
-            "prioridad": 4,
-        }
-
-    return {
-        "badge": "Pendiente",
-        "badge_clase": "primary",
-        "item_clase": "calendar-item-pendiente",
-        "prioridad": 3,
-    }
-
-
-def _build_calendario_mantenimientos(anio, mes, trabajador=None, limite_items_por_dia=6):
+def _build_calendario_mantenimientos(anio, mes, trabajador=None):
     primer_dia, ultimo_dia = _inicio_fin_mes(anio, mes)
-    hoy_local = timezone.localdate()
 
     qs = (
         Mantenimiento.objects.filter(fecha__range=(primer_dia, ultimo_dia))
         .select_related("cliente", "contrato")
-        .prefetch_related("trabajadores", "trabajadores__user")
+        .prefetch_related("trabajadores")
         .order_by("fecha", "estado", "id")
     )
 
@@ -398,7 +317,6 @@ def _build_calendario_mantenimientos(anio, mes, trabajador=None, limite_items_po
     semanas = []
     for semana in monthcalendar(anio, mes):
         fila = []
-
         for dia in semana:
             if dia == 0:
                 fila.append({
@@ -411,148 +329,50 @@ def _build_calendario_mantenimientos(anio, mes, trabajador=None, limite_items_po
                     "pendientes": 0,
                     "atrasados": 0,
                     "sin_asignar": 0,
-                    "total_visible": 0,
-                    "total_ocultos": 0,
-                    "hay_mas": False,
-                    "clase_dia": "calendar-empty",
-                    "resumen": "",
-                    "titulo": "",
                 })
                 continue
 
             fecha_actual = date(anio, mes, dia)
             items = por_fecha.get(fecha_actual, [])
+            realizados = len([m for m in items if getattr(m, "estado", "") == "realizado"])
+            pendientes = len([m for m in items if getattr(m, "estado", "") == "pendiente"])
+            atrasados = len([
+                m for m in items
+                if getattr(m, "estado", "") == "pendiente" and fecha_actual < timezone.localdate()
+            ])
 
-            items_enriquecidos = []
-            realizados = 0
-            pendientes = 0
-            atrasados = 0
             sin_asignar = 0
-
             for m in items:
-                estado = str(getattr(m, "estado", "") or "").lower()
-                if estado == "realizado":
-                    realizados += 1
-                if estado == "pendiente":
-                    pendientes += 1
-
                 try:
-                    m_sin_asignar = not m.trabajadores.exists()
+                    if not m.trabajadores.exists():
+                        sin_asignar += 1
                 except Exception:
-                    m_sin_asignar = False
-
-                if m_sin_asignar:
-                    sin_asignar += 1
-
-                m_atrasado = estado == "pendiente" and fecha_actual < hoy_local
-                if m_atrasado:
-                    atrasados += 1
-
-                estado_info = _calendario_estado_item(m, hoy_local)
-
-                items_enriquecidos.append({
-                    "id": m.id,
-                    "cliente": str(getattr(m, "cliente", "") or "Cliente"),
-                    "contrato": str(getattr(m, "contrato", "") or "Sin contrato"),
-                    "estado": estado,
-                    "estado_label": estado_info["badge"],
-                    "estado_badge_clase": estado_info["badge_clase"],
-                    "item_clase": estado_info["item_clase"],
-                    "prioridad": estado_info["prioridad"],
-                    "fecha": fecha_actual,
-                    "fecha_label": fecha_actual.strftime("%d/%m/%Y"),
-                    "trabajadores_resumen": _trabajadores_resumen_mantenimiento(m),
-                    "sin_asignar": m_sin_asignar,
-                    "atrasado": m_atrasado,
-                    "url": f"/dashboard/mantenimientos/{m.id}/",
-                })
-
-            items_enriquecidos.sort(
-                key=lambda x: (x["prioridad"], x["cliente"], x["id"])
-            )
-
-            items_visibles = items_enriquecidos[:limite_items_por_dia]
-            total = len(items_enriquecidos)
-            total_visible = len(items_visibles)
-            total_ocultos = max(total - total_visible, 0)
-            hay_mas = total_ocultos > 0
-
-            if atrasados > 0 and sin_asignar > 0:
-                clase_dia = "calendar-day-critical"
-            elif atrasados > 0:
-                clase_dia = "calendar-day-danger"
-            elif sin_asignar > 0:
-                clase_dia = "calendar-day-warning"
-            elif pendientes > 0:
-                clase_dia = "calendar-day-primary"
-            elif realizados > 0:
-                clase_dia = "calendar-day-success"
-            else:
-                clase_dia = "calendar-day-empty"
-
-            if total == 0:
-                resumen = "Sin mantenimientos"
-            else:
-                partes = [f"{total} total"]
-                if pendientes > 0:
-                    partes.append(f"{pendientes} pendientes")
-                if realizados > 0:
-                    partes.append(f"{realizados} realizados")
-                if atrasados > 0:
-                    partes.append(f"{atrasados} atrasados")
-                if sin_asignar > 0:
-                    partes.append(f"{sin_asignar} sin asignar")
-                resumen = " · ".join(partes)
+                    pass
 
             fila.append({
                 "dia": dia,
                 "fecha": fecha_actual,
-                "es_hoy": fecha_actual == hoy_local,
-                "items": items_visibles,
-                "items_todos": items_enriquecidos,
-                "total": total,
+                "es_hoy": fecha_actual == timezone.localdate(),
+                "items": items[:4],
+                "total": len(items),
                 "realizados": realizados,
                 "pendientes": pendientes,
                 "atrasados": atrasados,
                 "sin_asignar": sin_asignar,
-                "total_visible": total_visible,
-                "total_ocultos": total_ocultos,
-                "hay_mas": hay_mas,
-                "clase_dia": clase_dia,
-                "resumen": resumen,
-                "titulo": f"{dia} de {MESES_ES[mes]} de {anio}",
             })
-
         semanas.append(fila)
 
     total_mes = len(mantenimientos)
     total_realizados = len([m for m in mantenimientos if getattr(m, "estado", "") == "realizado"])
     total_pendientes = len([m for m in mantenimientos if getattr(m, "estado", "") == "pendiente"])
-    total_atrasados = len([
-        m for m in mantenimientos
-        if getattr(m, "estado", "") == "pendiente" and getattr(m, "fecha", hoy_local) < hoy_local
-    ])
-    total_sin_asignar = 0
-    for m in mantenimientos:
-        try:
-            if not m.trabajadores.exists():
-                total_sin_asignar += 1
-        except Exception:
-            pass
 
     return {
         "anio": anio,
         "mes": mes,
-        "mes_nombre": MESES_ES[mes],
-        "titulo_periodo": f"{MESES_ES[mes]} {anio}",
-        "dias_semana": DIAS_SEMANA_ES,
         "semanas": semanas,
         "total_mes": total_mes,
         "total_realizados": total_realizados,
         "total_pendientes": total_pendientes,
-        "total_atrasados": total_atrasados,
-        "total_sin_asignar": total_sin_asignar,
-        "limite_items_por_dia": limite_items_por_dia,
     }
 
 
@@ -812,16 +632,6 @@ def _push_status_code_from_exception(ex):
         return getattr(getattr(ex, "response", None), "status_code", None)
     except Exception:
         return None
-
-
-def _push_response_body_from_exception(ex) -> str:
-    try:
-        response = getattr(ex, "response", None)
-        if response is not None:
-            return response.text or ""
-    except Exception:
-        pass
-    return ""
 
 
 def _send_push_to_user(user, title, body, url="/dashboard/notificaciones/", tag=None):
@@ -1274,13 +1084,6 @@ def dashboard_view(request):
         egresos_hoy = Egreso.objects.filter(fecha=hoy).aggregate(total=Sum("total"))["total"] or 0
         balance_hoy = ingresos_hoy - egresos_hoy
 
-        anio_cal = int(request.GET.get("anio_cal", hoy.year))
-        mes_cal = int(request.GET.get("mes_cal", hoy.month))
-        anio_cal_ant, mes_cal_ant = _mes_anterior(anio_cal, mes_cal)
-        anio_cal_sig, mes_cal_sig = _mes_siguiente(anio_cal, mes_cal)
-
-        calendario_admin = _build_calendario_mantenimientos(anio_cal, mes_cal)
-
         primer_dia_mes_actual, ultimo_dia_mes_actual = _inicio_fin_mes(hoy.year, hoy.month)
         anio_mes_anterior, mes_mes_anterior = _mes_anterior(hoy.year, hoy.month)
         primer_dia_mes_anterior, ultimo_dia_mes_anterior = _inicio_fin_mes(anio_mes_anterior, mes_mes_anterior)
@@ -1301,11 +1104,11 @@ def dashboard_view(request):
             resumen_mes_anterior["balance"],
         )
 
-        recurrentes_proximos_7_dias = list(
+        recurrentes_proximos_3_dias = list(
             MovimientoRecurrente.objects.filter(
                 activo=True,
                 proxima_fecha__gte=hoy,
-                proxima_fecha__lte=hoy + timedelta(days=7)
+                proxima_fecha__lte=hoy + timedelta(days=3)
             ).order_by("proxima_fecha", "id")[:10]
         )
 
@@ -1528,14 +1331,7 @@ def dashboard_view(request):
             "variacion_ingresos_mes": variacion_ingresos_mes,
             "variacion_egresos_mes": variacion_egresos_mes,
             "variacion_balance_mes": variacion_balance_mes,
-            "recurrentes_proximos_7_dias": recurrentes_proximos_7_dias,
-            "anio_cal": anio_cal,
-            "mes_cal": mes_cal,
-            "anio_cal_ant": anio_cal_ant,
-            "mes_cal_ant": mes_cal_ant,
-            "anio_cal_sig": anio_cal_sig,
-            "mes_cal_sig": mes_cal_sig,
-            "calendario_admin": calendario_admin,
+            "recurrentes_proximos_3_dias": recurrentes_proximos_3_dias,
             "total_mantenimientos_hoy": total_mantenimientos_hoy,
             "realizados_hoy": realizados_hoy,
             "pendientes_hoy": pendientes_hoy,
@@ -1593,7 +1389,7 @@ def dashboard_view(request):
         mantenimientos_proximos = (
             Mantenimiento.objects.filter(fecha__gt=hoy, trabajadores=trabajador)
             .select_related("cliente", "contrato")
-            .order_by("fecha")[:30]
+            .order_by("fecha")[:10]
         )
 
         mantenimientos_atrasados = (
@@ -1951,6 +1747,7 @@ def admin_operativo_view(request):
     hoy = date.today()
     filtro = (request.GET.get("filtro", "") or "").strip().lower()
     q = (request.GET.get("q", "") or "").strip()
+    ver_mas_proximos = (request.GET.get("ver_mas_proximos", "") or "").strip() == "1"
 
     anio_cal = int(request.GET.get("anio_cal", hoy.year))
     mes_cal = int(request.GET.get("mes_cal", hoy.month))
@@ -2031,12 +1828,17 @@ def admin_operativo_view(request):
                 estado="pendiente"
             )
         )
-        proximos = list(
-            base_qs.filter(
-                fecha__gt=hoy,
-                estado="pendiente"
-            )[:50]
+
+        limite_proximos = None if ver_mas_proximos else 10
+        qs_proximos = base_qs.filter(
+            fecha__gt=hoy,
+            estado="pendiente"
         )
+
+        if limite_proximos is not None:
+            qs_proximos = qs_proximos[:limite_proximos]
+
+        proximos = list(qs_proximos)
         etiqueta_periodo = "Operativo de hoy"
 
     if q:
@@ -2057,6 +1859,11 @@ def admin_operativo_view(request):
     )
 
     calendario_operativo = _build_calendario_mantenimientos(anio_cal, mes_cal)
+
+    total_proximos_reales = base_qs.filter(fecha__gt=hoy, estado="pendiente").count()
+    mostrar_boton_ver_mas_proximos = (
+        not filtro and not ver_mas_proximos and total_proximos_reales > 10
+    )
 
     return render(
         request,
@@ -2081,6 +1888,9 @@ def admin_operativo_view(request):
             "anio_cal_sig": anio_cal_sig,
             "mes_cal_sig": mes_cal_sig,
             "calendario_operativo": calendario_operativo,
+            "ver_mas_proximos": ver_mas_proximos,
+            "mostrar_boton_ver_mas_proximos": mostrar_boton_ver_mas_proximos,
+            "total_proximos_reales": total_proximos_reales,
             "es_admin": True,
         },
     )
@@ -2107,6 +1917,7 @@ def mantenimiento_detalle_view(request, pk):
     if not permitido:
         return render(request, "dashboard/no_autorizado.html", status=403)
 
+    es_usuario_admin = es_admin(request.user)
     insumos = Insumo.objects.all().order_by("nombre")
     esta_realizado = mantenimiento.estado == "realizado"
 
@@ -2124,15 +1935,17 @@ def mantenimiento_detalle_view(request, pk):
             return f"/dashboard/mantenimientos/{mantenimiento.pk}/"
 
         if accion == "marcar_realizado":
-            tiene_fotos = mantenimiento.fotos.exists()
-            tiene_usos = mantenimiento.usos_insumos.exists()
+            fotos_qs_validacion = mantenimiento.fotos.all()
+            fotos_por_nombre_validacion = {
+                f.descripcion: f for f in fotos_qs_validacion if _nombre_foto_valido(f.descripcion)
+            }
+            cantidad_fotos_requeridas = len(fotos_por_nombre_validacion)
 
-            if not tiene_fotos:
-                messages.error(request, "Debes subir al menos una foto antes de marcar como realizado.")
-                return redirect(safe_return_url())
-
-            if not tiene_usos:
-                messages.error(request, "Debes registrar al menos un insumo antes de marcar como realizado.")
+            if cantidad_fotos_requeridas < 3:
+                messages.error(
+                    request,
+                    "Debes subir las 3 fotos requeridas antes de marcar como realizado."
+                )
                 return redirect(safe_return_url())
 
             mantenimiento.estado = "realizado"
@@ -2144,7 +1957,7 @@ def mantenimiento_detalle_view(request, pk):
                 mensaje=f"El mantenimiento de {mantenimiento.cliente} fue marcado como realizado por {actor}.",
                 url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
                 enviar_push=True,
-                excluir_user_id=request.user.id if es_admin(request.user) else None,
+                excluir_user_id=request.user.id if es_usuario_admin else None,
             )
             _registrar_actividad(
                 user=request.user,
@@ -2166,7 +1979,7 @@ def mantenimiento_detalle_view(request, pk):
                 mensaje=f"El mantenimiento de {mantenimiento.cliente} fue marcado como pendiente por {actor}.",
                 url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
                 enviar_push=False,
-                excluir_user_id=request.user.id if es_admin(request.user) else None,
+                excluir_user_id=request.user.id if es_usuario_admin else None,
             )
             _registrar_actividad(
                 user=request.user,
@@ -2234,7 +2047,7 @@ def mantenimiento_detalle_view(request, pk):
                 mensaje=f"{actor} registró {insumo.nombre} x {cantidad} en {mantenimiento.cliente}.",
                 url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
                 enviar_push=False,
-                excluir_user_id=request.user.id if es_admin(request.user) else None,
+                excluir_user_id=request.user.id if es_usuario_admin else None,
             )
             _registrar_actividad(
                 user=request.user,
@@ -2280,7 +2093,7 @@ def mantenimiento_detalle_view(request, pk):
                 mensaje=f"{actor} subió la foto '{tipo_foto}' en el mantenimiento de {mantenimiento.cliente}.",
                 url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
                 enviar_push=False,
-                excluir_user_id=request.user.id if es_admin(request.user) else None,
+                excluir_user_id=request.user.id if es_usuario_admin else None,
             )
             _registrar_actividad(
                 user=request.user,
@@ -2300,18 +2113,20 @@ def mantenimiento_detalle_view(request, pk):
     fotos_por_nombre = {f.descripcion: f for f in fotos_qs if _nombre_foto_valido(f.descripcion)}
     fotos = [fotos_por_nombre[nombre] for nombre in FOTOS_REQUERIDAS if nombre in fotos_por_nombre]
 
-    historial_cliente_reciente = (
-        Mantenimiento.objects
-        .filter(cliente=mantenimiento.cliente)
-        .exclude(pk=mantenimiento.pk)
-        .select_related("cliente", "contrato")
-        .prefetch_related("trabajadores")
-        .order_by("-fecha", "-id")[:5]
-    )
+    historial_cliente_reciente = []
+    if es_usuario_admin:
+        historial_cliente_reciente = (
+            Mantenimiento.objects
+            .filter(cliente=mantenimiento.cliente)
+            .exclude(pk=mantenimiento.pk)
+            .select_related("cliente", "contrato")
+            .prefetch_related("trabajadores")
+            .order_by("-fecha", "-id")[:5]
+        )
 
     cantidad_fotos = len(fotos)
     cantidad_usos = lista_usos.count()
-    puede_cerrar = cantidad_fotos > 0 and cantidad_usos > 0
+    puede_cerrar = cantidad_fotos == 3
     puede_subir_fotos = cantidad_fotos < 3 and not esta_realizado
 
     foto_inicio = fotos_por_nombre.get("Inicio de Mantenimiento")
@@ -2327,7 +2142,7 @@ def mantenimiento_detalle_view(request, pk):
             "lista_usos": lista_usos,
             "lista_egresos": lista_egresos,
             "total_egresos": total_egresos,
-            "es_admin": es_admin(request.user),
+            "es_admin": es_usuario_admin,
             "fotos": fotos,
             "cantidad_fotos": cantidad_fotos,
             "cantidad_usos": cantidad_usos,
@@ -2755,7 +2570,7 @@ def flujo_mensual_view(request):
         resumen_mes_anterior["balance"],
     )
 
-    dias, ingresos_por_dia, egresos_por_dia, balance_por_dia = [], [], [], []
+    resumen_diario = []
     balance_acumulado = 0.0
     for d in range(1, ultimo_dia.day + 1):
         fecha_d = date(anio, mes, d)
@@ -2764,10 +2579,12 @@ def flujo_mensual_view(request):
         balance_d = float(ing_d) - float(egr_d)
         balance_acumulado += balance_d
 
-        dias.append(str(d))
-        ingresos_por_dia.append(float(ing_d))
-        egresos_por_dia.append(float(egr_d))
-        balance_por_dia.append(float(balance_acumulado))
+        resumen_diario.append({
+            "dia": d,
+            "ingresos": float(ing_d),
+            "egresos": float(egr_d),
+            "balance_acumulado": float(balance_acumulado),
+        })
 
     top_ingresos = list(ingresos_qs.order_by("-total", "-fecha", "-id")[:5])
     top_egresos = sorted(list(egresos_qs), key=lambda x: float(getattr(x, "total", 0) or 0), reverse=True)[:5]
@@ -2796,10 +2613,7 @@ def flujo_mensual_view(request):
             "variacion_ingresos_mes": variacion_ingresos_mes,
             "variacion_egresos_mes": variacion_egresos_mes,
             "variacion_balance_mes": variacion_balance_mes,
-            "dias": dias,
-            "ingresos_por_dia": ingresos_por_dia,
-            "egresos_por_dia": egresos_por_dia,
-            "balance_por_dia": balance_por_dia,
+            "resumen_diario": resumen_diario,
             "top_ingresos": top_ingresos,
             "top_egresos": top_egresos,
             "es_admin": True,
