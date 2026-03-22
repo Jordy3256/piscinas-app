@@ -1316,6 +1316,24 @@ def dashboard_view(request):
         if ActividadSistema is not None:
             actividades_recientes = list(ActividadSistema.objects.select_related("user").all()[:5])
 
+        grafico_finanzas = {
+            "labels": ["Ingresos", "Egresos", "Balance"],
+            "data": [
+                float(resumen_mes_actual.get("ingresos", 0) or 0),
+                float(resumen_mes_actual.get("egresos", 0) or 0),
+                float(resumen_mes_actual.get("balance", 0) or 0),
+            ],
+        }
+        grafico_operativo = {
+            "labels": ["Realizados hoy", "Pendientes hoy", "Atrasados", "Sin asignar"],
+            "data": [
+                int(realizados_hoy),
+                int(pendientes_hoy),
+                int(total_atrasados),
+                int(total_pendientes_sin_asignar),
+            ],
+        }
+
         ctx = {
             **base_ctx,
             "modo": "admin",
@@ -1360,6 +1378,8 @@ def dashboard_view(request):
                 or total_atrasados_sin_asignar > 0
             ),
             "actividades_recientes": actividades_recientes,
+            "grafico_finanzas": json.dumps(grafico_finanzas),
+            "grafico_operativo": json.dumps(grafico_operativo),
             "es_admin": True,
         }
         return render(request, "dashboard/dashboard.html", ctx)
@@ -1386,11 +1406,19 @@ def dashboard_view(request):
             .order_by("estado", "fecha")
         )
 
-        mantenimientos_proximos = (
+        ver_mas_proximos = request.GET.get("ver_mas_proximos") == "1"
+
+        qs_mantenimientos_proximos = (
             Mantenimiento.objects.filter(fecha__gt=hoy, trabajadores=trabajador)
             .select_related("cliente", "contrato")
-            .order_by("fecha")[:10]
+            .order_by("fecha")
         )
+        total_proximos_reales = qs_mantenimientos_proximos.count()
+
+        if ver_mas_proximos:
+            mantenimientos_proximos = qs_mantenimientos_proximos
+        else:
+            mantenimientos_proximos = qs_mantenimientos_proximos[:10]
 
         mantenimientos_atrasados = (
             Mantenimiento.objects.filter(
@@ -1408,6 +1436,9 @@ def dashboard_view(request):
             "hoy": hoy,
             "mantenimientos_hoy": mantenimientos_hoy,
             "mantenimientos_proximos": mantenimientos_proximos,
+            "total_proximos_reales": total_proximos_reales,
+            "mostrar_boton_ver_mas_proximos": total_proximos_reales > 10,
+            "ver_mas_proximos": ver_mas_proximos,
             "mantenimientos_atrasados": mantenimientos_atrasados,
             "anio_cal": anio_cal,
             "mes_cal": mes_cal,

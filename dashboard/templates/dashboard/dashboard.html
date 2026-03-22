@@ -5,6 +5,8 @@
 
 {% block content %}
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
 <style>
   @media (max-width: 767.98px) {
     .dashboard-mobile-title {
@@ -211,6 +213,49 @@
           No hay mantenimientos programados para hoy.
         {% endif %}
       </div>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow-sm mb-3 border-0 dashboard-mobile-card">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+      <div>
+        <div class="fw-bold fs-5 dashboard-mobile-title">
+          📈 Análisis visual
+        </div>
+        <div class="text-muted small">
+          Gráficos reales conectados al resumen financiero y operativo.
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-3">
+      <div class="col-12 col-lg-6">
+        <div class="card border-success shadow-sm h-100">
+          <div class="card-body">
+            <div class="fw-semibold mb-2">💰 Ingresos vs egresos</div>
+            <div style="position: relative; height: 320px;">
+              <canvas id="graficoFinanzas"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 col-lg-6">
+        <div class="card border-primary shadow-sm h-100">
+          <div class="card-body">
+            <div class="fw-semibold mb-2">🧑‍💼 Estado operativo</div>
+            <div style="position: relative; height: 320px;">
+              <canvas id="graficoOperativo"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="text-muted small mt-3">
+      Estos gráficos usan los datos preparados desde el backend en <code>grafico_finanzas</code> y <code>grafico_operativo</code>.
     </div>
   </div>
 </div>
@@ -868,5 +913,97 @@
     </div>
   </div>
 </div>
+
+<script>
+  (function () {
+    try {
+      const rawFinanzas = '{{ grafico_finanzas|default:""|escapejs }}';
+      const rawOperativo = '{{ grafico_operativo|default:""|escapejs }}';
+
+      if (!rawFinanzas || !rawOperativo) return;
+
+      const dataFinanzas = JSON.parse(rawFinanzas);
+      const dataOperativo = JSON.parse(rawOperativo);
+
+      const canvasFinanzas = document.getElementById('graficoFinanzas');
+      const canvasOperativo = document.getElementById('graficoOperativo');
+
+      if (canvasFinanzas) {
+        new Chart(canvasFinanzas, {
+          type: 'doughnut',
+          data: {
+            labels: dataFinanzas.labels || [],
+            datasets: [{
+              data: dataFinanzas.data || [],
+              backgroundColor: [
+                'rgba(25, 135, 84, 0.85)',
+                'rgba(220, 53, 69, 0.85)'
+              ],
+              borderColor: [
+                'rgba(25, 135, 84, 1)',
+                'rgba(220, 53, 69, 1)'
+              ],
+              borderWidth: 1
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                position: 'bottom'
+              }
+            }
+          }
+        });
+      }
+
+      if (canvasOperativo) {
+        new Chart(canvasOperativo, {
+          type: 'bar',
+          data: {
+            labels: dataOperativo.labels || [],
+            datasets: [{
+              label: 'Cantidad',
+              data: dataOperativo.data || [],
+              backgroundColor: [
+                'rgba(25, 135, 84, 0.85)',
+                'rgba(255, 193, 7, 0.85)',
+                'rgba(220, 53, 69, 0.85)',
+                'rgba(13, 110, 253, 0.85)'
+              ],
+              borderColor: [
+                'rgba(25, 135, 84, 1)',
+                'rgba(255, 193, 7, 1)',
+                'rgba(220, 53, 69, 1)',
+                'rgba(13, 110, 253, 1)'
+              ],
+              borderWidth: 1
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              y: {
+                beginAtZero: true,
+                ticks: {
+                  precision: 0
+                }
+              }
+            },
+            plugins: {
+              legend: {
+                display: false
+              }
+            }
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error cargando gráficos del dashboard:', error);
+    }
+  })();
+</script>
 
 {% endblock %}
