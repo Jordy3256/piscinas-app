@@ -2101,6 +2101,81 @@ def mantenimiento_detalle_view(request, pk):
             messages.success(request, f"Insumo registrado: {insumo.nombre} x {cantidad}")
             return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
 
+        if accion == "subir_fotos_requeridas":
+            if esta_realizado:
+                messages.error(request, "Este mantenimiento está realizado y bloqueado para cambios. Debes volverlo a pendiente para editarlo.")
+                return redirect(safe_return_url())
+
+            mapa_fotos = [
+                ("Inicio de Mantenimiento", request.FILES.get("foto_inicio")),
+                ("Fin de Mantenimiento", request.FILES.get("foto_fin")),
+                ("Nivel PH y Cl", request.FILES.get("foto_nivel")),
+            ]
+
+            existentes = {
+                f.descripcion: f
+                for f in mantenimiento.fotos.all()
+                if _nombre_foto_valido(f.descripcion)
+            }
+
+            subidas = []
+            omitidas = []
+
+            for tipo_foto, imagen in mapa_fotos:
+                if not imagen:
+                    continue
+
+                if tipo_foto in existentes:
+                    omitidas.append(tipo_foto)
+                    continue
+
+                FotoMantenimiento.objects.create(
+                    mantenimiento=mantenimiento,
+                    imagen=imagen,
+                    descripcion=tipo_foto,
+                )
+                subidas.append(tipo_foto)
+
+            if subidas:
+                actor = request.user.username
+                detalle = ", ".join(subidas)
+                _notificar_admins(
+                    titulo="📸 Fotos requeridas subidas",
+                    mensaje=f"{actor} subió fotos en el mantenimiento de {mantenimiento.cliente}: {detalle}.",
+                    url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
+                    enviar_push=False,
+                    excluir_user_id=request.user.id if es_usuario_admin else None,
+                )
+                _registrar_actividad(
+                    user=request.user,
+                    titulo="Fotos requeridas subidas",
+                    descripcion=f"{actor} subió fotos en el mantenimiento de {mantenimiento.cliente}: {detalle}.",
+                    url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
+                )
+
+            if subidas and omitidas:
+                messages.success(
+                    request,
+                    f"Se subieron {len(subidas)} foto(s). Ya existían: {', '.join(omitidas)}."
+                )
+            elif subidas:
+                messages.success(
+                    request,
+                    f"Se subieron correctamente {len(subidas)} foto(s)."
+                )
+            elif omitidas:
+                messages.warning(
+                    request,
+                    f"No se subieron nuevas fotos porque ya existían: {', '.join(omitidas)}."
+                )
+            else:
+                messages.error(
+                    request,
+                    "Debes seleccionar al menos una foto para subir."
+                )
+
+            return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
+
         if accion == "subir_foto":
             imagen = request.FILES.get("imagen")
             tipo_foto = (request.POST.get("tipo_foto", "") or "").strip()

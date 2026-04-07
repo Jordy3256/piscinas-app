@@ -46,42 +46,46 @@
         <div class="fw-bold fs-5 mobile-card-title">{{ m.cliente }}</div>
         <div class="text-muted small">📅 {{ m.fecha }} · Contrato: {{ m.contrato }}</div>
 
-        <div class="mt-3 d-grid d-sm-flex gap-2">
-          {% if m.cliente.telefono %}
-          <a class="btn btn-success btn-sm"
-             href="https://wa.me/{{ m.cliente.telefono }}"
-             target="_blank">
-            📞 WhatsApp
-          </a>
-          {% endif %}
+```
+    <div class="mt-3 d-grid d-sm-flex gap-2">
+      {% if m.cliente.telefono %}
+      <a class="btn btn-success btn-sm"
+         href="https://wa.me/{{ m.cliente.telefono }}"
+         target="_blank">
+        📞 WhatsApp
+      </a>
+      {% endif %}
 
-          {% if m.cliente.direccion %}
-          <a class="btn btn-outline-primary btn-sm"
-             href="https://www.google.com/maps/search/?api=1&query={{ m.cliente.direccion|urlencode }}"
-             target="_blank">
-            📍 Ver ubicación
-          </a>
-          {% endif %}
-        </div>
-      </div>
-
-      <div class="w-100 w-sm-auto">
-        {% if m.estado == "realizado" %}
-          <span class="badge text-bg-success fs-6">Realizado</span>
-        {% else %}
-          <span class="badge text-bg-warning fs-6">Pendiente</span>
-        {% endif %}
-      </div>
+      {% if m.cliente.direccion %}
+      <a class="btn btn-outline-primary btn-sm"
+         href="https://www.google.com/maps/search/?api=1&query={{ m.cliente.direccion|urlencode }}"
+         target="_blank">
+        📍 Ver ubicación
+      </a>
+      {% endif %}
     </div>
+  </div>
 
-    <div class="mt-3">
-      <div class="text-muted small">Observaciones</div>
-      <div>{{ m.observaciones|default:"(sin observaciones)"|linebreaksbr }}</div>
-    </div>
+  <div class="w-100 w-sm-auto">
+    {% if m.estado == "realizado" %}
+      <span class="badge text-bg-success fs-6">Realizado</span>
+    {% else %}
+      <span class="badge text-bg-warning fs-6">Pendiente</span>
+    {% endif %}
+  </div>
+</div>
+
+<div class="mt-3">
+  <div class="text-muted small">Observaciones</div>
+  <div>{{ m.observaciones|default:"(sin observaciones)"|linebreaksbr }}</div>
+</div>
+```
+
   </div>
 </div>
 
 {% if esta_realizado %}
+
 <div class="alert alert-secondary border shadow-sm">
   <div class="fw-bold mb-1">🔒 Mantenimiento bloqueado</div>
   <div>
@@ -91,6 +95,7 @@
 {% endif %}
 
 {% if m.estado != "realizado" %}
+
 <div class="card shadow-sm mb-3 {% if puede_cerrar %}border-success{% else %}border-warning{% endif %} mobile-tight-card">
   <div class="card-body">
     <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
@@ -102,102 +107,105 @@
         {% endif %}
       </div>
 
-      <div class="w-100 w-sm-auto">
-        {% if puede_cerrar %}
-          <span class="badge bg-success fs-6">Listo para cerrar</span>
-        {% else %}
-          <span class="badge bg-warning text-dark fs-6">Faltan fotos</span>
-        {% endif %}
-      </div>
-    </div>
-
-    <div class="row g-2 mb-3">
-      <div class="col-12">
-        <div class="border rounded p-3 h-100 {% if cantidad_fotos == 3 %}bg-success-subtle border-success{% else %}bg-warning-subtle border-warning{% endif %}">
-          <div class="fw-semibold mb-1">
-            {% if cantidad_fotos == 3 %}✅{% else %}⚠{% endif %} Fotos obligatorias
-          </div>
-          <div class="small text-muted">
-            {% if cantidad_fotos == 3 %}
-              Ya están completas las 3 fotos requeridas.
-            {% else %}
-              Llevas {{ cantidad_fotos }} de 3 fotos requeridas.
-            {% endif %}
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="border rounded p-3 mb-3">
-      <div class="fw-semibold mb-2">📷 Estado de fotos requeridas</div>
-
-      <div class="vstack gap-2">
-        <div class="border rounded px-3 py-2 {% if foto_inicio %}bg-success-subtle border-success{% else %}bg-light{% endif %}">
-          <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
-            <div>
-              <div class="fw-semibold">1. Inicio de Mantenimiento</div>
-              <div class="small text-muted">Foto obligatoria</div>
-            </div>
-            <div>
-              {% if foto_inicio %}
-                <span class="badge bg-success">Subida</span>
-              {% else %}
-                <span class="badge bg-secondary">Pendiente</span>
-              {% endif %}
-            </div>
-          </div>
-        </div>
-
-        <div class="border rounded px-3 py-2 {% if foto_fin %}bg-success-subtle border-success{% else %}bg-light{% endif %}">
-          <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
-            <div>
-              <div class="fw-semibold">2. Fin de Mantenimiento</div>
-              <div class="small text-muted">Foto obligatoria</div>
-            </div>
-            <div>
-              {% if foto_fin %}
-                <span class="badge bg-success">Subida</span>
-              {% else %}
-                <span class="badge bg-secondary">Pendiente</span>
-              {% endif %}
-            </div>
-          </div>
-        </div>
-
-        <div class="border rounded px-3 py-2 {% if foto_nivel %}bg-success-subtle border-success{% else %}bg-light{% endif %}">
-          <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
-            <div>
-              <div class="fw-semibold">3. Nivel PH y Cl</div>
-              <div class="small text-muted">Foto obligatoria</div>
-            </div>
-            <div>
-              {% if foto_nivel %}
-                <span class="badge bg-success">Subida</span>
-              {% else %}
-                <span class="badge bg-secondary">Pendiente</span>
-              {% endif %}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    {% if not puede_cerrar %}
-    <div class="alert alert-warning mb-0">
-      <div class="fw-semibold mb-1">Antes de cerrar este mantenimiento falta:</div>
-      <ul class="mb-0 ps-3">
-        {% if not foto_inicio %}
-          <li>Subir la foto de inicio de mantenimiento.</li>
-        {% endif %}
-        {% if not foto_fin %}
-          <li>Subir la foto de fin de mantenimiento.</li>
-        {% endif %}
-        {% if not foto_nivel %}
-          <li>Subir la foto de nivel PH y Cl.</li>
-        {% endif %}
-      </ul>
-    </div>
+```
+  <div class="w-100 w-sm-auto">
+    {% if puede_cerrar %}
+      <span class="badge bg-success fs-6">Listo para cerrar</span>
+    {% else %}
+      <span class="badge bg-warning text-dark fs-6">Faltan fotos</span>
     {% endif %}
+  </div>
+</div>
+
+<div class="row g-2 mb-3">
+  <div class="col-12">
+    <div class="border rounded p-3 h-100 {% if cantidad_fotos == 3 %}bg-success-subtle border-success{% else %}bg-warning-subtle border-warning{% endif %}">
+      <div class="fw-semibold mb-1">
+        {% if cantidad_fotos == 3 %}✅{% else %}⚠{% endif %} Fotos obligatorias
+      </div>
+      <div class="small text-muted">
+        {% if cantidad_fotos == 3 %}
+          Ya están completas las 3 fotos requeridas.
+        {% else %}
+          Llevas {{ cantidad_fotos }} de 3 fotos requeridas.
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="border rounded p-3 mb-3">
+  <div class="fw-semibold mb-2">📷 Estado de fotos requeridas</div>
+
+  <div class="vstack gap-2">
+    <div class="border rounded px-3 py-2 {% if foto_inicio %}bg-success-subtle border-success{% else %}bg-light{% endif %}">
+      <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
+        <div>
+          <div class="fw-semibold">1. Inicio de Mantenimiento</div>
+          <div class="small text-muted">Foto obligatoria</div>
+        </div>
+        <div>
+          {% if foto_inicio %}
+            <span class="badge bg-success">Subida</span>
+          {% else %}
+            <span class="badge bg-secondary">Pendiente</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="border rounded px-3 py-2 {% if foto_fin %}bg-success-subtle border-success{% else %}bg-light{% endif %}">
+      <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
+        <div>
+          <div class="fw-semibold">2. Fin de Mantenimiento</div>
+          <div class="small text-muted">Foto obligatoria</div>
+        </div>
+        <div>
+          {% if foto_fin %}
+            <span class="badge bg-success">Subida</span>
+          {% else %}
+            <span class="badge bg-secondary">Pendiente</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="border rounded px-3 py-2 {% if foto_nivel %}bg-success-subtle border-success{% else %}bg-light{% endif %}">
+      <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
+        <div>
+          <div class="fw-semibold">3. Nivel PH y Cl</div>
+          <div class="small text-muted">Foto obligatoria</div>
+        </div>
+        <div>
+          {% if foto_nivel %}
+            <span class="badge bg-success">Subida</span>
+          {% else %}
+            <span class="badge bg-secondary">Pendiente</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if not puede_cerrar %}
+<div class="alert alert-warning mb-0">
+  <div class="fw-semibold mb-1">Antes de cerrar este mantenimiento falta:</div>
+  <ul class="mb-0 ps-3">
+    {% if not foto_inicio %}
+      <li>Subir la foto de inicio de mantenimiento.</li>
+    {% endif %}
+    {% if not foto_fin %}
+      <li>Subir la foto de fin de mantenimiento.</li>
+    {% endif %}
+    {% if not foto_nivel %}
+      <li>Subir la foto de nivel PH y Cl.</li>
+    {% endif %}
+  </ul>
+</div>
+{% endif %}
+```
+
   </div>
 </div>
 {% endif %}
@@ -206,33 +214,37 @@
   <div class="card-body">
     <div class="fw-bold mb-2">🎯 Estado del mantenimiento</div>
 
-    <div class="d-grid gap-2">
-      {% if m.estado != 'realizado' %}
-        <form method="post">
-          {% csrf_token %}
-          <input type="hidden" name="accion" value="marcar_realizado">
-          <button class="btn {% if puede_cerrar %}btn-success{% else %}btn-outline-success{% endif %} btn-lg">
-            ✅ Marcar como realizado
-          </button>
-        </form>
+```
+<div class="d-grid gap-2">
+  {% if m.estado != 'realizado' %}
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="accion" value="marcar_realizado">
+      <button class="btn {% if puede_cerrar %}btn-success{% else %}btn-outline-success{% endif %} btn-lg">
+        ✅ Marcar como realizado
+      </button>
+    </form>
 
-        {% if not puede_cerrar %}
-        <div class="small text-muted">
-          El sistema no permitirá cerrarlo hasta que tenga las 3 fotos obligatorias.
-        </div>
-        {% endif %}
-      {% else %}
-        <form method="post">
-          {% csrf_token %}
-          <input type="hidden" name="accion" value="marcar_pendiente">
-          <button class="btn btn-warning btn-lg">↩️ Volver a pendiente</button>
-        </form>
-      {% endif %}
+    {% if not puede_cerrar %}
+    <div class="small text-muted">
+      El sistema no permitirá cerrarlo hasta que tenga las 3 fotos obligatorias.
     </div>
+    {% endif %}
+  {% else %}
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="accion" value="marcar_pendiente">
+      <button class="btn btn-warning btn-lg">↩️ Volver a pendiente</button>
+    </form>
+  {% endif %}
+</div>
+```
+
   </div>
 </div>
 
 {% if es_admin %}
+
 <div class="card shadow-sm mb-3 border-info mobile-tight-card">
   <div class="card-body">
     <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
@@ -242,54 +254,57 @@
       </a>
     </div>
 
-    {% if historial_cliente_reciente %}
-      <div class="vstack gap-2">
-        {% for h in historial_cliente_reciente %}
-          <div class="border rounded p-3 bg-light">
-            <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
-              <div class="flex-grow-1">
-                <div class="fw-semibold">
-                  {{ h.fecha|date:"d/m/Y" }} · {{ h.contrato }}
-                </div>
-
-                <div class="small text-muted mt-1">
-                  {% if h.estado == "realizado" %}
-                    <span class="badge bg-success">Realizado</span>
-                  {% else %}
-                    <span class="badge bg-warning text-dark">Pendiente</span>
-                  {% endif %}
-                </div>
-              </div>
-
-              <div class="w-100 w-sm-auto">
-                <a href="/dashboard/mantenimientos/{{ h.id }}/" class="btn btn-outline-primary btn-sm w-100">
-                  Abrir
-                </a>
-              </div>
+```
+{% if historial_cliente_reciente %}
+  <div class="vstack gap-2">
+    {% for h in historial_cliente_reciente %}
+      <div class="border rounded p-3 bg-light">
+        <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
+          <div class="flex-grow-1">
+            <div class="fw-semibold">
+              {{ h.fecha|date:"d/m/Y" }} · {{ h.contrato }}
             </div>
 
-            <div class="small mt-2">
-              <strong>Trabajadores:</strong>
-              {% for t in h.trabajadores.all %}
-                {{ t.user.username }}{% if not forloop.last %}, {% endif %}
-              {% empty %}
-                <span class="text-muted">Sin asignar</span>
-              {% endfor %}
+            <div class="small text-muted mt-1">
+              {% if h.estado == "realizado" %}
+                <span class="badge bg-success">Realizado</span>
+              {% else %}
+                <span class="badge bg-warning text-dark">Pendiente</span>
+              {% endif %}
             </div>
-
-            {% if h.observaciones %}
-            <div class="small text-muted mt-2">
-              {{ h.observaciones|truncatechars:140 }}
-            </div>
-            {% endif %}
           </div>
-        {% endfor %}
+
+          <div class="w-100 w-sm-auto">
+            <a href="/dashboard/mantenimientos/{{ h.id }}/" class="btn btn-outline-primary btn-sm w-100">
+              Abrir
+            </a>
+          </div>
+        </div>
+
+        <div class="small mt-2">
+          <strong>Trabajadores:</strong>
+          {% for t in h.trabajadores.all %}
+            {{ t.user.username }}{% if not forloop.last %}, {% endif %}
+          {% empty %}
+            <span class="text-muted">Sin asignar</span>
+          {% endfor %}
+        </div>
+
+        {% if h.observaciones %}
+        <div class="small text-muted mt-2">
+          {{ h.observaciones|truncatechars:140 }}
+        </div>
+        {% endif %}
       </div>
-    {% else %}
-      <div class="text-muted">
-        No hay mantenimientos anteriores registrados para este cliente.
-      </div>
-    {% endif %}
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="text-muted">
+    No hay mantenimientos anteriores registrados para este cliente.
+  </div>
+{% endif %}
+```
+
   </div>
 </div>
 {% endif %}
@@ -298,33 +313,36 @@
   <div class="card-body">
     <div class="fw-bold mb-2">🧪 Registrar insumo usado</div>
 
-    {% if esta_realizado %}
-      <div class="alert alert-secondary mb-0">
-        Este mantenimiento está bloqueado. Para registrar nuevos insumos primero debes volverlo a pendiente.
-      </div>
-    {% else %}
-      <form method="post" class="row g-2">
-        {% csrf_token %}
-        <input type="hidden" name="accion" value="agregar_insumo">
+```
+{% if esta_realizado %}
+  <div class="alert alert-secondary mb-0">
+    Este mantenimiento está bloqueado. Para registrar nuevos insumos primero debes volverlo a pendiente.
+  </div>
+{% else %}
+  <form method="post" class="row g-2">
+    {% csrf_token %}
+    <input type="hidden" name="accion" value="agregar_insumo">
 
-        <div class="col-12">
-          <select class="form-select form-select-lg" name="insumo_id" required>
-            <option value="">-- Selecciona un insumo --</option>
-            {% for i in insumos %}
-              <option value="{{ i.id }}">{{ i.nombre }}</option>
-            {% endfor %}
-          </select>
-        </div>
+    <div class="col-12">
+      <select class="form-select form-select-lg" name="insumo_id" required>
+        <option value="">-- Selecciona un insumo --</option>
+        {% for i in insumos %}
+          <option value="{{ i.id }}">{{ i.nombre }}</option>
+        {% endfor %}
+      </select>
+    </div>
 
-        <div class="col-12">
-          <input class="form-control form-control-lg" type="number" name="cantidad" min="1" placeholder="Cantidad" required>
-        </div>
+    <div class="col-12">
+      <input class="form-control form-control-lg" type="number" name="cantidad" min="1" placeholder="Cantidad" required>
+    </div>
 
-        <div class="col-12">
-          <button class="btn btn-primary btn-lg w-100" type="submit">Agregar insumo</button>
-        </div>
-      </form>
-    {% endif %}
+    <div class="col-12">
+      <button class="btn btn-primary btn-lg w-100" type="submit">Agregar insumo</button>
+    </div>
+  </form>
+{% endif %}
+```
+
   </div>
 </div>
 
@@ -332,155 +350,154 @@
   <div class="card-body">
     <div class="fw-bold mb-3">📸 Subir fotos requeridas</div>
 
-    {% if esta_realizado %}
-      <div class="alert alert-secondary mb-3">
-        Este mantenimiento está bloqueado. Para subir o eliminar fotos primero debes volverlo a pendiente.
-      </div>
-    {% endif %}
+```
+{% if esta_realizado %}
+  <div class="alert alert-secondary mb-3">
+    Este mantenimiento está bloqueado. Para subir o eliminar fotos primero debes volverlo a pendiente.
+  </div>
+{% endif %}
 
-    <div class="row g-3">
-      <div class="col-12 col-lg-4">
-        <div class="border rounded p-3 h-100 {% if foto_inicio %}bg-success-subtle border-success{% elif esta_realizado %}bg-light{% endif %}">
-          <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap mb-2">
-            <div class="fw-semibold">Inicio de Mantenimiento</div>
-            {% if foto_inicio %}
-              <span class="badge bg-success">Subida</span>
-            {% else %}
-              <span class="badge bg-secondary">Pendiente</span>
-            {% endif %}
-          </div>
+{% if not esta_realizado %}
+<div class="border rounded p-3 mb-4 bg-light">
+  <div class="fw-semibold mb-2">Carga rápida de las 3 fotos</div>
+  <div class="small text-muted mb-3">
+    Puedes subir una, dos o las tres fotos en un solo envío. Las que ya existen no se reemplazan automáticamente.
+  </div>
 
-          {% if foto_inicio %}
-            <div class="small text-muted mb-2">Esta foto ya fue subida.</div>
-            <a href="{{ foto_inicio.imagen.url }}" target="_blank" class="text-decoration-none">
-              <img src="{{ foto_inicio.imagen.url }}" class="img-fluid rounded border w-100 mb-2 mobile-photo-img" alt="Inicio de Mantenimiento" style="object-fit: cover; max-height: 220px;">
-            </a>
-            {% if esta_realizado %}
-              <button type="button" class="btn btn-sm btn-outline-secondary w-100" disabled>🔒 Eliminación bloqueada</button>
-            {% else %}
-              <form method="post" action="/dashboard/fotos/{{ foto_inicio.id }}/eliminar/" onsubmit="return confirm('¿Seguro que deseas eliminar esta foto?');">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-sm btn-outline-danger w-100">🗑 Eliminar foto</button>
-              </form>
-            {% endif %}
-          {% else %}
-            {% if esta_realizado %}
-              <button type="button" class="btn btn-outline-secondary w-100" disabled>🔒 Subida bloqueada</button>
-            {% else %}
-              <form method="post" enctype="multipart/form-data" class="row g-2">
-                {% csrf_token %}
-                <input type="hidden" name="accion" value="subir_foto">
-                <input type="hidden" name="tipo_foto" value="Inicio de Mantenimiento">
+  <form method="post" enctype="multipart/form-data" class="row g-3">
+    {% csrf_token %}
+    <input type="hidden" name="accion" value="subir_fotos_requeridas">
 
-                <div class="col-12">
-                  <input class="form-control" type="file" name="imagen" accept="image/*" required>
-                </div>
-
-                <div class="col-12">
-                  <button class="btn btn-dark w-100" type="submit">Subir esta foto</button>
-                </div>
-              </form>
-            {% endif %}
-          {% endif %}
-        </div>
-      </div>
-
-      <div class="col-12 col-lg-4">
-        <div class="border rounded p-3 h-100 {% if foto_fin %}bg-success-subtle border-success{% elif esta_realizado %}bg-light{% endif %}">
-          <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap mb-2">
-            <div class="fw-semibold">Fin de Mantenimiento</div>
-            {% if foto_fin %}
-              <span class="badge bg-success">Subida</span>
-            {% else %}
-              <span class="badge bg-secondary">Pendiente</span>
-            {% endif %}
-          </div>
-
-          {% if foto_fin %}
-            <div class="small text-muted mb-2">Esta foto ya fue subida.</div>
-            <a href="{{ foto_fin.imagen.url }}" target="_blank" class="text-decoration-none">
-              <img src="{{ foto_fin.imagen.url }}" class="img-fluid rounded border w-100 mb-2 mobile-photo-img" alt="Fin de Mantenimiento" style="object-fit: cover; max-height: 220px;">
-            </a>
-            {% if esta_realizado %}
-              <button type="button" class="btn btn-sm btn-outline-secondary w-100" disabled>🔒 Eliminación bloqueada</button>
-            {% else %}
-              <form method="post" action="/dashboard/fotos/{{ foto_fin.id }}/eliminar/" onsubmit="return confirm('¿Seguro que deseas eliminar esta foto?');">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-sm btn-outline-danger w-100">🗑 Eliminar foto</button>
-              </form>
-            {% endif %}
-          {% else %}
-            {% if esta_realizado %}
-              <button type="button" class="btn btn-outline-secondary w-100" disabled>🔒 Subida bloqueada</button>
-            {% else %}
-              <form method="post" enctype="multipart/form-data" class="row g-2">
-                {% csrf_token %}
-                <input type="hidden" name="accion" value="subir_foto">
-                <input type="hidden" name="tipo_foto" value="Fin de Mantenimiento">
-
-                <div class="col-12">
-                  <input class="form-control" type="file" name="imagen" accept="image/*" required>
-                </div>
-
-                <div class="col-12">
-                  <button class="btn btn-dark w-100" type="submit">Subir esta foto</button>
-                </div>
-              </form>
-            {% endif %}
-          {% endif %}
-        </div>
-      </div>
-
-      <div class="col-12 col-lg-4">
-        <div class="border rounded p-3 h-100 {% if foto_nivel %}bg-success-subtle border-success{% elif esta_realizado %}bg-light{% endif %}">
-          <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap mb-2">
-            <div class="fw-semibold">Nivel PH y Cl</div>
-            {% if foto_nivel %}
-              <span class="badge bg-success">Subida</span>
-            {% else %}
-              <span class="badge bg-secondary">Pendiente</span>
-            {% endif %}
-          </div>
-
-          {% if foto_nivel %}
-            <div class="small text-muted mb-2">Esta foto ya fue subida.</div>
-            <a href="{{ foto_nivel.imagen.url }}" target="_blank" class="text-decoration-none">
-              <img src="{{ foto_nivel.imagen.url }}" class="img-fluid rounded border w-100 mb-2 mobile-photo-img" alt="Nivel PH y Cl" style="object-fit: cover; max-height: 220px;">
-            </a>
-            {% if esta_realizado %}
-              <button type="button" class="btn btn-sm btn-outline-secondary w-100" disabled>🔒 Eliminación bloqueada</button>
-            {% else %}
-              <form method="post" action="/dashboard/fotos/{{ foto_nivel.id }}/eliminar/" onsubmit="return confirm('¿Seguro que deseas eliminar esta foto?');">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-sm btn-outline-danger w-100">🗑 Eliminar foto</button>
-              </form>
-            {% endif %}
-          {% else %}
-            {% if esta_realizado %}
-              <button type="button" class="btn btn-outline-secondary w-100" disabled>🔒 Subida bloqueada</button>
-            {% else %}
-              <form method="post" enctype="multipart/form-data" class="row g-2">
-                {% csrf_token %}
-                <input type="hidden" name="accion" value="subir_foto">
-                <input type="hidden" name="tipo_foto" value="Nivel PH y Cl">
-
-                <div class="col-12">
-                  <input class="form-control" type="file" name="imagen" accept="image/*" required>
-                </div>
-
-                <div class="col-12">
-                  <button class="btn btn-dark w-100" type="submit">Subir esta foto</button>
-                </div>
-              </form>
-            {% endif %}
-          {% endif %}
-        </div>
-      </div>
+    <div class="col-12 col-lg-4">
+      <label class="form-label fw-semibold">Inicio de Mantenimiento</label>
+      <input class="form-control" type="file" name="foto_inicio" accept="image/*" {% if foto_inicio %}disabled{% endif %}>
+      {% if foto_inicio %}
+        <div class="small text-success mt-1">Ya subida.</div>
+      {% endif %}
     </div>
 
-    <div class="small text-muted mt-3">
-      Cada bloque controla su propia foto. Si eliminas una, podrás volver a subir exactamente esa misma.
+    <div class="col-12 col-lg-4">
+      <label class="form-label fw-semibold">Fin de Mantenimiento</label>
+      <input class="form-control" type="file" name="foto_fin" accept="image/*" {% if foto_fin %}disabled{% endif %}>
+      {% if foto_fin %}
+        <div class="small text-success mt-1">Ya subida.</div>
+      {% endif %}
     </div>
+
+    <div class="col-12 col-lg-4">
+      <label class="form-label fw-semibold">Nivel PH y Cl</label>
+      <input class="form-control" type="file" name="foto_nivel" accept="image/*" {% if foto_nivel %}disabled{% endif %}>
+      {% if foto_nivel %}
+        <div class="small text-success mt-1">Ya subida.</div>
+      {% endif %}
+    </div>
+
+    <div class="col-12">
+      <button class="btn btn-primary w-100" type="submit">
+        📤 Subir fotos seleccionadas
+      </button>
+    </div>
+  </form>
+</div>
+{% endif %}
+
+<div class="row g-3">
+  <div class="col-12 col-lg-4">
+    <div class="border rounded p-3 h-100 {% if foto_inicio %}bg-success-subtle border-success{% elif esta_realizado %}bg-light{% endif %}">
+      <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap mb-2">
+        <div class="fw-semibold">Inicio de Mantenimiento</div>
+        {% if foto_inicio %}
+          <span class="badge bg-success">Subida</span>
+        {% else %}
+          <span class="badge bg-secondary">Pendiente</span>
+        {% endif %}
+      </div>
+
+      {% if foto_inicio %}
+        <div class="small text-muted mb-2">Esta foto ya fue subida.</div>
+        <a href="{{ foto_inicio.imagen.url }}" target="_blank" class="text-decoration-none">
+          <img src="{{ foto_inicio.imagen.url }}" class="img-fluid rounded border w-100 mb-2 mobile-photo-img" alt="Inicio de Mantenimiento" style="object-fit: cover; max-height: 220px;">
+        </a>
+        {% if esta_realizado %}
+          <button type="button" class="btn btn-sm btn-outline-secondary w-100" disabled>🔒 Eliminación bloqueada</button>
+        {% else %}
+          <form method="post" action="/dashboard/fotos/{{ foto_inicio.id }}/eliminar/" onsubmit="return confirm('¿Seguro que deseas eliminar esta foto?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-outline-danger w-100">🗑 Eliminar foto</button>
+          </form>
+        {% endif %}
+      {% else %}
+        <div class="small text-muted">Aún no subida.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-4">
+    <div class="border rounded p-3 h-100 {% if foto_fin %}bg-success-subtle border-success{% elif esta_realizado %}bg-light{% endif %}">
+      <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap mb-2">
+        <div class="fw-semibold">Fin de Mantenimiento</div>
+        {% if foto_fin %}
+          <span class="badge bg-success">Subida</span>
+        {% else %}
+          <span class="badge bg-secondary">Pendiente</span>
+        {% endif %}
+      </div>
+
+      {% if foto_fin %}
+        <div class="small text-muted mb-2">Esta foto ya fue subida.</div>
+        <a href="{{ foto_fin.imagen.url }}" target="_blank" class="text-decoration-none">
+          <img src="{{ foto_fin.imagen.url }}" class="img-fluid rounded border w-100 mb-2 mobile-photo-img" alt="Fin de Mantenimiento" style="object-fit: cover; max-height: 220px;">
+        </a>
+        {% if esta_realizado %}
+          <button type="button" class="btn btn-sm btn-outline-secondary w-100" disabled>🔒 Eliminación bloqueada</button>
+        {% else %}
+          <form method="post" action="/dashboard/fotos/{{ foto_fin.id }}/eliminar/" onsubmit="return confirm('¿Seguro que deseas eliminar esta foto?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-outline-danger w-100">🗑 Eliminar foto</button>
+          </form>
+        {% endif %}
+      {% else %}
+        <div class="small text-muted">Aún no subida.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-4">
+    <div class="border rounded p-3 h-100 {% if foto_nivel %}bg-success-subtle border-success{% elif esta_realizado %}bg-light{% endif %}">
+      <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap mb-2">
+        <div class="fw-semibold">Nivel PH y Cl</div>
+        {% if foto_nivel %}
+          <span class="badge bg-success">Subida</span>
+        {% else %}
+          <span class="badge bg-secondary">Pendiente</span>
+        {% endif %}
+      </div>
+
+      {% if foto_nivel %}
+        <div class="small text-muted mb-2">Esta foto ya fue subida.</div>
+        <a href="{{ foto_nivel.imagen.url }}" target="_blank" class="text-decoration-none">
+          <img src="{{ foto_nivel.imagen.url }}" class="img-fluid rounded border w-100 mb-2 mobile-photo-img" alt="Nivel PH y Cl" style="object-fit: cover; max-height: 220px;">
+        </a>
+        {% if esta_realizado %}
+          <button type="button" class="btn btn-sm btn-outline-secondary w-100" disabled>🔒 Eliminación bloqueada</button>
+        {% else %}
+          <form method="post" action="/dashboard/fotos/{{ foto_nivel.id }}/eliminar/" onsubmit="return confirm('¿Seguro que deseas eliminar esta foto?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-outline-danger w-100">🗑 Eliminar foto</button>
+          </form>
+        {% endif %}
+      {% else %}
+        <div class="small text-muted">Aún no subida.</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="small text-muted mt-3">
+  Las fotos ya subidas se mantienen visibles abajo. Si eliminas una, podrás volver a subir exactamente esa misma.
+</div>
+```
+
   </div>
 </div>
 
@@ -488,42 +505,45 @@
   <div class="card-body">
     <div class="fw-bold mb-2">🖼️ Fotos</div>
 
-    {% if fotos %}
-      <div class="row g-3">
-        {% for f in fotos %}
-          <div class="col-12 col-sm-6 col-lg-4">
-            <div class="border rounded p-2 h-100">
-              <div class="mb-2">
-                <span class="badge bg-dark">{{ f.descripcion }}</span>
-              </div>
-
-              <a href="{{ f.imagen.url }}" target="_blank" class="text-decoration-none">
-                <img src="{{ f.imagen.url }}" class="img-fluid rounded border w-100 mobile-photo-img" alt="{{ f.descripcion }}" style="object-fit: cover; max-height: 280px;">
-              </a>
-
-              <div class="small text-muted mt-2">{{ f.descripcion }}</div>
-
-              <div class="mt-2 d-grid">
-                {% if esta_realizado %}
-                  <button type="button" class="btn btn-sm btn-outline-secondary w-100" disabled>
-                    🔒 Eliminación bloqueada
-                  </button>
-                {% else %}
-                  <form method="post" action="/dashboard/fotos/{{ f.id }}/eliminar/" onsubmit="return confirm('¿Seguro que deseas eliminar esta foto?');">
-                    {% csrf_token %}
-                    <button type="submit" class="btn btn-sm btn-outline-danger w-100">
-                      🗑 Eliminar foto
-                    </button>
-                  </form>
-                {% endif %}
-              </div>
-            </div>
+```
+{% if fotos %}
+  <div class="row g-3">
+    {% for f in fotos %}
+      <div class="col-12 col-sm-6 col-lg-4">
+        <div class="border rounded p-2 h-100">
+          <div class="mb-2">
+            <span class="badge bg-dark">{{ f.descripcion }}</span>
           </div>
-        {% endfor %}
+
+          <a href="{{ f.imagen.url }}" target="_blank" class="text-decoration-none">
+            <img src="{{ f.imagen.url }}" class="img-fluid rounded border w-100 mobile-photo-img" alt="{{ f.descripcion }}" style="object-fit: cover; max-height: 280px;">
+          </a>
+
+          <div class="small text-muted mt-2">{{ f.descripcion }}</div>
+
+          <div class="mt-2 d-grid">
+            {% if esta_realizado %}
+              <button type="button" class="btn btn-sm btn-outline-secondary w-100" disabled>
+                🔒 Eliminación bloqueada
+              </button>
+            {% else %}
+              <form method="post" action="/dashboard/fotos/{{ f.id }}/eliminar/" onsubmit="return confirm('¿Seguro que deseas eliminar esta foto?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-danger w-100">
+                  🗑 Eliminar foto
+                </button>
+              </form>
+            {% endif %}
+          </div>
+        </div>
       </div>
-    {% else %}
-      <div class="text-muted">Aún no hay fotos para este mantenimiento.</div>
-    {% endif %}
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="text-muted">Aún no hay fotos para este mantenimiento.</div>
+{% endif %}
+```
+
   </div>
 </div>
 
@@ -531,43 +551,23 @@
   <div class="card-body">
     <div class="fw-bold mb-2">🧪 Insumos usados</div>
 
-    {% if lista_usos %}
-      <div class="table-responsive d-none d-md-block">
-        <table class="table table-sm table-striped mb-0 align-middle">
-          <thead>
-            <tr>
-              <th>Insumo</th>
-              <th>Cant.</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for u in lista_usos %}
-            <tr>
-              <td>{{ u.insumo }}</td>
-              <td>{{ u.cantidad }}</td>
-              <td class="text-nowrap">
-                {% if esta_realizado %}
-                  <button type="button" class="btn btn-sm btn-outline-secondary" disabled>🔒 Editar</button>
-                  <button type="button" class="btn btn-sm btn-outline-secondary" disabled>🔒 Eliminar</button>
-                {% else %}
-                  <a class="btn btn-sm btn-outline-primary" href="/dashboard/usos/{{ u.id }}/editar/">Editar</a>
-                  <a class="btn btn-sm btn-outline-danger" href="/dashboard/usos/{{ u.id }}/eliminar/">Eliminar</a>
-                {% endif %}
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-
-      <div class="d-md-none vstack gap-2">
+```
+{% if lista_usos %}
+  <div class="table-responsive d-none d-md-block">
+    <table class="table table-sm table-striped mb-0 align-middle">
+      <thead>
+        <tr>
+          <th>Insumo</th>
+          <th>Cant.</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
         {% for u in lista_usos %}
-        <div class="border rounded p-3 bg-light">
-          <div class="fw-semibold">{{ u.insumo }}</div>
-          <div class="small text-muted">Cantidad: {{ u.cantidad }}</div>
-
-          <div class="mt-3 mobile-table-actions">
+        <tr>
+          <td>{{ u.insumo }}</td>
+          <td>{{ u.cantidad }}</td>
+          <td class="text-nowrap">
             {% if esta_realizado %}
               <button type="button" class="btn btn-sm btn-outline-secondary" disabled>🔒 Editar</button>
               <button type="button" class="btn btn-sm btn-outline-secondary" disabled>🔒 Eliminar</button>
@@ -575,57 +575,84 @@
               <a class="btn btn-sm btn-outline-primary" href="/dashboard/usos/{{ u.id }}/editar/">Editar</a>
               <a class="btn btn-sm btn-outline-danger" href="/dashboard/usos/{{ u.id }}/eliminar/">Eliminar</a>
             {% endif %}
-          </div>
-        </div>
+          </td>
+        </tr>
         {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="d-md-none vstack gap-2">
+    {% for u in lista_usos %}
+    <div class="border rounded p-3 bg-light">
+      <div class="fw-semibold">{{ u.insumo }}</div>
+      <div class="small text-muted">Cantidad: {{ u.cantidad }}</div>
+
+      <div class="mt-3 mobile-table-actions">
+        {% if esta_realizado %}
+          <button type="button" class="btn btn-sm btn-outline-secondary" disabled>🔒 Editar</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary" disabled>🔒 Eliminar</button>
+        {% else %}
+          <a class="btn btn-sm btn-outline-primary" href="/dashboard/usos/{{ u.id }}/editar/">Editar</a>
+          <a class="btn btn-sm btn-outline-danger" href="/dashboard/usos/{{ u.id }}/eliminar/">Eliminar</a>
+        {% endif %}
       </div>
-    {% else %}
-      <div class="text-muted">No hay insumos registrados en este mantenimiento.</div>
-    {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="text-muted">No hay insumos registrados en este mantenimiento.</div>
+{% endif %}
+```
+
   </div>
 </div>
 
 {% if es_admin %}
+
 <div class="card shadow-sm mb-3 mobile-tight-card">
   <div class="card-body">
     <div class="fw-bold mb-2">💸 Egresos (solo admin)</div>
 
-    {% if lista_egresos %}
-      <div class="table-responsive d-none d-md-block">
-        <table class="table table-sm table-striped mb-2">
-          <thead>
-            <tr>
-              <th>Insumo</th>
-              <th>Cant.</th>
-              <th>Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for e in lista_egresos %}
-            <tr>
-              <td>{{ e.insumo }}</td>
-              <td>{{ e.cantidad }}</td>
-              <td>{{ e.total }}</td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-
-      <div class="d-md-none vstack gap-2">
+```
+{% if lista_egresos %}
+  <div class="table-responsive d-none d-md-block">
+    <table class="table table-sm table-striped mb-2">
+      <thead>
+        <tr>
+          <th>Insumo</th>
+          <th>Cant.</th>
+          <th>Total</th>
+        </tr>
+      </thead>
+      <tbody>
         {% for e in lista_egresos %}
-        <div class="border rounded p-3 bg-light">
-          <div class="fw-semibold">{{ e.insumo }}</div>
-          <div class="small text-muted">Cantidad: {{ e.cantidad }}</div>
-          <div class="small text-muted">Total: {{ e.total }}</div>
-        </div>
+        <tr>
+          <td>{{ e.insumo }}</td>
+          <td>{{ e.cantidad }}</td>
+          <td>{{ e.total }}</td>
+        </tr>
         {% endfor %}
-      </div>
+      </tbody>
+    </table>
+  </div>
 
-      <div class="mt-3"><strong>Total egresos:</strong> {{ total_egresos }}</div>
-    {% else %}
-      <div class="text-muted">No hay egresos registrados.</div>
-    {% endif %}
+  <div class="d-md-none vstack gap-2">
+    {% for e in lista_egresos %}
+    <div class="border rounded p-3 bg-light">
+      <div class="fw-semibold">{{ e.insumo }}</div>
+      <div class="small text-muted">Cantidad: {{ e.cantidad }}</div>
+      <div class="small text-muted">Total: {{ e.total }}</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="mt-3"><strong>Total egresos:</strong> {{ total_egresos }}</div>
+{% else %}
+  <div class="text-muted">No hay egresos registrados.</div>
+{% endif %}
+```
+
   </div>
 </div>
 {% endif %}
