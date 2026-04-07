@@ -22,6 +22,7 @@
 
     .mobile-photo-img {
       max-height: 240px !important;
+      cursor: zoom-in;
     }
 
     .mobile-section-title {
@@ -36,6 +37,55 @@
     .mobile-tight-card .card-body {
       padding: 0.9rem;
     }
+  }
+
+  .foto-clickable {
+    cursor: zoom-in;
+  }
+
+  .visor-imagen-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.92);
+    z-index: 9999;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+
+  .visor-imagen-overlay.activo {
+    display: flex;
+  }
+
+  .visor-imagen-contenido {
+    position: relative;
+    max-width: 96vw;
+    max-height: 96vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .visor-imagen-contenido img {
+    max-width: 96vw;
+    max-height: 92vh;
+    border-radius: 10px;
+    box-shadow: 0 0 30px rgba(0, 0, 0, 0.35);
+  }
+
+  .visor-cerrar {
+    position: absolute;
+    top: -10px;
+    right: -10px;
+    width: 42px;
+    height: 42px;
+    border: none;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.9);
+    font-size: 1.4rem;
+    line-height: 1;
+    cursor: pointer;
   }
 </style>
 
@@ -415,9 +465,11 @@
 
       {% if foto_inicio %}
         <div class="small text-muted mb-2">Esta foto ya fue subida.</div>
-        <a href="{{ foto_inicio.imagen.url }}" target="_blank" class="text-decoration-none">
-          <img src="{{ foto_inicio.imagen.url }}" class="img-fluid rounded border w-100 mb-2 mobile-photo-img" alt="Inicio de Mantenimiento" style="object-fit: cover; max-height: 220px;">
-        </a>
+        <img src="{{ foto_inicio.imagen.url }}"
+             class="img-fluid rounded border w-100 mb-2 mobile-photo-img foto-clickable"
+             alt="Inicio de Mantenimiento"
+             data-full="{{ foto_inicio.imagen.url }}"
+             style="object-fit: cover; max-height: 220px;">
         {% if esta_realizado %}
           <button type="button" class="btn btn-sm btn-outline-secondary w-100" disabled>🔒 Eliminación bloqueada</button>
         {% else %}
@@ -445,9 +497,11 @@
 
       {% if foto_fin %}
         <div class="small text-muted mb-2">Esta foto ya fue subida.</div>
-        <a href="{{ foto_fin.imagen.url }}" target="_blank" class="text-decoration-none">
-          <img src="{{ foto_fin.imagen.url }}" class="img-fluid rounded border w-100 mb-2 mobile-photo-img" alt="Fin de Mantenimiento" style="object-fit: cover; max-height: 220px;">
-        </a>
+        <img src="{{ foto_fin.imagen.url }}"
+             class="img-fluid rounded border w-100 mb-2 mobile-photo-img foto-clickable"
+             alt="Fin de Mantenimiento"
+             data-full="{{ foto_fin.imagen.url }}"
+             style="object-fit: cover; max-height: 220px;">
         {% if esta_realizado %}
           <button type="button" class="btn btn-sm btn-outline-secondary w-100" disabled>🔒 Eliminación bloqueada</button>
         {% else %}
@@ -475,9 +529,11 @@
 
       {% if foto_nivel %}
         <div class="small text-muted mb-2">Esta foto ya fue subida.</div>
-        <a href="{{ foto_nivel.imagen.url }}" target="_blank" class="text-decoration-none">
-          <img src="{{ foto_nivel.imagen.url }}" class="img-fluid rounded border w-100 mb-2 mobile-photo-img" alt="Nivel PH y Cl" style="object-fit: cover; max-height: 220px;">
-        </a>
+        <img src="{{ foto_nivel.imagen.url }}"
+             class="img-fluid rounded border w-100 mb-2 mobile-photo-img foto-clickable"
+             alt="Nivel PH y Cl"
+             data-full="{{ foto_nivel.imagen.url }}"
+             style="object-fit: cover; max-height: 220px;">
         {% if esta_realizado %}
           <button type="button" class="btn btn-sm btn-outline-secondary w-100" disabled>🔒 Eliminación bloqueada</button>
         {% else %}
@@ -610,5 +666,56 @@
   </div>
 </div>
 {% endif %}
+
+<div id="visorImagen" class="visor-imagen-overlay" aria-hidden="true">
+  <div class="visor-imagen-contenido">
+    <button type="button" class="visor-cerrar" id="cerrarVisor" aria-label="Cerrar">×</button>
+    <img id="imagenAmpliada" src="" alt="Vista ampliada">
+  </div>
+</div>
+
+<script>
+  (function () {
+    const visor = document.getElementById("visorImagen");
+    const imagenAmpliada = document.getElementById("imagenAmpliada");
+    const cerrarVisor = document.getElementById("cerrarVisor");
+    const imagenes = document.querySelectorAll(".foto-clickable");
+
+    function abrirVisor(src, altText) {
+      imagenAmpliada.src = src;
+      imagenAmpliada.alt = altText || "Vista ampliada";
+      visor.classList.add("activo");
+      visor.setAttribute("aria-hidden", "false");
+      document.body.style.overflow = "hidden";
+    }
+
+    function cerrar() {
+      visor.classList.remove("activo");
+      visor.setAttribute("aria-hidden", "true");
+      imagenAmpliada.src = "";
+      document.body.style.overflow = "";
+    }
+
+    imagenes.forEach((img) => {
+      img.addEventListener("click", function () {
+        abrirVisor(this.dataset.full || this.src, this.alt);
+      });
+    });
+
+    cerrarVisor.addEventListener("click", cerrar);
+
+    visor.addEventListener("click", function (e) {
+      if (e.target === visor) {
+        cerrar();
+      }
+    });
+
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && visor.classList.contains("activo")) {
+        cerrar();
+      }
+    });
+  })();
+</script>
 
 {% endblock %}
