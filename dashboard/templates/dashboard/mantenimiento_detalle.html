@@ -494,54 +494,8 @@
 </div>
 
 <div class="small text-muted mt-3">
-  Las fotos ya subidas se mantienen visibles abajo. Si eliminas una, podrás volver a subir exactamente esa misma.
+  Si eliminas una foto, podrás volver a subir exactamente esa misma.
 </div>
-```
-
-  </div>
-</div>
-
-<div class="card shadow-sm mb-3 mobile-tight-card">
-  <div class="card-body">
-    <div class="fw-bold mb-2">🖼️ Fotos</div>
-
-```
-{% if fotos %}
-  <div class="row g-3">
-    {% for f in fotos %}
-      <div class="col-12 col-sm-6 col-lg-4">
-        <div class="border rounded p-2 h-100">
-          <div class="mb-2">
-            <span class="badge bg-dark">{{ f.descripcion }}</span>
-          </div>
-
-          <a href="{{ f.imagen.url }}" target="_blank" class="text-decoration-none">
-            <img src="{{ f.imagen.url }}" class="img-fluid rounded border w-100 mobile-photo-img" alt="{{ f.descripcion }}" style="object-fit: cover; max-height: 280px;">
-          </a>
-
-          <div class="small text-muted mt-2">{{ f.descripcion }}</div>
-
-          <div class="mt-2 d-grid">
-            {% if esta_realizado %}
-              <button type="button" class="btn btn-sm btn-outline-secondary w-100" disabled>
-                🔒 Eliminación bloqueada
-              </button>
-            {% else %}
-              <form method="post" action="/dashboard/fotos/{{ f.id }}/eliminar/" onsubmit="return confirm('¿Seguro que deseas eliminar esta foto?');">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-sm btn-outline-danger w-100">
-                  🗑 Eliminar foto
-                </button>
-              </form>
-            {% endif %}
-          </div>
-        </div>
-      </div>
-    {% endfor %}
-  </div>
-{% else %}
-  <div class="text-muted">Aún no hay fotos para este mantenimiento.</div>
-{% endif %}
 ```
 
   </div>
