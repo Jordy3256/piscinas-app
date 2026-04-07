@@ -11,7 +11,6 @@ from inventario.models import Insumo
 
 class Mantenimiento(models.Model):
 
-```
 ESTADO_CHOICES = [
     ('pendiente', 'Pendiente'),
     ('realizado', 'Realizado'),
@@ -42,7 +41,6 @@ def __str__(self):
 class Meta:
     verbose_name = "Mantenimiento"
     verbose_name_plural = "Mantenimientos"
-```
 
 class UsoInsumo(models.Model):
 mantenimiento = models.ForeignKey(
@@ -53,7 +51,6 @@ related_name='usos_insumos'
 insumo = models.ForeignKey(Insumo, on_delete=models.CASCADE)
 cantidad = models.PositiveIntegerField()
 
-```
 egreso = models.OneToOneField(
     'finanzas.Egreso',
     on_delete=models.SET_NULL,
@@ -67,7 +64,6 @@ def subtotal(self):
 
 def __str__(self):
     return f"{self.insumo.nombre} - {self.cantidad}"
-```
 
 class FotoMantenimiento(models.Model):
 mantenimiento = models.ForeignKey(
@@ -79,7 +75,6 @@ imagen = models.ImageField(upload_to='mantenimientos/')
 descripcion = models.CharField(max_length=200, blank=True)
 creada_en = models.DateTimeField(auto_now_add=True)
 
-```
 def save(self, *args, **kwargs):
     nueva_imagen = False
 
@@ -116,4 +111,3 @@ def save(self, *args, **kwargs):
 
 def __str__(self):
     return f"Foto #{self.id} - {self.mantenimiento}"
-```
