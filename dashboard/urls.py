@@ -5,7 +5,6 @@ sw_js_view,
 manifest_json_view,
 offline_view,
 
-```
 # Push
 vapid_public_key_view,
 save_subscription_view,
@@ -58,7 +57,6 @@ movimientos_recurrentes_procesar_view,
 movimiento_recurrente_editar_view,
 movimiento_recurrente_toggle_view,
 movimiento_recurrente_eliminar_view,
-```
 
 )
 
@@ -70,7 +68,6 @@ path("sw.js", sw_js_view, name="sw_js"),
 path("manifest.json", manifest_json_view, name="manifest_json"),
 path("offline/", offline_view, name="offline"),
 
-```
 # ======================
 # Push
 # ======================
@@ -143,6 +140,5 @@ path("finanzas/recurrentes/procesar/", movimientos_recurrentes_procesar_view, na
 path("finanzas/recurrentes/<int:pk>/editar/", movimiento_recurrente_editar_view, name="movimiento_recurrente_editar"),
 path("finanzas/recurrentes/<int:pk>/toggle/", movimiento_recurrente_toggle_view, name="movimiento_recurrente_toggle"),
 path("finanzas/recurrentes/<int:pk>/eliminar/", movimiento_recurrente_eliminar_view, name="movimiento_recurrente_eliminar"),
-```
 
 ]
