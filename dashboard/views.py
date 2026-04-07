@@ -2784,7 +2784,7 @@ def ingreso_manual_crear_view(request):
         messages.error(request, "Fecha inválida para el ingreso.")
         return redirect(next_url or "/dashboard/finanzas/flujo/")
 
-    ingreso = Ingreso.objects.create(
+    Ingreso.objects.create(
         concepto=concepto,
         total=total,
         fecha=fecha,
@@ -2799,6 +2799,36 @@ def ingreso_manual_crear_view(request):
 
     messages.success(request, "Ingreso manual registrado correctamente.")
     return redirect(next_url or f"/dashboard/finanzas/flujo/?anio={fecha.year}&mes={fecha.month}")
+
+
+@login_required
+def ingreso_manual_eliminar_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    ingreso = get_object_or_404(Ingreso, pk=pk)
+
+    if not _ingreso_es_manual(ingreso):
+        messages.error(request, "Solo se pueden eliminar ingresos manuales desde esta pantalla.")
+        return redirect("/dashboard/finanzas/flujo/")
+
+    if request.method != "POST":
+        return redirect(f"/dashboard/finanzas/flujo/?anio={ingreso.fecha.year}&mes={ingreso.fecha.month}")
+
+    concepto = getattr(ingreso, "concepto", "") or "Ingreso manual"
+    total = ingreso.total
+    fecha = ingreso.fecha
+
+    _registrar_actividad(
+        user=request.user,
+        titulo="Ingreso manual eliminado",
+        descripcion=f"{request.user.username} eliminó el ingreso manual '{concepto}' por ${total}.",
+        url=f"/dashboard/finanzas/flujo/?anio={fecha.year}&mes={fecha.month}",
+    )
+
+    ingreso.delete()
+    messages.success(request, "Ingreso manual eliminado.")
+    return redirect(f"/dashboard/finanzas/flujo/?anio={fecha.year}&mes={fecha.month}")
 
 
 @login_required

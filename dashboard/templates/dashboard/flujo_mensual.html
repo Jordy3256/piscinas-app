@@ -16,18 +16,15 @@
       <input type="number" class="form-control" name="anio" value="{{ anio }}" min="2000" max="2100">
     </div>
 
-```
-<div>
-  <label class="form-label mb-1 small">Mes</label>
-  <input type="number" class="form-control" name="mes" value="{{ mes }}" min="1" max="12">
-</div>
+    <div>
+      <label class="form-label mb-1 small">Mes</label>
+      <input type="number" class="form-control" name="mes" value="{{ mes }}" min="1" max="12">
+    </div>
 
-<div class="d-grid" style="min-width:140px;">
-  <label class="form-label mb-1 small">&nbsp;</label>
-  <button class="btn btn-primary" type="submit">Aplicar</button>
-</div>
-```
-
+    <div class="d-grid" style="min-width:140px;">
+      <label class="form-label mb-1 small">&nbsp;</label>
+      <button class="btn btn-primary" type="submit">Aplicar</button>
+    </div>
   </form>
 </div>
 
@@ -84,7 +81,7 @@
 </div>
 
 <div class="row g-2 mb-3">
-  <div class="col-12 col-md-3">
+  <div class="col-12 col-md-2">
     <div class="card shadow-sm">
       <div class="card-body">
         <div class="text-muted small">Total ingresos</div>
@@ -93,7 +90,25 @@
     </div>
   </div>
 
-  <div class="col-12 col-md-3">
+  <div class="col-12 col-md-2">
+    <div class="card shadow-sm border-success">
+      <div class="card-body">
+        <div class="text-muted small">Ingresos manuales</div>
+        <div class="fs-4 fw-bold text-success">${{ total_ingresos_manuales|floatformat:2 }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-md-2">
+    <div class="card shadow-sm border-secondary">
+      <div class="card-body">
+        <div class="text-muted small">Ingresos automáticos</div>
+        <div class="fs-4 fw-bold">${{ total_ingresos_automaticos|floatformat:2 }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-md-2">
     <div class="card shadow-sm">
       <div class="card-body">
         <div class="text-muted small">Total egresos</div>
@@ -102,7 +117,7 @@
     </div>
   </div>
 
-  <div class="col-12 col-md-3">
+  <div class="col-12 col-md-2">
     <div class="card shadow-sm border-warning">
       <div class="card-body">
         <div class="text-muted small">Egresos manuales</div>
@@ -111,7 +126,7 @@
     </div>
   </div>
 
-  <div class="col-12 col-md-3">
+  <div class="col-12 col-md-2">
     <div class="card shadow-sm border-secondary">
       <div class="card-body">
         <div class="text-muted small">Egresos automáticos</div>
@@ -140,53 +155,51 @@
   <div class="card-body">
     <div class="fw-bold mb-3">💵 Registrar ingreso manual</div>
 
-```
-<form method="post" action="/dashboard/finanzas/ingresos/manual/nuevo/" class="row g-2">
-  {% csrf_token %}
-  <input type="hidden" name="next" value="/dashboard/finanzas/flujo/?anio={{ anio }}&mes={{ mes }}">
+    <form method="post" action="/dashboard/finanzas/ingresos/manual/nuevo/" class="row g-2">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="/dashboard/finanzas/flujo/?anio={{ anio }}&mes={{ mes }}">
 
-  <div class="col-12 col-md-7">
-    <label class="form-label small text-muted">Concepto</label>
-    <input
-      type="text"
-      name="concepto"
-      class="form-control"
-      placeholder="Ej: Pago cliente, servicio adicional, cobro pendiente"
-      required
-    >
-  </div>
+      <div class="col-12 col-md-7">
+        <label class="form-label small text-muted">Concepto</label>
+        <input
+          type="text"
+          name="concepto"
+          class="form-control"
+          placeholder="Ej: Pago cliente, servicio adicional, cobro pendiente"
+          required
+        >
+      </div>
 
-  <div class="col-6 col-md-2">
-    <label class="form-label small text-muted">Total</label>
-    <input
-      type="number"
-      step="0.01"
-      min="0.01"
-      name="total"
-      class="form-control"
-      required
-    >
-  </div>
+      <div class="col-6 col-md-2">
+        <label class="form-label small text-muted">Total</label>
+        <input
+          type="number"
+          step="0.01"
+          min="0.01"
+          name="total"
+          class="form-control"
+          required
+        >
+      </div>
 
-  <div class="col-6 col-md-2">
-    <label class="form-label small text-muted">Fecha</label>
-    <input
-      type="date"
-      name="fecha"
-      class="form-control"
-      value="{{ primer_dia|date:'Y-m-d' }}"
-      required
-    >
-  </div>
+      <div class="col-6 col-md-2">
+        <label class="form-label small text-muted">Fecha</label>
+        <input
+          type="date"
+          name="fecha"
+          class="form-control"
+          value="{{ primer_dia|date:'Y-m-d' }}"
+          required
+        >
+      </div>
 
-  <div class="col-12 col-md-1 d-grid">
-    <label class="form-label small text-muted d-none d-md-block">&nbsp;</label>
-    <button class="btn btn-success" type="submit">
-      Guardar
-    </button>
-  </div>
-</form>
-```
+      <div class="col-12 col-md-1 d-grid">
+        <label class="form-label small text-muted d-none d-md-block">&nbsp;</label>
+        <button class="btn btn-success" type="submit">
+          Guardar
+        </button>
+      </div>
+    </form>
 
   </div>
 </div>
@@ -195,63 +208,61 @@
   <div class="card-body">
     <div class="fw-bold mb-3">🧾 Registrar egreso manual</div>
 
-```
-<form method="post" action="/dashboard/finanzas/egresos/manual/nuevo/" class="row g-2">
-  {% csrf_token %}
-  <input type="hidden" name="next" value="/dashboard/finanzas/flujo/?anio={{ anio }}&mes={{ mes }}">
+    <form method="post" action="/dashboard/finanzas/egresos/manual/nuevo/" class="row g-2">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="/dashboard/finanzas/flujo/?anio={{ anio }}&mes={{ mes }}">
 
-  <div class="col-12 col-md-4">
-    <label class="form-label small text-muted">Concepto</label>
-    <input
-      type="text"
-      name="concepto"
-      class="form-control"
-      placeholder="Ej: Gasolina, transporte, herramientas"
-      required
-    >
-  </div>
+      <div class="col-12 col-md-4">
+        <label class="form-label small text-muted">Concepto</label>
+        <input
+          type="text"
+          name="concepto"
+          class="form-control"
+          placeholder="Ej: Gasolina, transporte, herramientas"
+          required
+        >
+      </div>
 
-  <div class="col-12 col-md-3">
-    <label class="form-label small text-muted">Categoría</label>
-    <input
-      type="text"
-      name="categoria"
-      class="form-control"
-      placeholder="Ej: Movilidad, compras, varios"
-    >
-  </div>
+      <div class="col-12 col-md-3">
+        <label class="form-label small text-muted">Categoría</label>
+        <input
+          type="text"
+          name="categoria"
+          class="form-control"
+          placeholder="Ej: Movilidad, compras, varios"
+        >
+      </div>
 
-  <div class="col-6 col-md-2">
-    <label class="form-label small text-muted">Total</label>
-    <input
-      type="number"
-      step="0.01"
-      min="0.01"
-      name="total"
-      class="form-control"
-      required
-    >
-  </div>
+      <div class="col-6 col-md-2">
+        <label class="form-label small text-muted">Total</label>
+        <input
+          type="number"
+          step="0.01"
+          min="0.01"
+          name="total"
+          class="form-control"
+          required
+        >
+      </div>
 
-  <div class="col-6 col-md-2">
-    <label class="form-label small text-muted">Fecha</label>
-    <input
-      type="date"
-      name="fecha"
-      class="form-control"
-      value="{{ primer_dia|date:'Y-m-d' }}"
-      required
-    >
-  </div>
+      <div class="col-6 col-md-2">
+        <label class="form-label small text-muted">Fecha</label>
+        <input
+          type="date"
+          name="fecha"
+          class="form-control"
+          value="{{ primer_dia|date:'Y-m-d' }}"
+          required
+        >
+      </div>
 
-  <div class="col-12 col-md-1 d-grid">
-    <label class="form-label small text-muted d-none d-md-block">&nbsp;</label>
-    <button class="btn btn-warning text-dark" type="submit">
-      Guardar
-    </button>
-  </div>
-</form>
-```
+      <div class="col-12 col-md-1 d-grid">
+        <label class="form-label small text-muted d-none d-md-block">&nbsp;</label>
+        <button class="btn btn-warning text-dark" type="submit">
+          Guardar
+        </button>
+      </div>
+    </form>
 
   </div>
 </div>
@@ -262,28 +273,32 @@
       <div class="card-body">
         <div class="fw-bold mb-3">🏆 Top ingresos del mes</div>
 
-```
-    {% if top_ingresos %}
-      <div class="vstack gap-2">
-        {% for i in top_ingresos %}
-        <div class="border rounded p-3 bg-light">
-          <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
-            <div>
-              <div class="fw-semibold">{{ i.concepto }}</div>
-              <div class="small text-muted">{{ i.fecha|date:"d/m/Y" }}</div>
+        {% if top_ingresos %}
+          <div class="vstack gap-2">
+            {% for i in top_ingresos %}
+            <div class="border rounded p-3 bg-light">
+              <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
+                <div>
+                  <div class="fw-semibold">{{ i.concepto }}</div>
+                  <div class="small text-muted">
+                    {{ i.fecha|date:"d/m/Y" }}
+                    {% if i in ingresos_manuales_qs %}
+                      · <span class="badge bg-success">Manual</span>
+                    {% else %}
+                      · <span class="badge bg-secondary">Automático</span>
+                    {% endif %}
+                  </div>
+                </div>
+                <div class="fw-bold text-success">${{ i.total|floatformat:2 }}</div>
+              </div>
             </div>
-            <div class="fw-bold text-success">${{ i.total|floatformat:2 }}</div>
+            {% endfor %}
           </div>
-        </div>
-        {% endfor %}
+        {% else %}
+          <div class="text-muted">No hay ingresos registrados este mes.</div>
+        {% endif %}
       </div>
-    {% else %}
-      <div class="text-muted">No hay ingresos registrados este mes.</div>
-    {% endif %}
-  </div>
-</div>
-```
-
+    </div>
   </div>
 
   <div class="col-12 col-lg-6">
@@ -291,39 +306,36 @@
       <div class="card-body">
         <div class="fw-bold mb-3">💸 Top egresos del mes</div>
 
-```
-    {% if top_egresos %}
-      <div class="vstack gap-2">
-        {% for e in top_egresos %}
-        <div class="border rounded p-3 bg-light">
-          <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
-            <div>
-              <div class="fw-semibold">
-                {% if e.insumo %}
-                  {{ e.insumo }}
-                {% else %}
-                  {{ e.concepto|default:"Egreso" }}
-                {% endif %}
-              </div>
-              <div class="small text-muted">
-                {{ e.fecha|date:"d/m/Y" }}
-                {% if e.mantenimiento %}
-                  · {{ e.mantenimiento.cliente }}
-                {% endif %}
+        {% if top_egresos %}
+          <div class="vstack gap-2">
+            {% for e in top_egresos %}
+            <div class="border rounded p-3 bg-light">
+              <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
+                <div>
+                  <div class="fw-semibold">
+                    {% if e.insumo %}
+                      {{ e.insumo }}
+                    {% else %}
+                      {{ e.concepto|default:"Egreso" }}
+                    {% endif %}
+                  </div>
+                  <div class="small text-muted">
+                    {{ e.fecha|date:"d/m/Y" }}
+                    {% if e.mantenimiento %}
+                      · {{ e.mantenimiento.cliente }}
+                    {% endif %}
+                  </div>
+                </div>
+                <div class="fw-bold text-danger">${{ e.total|floatformat:2 }}</div>
               </div>
             </div>
-            <div class="fw-bold text-danger">${{ e.total|floatformat:2 }}</div>
+            {% endfor %}
           </div>
-        </div>
-        {% endfor %}
+        {% else %}
+          <div class="text-muted">No hay egresos registrados este mes.</div>
+        {% endif %}
       </div>
-    {% else %}
-      <div class="text-muted">No hay egresos registrados este mes.</div>
-    {% endif %}
-  </div>
-</div>
-```
-
+    </div>
   </div>
 </div>
 
@@ -331,36 +343,34 @@
   <div class="card-body">
     <div class="fw-bold mb-2">📈 Balance acumulado del mes</div>
 
-```
-{% if resumen_diario %}
-  <div class="table-responsive">
-    <table class="table table-sm table-striped mb-0 align-middle">
-      <thead>
-        <tr>
-          <th>Día</th>
-          <th class="text-end">Ingresos</th>
-          <th class="text-end">Egresos</th>
-          <th class="text-end">Balance acumulado</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for fila in resumen_diario %}
-        <tr>
-          <td>{{ fila.dia }}</td>
-          <td class="text-end">${{ fila.ingresos|floatformat:2 }}</td>
-          <td class="text-end">${{ fila.egresos|floatformat:2 }}</td>
-          <td class="text-end {% if fila.balance_acumulado < 0 %}text-danger{% else %}text-success{% endif %}">
-            ${{ fila.balance_acumulado|floatformat:2 }}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-{% else %}
-  <div class="text-muted">No hay datos diarios disponibles.</div>
-{% endif %}
-```
+    {% if resumen_diario %}
+      <div class="table-responsive">
+        <table class="table table-sm table-striped mb-0 align-middle">
+          <thead>
+            <tr>
+              <th>Día</th>
+              <th class="text-end">Ingresos</th>
+              <th class="text-end">Egresos</th>
+              <th class="text-end">Balance acumulado</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for fila in resumen_diario %}
+            <tr>
+              <td>{{ fila.dia }}</td>
+              <td class="text-end">${{ fila.ingresos|floatformat:2 }}</td>
+              <td class="text-end">${{ fila.egresos|floatformat:2 }}</td>
+              <td class="text-end {% if fila.balance_acumulado < 0 %}text-danger{% else %}text-success{% endif %}">
+                ${{ fila.balance_acumulado|floatformat:2 }}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="text-muted">No hay datos diarios disponibles.</div>
+    {% endif %}
 
   </div>
 </div>
@@ -369,100 +379,119 @@
   <div class="card-body">
     <div class="fw-bold mb-2">📅 Detalle del mes</div>
 
-```
-<div class="row g-3">
-  <div class="col-12 col-lg-6">
-    <div class="fw-semibold mb-2">Ingresos</div>
-    {% if ingresos_qs %}
-      <div class="table-responsive">
-        <table class="table table-sm table-striped mb-0">
-          <thead>
-            <tr>
-              <th>Fecha</th>
-              <th>Concepto</th>
-              <th class="text-end">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for i in ingresos_qs %}
-              <tr>
-                <td>{{ i.fecha|date:"d/m/Y" }}</td>
-                <td>{{ i.concepto }}</td>
-                <td class="text-end">${{ i.total|floatformat:2 }}</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+    <div class="row g-3">
+      <div class="col-12 col-lg-6">
+        <div class="fw-semibold mb-2">Ingresos</div>
+        {% if ingresos_qs %}
+          <div class="table-responsive">
+            <table class="table table-sm table-striped mb-0 align-middle">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Concepto</th>
+                  <th>Tipo</th>
+                  <th class="text-end">Total</th>
+                  <th class="text-end">Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for i in ingresos_qs %}
+                  <tr>
+                    <td>{{ i.fecha|date:"d/m/Y" }}</td>
+                    <td>{{ i.concepto }}</td>
+                    <td>
+                      {% if i in ingresos_manuales_qs %}
+                        <span class="badge bg-success">Manual</span>
+                      {% else %}
+                        <span class="badge bg-secondary">Automático</span>
+                      {% endif %}
+                    </td>
+                    <td class="text-end">${{ i.total|floatformat:2 }}</td>
+                    <td class="text-end">
+                      {% if i in ingresos_manuales_qs %}
+                        <form method="post" action="/dashboard/finanzas/ingresos/manual/{{ i.id }}/eliminar/" onsubmit="return confirm('¿Eliminar este ingreso manual?');">
+                          {% csrf_token %}
+                          <button class="btn btn-outline-danger btn-sm" type="submit">
+                            Eliminar
+                          </button>
+                        </form>
+                      {% else %}
+                        <span class="text-muted small">—</span>
+                      {% endif %}
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <div class="text-muted">No hay ingresos en este mes.</div>
+        {% endif %}
       </div>
-    {% else %}
-      <div class="text-muted">No hay ingresos en este mes.</div>
-    {% endif %}
-  </div>
 
-  <div class="col-12 col-lg-6">
-    <div class="fw-semibold mb-2">Egresos</div>
-    {% if egresos_qs %}
-      <div class="table-responsive">
-        <table class="table table-sm table-striped mb-0 align-middle">
-          <thead>
-            <tr>
-              <th>Fecha</th>
-              <th>Detalle</th>
-              <th>Tipo</th>
-              <th class="text-end">Total</th>
-              <th class="text-end">Acción</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for e in egresos_qs %}
-              <tr>
-                <td>{{ e.fecha|date:"d/m/Y" }}</td>
-                <td>
-                  {% if e in egresos_manuales_qs %}
-                    <div class="fw-semibold">{{ e.concepto }}</div>
-                    {% if e.categoria %}
-                      <div class="small text-muted">{{ e.categoria }}</div>
-                    {% endif %}
-                  {% else %}
-                    <div class="fw-semibold">{{ e.insumo }}</div>
-                    {% if e.mantenimiento %}
-                      <div class="small text-muted">
-                        Mant.: {{ e.mantenimiento.cliente }} - {{ e.mantenimiento.fecha|date:"d/m/Y" }}
-                      </div>
-                    {% endif %}
-                  {% endif %}
-                </td>
-                <td>
-                  {% if e in egresos_manuales_qs %}
-                    <span class="badge bg-warning text-dark">Manual</span>
-                  {% else %}
-                    <span class="badge bg-secondary">Automático</span>
-                  {% endif %}
-                </td>
-                <td class="text-end">${{ e.total|floatformat:2 }}</td>
-                <td class="text-end">
-                  {% if e in egresos_manuales_qs %}
-                    <form method="post" action="/dashboard/finanzas/egresos/manual/{{ e.id }}/eliminar/" onsubmit="return confirm('¿Eliminar este egreso manual?');">
-                      {% csrf_token %}
-                      <button class="btn btn-outline-danger btn-sm" type="submit">
-                        Eliminar
-                      </button>
-                    </form>
-                  {% else %}
-                    <span class="text-muted small">—</span>
-                  {% endif %}
-                </td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+      <div class="col-12 col-lg-6">
+        <div class="fw-semibold mb-2">Egresos</div>
+        {% if egresos_qs %}
+          <div class="table-responsive">
+            <table class="table table-sm table-striped mb-0 align-middle">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Detalle</th>
+                  <th>Tipo</th>
+                  <th class="text-end">Total</th>
+                  <th class="text-end">Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for e in egresos_qs %}
+                  <tr>
+                    <td>{{ e.fecha|date:"d/m/Y" }}</td>
+                    <td>
+                      {% if e in egresos_manuales_qs %}
+                        <div class="fw-semibold">{{ e.concepto }}</div>
+                        {% if e.categoria %}
+                          <div class="small text-muted">{{ e.categoria }}</div>
+                        {% endif %}
+                      {% else %}
+                        <div class="fw-semibold">{{ e.insumo }}</div>
+                        {% if e.mantenimiento %}
+                          <div class="small text-muted">
+                            Mant.: {{ e.mantenimiento.cliente }} - {{ e.mantenimiento.fecha|date:"d/m/Y" }}
+                          </div>
+                        {% endif %}
+                      {% endif %}
+                    </td>
+                    <td>
+                      {% if e in egresos_manuales_qs %}
+                        <span class="badge bg-warning text-dark">Manual</span>
+                      {% else %}
+                        <span class="badge bg-secondary">Automático</span>
+                      {% endif %}
+                    </td>
+                    <td class="text-end">${{ e.total|floatformat:2 }}</td>
+                    <td class="text-end">
+                      {% if e in egresos_manuales_qs %}
+                        <form method="post" action="/dashboard/finanzas/egresos/manual/{{ e.id }}/eliminar/" onsubmit="return confirm('¿Eliminar este egreso manual?');">
+                          {% csrf_token %}
+                          <button class="btn btn-outline-danger btn-sm" type="submit">
+                            Eliminar
+                          </button>
+                        </form>
+                      {% else %}
+                        <span class="text-muted small">—</span>
+                      {% endif %}
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <div class="text-muted">No hay egresos en este mes.</div>
+        {% endif %}
       </div>
-    {% else %}
-      <div class="text-muted">No hay egresos en este mes.</div>
-    {% endif %}
-  </div>
-</div>
-```
+    </div>
 
   </div>
 </div>
