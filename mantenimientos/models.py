@@ -20,11 +20,7 @@ cliente = models.ForeignKey(Cliente, on_delete=models.CASCADE)
 contrato = models.ForeignKey(Contrato, on_delete=models.CASCADE)
 fecha = models.DateField()
 trabajadores = models.ManyToManyField(Trabajador)
-estado = models.CharField(
-    max_length=20,
-    choices=ESTADO_CHOICES,
-    default='pendiente'
-)
+estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default='pendiente')
 observaciones = models.TextField(blank=True)
 
 def total_egresos(self):
@@ -32,8 +28,6 @@ def total_egresos(self):
     for uso in self.usos_insumos.all():
         total += uso.subtotal()
     return total
-
-total_egresos.short_description = "Total egresos"
 
 def __str__(self):
     return f"{self.cliente} - {self.fecha}"
@@ -43,11 +37,7 @@ class Meta:
     verbose_name_plural = "Mantenimientos"
 
 class UsoInsumo(models.Model):
-mantenimiento = models.ForeignKey(
-'mantenimientos.Mantenimiento',
-on_delete=models.CASCADE,
-related_name='usos_insumos'
-)
+mantenimiento = models.ForeignKey('mantenimientos.Mantenimiento', on_delete=models.CASCADE, related_name='usos_insumos')
 insumo = models.ForeignKey(Insumo, on_delete=models.CASCADE)
 cantidad = models.PositiveIntegerField()
 
@@ -66,34 +56,30 @@ def __str__(self):
     return f"{self.insumo.nombre} - {self.cantidad}"
 
 class FotoMantenimiento(models.Model):
-mantenimiento = models.ForeignKey(
-'mantenimientos.Mantenimiento',
-on_delete=models.CASCADE,
-related_name='fotos'
-)
+mantenimiento = models.ForeignKey('mantenimientos.Mantenimiento', on_delete=models.CASCADE, related_name='fotos')
 imagen = models.ImageField(upload_to='mantenimientos/')
 descripcion = models.CharField(max_length=200, blank=True)
 creada_en = models.DateTimeField(auto_now_add=True)
 
 def save(self, *args, **kwargs):
-    nueva_imagen = False
+    nueva = False
 
     if self.imagen:
         if not self.pk:
-            nueva_imagen = True
+            nueva = True
         else:
             try:
                 anterior = FotoMantenimiento.objects.get(pk=self.pk)
                 if anterior.imagen != self.imagen:
-                    nueva_imagen = True
+                    nueva = True
             except:
-                nueva_imagen = True
+                nueva = True
 
-    if nueva_imagen:
+    if nueva:
         try:
             img = Image.open(self.imagen)
 
-            if img.mode in ("RGBA", "P", "LA"):
+            if img.mode != "RGB":
                 img = img.convert("RGB")
 
             img.thumbnail((1400, 1400), Image.Resampling.LANCZOS)
