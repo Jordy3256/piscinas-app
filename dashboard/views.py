@@ -128,8 +128,19 @@ def _mes_siguiente(anio, mes):
 
 
 # -------------------
-# Helpers egresos manuales
+# Helpers ingresos / egresos manuales
 # -------------------
+def _ingreso_es_manual(ingreso):
+    try:
+        return bool(getattr(ingreso, "es_manual"))
+    except Exception:
+        pass
+
+    cliente_id = getattr(ingreso, "cliente_id", None)
+    contrato_id = getattr(ingreso, "contrato_id", None)
+    return cliente_id is None and contrato_id is None
+
+
 def _egreso_es_manual(egreso):
     try:
         return bool(getattr(egreso, "es_manual"))
@@ -2571,16 +2582,24 @@ def flujo_mensual_view(request):
         "mantenimiento__cliente",
     ).order_by("fecha", "id")
 
+    ingresos_manuales_qs = [
+        i for i in ingresos_qs if _ingreso_es_manual(i)
+    ]
+    ingresos_automaticos_qs = [
+        i for i in ingresos_qs if not _ingreso_es_manual(i)
+    ]
+
     egresos_manuales_qs = [
         e for e in egresos_qs if _egreso_es_manual(e)
     ]
-
     egresos_automaticos_qs = [
         e for e in egresos_qs if not _egreso_es_manual(e)
     ]
 
     total_ingresos = ingresos_qs.aggregate(total=Sum("total"))["total"] or 0
     total_egresos = egresos_qs.aggregate(total=Sum("total"))["total"] or 0
+    total_ingresos_manuales = sum(float(getattr(i, "total", 0) or 0) for i in ingresos_manuales_qs)
+    total_ingresos_automaticos = sum(float(getattr(i, "total", 0) or 0) for i in ingresos_automaticos_qs)
     total_egresos_manuales = sum(float(getattr(e, "total", 0) or 0) for e in egresos_manuales_qs)
     total_egresos_automaticos = sum(float(getattr(e, "total", 0) or 0) for e in egresos_automaticos_qs)
     balance = total_ingresos - total_egresos
@@ -2631,11 +2650,15 @@ def flujo_mensual_view(request):
             "anio_anterior": anio_anterior,
             "mes_anterior": mes_anterior,
             "ingresos_qs": ingresos_qs,
+            "ingresos_manuales_qs": ingresos_manuales_qs,
+            "ingresos_automaticos_qs": ingresos_automaticos_qs,
             "egresos_qs": egresos_qs,
             "egresos_manuales_qs": egresos_manuales_qs,
             "egresos_automaticos_qs": egresos_automaticos_qs,
             "total_ingresos": float(total_ingresos),
             "total_egresos": float(total_egresos),
+            "total_ingresos_manuales": float(total_ingresos_manuales),
+            "total_ingresos_automaticos": float(total_ingresos_automaticos),
             "total_egresos_manuales": float(total_egresos_manuales),
             "total_egresos_automaticos": float(total_egresos_automaticos),
             "balance": float(balance),
@@ -2729,6 +2752,53 @@ def egreso_manual_eliminar_view(request, pk):
     egreso.delete()
     messages.success(request, "Egreso manual eliminado.")
     return redirect(f"/dashboard/finanzas/flujo/?anio={fecha.year}&mes={fecha.month}")
+
+
+@login_required
+def ingreso_manual_crear_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    if request.method != "POST":
+        return redirect("/dashboard/finanzas/flujo/")
+
+    concepto = (request.POST.get("concepto", "") or "").strip()
+    total_str = (request.POST.get("total", "") or "").strip()
+    fecha_str = (request.POST.get("fecha", "") or "").strip()
+    next_url = (request.POST.get("next", "") or "").strip()
+
+    if not concepto:
+        messages.error(request, "Debes escribir un concepto para el ingreso.")
+        return redirect(next_url or "/dashboard/finanzas/flujo/")
+
+    try:
+        total = float(total_str)
+        if total <= 0:
+            raise ValueError
+    except Exception:
+        messages.error(request, "Total inválido para el ingreso.")
+        return redirect(next_url or "/dashboard/finanzas/flujo/")
+
+    fecha = parse_date(fecha_str)
+    if not fecha:
+        messages.error(request, "Fecha inválida para el ingreso.")
+        return redirect(next_url or "/dashboard/finanzas/flujo/")
+
+    ingreso = Ingreso.objects.create(
+        concepto=concepto,
+        total=total,
+        fecha=fecha,
+    )
+
+    _registrar_actividad(
+        user=request.user,
+        titulo="Ingreso manual creado",
+        descripcion=f"{request.user.username} registró el ingreso manual '{concepto}' por ${total}.",
+        url=f"/dashboard/finanzas/flujo/?anio={fecha.year}&mes={fecha.month}",
+    )
+
+    messages.success(request, "Ingreso manual registrado correctamente.")
+    return redirect(next_url or f"/dashboard/finanzas/flujo/?anio={fecha.year}&mes={fecha.month}")
 
 
 @login_required
