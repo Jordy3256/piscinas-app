@@ -11,7 +11,7 @@ from inventario.models import Insumo
 
 class Mantenimiento(models.Model):
 
-
+```
 ESTADO_CHOICES = [
     ('pendiente', 'Pendiente'),
     ('realizado', 'Realizado'),
@@ -42,7 +42,7 @@ def __str__(self):
 class Meta:
     verbose_name = "Mantenimiento"
     verbose_name_plural = "Mantenimientos"
-
+```
 
 class UsoInsumo(models.Model):
 mantenimiento = models.ForeignKey(
@@ -53,7 +53,7 @@ related_name='usos_insumos'
 insumo = models.ForeignKey(Insumo, on_delete=models.CASCADE)
 cantidad = models.PositiveIntegerField()
 
-
+```
 egreso = models.OneToOneField(
     'finanzas.Egreso',
     on_delete=models.SET_NULL,
@@ -67,7 +67,7 @@ def subtotal(self):
 
 def __str__(self):
     return f"{self.insumo.nombre} - {self.cantidad}"
-
+```
 
 class FotoMantenimiento(models.Model):
 mantenimiento = models.ForeignKey(
@@ -79,23 +79,20 @@ imagen = models.ImageField(upload_to='mantenimientos/')
 descripcion = models.CharField(max_length=200, blank=True)
 creada_en = models.DateTimeField(auto_now_add=True)
 
-
+```
 def save(self, *args, **kwargs):
     nueva_imagen = False
 
-    try:
-        if self.imagen and hasattr(self.imagen, "file"):
-            if not self.pk:
-                nueva_imagen = True
-            else:
-                try:
-                    foto_anterior = FotoMantenimiento.objects.get(pk=self.pk)
-                    if foto_anterior.imagen != self.imagen:
-                        nueva_imagen = True
-                except FotoMantenimiento.DoesNotExist:
+    if self.imagen:
+        if not self.pk:
+            nueva_imagen = True
+        else:
+            try:
+                anterior = FotoMantenimiento.objects.get(pk=self.pk)
+                if anterior.imagen != self.imagen:
                     nueva_imagen = True
-    except Exception:
-        nueva_imagen = False
+            except:
+                nueva_imagen = True
 
     if nueva_imagen:
         try:
@@ -103,34 +100,20 @@ def save(self, *args, **kwargs):
 
             if img.mode in ("RGBA", "P", "LA"):
                 img = img.convert("RGB")
-            elif img.mode != "RGB":
-                img = img.convert("RGB")
 
-            max_size = (1400, 1400)
-            img.thumbnail(max_size, Image.Resampling.LANCZOS)
+            img.thumbnail((1400, 1400), Image.Resampling.LANCZOS)
 
             buffer = BytesIO()
-            img.save(
-                buffer,
-                format="JPEG",
-                quality=78,
-                optimize=True
-            )
+            img.save(buffer, format='JPEG', quality=78, optimize=True)
             buffer.seek(0)
 
-            nombre_base = self.imagen.name.rsplit(".", 1)[0]
-            nuevo_nombre = f"{nombre_base}.jpg"
-
-            self.imagen.save(
-                nuevo_nombre,
-                ContentFile(buffer.read()),
-                save=False
-            )
-        except Exception:
+            nombre = self.imagen.name.split('.')[0] + ".jpg"
+            self.imagen.save(nombre, ContentFile(buffer.read()), save=False)
+        except:
             pass
 
     super().save(*args, **kwargs)
 
 def __str__(self):
     return f"Foto #{self.id} - {self.mantenimiento}"
-
+```

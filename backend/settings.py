@@ -22,10 +22,13 @@ if os.environ.get("RENDER") != "true":
 # =========================
 # BASICO
 # =========================
+# ✅ OJO: en Render SIEMPRE pon SECRET_KEY en env. Igual dejo fallback.
 SECRET_KEY = os.environ.get("SECRET_KEY") or ("dev-" + get_random_secret_key())
 
+# ✅ IMPORTANTE: por defecto FALSE (en producción debe ser False)
 DEBUG = os.environ.get("DEBUG", "False").strip().lower() == "true"
 
+# Detecta si estamos en Render (o al menos en HTTPS detrás de proxy)
 RENDER = (os.environ.get("RENDER") or "").strip().lower() == "true"
 RENDER_HOST = os.environ.get("RENDER_EXTERNAL_HOSTNAME")
 
@@ -76,6 +79,7 @@ if not VAPID_PUBLIC_KEY:
     else:
         VAPID_PUBLIC_KEY = VAPID_PUBLIC_KEY_FALLBACK
 
+# ✅ pywebpush firma con PEM (string PEM)
 VAPID_PRIVATE_KEY = VAPID_PRIVATE_PEM
 
 # =========================
@@ -104,6 +108,8 @@ ALLOWED_HOSTS = list(dict.fromkeys(ALLOWED_HOSTS))
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 USE_X_FORWARDED_HOST = True
 
+# ✅ Cookies (en Render siempre es https)
+# Esto es lo que normalmente causa que “no se pegue el login” si está mal.
 SESSION_COOKIE_SECURE = True if RENDER else (not DEBUG)
 CSRF_COOKIE_SECURE = True if RENDER else (not DEBUG)
 
@@ -171,6 +177,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+
                 "dashboard.context_processors.vapid_public_key",
             ],
         },
@@ -245,12 +252,13 @@ MEDIA_ROOT = BASE_DIR / "media"
 # LOGIN
 # =========================
 LOGIN_URL = "/login/"
-LOGIN_REDIRECT_URL = "/dashboard/inicio/"
+LOGIN_REDIRECT_URL = "/dashboard/inicio/"         # ✅ clave: entra a “mis mantenimientos”
 LOGOUT_REDIRECT_URL = "/login/"
 
 # =========================
 # SEGURIDAD PRODUCCION
 # =========================
+# ✅ En Render NO fuerces SSL_REDIRECT (Render ya está en https). Evita loops.
 SECURE_SSL_REDIRECT = False
 
 if not DEBUG:
