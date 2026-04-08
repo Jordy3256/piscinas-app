@@ -3325,9 +3325,15 @@ def inventario_view(request):
         },
     )
 
-# ======================
-# INVENTARIO
-# ======================
+#======================
+#INVENTARIO PRO
+#======================
+
+from django.db.models import F
+from decimal import Decimal
+from inventario.models import Insumo, VentaInsumo, EntradaStock, MovimientoInventario
+from finanzas.models import Ingreso
+
 @login_required
 def inventario_view(request):
     if not es_admin(request.user):
@@ -3347,57 +3353,110 @@ def inventario_view(request):
             "total_insumos": total_insumos,
             "bajo_stock": bajo_stock,
             "stock_total": stock_total,
-            "es_admin": True,
         },
     )
+#======================
+#VENDER INSUMO
+#======================
 
 @login_required
 def vender_insumo_view(request):
-    from decimal import Decimal
-    from django.shortcuts import get_object_or_404
-    from inventario.models import Insumo
-    from finanzas.models import Ingreso
-
     if not es_admin(request.user):
-        return render(request, "dashboard/no_autorizado.html", status=403)
+        return redirect("inventario")
 
     if request.method != "POST":
-        return redirect("/dashboard/inventario/")
+        return redirect("inventario")
 
-    insumo_id = (request.POST.get("insumo_id") or "").strip()
-    cantidad_str = (request.POST.get("cantidad") or "").strip()
+    insumo_id = request.POST.get("insumo_id")
+    cantidad = int(request.POST.get("cantidad"))
 
-    try:
-        cantidad = int(cantidad_str)
-        if cantidad <= 0:
-            raise ValueError
-    except Exception:
-        messages.error(request, "Cantidad inválida.")
-        return redirect("/dashboard/inventario/")
+    insumo = get_object_or_404(Insumo, id=insumo_id)
 
-    insumo = get_object_or_404(Insumo, pk=insumo_id)
+    if cantidad <= 0:
+        messages.error(request, "Cantidad inválida")
+        return redirect("inventario")
 
     if insumo.stock < cantidad:
-        messages.error(request, f"Stock insuficiente de {insumo.nombre}. Disponible: {insumo.stock}")
-        return redirect("/dashboard/inventario/")
+        messages.error(request, "Stock insuficiente")
+        return redirect("inventario")
 
-    total = Decimal(cantidad) * Decimal(insumo.precio)
+    stock_anterior = insumo.stock
+    total = Decimal(cantidad) * insumo.precio
 
+    # 🔻 Descontar stock
     insumo.stock -= cantidad
     insumo.save()
 
+    # 🧾 Venta
+    VentaInsumo.objects.create(
+        insumo=insumo,
+        cantidad=cantidad,
+        precio_unitario=insumo.precio,
+        total=total,
+    )
+
+    # 📊 Movimiento
+    MovimientoInventario.objects.create(
+        insumo=insumo,
+        tipo="venta",
+        cantidad=cantidad,
+        stock_anterior=stock_anterior,
+        stock_resultante=insumo.stock,
+        observacion="Venta de insumo",
+    )
+
+    # 💰 Ingreso automático
     Ingreso.objects.create(
         concepto=f"Venta de insumo: {insumo.nombre}",
         total=total,
-        fecha=timezone.localdate(),
     )
 
-    _registrar_actividad(
-        user=request.user,
-        titulo="Venta de insumo registrada",
-        descripcion=f"{request.user.username} registró la venta de {insumo.nombre} x {cantidad} por ${total}.",
-        url="/dashboard/inventario/",
+    messages.success(request, "Venta registrada correctamente")
+    return redirect("inventario")
+#======================
+#ENTRADA DE STOCK
+#======================
+
+@login_required
+def agregar_stock_view(request):
+    if not es_admin(request.user):
+        return redirect("inventario")
+
+    if request.method != "POST":
+        return redirect("inventario")
+
+    insumo_id = request.POST.get("insumo_id")
+    cantidad = int(request.POST.get("cantidad"))
+    observacion = request.POST.get("observacion", "")
+
+    insumo = get_object_or_404(Insumo, id=insumo_id)
+
+    if cantidad <= 0:
+        messages.error(request, "Cantidad inválida")
+        return redirect("inventario")
+
+    stock_anterior = insumo.stock
+
+    # 🔼 Aumentar stock
+    insumo.stock += cantidad
+    insumo.save()
+
+    # 🧾 Registro
+    EntradaStock.objects.create(
+        insumo=insumo,
+        cantidad=cantidad,
+        observacion=observacion,
     )
 
-    messages.success(request, "Venta registrada correctamente.")
-    return redirect("/dashboard/inventario/")
+    # 📊 Movimiento
+    MovimientoInventario.objects.create(
+        insumo=insumo,
+        tipo="entrada",
+        cantidad=cantidad,
+        stock_anterior=stock_anterior,
+        stock_resultante=insumo.stock,
+        observacion=observacion or "Entrada manual",
+    )
+
+    messages.success(request, "Stock agregado correctamente")
+    return redirect("inventario")

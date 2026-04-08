@@ -126,6 +126,7 @@ urlpatterns = [
     # ====================== 
     path("inventario/", inventario_view, name="inventario"),
     path("inventario/vender/", vender_insumo_view, name="vender_insumo"),
+    path("inventario/agregar/", agregar_stock_view, name="agregar_stock"),
 
     # ======================
     # Finanzas
