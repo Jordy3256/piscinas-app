@@ -1,0 +1,85 @@
+{% extends "dashboard/base_app.html" %}
+
+{% block title %}Inventario{% endblock %}
+{% block top_title %}📦 Inventario{% endblock %}
+
+{% block content %}
+
+<div class="row g-3 mb-3">
+  <div class="col-4">
+    <div class="card text-center shadow-sm">
+      <div class="card-body">
+        <div class="fw-bold fs-4">{{ total_insumos }}</div>
+        <div class="small text-muted">Insumos</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-4">
+    <div class="card text-center shadow-sm border-warning">
+      <div class="card-body">
+        <div class="fw-bold fs-4 text-warning">{{ bajo_stock }}</div>
+        <div class="small text-muted">Bajo stock</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-4">
+    <div class="card text-center shadow-sm">
+      <div class="card-body">
+        <div class="fw-bold fs-4">{{ stock_total }}</div>
+        <div class="small text-muted">Stock total</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-body">
+
+```
+<div class="d-flex justify-content-between mb-3">
+  <div class="fw-bold">Lista de insumos</div>
+  <button class="btn btn-primary btn-sm">+ Nuevo insumo</button>
+</div>
+
+{% if insumos %}
+  <div class="table-responsive">
+    <table class="table table-striped align-middle">
+      <thead>
+        <tr>
+          <th>Insumo</th>
+          <th>Stock</th>
+          <th>Mínimo</th>
+          <th>Precio</th>
+          <th>Estado</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for i in insumos %}
+        <tr>
+          <td class="fw-semibold">{{ i.nombre }}</td>
+          <td>{{ i.stock }}</td>
+          <td>{{ i.stock_minimo }}</td>
+          <td>${{ i.precio }}</td>
+          <td>
+            {% if i.bajo_stock %}
+              <span class="badge bg-danger">Bajo</span>
+            {% else %}
+              <span class="badge bg-success">OK</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <div class="text-muted">No hay insumos registrados.</div>
+{% endif %}
+```
+
+  </div>
+</div>
+
+{% endblock %}

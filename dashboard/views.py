@@ -3298,3 +3298,27 @@ def unread_count_view(request):
     ).count()
 
     return JsonResponse({"count": count})
+
+@login_required
+def inventario_view(request):
+    from inventario.models import Insumo
+    from django.db.models import F
+
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    insumos = Insumo.objects.all().order_by("nombre")
+
+    total_insumos = insumos.count()
+    bajo_stock = insumos.filter(stock__lte=F("stock_minimo")).count()
+    stock_total = sum(i.stock for i in insumos)
+
+    context = {
+        "insumos": insumos,
+        "total_insumos": total_insumos,
+        "bajo_stock": bajo_stock,
+        "stock_total": stock_total,
+        "es_admin": True,
+    }
+
+    return render(request, "dashboard/inventario.html", context)
