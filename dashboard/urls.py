@@ -45,6 +45,7 @@ from .views import (
     inventario_view,
     vender_insumo_view,
     agregar_stock_view,
+    inventario_historial_view,
 
     # Finanzas
     flujo_mensual_view,
@@ -128,6 +129,7 @@ urlpatterns = [
     path("inventario/", inventario_view, name="inventario"),
     path("inventario/vender/", vender_insumo_view, name="vender_insumo"),
     path("inventario/agregar/", agregar_stock_view, name="agregar_stock"),
+    path("inventario/historial/", inventario_historial_view, name="inventario_historial"),
 
     # ======================
     # Finanzas
