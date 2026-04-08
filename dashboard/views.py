@@ -3301,13 +3301,14 @@ def unread_count_view(request):
     return JsonResponse({"count": count})
 
 #======================
-#INVENTARIO PRO
+# INVENTARIO PRO
 #======================
 
 from django.db.models import F
 from decimal import Decimal
 from inventario.models import Insumo, VentaInsumo, EntradaStock, MovimientoInventario
 from finanzas.models import Ingreso
+
 
 @login_required
 def inventario_view(request):
@@ -3320,6 +3321,28 @@ def inventario_view(request):
     bajo_stock = insumos.filter(stock__lte=F("stock_minimo")).count()
     stock_total = sum(i.stock for i in insumos)
 
+    hoy = timezone.localdate()
+    primer_dia_mes = hoy.replace(day=1)
+
+    ventas_mes = VentaInsumo.objects.filter(fecha__gte=primer_dia_mes)
+    total_ventas_mes = ventas_mes.aggregate(total=Sum("total")).get("total") or 0
+    unidades_vendidas_mes = ventas_mes.aggregate(total=Sum("cantidad")).get("total") or 0
+
+    movimientos_recientes = list(
+        MovimientoInventario.objects.select_related("insumo").all().order_by("-creado_en", "-id")[:8]
+    )
+
+    top_vendidos = list(
+        VentaInsumo.objects
+        .filter(fecha__gte=primer_dia_mes)
+        .values("insumo__nombre")
+        .annotate(
+            cantidad_total=Sum("cantidad"),
+            monto_total=Sum("total"),
+        )
+        .order_by("-cantidad_total", "-monto_total")[:5]
+    )
+
     return render(
         request,
         "dashboard/inventario.html",
@@ -3328,10 +3351,17 @@ def inventario_view(request):
             "total_insumos": total_insumos,
             "bajo_stock": bajo_stock,
             "stock_total": stock_total,
+            "total_ventas_mes": float(total_ventas_mes),
+            "unidades_vendidas_mes": int(unidades_vendidas_mes or 0),
+            "movimientos_recientes": movimientos_recientes,
+            "top_vendidos": top_vendidos,
+            "es_admin": True,
         },
     )
+
+
 #======================
-#VENDER INSUMO
+# VENDER INSUMO
 #======================
 
 @login_required
@@ -3357,19 +3387,17 @@ def vender_insumo_view(request):
 
     if insumo.stock < cantidad:
         messages.error(
-            request, 
-            f"Stock insuficiente de {insumo.nombre}. Disponible: {insumo.stock}" 
+            request,
+            f"Stock insuficiente de {insumo.nombre}. Disponible: {insumo.stock}"
         )
         return redirect("/dashboard/inventario/")
 
     stock_anterior = insumo.stock
     total = Decimal(cantidad) * Decimal(insumo.precio)
 
-    # 🔻 Descontar stock
     insumo.stock -= cantidad
     insumo.save()
 
-    # 🧾 Registrar Venta
     VentaInsumo.objects.create(
         insumo=insumo,
         cantidad=cantidad,
@@ -3377,7 +3405,6 @@ def vender_insumo_view(request):
         total=total,
     )
 
-    # 📊 Registrar movimiento de inventario
     MovimientoInventario.objects.create(
         insumo=insumo,
         tipo="venta",
@@ -3387,31 +3414,29 @@ def vender_insumo_view(request):
         observacion="Venta de insumo",
     )
 
-    # 💰 Crear ingreso automático en finanzas
     Ingreso.objects.create(
         concepto=f"Venta de insumo: {insumo.nombre}",
         total=total,
         fecha=timezone.localdate(),
     )
 
-    _registrar_actividad( 
-        user=request.user, 
-        titulo="Venta de insumo registrada", 
-        descripcion=f"{request.user.username} registró la venta de {insumo.nombre} x {cantidad} por ${total}.", 
+    _registrar_actividad(
+        user=request.user,
+        titulo="Venta de insumo registrada",
+        descripcion=f"{request.user.username} registró la venta de {insumo.nombre} x {cantidad} por ${total}.",
         url="/dashboard/inventario/",
     )
 
     messages.success(request, "Venta registrada correctamente")
     return redirect("inventario")
 
+
 #======================
-#ENTRADA DE STOCK
+# ENTRADA DE STOCK
 #======================
 
 @login_required
 def agregar_stock_view(request):
-    from inventario.models import Insumo, EntradaStock, MovimientoInventario
-
     if not es_admin(request.user):
         return render(request, "dashboard/no_autorizado.html", status=403)
 
@@ -3460,3 +3485,101 @@ def agregar_stock_view(request):
 
     messages.success(request, "Stock agregado correctamente.")
     return redirect("/dashboard/inventario/")
+
+
+#======================
+# HISTORIAL INVENTARIO PRO
+#======================
+
+@login_required
+def inventario_historial_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    q = (request.GET.get("q", "") or "").strip()
+    tipo = (request.GET.get("tipo", "") or "").strip().lower()
+    fecha_desde_str = (request.GET.get("fecha_desde", "") or "").strip()
+    fecha_hasta_str = (request.GET.get("fecha_hasta", "") or "").strip()
+    insumo_id = (request.GET.get("insumo", "") or "").strip()
+
+    fecha_desde = parse_date(fecha_desde_str) if fecha_desde_str else None
+    fecha_hasta = parse_date(fecha_hasta_str) if fecha_hasta_str else None
+
+    qs = MovimientoInventario.objects.select_related("insumo").all().order_by("-creado_en", "-id")
+
+    if tipo in ["entrada", "venta", "mantenimiento", "ajuste"]:
+        qs = qs.filter(tipo=tipo)
+
+    if fecha_desde:
+        qs = qs.filter(fecha__gte=fecha_desde)
+
+    if fecha_hasta:
+        qs = qs.filter(fecha__lte=fecha_hasta)
+
+    if insumo_id.isdigit():
+        qs = qs.filter(insumo_id=int(insumo_id))
+
+    if q:
+        qs = qs.filter(insumo__nombre__icontains=q)
+
+    total_movimientos = qs.count()
+    total_entradas = qs.filter(tipo="entrada").count()
+    total_ventas = qs.filter(tipo="venta").count()
+    total_mantenimiento = qs.filter(tipo="mantenimiento").count()
+
+    unidades_entrada = qs.filter(tipo="entrada").aggregate(total=Sum("cantidad")).get("total") or 0
+    unidades_venta = qs.filter(tipo="venta").aggregate(total=Sum("cantidad")).get("total") or 0
+    unidades_mantenimiento = qs.filter(tipo="mantenimiento").aggregate(total=Sum("cantidad")).get("total") or 0
+
+    paginator = Paginator(qs, 25)
+    page_number = request.GET.get("page")
+    page_obj = paginator.get_page(page_number)
+
+    insumos_filtro = Insumo.objects.all().order_by("nombre")
+
+    top_vendidos = list(
+        VentaInsumo.objects
+        .values("insumo__nombre")
+        .annotate(
+            cantidad_total=Sum("cantidad"),
+            monto_total=Sum("total"),
+        )
+        .order_by("-cantidad_total", "-monto_total")[:10]
+    )
+
+    top_movidos = list(
+        MovimientoInventario.objects
+        .values("insumo__nombre")
+        .annotate(cantidad_total=Sum("cantidad"))
+        .order_by("-cantidad_total")[:10]
+    )
+
+    query_params = request.GET.copy()
+    if "page" in query_params:
+        query_params.pop("page")
+    querystring = query_params.urlencode()
+
+    return render(
+        request,
+        "dashboard/inventario_historial.html",
+        {
+            "page_obj": page_obj,
+            "q": q,
+            "tipo": tipo,
+            "fecha_desde": fecha_desde_str,
+            "fecha_hasta": fecha_hasta_str,
+            "insumo_id": insumo_id,
+            "insumos_filtro": insumos_filtro,
+            "total_movimientos": total_movimientos,
+            "total_entradas": total_entradas,
+            "total_ventas": total_ventas,
+            "total_mantenimiento": total_mantenimiento,
+            "unidades_entrada": int(unidades_entrada or 0),
+            "unidades_venta": int(unidades_venta or 0),
+            "unidades_mantenimiento": int(unidades_mantenimiento or 0),
+            "top_vendidos": top_vendidos,
+            "top_movidos": top_movidos,
+            "querystring": querystring,
+            "es_admin": True,
+        },
+    )
