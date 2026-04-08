@@ -3337,32 +3337,39 @@ def inventario_view(request):
 @login_required
 def vender_insumo_view(request):
     if not es_admin(request.user):
-        return redirect("inventario")
+        return render(request, "dashboard/no_autorizado.html", status=403)
 
     if request.method != "POST":
-        return redirect("inventario")
+        return redirect("/dashboard/inventario/")
 
-    insumo_id = request.POST.get("insumo_id")
-    cantidad = int(request.POST.get("cantidad"))
+    insumo_id = (request.POST.get("insumo_id") or "").strip()
+    insumo_id = (request.POST.get("insumo_id") or "").strip()
 
-    insumo = get_object_or_404(Insumo, id=insumo_id)
-
-    if cantidad <= 0:
+    try:
+        cantidad = int(cantidad_str)
+        if cantidad <= 0:
+            raise ValueError
+    except Exception:
         messages.error(request, "Cantidad inválida")
-        return redirect("inventario")
+        return redirect("/dashboard/inventario/")
+
+    insumo = get_object_or_404(Insumo, pk=insumo_id)
 
     if insumo.stock < cantidad:
-        messages.error(request, "Stock insuficiente")
-        return redirect("inventario")
+        messages.error(
+            request, 
+            f"Stock insuficiente de {insumo.nombre}. Disponible: {insumo.stock}" 
+        )
+        return redirect("/dashboard/inventario/")
 
     stock_anterior = insumo.stock
-    total = Decimal(cantidad) * insumo.precio
+    total = Decimal(cantidad) * Decimal(insumo.precio)
 
     # 🔻 Descontar stock
     insumo.stock -= cantidad
     insumo.save()
 
-    # 🧾 Venta
+    # 🧾 Registrar Venta
     VentaInsumo.objects.create(
         insumo=insumo,
         cantidad=cantidad,
@@ -3370,7 +3377,7 @@ def vender_insumo_view(request):
         total=total,
     )
 
-    # 📊 Movimiento
+    # 📊 Registrar movimiento de inventario
     MovimientoInventario.objects.create(
         insumo=insumo,
         tipo="venta",
@@ -3380,14 +3387,23 @@ def vender_insumo_view(request):
         observacion="Venta de insumo",
     )
 
-    # 💰 Ingreso automático
+    # 💰 Crear ingreso automático en finanzas
     Ingreso.objects.create(
         concepto=f"Venta de insumo: {insumo.nombre}",
         total=total,
+        fecha=timezone.localdate(),
+    )
+
+    _registrar_actividad( 
+        user=request.user, 
+        titulo="Venta de insumo registrada", 
+        descripcion=f"{request.user.username} registró la venta de {insumo.nombre} x {cantidad} por ${total}.", 
+        url="/dashboard/inventario/",
     )
 
     messages.success(request, "Venta registrada correctamente")
     return redirect("inventario")
+
 #======================
 #ENTRADA DE STOCK
 #======================
