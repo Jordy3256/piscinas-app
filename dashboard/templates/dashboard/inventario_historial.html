@@ -1,0 +1,278 @@
+{% extends "dashboard/base_admin.html" %}
+
+{% block title %}Historial de inventario{% endblock %}
+{% block top_title %}📊 Historial de inventario{% endblock %}
+
+{% block content %}
+
+<div class="row g-3 mb-3">
+  <div class="col-12 col-md-3">
+    <div class="card shadow-sm">
+      <div class="card-body text-center">
+        <div class="text-muted small">Movimientos</div>
+        <div class="fs-3 fw-bold">{{ total_movimientos }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-md-3">
+    <div class="card shadow-sm border-success">
+      <div class="card-body text-center">
+        <div class="text-muted small">Entradas</div>
+        <div class="fs-3 fw-bold text-success">{{ total_entradas }}</div>
+        <div class="small text-muted">{{ unidades_entrada }} unidades</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-md-3">
+    <div class="card shadow-sm border-danger">
+      <div class="card-body text-center">
+        <div class="text-muted small">Ventas</div>
+        <div class="fs-3 fw-bold text-danger">{{ total_ventas }}</div>
+        <div class="small text-muted">{{ unidades_venta }} unidades</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-md-3">
+    <div class="card shadow-sm border-warning">
+      <div class="card-body text-center">
+        <div class="text-muted small">Mantenimientos</div>
+        <div class="fs-3 fw-bold text-warning">{{ total_mantenimiento }}</div>
+        <div class="small text-muted">{{ unidades_mantenimiento }} unidades</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow-sm mb-3">
+  <div class="card-body">
+    <div class="fw-bold mb-3">🔎 Filtros</div>
+
+```
+<form method="get" class="row g-2">
+  <div class="col-12 col-md-3">
+    <label class="form-label small text-muted">Buscar insumo</label>
+    <input
+      type="text"
+      name="q"
+      value="{{ q }}"
+      class="form-control"
+      placeholder="Ej: cloro"
+    >
+  </div>
+
+  <div class="col-12 col-md-2">
+    <label class="form-label small text-muted">Tipo</label>
+    <select name="tipo" class="form-select">
+      <option value="">Todos</option>
+      <option value="entrada" {% if tipo == "entrada" %}selected{% endif %}>Entrada</option>
+      <option value="venta" {% if tipo == "venta" %}selected{% endif %}>Venta</option>
+      <option value="mantenimiento" {% if tipo == "mantenimiento" %}selected{% endif %}>Mantenimiento</option>
+      <option value="ajuste" {% if tipo == "ajuste" %}selected{% endif %}>Ajuste</option>
+    </select>
+  </div>
+
+  <div class="col-12 col-md-2">
+    <label class="form-label small text-muted">Insumo</label>
+    <select name="insumo" class="form-select">
+      <option value="">Todos</option>
+      {% for i in insumos_filtro %}
+        <option value="{{ i.id }}" {% if insumo_id == i.id|stringformat:"s" %}selected{% endif %}>
+          {{ i.nombre }}
+        </option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="col-6 col-md-2">
+    <label class="form-label small text-muted">Desde</label>
+    <input type="date" name="fecha_desde" value="{{ fecha_desde }}" class="form-control">
+  </div>
+
+  <div class="col-6 col-md-2">
+    <label class="form-label small text-muted">Hasta</label>
+    <input type="date" name="fecha_hasta" value="{{ fecha_hasta }}" class="form-control">
+  </div>
+
+  <div class="col-12 col-md-1 d-grid">
+    <label class="form-label small text-muted d-none d-md-block">&nbsp;</label>
+    <button class="btn btn-primary" type="submit">Aplicar</button>
+  </div>
+
+  <div class="col-12">
+    <a href="/dashboard/inventario/historial/" class="btn btn-outline-secondary btn-sm">
+      Limpiar filtros
+    </a>
+    <a href="/dashboard/inventario/" class="btn btn-outline-primary btn-sm">
+      Volver a inventario
+    </a>
+  </div>
+</form>
+```
+
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-12 col-lg-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-body">
+        <div class="fw-bold mb-3">🏆 Insumos más vendidos</div>
+
+```
+    {% if top_vendidos %}
+      <div class="vstack gap-2">
+        {% for item in top_vendidos %}
+          <div class="border rounded p-3 bg-light">
+            <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
+              <div>
+                <div class="fw-semibold">{{ item.insumo__nombre }}</div>
+                <div class="small text-muted">{{ item.cantidad_total }} unidades vendidas</div>
+              </div>
+              <div class="fw-bold text-success">
+                ${{ item.monto_total|floatformat:2 }}
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="text-muted">Todavía no hay ventas registradas.</div>
+    {% endif %}
+  </div>
+</div>
+```
+
+  </div>
+
+  <div class="col-12 col-lg-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-body">
+        <div class="fw-bold mb-3">📦 Insumos con más movimiento</div>
+
+```
+    {% if top_movidos %}
+      <div class="vstack gap-2">
+        {% for item in top_movidos %}
+          <div class="border rounded p-3 bg-light">
+            <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
+              <div class="fw-semibold">{{ item.insumo__nombre }}</div>
+              <div class="fw-bold text-primary">
+                {{ item.cantidad_total }} unidades
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="text-muted">Todavía no hay movimientos registrados.</div>
+    {% endif %}
+  </div>
+</div>
+```
+
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-body">
+    <div class="fw-bold mb-3">🧾 Detalle de movimientos</div>
+
+```
+{% if page_obj %}
+  <div class="table-responsive">
+    <table class="table table-striped align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Fecha</th>
+          <th>Insumo</th>
+          <th>Tipo</th>
+          <th class="text-center">Cantidad</th>
+          <th class="text-center">Stock anterior</th>
+          <th class="text-center">Stock resultante</th>
+          <th>Observación</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in page_obj %}
+          <tr>
+            <td>
+              <div>{{ m.fecha|date:"d/m/Y" }}</div>
+              <div class="small text-muted">{{ m.creado_en|date:"H:i" }}</div>
+            </td>
+            <td class="fw-semibold">{{ m.insumo.nombre }}</td>
+            <td>
+              {% if m.tipo == "entrada" %}
+                <span class="badge bg-success">Entrada</span>
+              {% elif m.tipo == "venta" %}
+                <span class="badge bg-danger">Venta</span>
+              {% elif m.tipo == "mantenimiento" %}
+                <span class="badge bg-warning text-dark">Mantenimiento</span>
+              {% else %}
+                <span class="badge bg-secondary">Ajuste</span>
+              {% endif %}
+            </td>
+            <td class="text-center fw-semibold">{{ m.cantidad }}</td>
+            <td class="text-center">{{ m.stock_anterior }}</td>
+            <td class="text-center">{{ m.stock_resultante }}</td>
+            <td>
+              {% if m.observacion %}
+                {{ m.observacion }}
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if page_obj.has_other_pages %}
+    <nav class="mt-3">
+      <ul class="pagination mb-0 flex-wrap">
+        {% if page_obj.has_previous %}
+          <li class="page-item">
+            <a class="page-link" href="?page=1{% if querystring %}&{{ querystring }}{% endif %}">
+              Primero
+            </a>
+          </li>
+          <li class="page-item">
+            <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if querystring %}&{{ querystring }}{% endif %}">
+              Anterior
+            </a>
+          </li>
+        {% endif %}
+
+        <li class="page-item active">
+          <span class="page-link">
+            Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+          </span>
+        </li>
+
+        {% if page_obj.has_next %}
+          <li class="page-item">
+            <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if querystring %}&{{ querystring }}{% endif %}">
+              Siguiente
+            </a>
+          </li>
+          <li class="page-item">
+            <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if querystring %}&{{ querystring }}{% endif %}">
+              Última
+            </a>
+          </li>
+        {% endif %}
+      </ul>
+    </nav>
+  {% endif %}
+{% else %}
+  <div class="text-muted">No hay movimientos para mostrar.</div>
+{% endif %}
+```
+
+  </div>
+</div>
+
+{% endblock %}
