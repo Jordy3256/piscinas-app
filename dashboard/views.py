@@ -3322,3 +3322,29 @@ def inventario_view(request):
     }
 
     return render(request, "dashboard/inventario.html", context)
+
+# ======================
+# INVENTARIO
+# ======================
+@login_required
+def inventario_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    insumos = Insumo.objects.all().order_by("nombre")
+
+    total_insumos = insumos.count()
+    bajo_stock = insumos.filter(stock__lte=models.F("stock_minimo")).count()
+    stock_total = sum(i.stock for i in insumos)
+
+    return render(
+        request,
+        "dashboard/inventario.html",
+        {
+            "insumos": insumos,
+            "total_insumos": total_insumos,
+            "bajo_stock": bajo_stock,
+            "stock_total": stock_total,
+            "es_admin": True,
+        },
+    )
