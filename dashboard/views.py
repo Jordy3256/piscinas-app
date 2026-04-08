@@ -3314,15 +3314,16 @@ def inventario_view(request):
     bajo_stock = insumos.filter(stock__lte=F("stock_minimo")).count()
     stock_total = sum(i.stock for i in insumos)
 
-    context = {
-        "insumos": insumos,
-        "total_insumos": total_insumos,
-        "bajo_stock": bajo_stock,
-        "stock_total": stock_total,
-        "es_admin": True,
-    }
-
-    return render(request, "dashboard/inventario.html", context)
+    return render(
+        request,
+        "dashboard/inventario.html",
+        {
+            "insumos": insumos,
+            "total_insumos": total_insumos,
+            "bajo_stock": bajo_stock,
+            "stock_total": stock_total,
+        },
+    )
 
 # ======================
 # INVENTARIO
@@ -3349,3 +3350,50 @@ def inventario_view(request):
             "es_admin": True,
         },
     )
+
+@login_required
+def vender_insumo_view(request):
+    from inventario.models import Insumo, VentaInsumo
+    from finanzas.models import Ingreso
+    from decimal import Decimal
+
+    if not es_admin(request.user):
+        return redirect("inventario")
+
+    if request.method == "POST":
+        insumo_id = request.POST.get("insumo_id")
+        cantidad = int(request.POST.get("cantidad"))
+
+        insumo = get_object_or_404(Insumo, id=insumo_id)
+
+        if cantidad <= 0:
+            messages.error(request, "Cantidad inválida")
+            return redirect("inventario")
+
+        if insumo.stock < cantidad:
+            messages.error(request, "Stock insuficiente")
+            return redirect("inventario")
+
+        total = Decimal(cantidad) * insumo.precio
+
+        # 🔻 Descontar stock
+        insumo.stock -= cantidad
+        insumo.save()
+
+        # 🧾 Registrar venta
+        VentaInsumo.objects.create(
+            insumo=insumo,
+            cantidad=cantidad,
+            precio_unitario=insumo.precio,
+            total=total,
+        )
+
+        # 💰 Crear ingreso automático
+        Ingreso.objects.create(
+            concepto=f"Venta de insumo: {insumo.nombre}",
+            monto=total,
+        )
+
+        messages.success(request, "Venta registrada correctamente")
+
+    return redirect("inventario")

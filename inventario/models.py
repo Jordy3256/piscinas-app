@@ -12,3 +12,13 @@ class Insumo(models.Model):
     @property
     def bajo_stock(self):
         return self.stock <= self.stock_minimo
+
+class VentaInsumo(models.Model):
+    insumo = models.ForeignKey("Insumo", on_delete=models.CASCADE)
+    cantidad = models.PositiveIntegerField()
+    precio_unitario = models.DecimalField(max_digits=10, decimal_places=2)
+    total = models.DecimalField(max_digits=10, decimal_places=2)
+    fecha = models.DateField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.insumo.nombre} x{self.cantidad} - ${self.total}"

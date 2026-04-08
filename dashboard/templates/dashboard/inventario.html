@@ -1,85 +1,92 @@
-{% extends "dashboard/base_app.html" %}
-
+{% extends "dashboard/base_admin.html" %}
 {% block title %}Inventario{% endblock %}
-{% block top_title %}📦 Inventario{% endblock %}
 
 {% block content %}
+<div class="container">
+  <h3 class="mb-3">📦 Inventario</h3>
 
-<div class="row g-3 mb-3">
-  <div class="col-4">
-    <div class="card text-center shadow-sm">
-      <div class="card-body">
-        <div class="fw-bold fs-4">{{ total_insumos }}</div>
-        <div class="small text-muted">Insumos</div>
+  <div class="row mb-4">
+    <div class="col-md-4">
+      <div class="card p-3">
+        <h6>Total insumos</h6>
+        <h4>{{ total_insumos }}</h4>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card p-3">
+        <h6>Bajo stock</h6>
+        <h4 class="text-danger">{{ bajo_stock }}</h4>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card p-3">
+        <h6>Stock total</h6>
+        <h4>{{ stock_total }}</h4>
       </div>
     </div>
   </div>
 
-  <div class="col-4">
-    <div class="card text-center shadow-sm border-warning">
-      <div class="card-body">
-        <div class="fw-bold fs-4 text-warning">{{ bajo_stock }}</div>
-        <div class="small text-muted">Bajo stock</div>
+  <table class="table table-bordered">
+    <thead>
+      <tr>
+        <th>Insumo</th>
+        <th>Stock</th>
+        <th>Precio</th>
+        <th>Acción</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for i in insumos %}
+      <tr>
+        <td>{{ i.nombre }}</td>
+        <td>
+          {% if i.bajo_stock %}
+            <span class="text-danger fw-bold">{{ i.stock }}</span>
+          {% else %}
+            {{ i.stock }}
+          {% endif %}
+        </td>
+        <td>${{ i.precio }}</td>
+        <td>
+          <button class="btn btn-success btn-sm" onclick="abrirVenta({{ i.id }}, '{{ i.nombre }}')">
+            Vender
+          </button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Modal venta -->
+<div class="modal fade" id="ventaModal" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="POST" action="/dashboard/inventario/vender/">
+      {% csrf_token %}
+      <input type="hidden" name="insumo_id" id="insumo_id">
+
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Vender insumo</h5>
+        </div>
+        <div class="modal-body">
+          <p id="nombre_insumo"></p>
+          <input type="number" name="cantidad" class="form-control" placeholder="Cantidad" required>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-primary">Confirmar venta</button>
+        </div>
       </div>
-    </div>
-  </div>
-
-  <div class="col-4">
-    <div class="card text-center shadow-sm">
-      <div class="card-body">
-        <div class="fw-bold fs-4">{{ stock_total }}</div>
-        <div class="small text-muted">Stock total</div>
-      </div>
-    </div>
+    </form>
   </div>
 </div>
 
-<div class="card shadow-sm">
-  <div class="card-body">
-
-```
-<div class="d-flex justify-content-between mb-3">
-  <div class="fw-bold">Lista de insumos</div>
-  <button class="btn btn-primary btn-sm">+ Nuevo insumo</button>
-</div>
-
-{% if insumos %}
-  <div class="table-responsive">
-    <table class="table table-striped align-middle">
-      <thead>
-        <tr>
-          <th>Insumo</th>
-          <th>Stock</th>
-          <th>Mínimo</th>
-          <th>Precio</th>
-          <th>Estado</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for i in insumos %}
-        <tr>
-          <td class="fw-semibold">{{ i.nombre }}</td>
-          <td>{{ i.stock }}</td>
-          <td>{{ i.stock_minimo }}</td>
-          <td>${{ i.precio }}</td>
-          <td>
-            {% if i.bajo_stock %}
-              <span class="badge bg-danger">Bajo</span>
-            {% else %}
-              <span class="badge bg-success">OK</span>
-            {% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-{% else %}
-  <div class="text-muted">No hay insumos registrados.</div>
-{% endif %}
-```
-
-  </div>
-</div>
-
+<script>
+function abrirVenta(id, nombre){
+  document.getElementById("insumo_id").value = id;
+  document.getElementById("nombre_insumo").innerText = nombre;
+  var modal = new bootstrap.Modal(document.getElementById('ventaModal'));
+  modal.show();
+}
+</script>
 {% endblock %}
