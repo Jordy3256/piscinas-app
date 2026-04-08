@@ -44,6 +44,7 @@ from .views import (
     # Inventario
     inventario_view,
     vender_insumo_view,
+    agregar_stock_view,
 
     # Finanzas
     flujo_mensual_view,

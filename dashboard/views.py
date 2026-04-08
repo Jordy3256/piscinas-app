@@ -13,7 +13,6 @@ from django.contrib.staticfiles import finders
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Sum
-from django.db.models import F
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.templatetags.static import static
@@ -2102,81 +2101,6 @@ def mantenimiento_detalle_view(request, pk):
             messages.success(request, f"Insumo registrado: {insumo.nombre} x {cantidad}")
             return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
 
-        if accion == "subir_fotos_requeridas":
-            if esta_realizado:
-                messages.error(request, "Este mantenimiento está realizado y bloqueado para cambios. Debes volverlo a pendiente para editarlo.")
-                return redirect(safe_return_url())
-
-            mapa_fotos = [
-                ("Inicio de Mantenimiento", request.FILES.get("foto_inicio")),
-                ("Fin de Mantenimiento", request.FILES.get("foto_fin")),
-                ("Nivel PH y Cl", request.FILES.get("foto_nivel")),
-            ]
-
-            existentes = {
-                f.descripcion: f
-                for f in mantenimiento.fotos.all()
-                if _nombre_foto_valido(f.descripcion)
-            }
-
-            subidas = []
-            omitidas = []
-
-            for tipo_foto, imagen in mapa_fotos:
-                if not imagen:
-                    continue
-
-                if tipo_foto in existentes:
-                    omitidas.append(tipo_foto)
-                    continue
-
-                FotoMantenimiento.objects.create(
-                    mantenimiento=mantenimiento,
-                    imagen=imagen,
-                    descripcion=tipo_foto,
-                )
-                subidas.append(tipo_foto)
-
-            if subidas:
-                actor = request.user.username
-                detalle = ", ".join(subidas)
-                _notificar_admins(
-                    titulo="📸 Fotos requeridas subidas",
-                    mensaje=f"{actor} subió fotos en el mantenimiento de {mantenimiento.cliente}: {detalle}.",
-                    url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
-                    enviar_push=False,
-                    excluir_user_id=request.user.id if es_usuario_admin else None,
-                )
-                _registrar_actividad(
-                    user=request.user,
-                    titulo="Fotos requeridas subidas",
-                    descripcion=f"{actor} subió fotos en el mantenimiento de {mantenimiento.cliente}: {detalle}.",
-                    url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
-                )
-
-            if subidas and omitidas:
-                messages.success(
-                    request,
-                    f"Se subieron {len(subidas)} foto(s). Ya existían: {', '.join(omitidas)}."
-                )
-            elif subidas:
-                messages.success(
-                    request,
-                    f"Se subieron correctamente {len(subidas)} foto(s)."
-                )
-            elif omitidas:
-                messages.warning(
-                    request,
-                    f"No se subieron nuevas fotos porque ya existían: {', '.join(omitidas)}."
-                )
-            else:
-                messages.error(
-                    request,
-                    "Debes seleccionar al menos una foto para subir."
-                )
-
-            return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
-
         if accion == "subir_foto":
             imagen = request.FILES.get("imagen")
             tipo_foto = (request.POST.get("tipo_foto", "") or "").strip()
@@ -3300,39 +3224,12 @@ def unread_count_view(request):
 
     return JsonResponse({"count": count})
 
-@login_required
-def inventario_view(request):
-    from inventario.models import Insumo
-    from django.db.models import F
 
-    if not es_admin(request.user):
-        return render(request, "dashboard/no_autorizado.html", status=403)
-
-    insumos = Insumo.objects.all().order_by("nombre")
-
-    total_insumos = insumos.count()
-    bajo_stock = insumos.filter(stock__lte=F("stock_minimo")).count()
-    stock_total = sum(i.stock for i in insumos)
-
-    return render(
-        request,
-        "dashboard/inventario.html",
-        {
-            "insumos": insumos,
-            "total_insumos": total_insumos,
-            "bajo_stock": bajo_stock,
-            "stock_total": stock_total,
-        },
-    )
-
-#======================
-#INVENTARIO PRO
-#======================
-
-from django.db.models import F
+# ======================
+# INVENTARIO PRO
+# ======================
 from decimal import Decimal
-from inventario.models import Insumo, VentaInsumo, EntradaStock, MovimientoInventario
-from finanzas.models import Ingreso
+from inventario.models import VentaInsumo, EntradaStock, MovimientoInventario
 
 @login_required
 def inventario_view(request):
@@ -3340,24 +3237,17 @@ def inventario_view(request):
         return render(request, "dashboard/no_autorizado.html", status=403)
 
     insumos = Insumo.objects.all().order_by("nombre")
-
     total_insumos = insumos.count()
     bajo_stock = insumos.filter(stock__lte=F("stock_minimo")).count()
     stock_total = sum(i.stock for i in insumos)
 
-    return render(
-        request,
-        "dashboard/inventario.html",
-        {
-            "insumos": insumos,
-            "total_insumos": total_insumos,
-            "bajo_stock": bajo_stock,
-            "stock_total": stock_total,
-        },
-    )
-#======================
-#VENDER INSUMO
-#======================
+    return render(request, "dashboard/inventario.html", {
+        "insumos": insumos,
+        "total_insumos": total_insumos,
+        "bajo_stock": bajo_stock,
+        "stock_total": stock_total,
+    })
+
 
 @login_required
 def vender_insumo_view(request):
@@ -3367,27 +3257,19 @@ def vender_insumo_view(request):
     if request.method != "POST":
         return redirect("inventario")
 
-    insumo_id = request.POST.get("insumo_id")
+    insumo = get_object_or_404(Insumo, id=request.POST.get("insumo_id"))
     cantidad = int(request.POST.get("cantidad"))
 
-    insumo = get_object_or_404(Insumo, id=insumo_id)
-
-    if cantidad <= 0:
-        messages.error(request, "Cantidad inválida")
-        return redirect("inventario")
-
-    if insumo.stock < cantidad:
-        messages.error(request, "Stock insuficiente")
+    if cantidad <= 0 or insumo.stock < cantidad:
+        messages.error(request, "Error en la venta")
         return redirect("inventario")
 
     stock_anterior = insumo.stock
     total = Decimal(cantidad) * insumo.precio
 
-    # 🔻 Descontar stock
     insumo.stock -= cantidad
     insumo.save()
 
-    # 🧾 Venta
     VentaInsumo.objects.create(
         insumo=insumo,
         cantidad=cantidad,
@@ -3395,27 +3277,22 @@ def vender_insumo_view(request):
         total=total,
     )
 
-    # 📊 Movimiento
     MovimientoInventario.objects.create(
         insumo=insumo,
         tipo="venta",
         cantidad=cantidad,
         stock_anterior=stock_anterior,
         stock_resultante=insumo.stock,
-        observacion="Venta de insumo",
     )
 
-    # 💰 Ingreso automático
     Ingreso.objects.create(
         concepto=f"Venta de insumo: {insumo.nombre}",
         total=total,
     )
 
-    messages.success(request, "Venta registrada correctamente")
+    messages.success(request, "Venta registrada")
     return redirect("inventario")
-#======================
-#ENTRADA DE STOCK
-#======================
+
 
 @login_required
 def agregar_stock_view(request):
@@ -3425,11 +3302,8 @@ def agregar_stock_view(request):
     if request.method != "POST":
         return redirect("inventario")
 
-    insumo_id = request.POST.get("insumo_id")
+    insumo = get_object_or_404(Insumo, id=request.POST.get("insumo_id"))
     cantidad = int(request.POST.get("cantidad"))
-    observacion = request.POST.get("observacion", "")
-
-    insumo = get_object_or_404(Insumo, id=insumo_id)
 
     if cantidad <= 0:
         messages.error(request, "Cantidad inválida")
@@ -3437,26 +3311,21 @@ def agregar_stock_view(request):
 
     stock_anterior = insumo.stock
 
-    # 🔼 Aumentar stock
     insumo.stock += cantidad
     insumo.save()
 
-    # 🧾 Registro
     EntradaStock.objects.create(
         insumo=insumo,
         cantidad=cantidad,
-        observacion=observacion,
     )
 
-    # 📊 Movimiento
     MovimientoInventario.objects.create(
         insumo=insumo,
         tipo="entrada",
         cantidad=cantidad,
         stock_anterior=stock_anterior,
         stock_resultante=insumo.stock,
-        observacion=observacion or "Entrada manual",
     )
 
-    messages.success(request, "Stock agregado correctamente")
+    messages.success(request, "Stock agregado")
     return redirect("inventario")
