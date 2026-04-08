@@ -3343,7 +3343,7 @@ def vender_insumo_view(request):
         return redirect("/dashboard/inventario/")
 
     insumo_id = (request.POST.get("insumo_id") or "").strip()
-    insumo_id = (request.POST.get("insumo_id") or "").strip()
+    cantidad_str = (request.POST.get("cantidad") or "").strip()
 
     try:
         cantidad = int(cantidad_str)
