@@ -41,8 +41,9 @@ from .views import (
     admin_operativo_view,
     asignar_trabajadores_view,
 
-    # Inventario 
+    # Inventario
     inventario_view,
+    vender_insumo_view,
 
     # Finanzas
     flujo_mensual_view,
