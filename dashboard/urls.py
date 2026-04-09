@@ -59,6 +59,11 @@ from .views import (
     egreso_manual_crear_view,
     egreso_manual_eliminar_view,
 
+    # Reporte de ganancias
+    reporte_ganancias_view,
+    exportar_ganancias_excel,
+    exportar_ganancias_pdf,
+
     # Recurrentes
     movimientos_recurrentes_view,
     movimientos_recurrentes_procesar_view,
@@ -140,6 +145,13 @@ urlpatterns = [
     path("finanzas/ingresos/nuevo/", ingreso_crear_view, name="ingreso_crear"),
     path("finanzas/ingresos/<int:pk>/editar/", ingreso_editar_view, name="ingreso_editar"),
     path("finanzas/ingresos/<int:pk>/eliminar/", ingreso_eliminar_view, name="ingreso_eliminar"),
+
+    # ======================
+    # Reporte de ganancias
+    # ======================
+    path("finanzas/reporte-ganancias/", reporte_ganancias_view, name="reporte_ganancias"),
+    path("finanzas/reporte-ganancias/excel/", exportar_ganancias_excel, name="exportar_ganancias_excel"),
+    path("finanzas/reporte-ganancias/pdf/", exportar_ganancias_pdf, name="exportar_ganancias_pdf"),
 
     # ✅ INGRESOS MANUALES
     path("finanzas/ingresos/manual/nuevo/", ingreso_manual_crear_view, name="ingreso_manual_crear"),

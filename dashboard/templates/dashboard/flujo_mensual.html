@@ -28,6 +28,42 @@
   </form>
 </div>
 
+<div class="card shadow-sm border-primary mb-3">
+  <div class="card-body">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+      <div>
+        <div class="fw-bold mb-1">📊 Reporte de ganancias PRO</div>
+        <div class="text-muted small">
+          Exporta un reporte detallado de ingresos, egresos y ganancia neta en Excel o PDF.
+        </div>
+      </div>
+
+      <div class="d-flex flex-wrap gap-2">
+        <a
+          href="{% url 'reporte_ganancias' %}"
+          class="btn btn-outline-primary"
+        >
+          Ver reporte
+        </a>
+
+        <a
+          href="{% url 'exportar_ganancias_excel' %}?fecha_inicio={{ fecha_inicio_reporte }}&fecha_fin={{ fecha_fin_reporte }}"
+          class="btn btn-success"
+        >
+          Excel
+        </a>
+
+        <a
+          href="{% url 'exportar_ganancias_pdf' %}?fecha_inicio={{ fecha_inicio_reporte }}&fecha_fin={{ fecha_fin_reporte }}"
+          class="btn btn-danger"
+        >
+          PDF
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="row g-2 mb-3">
   <div class="col-12 col-md-4">
     <div class="card shadow-sm border-success">

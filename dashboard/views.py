@@ -2629,126 +2629,133 @@ def asignar_trabajadores_view(request, pk):
 
 @login_required
 def flujo_mensual_view(request):
-    if not es_admin(request.user):
-        return render(request, "dashboard/no_autorizado.html", status=403)
+    hoy = timezone.localdate()
 
-    notificar_movimientos_recurrentes_proximos()
-    procesar_movimientos_recurrentes()
-
-    hoy = date.today()
-    anio = int(request.GET.get("anio", hoy.year))
-    mes = int(request.GET.get("mes", hoy.month))
+    try:
+        anio = int(request.GET.get("anio", hoy.year))
+        mes = int(request.GET.get("mes", hoy.month))
+    except ValueError:
+        anio, mes = hoy.year, hoy.month
 
     primer_dia = date(anio, mes, 1)
     ultimo_dia = date(anio, mes, monthrange(anio, mes)[1])
 
-    anio_anterior, mes_anterior = _mes_anterior(anio, mes)
-    primer_dia_anterior = date(anio_anterior, mes_anterior, 1)
-    ultimo_dia_anterior = date(anio_anterior, mes_anterior, monthrange(anio_anterior, mes_anterior)[1])
+    ingresos_qs = Ingreso.objects.filter(fecha__range=(primer_dia, ultimo_dia)).order_by("-fecha", "-id")
+    egresos_qs = Egreso.objects.filter(fecha__range=(primer_dia, ultimo_dia)).order_by("-fecha", "-id")
 
-    ingresos_qs = Ingreso.objects.filter(
-        fecha__range=(primer_dia, ultimo_dia)
-    ).order_by("fecha", "id")
+    ingresos_manuales_qs = ingresos_qs.filter(cliente__isnull=True, contrato__isnull=True)
+    egresos_manuales_qs = egresos_qs.filter(mantenimiento__isnull=True, insumo__isnull=True)
 
-    egresos_qs = Egreso.objects.filter(
-        fecha__range=(primer_dia, ultimo_dia)
-    ).select_related(
-        "insumo",
-        "mantenimiento",
-        "mantenimiento__cliente",
-    ).order_by("fecha", "id")
+    total_ingresos = ingresos_qs.aggregate(total=Sum("total"))["total"] or Decimal("0")
+    total_egresos = egresos_qs.aggregate(total=Sum("total"))["total"] or Decimal("0")
 
-    ingresos_manuales_qs = [
-        i for i in ingresos_qs if _ingreso_es_manual(i)
-    ]
-    ingresos_automaticos_qs = [
-        i for i in ingresos_qs if not _ingreso_es_manual(i)
-    ]
+    total_ingresos_manuales = ingresos_manuales_qs.aggregate(total=Sum("total"))["total"] or Decimal("0")
+    total_egresos_manuales = egresos_manuales_qs.aggregate(total=Sum("total"))["total"] or Decimal("0")
 
-    egresos_manuales_qs = [
-        e for e in egresos_qs if _egreso_es_manual(e)
-    ]
-    egresos_automaticos_qs = [
-        e for e in egresos_qs if not _egreso_es_manual(e)
-    ]
+    total_ingresos_automaticos = total_ingresos - total_ingresos_manuales
+    total_egresos_automaticos = total_egresos - total_egresos_manuales
 
-    total_ingresos = ingresos_qs.aggregate(total=Sum("total"))["total"] or 0
-    total_egresos = egresos_qs.aggregate(total=Sum("total"))["total"] or 0
-    total_ingresos_manuales = sum(float(getattr(i, "total", 0) or 0) for i in ingresos_manuales_qs)
-    total_ingresos_automaticos = sum(float(getattr(i, "total", 0) or 0) for i in ingresos_automaticos_qs)
-    total_egresos_manuales = sum(float(getattr(e, "total", 0) or 0) for e in egresos_manuales_qs)
-    total_egresos_automaticos = sum(float(getattr(e, "total", 0) or 0) for e in egresos_automaticos_qs)
     balance = total_ingresos - total_egresos
 
-    resumen_mes_actual = _resumen_financiero_rango(primer_dia, ultimo_dia)
-    resumen_mes_anterior = _resumen_financiero_rango(primer_dia_anterior, ultimo_dia_anterior)
+    # 📊 MES ANTERIOR
+    mes_anterior = mes - 1 or 12
+    anio_anterior = anio - 1 if mes == 1 else anio
 
-    variacion_ingresos_mes = _variacion_porcentual(
-        resumen_mes_actual["ingresos"],
-        resumen_mes_anterior["ingresos"],
-    )
-    variacion_egresos_mes = _variacion_porcentual(
-        resumen_mes_actual["egresos"],
-        resumen_mes_anterior["egresos"],
-    )
-    variacion_balance_mes = _variacion_porcentual(
-        resumen_mes_actual["balance"],
-        resumen_mes_anterior["balance"],
-    )
+    primer_dia_ant = date(anio_anterior, mes_anterior, 1)
+    ultimo_dia_ant = date(anio_anterior, mes_anterior, monthrange(anio_anterior, mes_anterior)[1])
 
+    ingresos_ant = Ingreso.objects.filter(fecha__range=(primer_dia_ant, ultimo_dia_ant))
+    egresos_ant = Egreso.objects.filter(fecha__range=(primer_dia_ant, ultimo_dia_ant))
+
+    total_ingresos_ant = ingresos_ant.aggregate(total=Sum("total"))["total"] or Decimal("0")
+    total_egresos_ant = egresos_ant.aggregate(total=Sum("total"))["total"] or Decimal("0")
+
+    balance_ant = total_ingresos_ant - total_egresos_ant
+
+    def variacion(actual, anterior):
+        if anterior == 0:
+            return 100 if actual > 0 else 0
+        return ((actual - anterior) / anterior) * 100
+
+    variacion_ingresos_mes = variacion(total_ingresos, total_ingresos_ant)
+    variacion_egresos_mes = variacion(total_egresos, total_egresos_ant)
+    variacion_balance_mes = variacion(balance, balance_ant)
+
+    # 📅 RESUMEN DIARIO
     resumen_diario = []
-    balance_acumulado = 0.0
-    for d in range(1, ultimo_dia.day + 1):
-        fecha_d = date(anio, mes, d)
-        ing_d = ingresos_qs.filter(fecha=fecha_d).aggregate(total=Sum("total"))["total"] or 0
-        egr_d = egresos_qs.filter(fecha=fecha_d).aggregate(total=Sum("total"))["total"] or 0
-        balance_d = float(ing_d) - float(egr_d)
-        balance_acumulado += balance_d
+    balance_acumulado = Decimal("0")
+
+    dias = monthrange(anio, mes)[1]
+    for dia in range(1, dias + 1):
+        fecha = date(anio, mes, dia)
+
+        ingresos_dia = ingresos_qs.filter(fecha=fecha).aggregate(total=Sum("total"))["total"] or Decimal("0")
+        egresos_dia = egresos_qs.filter(fecha=fecha).aggregate(total=Sum("total"))["total"] or Decimal("0")
+
+        balance_dia = ingresos_dia - egresos_dia
+        balance_acumulado += balance_dia
 
         resumen_diario.append({
-            "dia": d,
-            "ingresos": float(ing_d),
-            "egresos": float(egr_d),
-            "balance_acumulado": float(balance_acumulado),
+            "dia": dia,
+            "ingresos": ingresos_dia,
+            "egresos": egresos_dia,
+            "balance_acumulado": balance_acumulado,
         })
 
-    top_ingresos = list(ingresos_qs.order_by("-total", "-fecha", "-id")[:5])
-    top_egresos = sorted(list(egresos_qs), key=lambda x: float(getattr(x, "total", 0) or 0), reverse=True)[:5]
+    # 🏆 TOP
+    top_ingresos = ingresos_qs.order_by("-total")[:5]
+    top_egresos = egresos_qs.order_by("-total")[:5]
 
-    return render(
-        request,
-        "dashboard/flujo_mensual.html",
-        {
-            "anio": anio,
-            "mes": mes,
-            "primer_dia": primer_dia,
-            "ultimo_dia": ultimo_dia,
-            "anio_anterior": anio_anterior,
-            "mes_anterior": mes_anterior,
-            "ingresos_qs": ingresos_qs,
-            "ingresos_manuales_qs": ingresos_manuales_qs,
-            "ingresos_automaticos_qs": ingresos_automaticos_qs,
-            "egresos_qs": egresos_qs,
-            "egresos_manuales_qs": egresos_manuales_qs,
-            "egresos_automaticos_qs": egresos_automaticos_qs,
-            "total_ingresos": float(total_ingresos),
-            "total_egresos": float(total_egresos),
-            "total_ingresos_manuales": float(total_ingresos_manuales),
-            "total_ingresos_automaticos": float(total_ingresos_automaticos),
-            "total_egresos_manuales": float(total_egresos_manuales),
-            "total_egresos_automaticos": float(total_egresos_automaticos),
-            "balance": float(balance),
-            "resumen_mes_actual": resumen_mes_actual,
-            "resumen_mes_anterior": resumen_mes_anterior,
-            "variacion_ingresos_mes": variacion_ingresos_mes,
-            "variacion_egresos_mes": variacion_egresos_mes,
-            "variacion_balance_mes": variacion_balance_mes,
-            "resumen_diario": resumen_diario,
-            "top_ingresos": top_ingresos,
-            "top_egresos": top_egresos,
-            "es_admin": True,
+    # 🔥 FECHAS PARA REPORTE PRO
+    fecha_inicio_reporte = primer_dia.strftime("%Y-%m-%d")
+    fecha_fin_reporte = ultimo_dia.strftime("%Y-%m-%d")
+
+    return render(request, "dashboard/flujo_mensual.html", {
+        "anio": anio,
+        "mes": mes,
+        "primer_dia": primer_dia,
+
+        "ingresos_qs": ingresos_qs,
+        "egresos_qs": egresos_qs,
+
+        "ingresos_manuales_qs": ingresos_manuales_qs,
+        "egresos_manuales_qs": egresos_manuales_qs,
+
+        "total_ingresos": total_ingresos,
+        "total_egresos": total_egresos,
+
+        "total_ingresos_manuales": total_ingresos_manuales,
+        "total_egresos_manuales": total_egresos_manuales,
+
+        "total_ingresos_automaticos": total_ingresos_automaticos,
+        "total_egresos_automaticos": total_egresos_automaticos,
+
+        "balance": balance,
+
+        "resumen_mes_actual": {
+            "ingresos": total_ingresos,
+            "egresos": total_egresos,
+            "balance": balance,
         },
-    )
+        "resumen_mes_anterior": {
+            "ingresos": total_ingresos_ant,
+            "egresos": total_egresos_ant,
+            "balance": balance_ant,
+        },
+
+        "variacion_ingresos_mes": variacion_ingresos_mes,
+        "variacion_egresos_mes": variacion_egresos_mes,
+        "variacion_balance_mes": variacion_balance_mes,
+
+        "resumen_diario": resumen_diario,
+
+        "top_ingresos": top_ingresos,
+        "top_egresos": top_egresos,
+
+        # 🔥 NUEVO
+        "fecha_inicio_reporte": fecha_inicio_reporte,
+        "fecha_fin_reporte": fecha_fin_reporte,
+    })
 
 
 @login_required
@@ -3594,86 +3601,260 @@ def inventario_historial_view(request):
     )
 
 
-#======================
+# ================================
 # REPORTE DE GANANCIAS PRO
-#======================
+# ================================
+import io
+from decimal import Decimal
+
+from django.contrib.auth.decorators import login_required
+from django.db.models import Sum
+from django.http import HttpResponse
+from django.shortcuts import render
+
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import cm
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
+
+
+def _obtener_datos_reporte_ganancias(fecha_inicio=None, fecha_fin=None):
+    ingresos = Ingreso.objects.all().order_by("-fecha", "-id")
+    egresos = Egreso.objects.all().order_by("-fecha", "-id")
+
+    if fecha_inicio:
+        ingresos = ingresos.filter(fecha__gte=fecha_inicio)
+        egresos = egresos.filter(fecha__gte=fecha_inicio)
+
+    if fecha_fin:
+        ingresos = ingresos.filter(fecha__lte=fecha_fin)
+        egresos = egresos.filter(fecha__lte=fecha_fin)
+
+    total_ingresos = ingresos.aggregate(total=Sum("total"))["total"] or Decimal("0")
+    total_egresos = egresos.aggregate(total=Sum("total"))["total"] or Decimal("0")
+    ganancia = total_ingresos - total_egresos
+
+    movimientos = []
+
+    for i in ingresos:
+        movimientos.append({
+            "tipo": "Ingreso",
+            "concepto": i.concepto or "-",
+            "monto": i.total or Decimal("0"),
+            "fecha": i.fecha,
+        })
+
+    for e in egresos:
+        movimientos.append({
+            "tipo": "Egreso",
+            "concepto": e.concepto or "-",
+            "monto": e.total or Decimal("0"),
+            "fecha": e.fecha,
+        })
+
+    movimientos.sort(key=lambda x: (x["fecha"], x["tipo"]), reverse=True)
+
+    return {
+        "ingresos": ingresos,
+        "egresos": egresos,
+        "movimientos": movimientos,
+        "total_ingresos": total_ingresos,
+        "total_egresos": total_egresos,
+        "ganancia": ganancia,
+        "fecha_inicio": fecha_inicio,
+        "fecha_fin": fecha_fin,
+    }
+
 
 @login_required
-def inventario_ganancias_view(request):
-    if not es_admin(request.user):
-        return render(request, "dashboard/no_autorizado.html", status=403)
+def reporte_ganancias_view(request):
+    fecha_inicio = request.GET.get("fecha_inicio") or None
+    fecha_fin = request.GET.get("fecha_fin") or None
 
-    hoy = timezone.localdate()
-    fecha_desde_str = (request.GET.get("fecha_desde") or "").strip()
-    fecha_hasta_str = (request.GET.get("fecha_hasta") or "").strip()
-    insumo_id = (request.GET.get("insumo") or "").strip()
-
-    fecha_desde = parse_date(fecha_desde_str) if fecha_desde_str else hoy.replace(day=1)
-    fecha_hasta = parse_date(fecha_hasta_str) if fecha_hasta_str else hoy
-
-    ventas_qs = VentaInsumo.objects.select_related("insumo").all().order_by("-fecha", "-id")
-
-    if fecha_desde:
-        ventas_qs = ventas_qs.filter(fecha__gte=fecha_desde)
-    if fecha_hasta:
-        ventas_qs = ventas_qs.filter(fecha__lte=fecha_hasta)
-    if insumo_id.isdigit():
-        ventas_qs = ventas_qs.filter(insumo_id=int(insumo_id))
-
-    total_ventas = ventas_qs.aggregate(total=Sum("total")).get("total") or 0
-    total_ganancia = ventas_qs.aggregate(total=Sum("ganancia")).get("total") or 0
-    total_unidades = ventas_qs.aggregate(total=Sum("cantidad")).get("total") or 0
-
-    top_ganancias = list(
-        ventas_qs.values("insumo__nombre")
-        .annotate(
-            unidades_total=Sum("cantidad"),
-            ventas_total=Sum("total"),
-            ganancia_total=Sum("ganancia"),
-        )
-        .order_by("-ganancia_total", "-ventas_total")[:10]
+    context = _obtener_datos_reporte_ganancias(
+        fecha_inicio=fecha_inicio,
+        fecha_fin=fecha_fin,
     )
 
-    resumen_diario = []
-    if fecha_desde and fecha_hasta and fecha_desde <= fecha_hasta:
-        cursor = fecha_desde
-        while cursor <= fecha_hasta:
-            ventas_dia = ventas_qs.filter(fecha=cursor)
-            total_dia = ventas_dia.aggregate(total=Sum("total")).get("total") or 0
-            ganancia_dia = ventas_dia.aggregate(total=Sum("ganancia")).get("total") or 0
-            unidades_dia = ventas_dia.aggregate(total=Sum("cantidad")).get("total") or 0
-            resumen_diario.append({
-                "fecha": cursor,
-                "ventas": float(total_dia),
-                "ganancia": float(ganancia_dia),
-                "unidades": int(unidades_dia or 0),
-            })
-            cursor += timedelta(days=1)
+    return render(request, "dashboard/reporte_ganancias.html", context)
 
-    paginator = Paginator(ventas_qs, 20)
-    page_number = request.GET.get("page")
-    page_obj = paginator.get_page(page_number)
 
-    query_params = request.GET.copy()
-    if "page" in query_params:
-        query_params.pop("page")
-    querystring = query_params.urlencode()
+@login_required
+def exportar_ganancias_excel(request):
+    fecha_inicio = request.GET.get("fecha_inicio") or None
+    fecha_fin = request.GET.get("fecha_fin") or None
 
-    return render(
-        request,
-        "dashboard/inventario_ganancias.html",
-        {
-            "page_obj": page_obj,
-            "fecha_desde": fecha_desde.strftime("%Y-%m-%d") if fecha_desde else "",
-            "fecha_hasta": fecha_hasta.strftime("%Y-%m-%d") if fecha_hasta else "",
-            "insumo_id": insumo_id,
-            "insumos_filtro": Insumo.objects.all().order_by("nombre"),
-            "total_ventas": float(total_ventas),
-            "total_ganancia": float(total_ganancia),
-            "total_unidades": int(total_unidades or 0),
-            "top_ganancias": top_ganancias,
-            "resumen_diario": resumen_diario,
-            "querystring": querystring,
-            "es_admin": True,
-        },
+    data = _obtener_datos_reporte_ganancias(
+        fecha_inicio=fecha_inicio,
+        fecha_fin=fecha_fin,
     )
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Ganancias"
+
+    fill_titulo = PatternFill("solid", fgColor="1F4E78")
+    fill_encabezado = PatternFill("solid", fgColor="D9EAF7")
+    fill_ingreso = PatternFill("solid", fgColor="E2F0D9")
+    fill_egreso = PatternFill("solid", fgColor="FDE9E7")
+
+    font_blanco = Font(color="FFFFFF", bold=True, size=12)
+    font_negrita = Font(bold=True)
+
+    ws.merge_cells("A1:D1")
+    ws["A1"] = "REPORTE DE GANANCIAS"
+    ws["A1"].fill = fill_titulo
+    ws["A1"].font = font_blanco
+    ws["A1"].alignment = Alignment(horizontal="center", vertical="center")
+
+    ws["A3"] = "Fecha inicio"
+    ws["B3"] = data["fecha_inicio"] or "Todas"
+    ws["C3"] = "Fecha fin"
+    ws["D3"] = data["fecha_fin"] or "Todas"
+
+    ws["A5"] = "Total ingresos"
+    ws["B5"] = float(data["total_ingresos"])
+    ws["C5"] = "Total egresos"
+    ws["D5"] = float(data["total_egresos"])
+
+    ws["A6"] = "Ganancia neta"
+    ws["B6"] = float(data["ganancia"])
+
+    for cell in ("A5", "C5", "A6"):
+        ws[cell].font = font_negrita
+
+    encabezados = ["Tipo", "Concepto", "Monto", "Fecha"]
+    fila_inicio_tabla = 8
+
+    for col, encabezado in enumerate(encabezados, start=1):
+        cell = ws.cell(row=fila_inicio_tabla, column=col, value=encabezado)
+        cell.fill = fill_encabezado
+        cell.font = font_negrita
+        cell.alignment = Alignment(horizontal="center")
+
+    fila = fila_inicio_tabla + 1
+    for mov in data["movimientos"]:
+        ws.cell(row=fila, column=1, value=mov["tipo"])
+        ws.cell(row=fila, column=2, value=mov["concepto"])
+        ws.cell(row=fila, column=3, value=float(mov["monto"]))
+        ws.cell(row=fila, column=4, value=mov["fecha"].strftime("%d/%m/%Y") if mov["fecha"] else "")
+
+        if mov["tipo"] == "Ingreso":
+            ws.cell(row=fila, column=1).fill = fill_ingreso
+        else:
+            ws.cell(row=fila, column=1).fill = fill_egreso
+
+        fila += 1
+
+    for row in ws.iter_rows(min_row=5, max_row=fila, min_col=2, max_col=3):
+        for cell in row:
+            if isinstance(cell.value, (int, float)):
+                cell.number_format = '$ #,##0.00'
+
+    ws.column_dimensions["A"].width = 15
+    ws.column_dimensions["B"].width = 45
+    ws.column_dimensions["C"].width = 18
+    ws.column_dimensions["D"].width = 18
+
+    response = HttpResponse(
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    response["Content-Disposition"] = 'attachment; filename="reporte_ganancias.xlsx"'
+
+    wb.save(response)
+    return response
+
+
+@login_required
+def exportar_ganancias_pdf(request):
+    fecha_inicio = request.GET.get("fecha_inicio") or None
+    fecha_fin = request.GET.get("fecha_fin") or None
+
+    data = _obtener_datos_reporte_ganancias(
+        fecha_inicio=fecha_inicio,
+        fecha_fin=fecha_fin,
+    )
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=1.2 * cm,
+        leftMargin=1.2 * cm,
+        topMargin=1.2 * cm,
+        bottomMargin=1.2 * cm,
+    )
+
+    styles = getSampleStyleSheet()
+    story = []
+
+    story.append(Paragraph("Reporte de Ganancias", styles["Title"]))
+    story.append(Spacer(1, 10))
+
+    rango_texto = f"Desde: {data['fecha_inicio'] or 'Todas'} &nbsp;&nbsp;&nbsp; Hasta: {data['fecha_fin'] or 'Todas'}"
+    story.append(Paragraph(rango_texto, styles["Normal"]))
+    story.append(Spacer(1, 10))
+
+    resumen = [
+        ["Total ingresos", f"${data['total_ingresos']:,.2f}"],
+        ["Total egresos", f"${data['total_egresos']:,.2f}"],
+        ["Ganancia neta", f"${data['ganancia']:,.2f}"],
+    ]
+
+    tabla_resumen = Table(resumen, colWidths=[7 * cm, 5 * cm])
+    tabla_resumen.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), colors.whitesmoke),
+        ("BOX", (0, 0), (-1, -1), 0.75, colors.grey),
+        ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.lightgrey),
+        ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+        ("ALIGN", (1, 0), (1, -1), "RIGHT"),
+        ("PADDING", (0, 0), (-1, -1), 6),
+    ]))
+    story.append(tabla_resumen)
+    story.append(Spacer(1, 14))
+
+    detalle = [["Tipo", "Concepto", "Monto", "Fecha"]]
+    for mov in data["movimientos"]:
+        detalle.append([
+            mov["tipo"],
+            mov["concepto"],
+            f"${mov['monto']:,.2f}",
+            mov["fecha"].strftime("%d/%m/%Y") if mov["fecha"] else "",
+        ])
+
+    tabla_detalle = Table(detalle, colWidths=[3 * cm, 8 * cm, 3.2 * cm, 3.2 * cm])
+    tabla_detalle.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#D9EAF7")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("BOX", (0, 0), (-1, -1), 0.75, colors.grey),
+        ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.lightgrey),
+        ("ALIGN", (2, 1), (2, -1), "RIGHT"),
+        ("ALIGN", (3, 1), (3, -1), "CENTER"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("PADDING", (0, 0), (-1, -1), 5),
+    ]))
+
+    for idx, mov in enumerate(data["movimientos"], start=1):
+        if mov["tipo"] == "Ingreso":
+            tabla_detalle.setStyle(TableStyle([
+                ("BACKGROUND", (0, idx), (0, idx), colors.HexColor("#E2F0D9"))
+            ]))
+        else:
+            tabla_detalle.setStyle(TableStyle([
+                ("BACKGROUND", (0, idx), (0, idx), colors.HexColor("#FDE9E7"))
+            ]))
+
+    story.append(tabla_detalle)
+
+    doc.build(story)
+    pdf = buffer.getvalue()
+    buffer.close()
+
+    response = HttpResponse(content_type="application/pdf")
+    response["Content-Disposition"] = 'attachment; filename="reporte_ganancias.pdf"'
+    response.write(pdf)
+    return response
