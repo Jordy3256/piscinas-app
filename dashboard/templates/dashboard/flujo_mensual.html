@@ -40,7 +40,7 @@
 
       <div class="d-flex flex-wrap gap-2">
         <a
-          href="{% url 'reporte_ganancias' %}"
+          href="{% url 'reporte_ganancias' %}?fecha_inicio={{ primer_dia|date:'Y-m-d' }}&fecha_fin={{ ultimo_dia|date:'Y-m-d' }}"
           class="btn btn-outline-primary"
         >
           Ver reporte

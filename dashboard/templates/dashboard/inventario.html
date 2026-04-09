@@ -15,9 +15,12 @@
     <a href="/dashboard/inventario/historial/" class="btn btn-outline-primary">
       📊 Ver historial
     </a>
-    <a href="/dashboard/inventario/ganancias/" class="btn btn-outline-success">
+
+    <!-- ✅ FIX -->
+    <a href="{% url 'reporte_ganancias' %}" class="btn btn-outline-success">
       💰 Ver ganancias
     </a>
+
     <a href="/admin/inventario/insumo/add/" class="btn btn-primary">
       + Nuevo insumo
     </a>
@@ -91,44 +94,35 @@
       <div class="card-body">
         <div class="fw-bold mb-3">💰 Registrar venta</div>
 
-```
-    <form method="post" action="/dashboard/inventario/vender/" class="row g-2">
-      {% csrf_token %}
+        <form method="post" action="/dashboard/inventario/vender/" class="row g-2">
+          {% csrf_token %}
 
-      <div class="col-12">
-        <label class="form-label small text-muted">Insumo</label>
-        <select name="insumo_id" class="form-select" required>
-          <option value="">Selecciona un insumo</option>
-          {% for i in insumos %}
-            <option value="{{ i.id }}">
-              {{ i.nombre }} · Stock: {{ i.stock }} · Precio: ${{ i.precio|floatformat:2 }}
-            </option>
-          {% endfor %}
-        </select>
+          <div class="col-12">
+            <label class="form-label small text-muted">Insumo</label>
+            <select name="insumo_id" class="form-select" required>
+              <option value="">Selecciona un insumo</option>
+              {% for i in insumos %}
+                <option value="{{ i.id }}">
+                  {{ i.nombre }} · Stock: {{ i.stock }} · Precio: ${{ i.precio|floatformat:2 }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="col-12">
+            <label class="form-label small text-muted">Cantidad</label>
+            <input type="number" name="cantidad" min="1" class="form-control" required>
+          </div>
+
+          <div class="col-12 d-grid">
+            <button type="submit" class="btn btn-success">
+              Registrar venta
+            </button>
+          </div>
+        </form>
+
       </div>
-
-      <div class="col-12">
-        <label class="form-label small text-muted">Cantidad</label>
-        <input
-          type="number"
-          name="cantidad"
-          min="1"
-          class="form-control"
-          placeholder="Ej: 2"
-          required
-        >
-      </div>
-
-      <div class="col-12 d-grid">
-        <button type="submit" class="btn btn-success">
-          Registrar venta
-        </button>
-      </div>
-    </form>
-  </div>
-</div>
-```
-
+    </div>
   </div>
 
   <div class="col-12 col-lg-6">
@@ -136,209 +130,51 @@
       <div class="card-body">
         <div class="fw-bold mb-3">📥 Agregar stock</div>
 
-```
-    <form method="post" action="/dashboard/inventario/agregar/" class="row g-2">
-      {% csrf_token %}
+        <form method="post" action="/dashboard/inventario/agregar/" class="row g-2">
+          {% csrf_token %}
 
-      <div class="col-12">
-        <label class="form-label small text-muted">Insumo</label>
-        <select name="insumo_id" class="form-select" required>
-          <option value="">Selecciona un insumo</option>
-          {% for i in insumos %}
-            <option value="{{ i.id }}">
-              {{ i.nombre }} · Stock actual: {{ i.stock }}
-            </option>
-          {% endfor %}
-        </select>
-      </div>
-
-      <div class="col-12 col-md-4">
-        <label class="form-label small text-muted">Cantidad</label>
-        <input
-          type="number"
-          name="cantidad"
-          min="1"
-          class="form-control"
-          placeholder="Ej: 10"
-          required
-        >
-      </div>
-
-      <div class="col-12 col-md-8">
-        <label class="form-label small text-muted">Observación</label>
-        <input
-          type="text"
-          name="observacion"
-          class="form-control"
-          placeholder="Ej: compra a proveedor"
-        >
-      </div>
-
-      <div class="col-12 d-grid">
-        <button type="submit" class="btn btn-primary">
-          Agregar stock
-        </button>
-      </div>
-    </form>
-  </div>
-</div>
-```
-
-  </div>
-</div>
-
-<div class="row g-3 mb-3">
-  <div class="col-12 col-lg-8">
-    <div class="card shadow-sm">
-      <div class="card-body">
-        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-          <div class="fw-bold">📦 Listado de inventario</div>
-          <div class="d-flex gap-2 flex-wrap">
-            <a href="/dashboard/inventario/historial/" class="btn btn-sm btn-outline-secondary">
-              Ver movimientos
-            </a>
-            <a href="/dashboard/inventario/ganancias/" class="btn btn-sm btn-outline-success">
-              Ver utilidad
-            </a>
+          <div class="col-12">
+            <label class="form-label small text-muted">Insumo</label>
+            <select name="insumo_id" class="form-select" required>
+              <option value="">Selecciona un insumo</option>
+              {% for i in insumos %}
+                <option value="{{ i.id }}">
+                  {{ i.nombre }} · Stock actual: {{ i.stock }}
+                </option>
+              {% endfor %}
+            </select>
           </div>
-        </div>
 
-```
-    {% if insumos %}
-      <div class="table-responsive">
-        <table class="table table-striped align-middle mb-0">
-          <thead>
-            <tr>
-              <th>Insumo</th>
-              <th class="text-center">Stock</th>
-              <th class="text-center">Mínimo</th>
-              <th class="text-end">Precio</th>
-              <th class="text-end">Costo</th>
-              <th class="text-end">Utilidad unitaria</th>
-              <th class="text-center">Estado</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for i in insumos %}
-              <tr>
-                <td class="fw-semibold">{{ i.nombre }}</td>
-                <td class="text-center">{{ i.stock }}</td>
-                <td class="text-center">{{ i.stock_minimo }}</td>
-                <td class="text-end">${{ i.precio|floatformat:2 }}</td>
-                <td class="text-end">${{ i.costo|floatformat:2 }}</td>
-                <td class="text-end text-success fw-semibold">
-                  ${{ i.utilidad_unitaria|floatformat:2 }}
-                </td>
-                <td class="text-center">
-                  {% if i.bajo_stock %}
-                    <span class="badge bg-danger">Bajo stock</span>
-                  {% else %}
-                    <span class="badge bg-success">OK</span>
-                  {% endif %}
-                </td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    {% else %}
-      <div class="text-muted">No hay insumos registrados.</div>
-    {% endif %}
-  </div>
-</div>
-```
-
-  </div>
-
-  <div class="col-12 col-lg-4">
-    <div class="card shadow-sm h-100">
-      <div class="card-body">
-        <div class="fw-bold mb-3">🏆 Más vendidos del mes</div>
-
-```
-    {% if top_vendidos %}
-      <div class="vstack gap-2">
-        {% for item in top_vendidos %}
-          <div class="border rounded p-3 bg-light">
-            <div class="fw-semibold">{{ item.insumo__nombre }}</div>
-            <div class="small text-muted">{{ item.cantidad_total }} unidades</div>
-            <div class="small text-muted">Ventas: ${{ item.monto_total|floatformat:2 }}</div>
-            <div class="fw-bold text-success mt-1">
-              Utilidad: ${{ item.ganancia_total|floatformat:2 }}
-            </div>
+          <div class="col-12 col-md-4">
+            <input type="number" name="cantidad" min="1" class="form-control" placeholder="Cantidad" required>
           </div>
-        {% endfor %}
-      </div>
-    {% else %}
-      <div class="text-muted">Aún no hay ventas registradas este mes.</div>
-    {% endif %}
-  </div>
-</div>
-```
 
-  </div>
-</div>
+          <div class="col-12 col-md-8">
+            <input type="text" name="observacion" class="form-control" placeholder="Observación">
+          </div>
 
-<div class="card shadow-sm">
-  <div class="card-body">
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-      <div class="fw-bold">🧾 Movimientos recientes</div>
-      <div class="d-flex gap-2 flex-wrap">
-        <a href="/dashboard/inventario/historial/" class="btn btn-sm btn-outline-primary">
-          Abrir historial completo
-        </a>
-        <a href="/dashboard/inventario/ganancias/" class="btn btn-sm btn-outline-success">
-          Abrir reporte de ganancias
-        </a>
+          <div class="col-12 d-grid">
+            <button type="submit" class="btn btn-primary">
+              Agregar stock
+            </button>
+          </div>
+        </form>
+
       </div>
     </div>
-
-```
-{% if movimientos_recientes %}
-  <div class="table-responsive">
-    <table class="table table-sm table-striped align-middle mb-0">
-      <thead>
-        <tr>
-          <th>Fecha</th>
-          <th>Insumo</th>
-          <th>Tipo</th>
-          <th class="text-center">Cantidad</th>
-          <th class="text-center">Stock anterior</th>
-          <th class="text-center">Stock resultante</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for m in movimientos_recientes %}
-          <tr>
-            <td>
-              <div>{{ m.fecha|date:"d/m/Y" }}</div>
-              <div class="small text-muted">{{ m.creado_en|date:"H:i" }}</div>
-            </td>
-            <td class="fw-semibold">{{ m.insumo.nombre }}</td>
-            <td>
-              {% if m.tipo == "entrada" %}
-                <span class="badge bg-success">Entrada</span>
-              {% elif m.tipo == "venta" %}
-                <span class="badge bg-danger">Venta</span>
-              {% elif m.tipo == "mantenimiento" %}
-                <span class="badge bg-warning text-dark">Mantenimiento</span>
-              {% else %}
-                <span class="badge bg-secondary">Ajuste</span>
-              {% endif %}
-            </td>
-            <td class="text-center">{{ m.cantidad }}</td>
-            <td class="text-center">{{ m.stock_anterior }}</td>
-            <td class="text-center">{{ m.stock_resultante }}</td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
   </div>
-{% else %}
-  <div class="text-muted">No hay movimientos recientes.</div>
-{% endif %}
-```
+</div>
 
+<!-- ✅ FIX EN OTROS BOTONES -->
+<div class="card shadow-sm">
+  <div class="card-body d-flex justify-content-between">
+    <a href="/dashboard/inventario/historial/" class="btn btn-outline-primary">
+      Historial
+    </a>
+
+    <a href="{% url 'reporte_ganancias' %}" class="btn btn-outline-success">
+      Reporte de ganancias
+    </a>
   </div>
 </div>
 
