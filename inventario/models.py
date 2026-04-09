@@ -5,6 +5,7 @@ class Insumo(models.Model):
     stock = models.PositiveIntegerField(default=0)
     stock_minimo = models.PositiveIntegerField(default=5)
     precio = models.DecimalField(max_digits=10, decimal_places=2)
+    costo = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 
     def __str__(self):
         return self.nombre
@@ -12,12 +13,23 @@ class Insumo(models.Model):
     @property
     def bajo_stock(self):
         return self.stock <= self.stock_minimo
+    
+    @property 
+    def utilidad_unitaria(self): 
+        return self.precio - self.costo
+    
+    class Meta: 
+        verbose_name = "Insumo" 
+        verbose_name_plural = "Insumos" 
+        ordering = ["nombre"]
 
 class VentaInsumo(models.Model):
     insumo = models.ForeignKey("Insumo", on_delete=models.CASCADE, related_name="ventas")
     cantidad = models.PositiveIntegerField()
     precio_unitario = models.DecimalField(max_digits=10, decimal_places=2)
+    costo_unitario = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     total = models.DecimalField(max_digits=10, decimal_places=2)
+    ganancia = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     fecha = models.DateField(auto_now_add=True)
     creado_en = models.DateTimeField(auto_now_add=True)
 

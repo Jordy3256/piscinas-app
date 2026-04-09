@@ -3327,6 +3327,7 @@ def inventario_view(request):
     ventas_mes = VentaInsumo.objects.filter(fecha__gte=primer_dia_mes)
     total_ventas_mes = ventas_mes.aggregate(total=Sum("total")).get("total") or 0
     unidades_vendidas_mes = ventas_mes.aggregate(total=Sum("cantidad")).get("total") or 0
+    ganancia_mes = ventas_mes.aggregate(total=Sum("ganancia")).get("total") or 0
 
     movimientos_recientes = list(
         MovimientoInventario.objects.select_related("insumo").all().order_by("-creado_en", "-id")[:8]
@@ -3353,6 +3354,7 @@ def inventario_view(request):
             "stock_total": stock_total,
             "total_ventas_mes": float(total_ventas_mes),
             "unidades_vendidas_mes": int(unidades_vendidas_mes or 0),
+            "ganancia_mes": float(ganancia_mes),
             "movimientos_recientes": movimientos_recientes,
             "top_vendidos": top_vendidos,
             "es_admin": True,
@@ -3372,62 +3374,55 @@ def vender_insumo_view(request):
     if request.method != "POST":
         return redirect("/dashboard/inventario/")
 
-    insumo_id = (request.POST.get("insumo_id") or "").strip()
-    cantidad_str = (request.POST.get("cantidad") or "").strip()
-
-    try:
-        cantidad = int(cantidad_str)
-        if cantidad <= 0:
-            raise ValueError
-    except Exception:
-        messages.error(request, "Cantidad inválida")
-        return redirect("/dashboard/inventario/")
+    insumo_id = request.POST.get("insumo_id")
+    cantidad = int(request.POST.get("cantidad"))
 
     insumo = get_object_or_404(Insumo, pk=insumo_id)
 
     if insumo.stock < cantidad:
-        messages.error(
-            request,
-            f"Stock insuficiente de {insumo.nombre}. Disponible: {insumo.stock}"
-        )
+        messages.error(request, "Stock insuficiente")
         return redirect("/dashboard/inventario/")
 
     stock_anterior = insumo.stock
-    total = Decimal(cantidad) * Decimal(insumo.precio)
 
+    precio = insumo.precio
+    costo = insumo.costo
+
+    total = precio * cantidad
+    ganancia = (precio - costo) * cantidad
+
+    # 🔥 descontar stock
     insumo.stock -= cantidad
     insumo.save()
 
+    # 🔥 guardar venta
     VentaInsumo.objects.create(
         insumo=insumo,
         cantidad=cantidad,
-        precio_unitario=insumo.precio,
+        precio_unitario=precio,
+        costo_unitario=costo,
         total=total,
+        ganancia=ganancia,
     )
 
+    # 🔥 movimiento inventario
     MovimientoInventario.objects.create(
         insumo=insumo,
         tipo="venta",
         cantidad=cantidad,
         stock_anterior=stock_anterior,
         stock_resultante=insumo.stock,
-        observacion="Venta de insumo",
+        observacion="Venta con ganancia",
     )
 
+    # 🔥 ingreso financiero
     Ingreso.objects.create(
         concepto=f"Venta de insumo: {insumo.nombre}",
         total=total,
         fecha=timezone.localdate(),
     )
 
-    _registrar_actividad(
-        user=request.user,
-        titulo="Venta de insumo registrada",
-        descripcion=f"{request.user.username} registró la venta de {insumo.nombre} x {cantidad} por ${total}.",
-        url="/dashboard/inventario/",
-    )
-
-    messages.success(request, "Venta registrada correctamente")
+    messages.success(request, f"Venta registrada | Ganancia: ${ganancia}")
     return redirect("inventario")
 
 
