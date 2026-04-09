@@ -3326,8 +3326,8 @@ def inventario_view(request):
 
     ventas_mes = VentaInsumo.objects.filter(fecha__gte=primer_dia_mes)
     total_ventas_mes = ventas_mes.aggregate(total=Sum("total")).get("total") or 0
-    unidades_vendidas_mes = ventas_mes.aggregate(total=Sum("cantidad")).get("total") or 0
     ganancia_mes = ventas_mes.aggregate(total=Sum("ganancia")).get("total") or 0
+    unidades_vendidas_mes = ventas_mes.aggregate(total=Sum("cantidad")).get("total") or 0
 
     movimientos_recientes = list(
         MovimientoInventario.objects.select_related("insumo").all().order_by("-creado_en", "-id")[:8]
@@ -3340,6 +3340,7 @@ def inventario_view(request):
         .annotate(
             cantidad_total=Sum("cantidad"),
             monto_total=Sum("total"),
+            ganancia_total=Sum("ganancia"),
         )
         .order_by("-cantidad_total", "-monto_total")[:5]
     )
@@ -3353,8 +3354,8 @@ def inventario_view(request):
             "bajo_stock": bajo_stock,
             "stock_total": stock_total,
             "total_ventas_mes": float(total_ventas_mes),
-            "unidades_vendidas_mes": int(unidades_vendidas_mes or 0),
             "ganancia_mes": float(ganancia_mes),
+            "unidades_vendidas_mes": int(unidades_vendidas_mes or 0),
             "movimientos_recientes": movimientos_recientes,
             "top_vendidos": top_vendidos,
             "es_admin": True,
@@ -3374,55 +3375,67 @@ def vender_insumo_view(request):
     if request.method != "POST":
         return redirect("/dashboard/inventario/")
 
-    insumo_id = request.POST.get("insumo_id")
-    cantidad = int(request.POST.get("cantidad"))
+    insumo_id = (request.POST.get("insumo_id") or "").strip()
+    cantidad_str = (request.POST.get("cantidad") or "").strip()
+
+    try:
+        cantidad = int(cantidad_str)
+        if cantidad <= 0:
+            raise ValueError
+    except Exception:
+        messages.error(request, "Cantidad inválida")
+        return redirect("/dashboard/inventario/")
 
     insumo = get_object_or_404(Insumo, pk=insumo_id)
 
     if insumo.stock < cantidad:
-        messages.error(request, "Stock insuficiente")
+        messages.error(
+            request,
+            f"Stock insuficiente de {insumo.nombre}. Disponible: {insumo.stock}"
+        )
         return redirect("/dashboard/inventario/")
 
     stock_anterior = insumo.stock
+    precio_unitario = Decimal(insumo.precio)
+    costo_unitario = Decimal(getattr(insumo, "costo", 0) or 0)
+    total = Decimal(cantidad) * precio_unitario
+    ganancia = Decimal(cantidad) * (precio_unitario - costo_unitario)
 
-    precio = insumo.precio
-    costo = insumo.costo
-
-    total = precio * cantidad
-    ganancia = (precio - costo) * cantidad
-
-    # 🔥 descontar stock
     insumo.stock -= cantidad
     insumo.save()
 
-    # 🔥 guardar venta
     VentaInsumo.objects.create(
         insumo=insumo,
         cantidad=cantidad,
-        precio_unitario=precio,
-        costo_unitario=costo,
+        precio_unitario=precio_unitario,
+        costo_unitario=costo_unitario,
         total=total,
         ganancia=ganancia,
     )
 
-    # 🔥 movimiento inventario
     MovimientoInventario.objects.create(
         insumo=insumo,
         tipo="venta",
         cantidad=cantidad,
         stock_anterior=stock_anterior,
         stock_resultante=insumo.stock,
-        observacion="Venta con ganancia",
+        observacion=f"Venta de insumo · utilidad ${ganancia}",
     )
 
-    # 🔥 ingreso financiero
     Ingreso.objects.create(
         concepto=f"Venta de insumo: {insumo.nombre}",
         total=total,
         fecha=timezone.localdate(),
     )
 
-    messages.success(request, f"Venta registrada | Ganancia: ${ganancia}")
+    _registrar_actividad(
+        user=request.user,
+        titulo="Venta de insumo registrada",
+        descripcion=f"{request.user.username} registró la venta de {insumo.nombre} x {cantidad} por ${total}. Ganancia: ${ganancia}.",
+        url="/dashboard/inventario/",
+    )
+
+    messages.success(request, f"Venta registrada correctamente. Ganancia: ${ganancia}")
     return redirect("inventario")
 
 
@@ -3538,6 +3551,7 @@ def inventario_historial_view(request):
         .annotate(
             cantidad_total=Sum("cantidad"),
             monto_total=Sum("total"),
+            ganancia_total=Sum("ganancia"),
         )
         .order_by("-cantidad_total", "-monto_total")[:10]
     )
@@ -3574,6 +3588,91 @@ def inventario_historial_view(request):
             "unidades_mantenimiento": int(unidades_mantenimiento or 0),
             "top_vendidos": top_vendidos,
             "top_movidos": top_movidos,
+            "querystring": querystring,
+            "es_admin": True,
+        },
+    )
+
+
+#======================
+# REPORTE DE GANANCIAS PRO
+#======================
+
+@login_required
+def inventario_ganancias_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    hoy = timezone.localdate()
+    fecha_desde_str = (request.GET.get("fecha_desde") or "").strip()
+    fecha_hasta_str = (request.GET.get("fecha_hasta") or "").strip()
+    insumo_id = (request.GET.get("insumo") or "").strip()
+
+    fecha_desde = parse_date(fecha_desde_str) if fecha_desde_str else hoy.replace(day=1)
+    fecha_hasta = parse_date(fecha_hasta_str) if fecha_hasta_str else hoy
+
+    ventas_qs = VentaInsumo.objects.select_related("insumo").all().order_by("-fecha", "-id")
+
+    if fecha_desde:
+        ventas_qs = ventas_qs.filter(fecha__gte=fecha_desde)
+    if fecha_hasta:
+        ventas_qs = ventas_qs.filter(fecha__lte=fecha_hasta)
+    if insumo_id.isdigit():
+        ventas_qs = ventas_qs.filter(insumo_id=int(insumo_id))
+
+    total_ventas = ventas_qs.aggregate(total=Sum("total")).get("total") or 0
+    total_ganancia = ventas_qs.aggregate(total=Sum("ganancia")).get("total") or 0
+    total_unidades = ventas_qs.aggregate(total=Sum("cantidad")).get("total") or 0
+
+    top_ganancias = list(
+        ventas_qs.values("insumo__nombre")
+        .annotate(
+            unidades_total=Sum("cantidad"),
+            ventas_total=Sum("total"),
+            ganancia_total=Sum("ganancia"),
+        )
+        .order_by("-ganancia_total", "-ventas_total")[:10]
+    )
+
+    resumen_diario = []
+    if fecha_desde and fecha_hasta and fecha_desde <= fecha_hasta:
+        cursor = fecha_desde
+        while cursor <= fecha_hasta:
+            ventas_dia = ventas_qs.filter(fecha=cursor)
+            total_dia = ventas_dia.aggregate(total=Sum("total")).get("total") or 0
+            ganancia_dia = ventas_dia.aggregate(total=Sum("ganancia")).get("total") or 0
+            unidades_dia = ventas_dia.aggregate(total=Sum("cantidad")).get("total") or 0
+            resumen_diario.append({
+                "fecha": cursor,
+                "ventas": float(total_dia),
+                "ganancia": float(ganancia_dia),
+                "unidades": int(unidades_dia or 0),
+            })
+            cursor += timedelta(days=1)
+
+    paginator = Paginator(ventas_qs, 20)
+    page_number = request.GET.get("page")
+    page_obj = paginator.get_page(page_number)
+
+    query_params = request.GET.copy()
+    if "page" in query_params:
+        query_params.pop("page")
+    querystring = query_params.urlencode()
+
+    return render(
+        request,
+        "dashboard/inventario_ganancias.html",
+        {
+            "page_obj": page_obj,
+            "fecha_desde": fecha_desde.strftime("%Y-%m-%d") if fecha_desde else "",
+            "fecha_hasta": fecha_hasta.strftime("%Y-%m-%d") if fecha_hasta else "",
+            "insumo_id": insumo_id,
+            "insumos_filtro": Insumo.objects.all().order_by("nombre"),
+            "total_ventas": float(total_ventas),
+            "total_ganancia": float(total_ganancia),
+            "total_unidades": int(total_unidades or 0),
+            "top_ganancias": top_ganancias,
+            "resumen_diario": resumen_diario,
             "querystring": querystring,
             "es_admin": True,
         },
