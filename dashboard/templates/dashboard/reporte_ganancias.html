@@ -1,171 +1,145 @@
 {% extends "dashboard/base_admin.html" %}
-{% load humanize %}
 
 {% block title %}Reporte de ganancias{% endblock %}
+{% block top_title %}📊 Reporte de ganancias{% endblock %}
 
 {% block content %}
-<div class="container py-4">
+<div class="container-fluid">
 
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
-        <div>
-            <h1 class="h3 mb-1 fw-bold">Reporte de ganancias</h1>
-            <p class="text-muted mb-0">
-                Consulta el resumen de ingresos, egresos y ganancia neta, con exportación a Excel y PDF.
-            </p>
-        </div>
-
-        <div class="d-flex flex-wrap gap-2">
-            <a href="{% url 'exportar_ganancias_excel' %}?fecha_inicio={{ fecha_inicio|default:'' }}&fecha_fin={{ fecha_fin|default:'' }}"
-               class="btn btn-success">
-                <i class="bi bi-file-earmark-excel me-1"></i> Exportar Excel
-            </a>
-
-            <a href="{% url 'exportar_ganancias_pdf' %}?fecha_inicio={{ fecha_inicio|default:'' }}&fecha_fin={{ fecha_fin|default:'' }}"
-               class="btn btn-danger">
-                <i class="bi bi-file-earmark-pdf me-1"></i> Exportar PDF
-            </a>
-        </div>
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <div>
+      <h4 class="mb-1">Reporte de ganancias</h4>
+      <div class="text-muted small">
+        Resumen de ingresos, egresos y ganancia neta
+      </div>
     </div>
 
-    <div class="card shadow-sm border-0 mb-4">
-        <div class="card-body">
-            <form method="get" class="row g-3 align-items-end">
-                <div class="col-md-4">
-                    <label for="fecha_inicio" class="form-label fw-semibold">Fecha inicio</label>
-                    <input
-                        type="date"
-                        name="fecha_inicio"
-                        id="fecha_inicio"
-                        class="form-control"
-                        value="{{ fecha_inicio|default:'' }}"
-                    >
-                </div>
+    <div class="d-flex flex-wrap gap-2">
+      <a
+        href="{% url 'exportar_ganancias_excel' %}?fecha_inicio={{ fecha_inicio|default:'' }}&fecha_fin={{ fecha_fin|default:'' }}"
+        class="btn btn-success"
+      >
+        Excel
+      </a>
+      <a
+        href="{% url 'exportar_ganancias_pdf' %}?fecha_inicio={{ fecha_inicio|default:'' }}&fecha_fin={{ fecha_fin|default:'' }}"
+        class="btn btn-danger"
+      >
+        PDF
+      </a>
+    </div>
+  </div>
 
-                <div class="col-md-4">
-                    <label for="fecha_fin" class="form-label fw-semibold">Fecha fin</label>
-                    <input
-                        type="date"
-                        name="fecha_fin"
-                        id="fecha_fin"
-                        class="form-control"
-                        value="{{ fecha_fin|default:'' }}"
-                    >
-                </div>
-
-                <div class="col-md-4 d-flex gap-2">
-                    <button type="submit" class="btn btn-primary w-100">
-                        <i class="bi bi-funnel me-1"></i> Filtrar
-                    </button>
-                    <a href="{% url 'reporte_ganancias' %}" class="btn btn-outline-secondary w-100">
-                        Limpiar
-                    </a>
-                </div>
-            </form>
+  <div class="card shadow-sm mb-3">
+    <div class="card-body">
+      <form method="get" class="row g-2 align-items-end">
+        <div class="col-12 col-md-4">
+          <label class="form-label small text-muted">Fecha inicio</label>
+          <input
+            type="date"
+            name="fecha_inicio"
+            class="form-control"
+            value="{{ fecha_inicio|default:'' }}"
+          >
         </div>
+
+        <div class="col-12 col-md-4">
+          <label class="form-label small text-muted">Fecha fin</label>
+          <input
+            type="date"
+            name="fecha_fin"
+            class="form-control"
+            value="{{ fecha_fin|default:'' }}"
+          >
+        </div>
+
+        <div class="col-12 col-md-4 d-flex gap-2">
+          <button type="submit" class="btn btn-primary w-100">
+            Filtrar
+          </button>
+          <a href="{% url 'reporte_ganancias' %}" class="btn btn-outline-secondary w-100">
+            Limpiar
+          </a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-12 col-md-4">
+      <div class="card shadow-sm border-success h-100">
+        <div class="card-body text-center">
+          <div class="text-muted small">Total ingresos</div>
+          <div class="fs-3 fw-bold text-success">
+            ${{ total_ingresos|floatformat:2 }}
+          </div>
+        </div>
+      </div>
     </div>
 
-    <div class="row g-3 mb-4">
-        <div class="col-md-4">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body">
-                    <div class="text-muted small mb-2">Total ingresos</div>
-                    <div class="fs-3 fw-bold text-success">
-                        ${{ total_ingresos|floatformat:2|intcomma }}
-                    </div>
-                </div>
-            </div>
+    <div class="col-12 col-md-4">
+      <div class="card shadow-sm border-danger h-100">
+        <div class="card-body text-center">
+          <div class="text-muted small">Total egresos</div>
+          <div class="fs-3 fw-bold text-danger">
+            ${{ total_egresos|floatformat:2 }}
+          </div>
         </div>
-
-        <div class="col-md-4">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body">
-                    <div class="text-muted small mb-2">Total egresos</div>
-                    <div class="fs-3 fw-bold text-danger">
-                        ${{ total_egresos|floatformat:2|intcomma }}
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-4">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body">
-                    <div class="text-muted small mb-2">Ganancia neta</div>
-                    <div class="fs-3 fw-bold {% if ganancia >= 0 %}text-primary{% else %}text-danger{% endif %}">
-                        ${{ ganancia|floatformat:2|intcomma }}
-                    </div>
-                </div>
-            </div>
-        </div>
+      </div>
     </div>
 
-    <div class="card shadow-sm border-0 mb-4">
-        <div class="card-header bg-white border-0 pb-0">
-            <h2 class="h5 mb-3 fw-bold">Detalle del reporte</h2>
+    <div class="col-12 col-md-4">
+      <div class="card shadow-sm border-primary h-100">
+        <div class="card-body text-center">
+          <div class="text-muted small">Ganancia neta</div>
+          <div class="fs-3 fw-bold {% if ganancia < 0 %}text-danger{% else %}text-primary{% endif %}">
+            ${{ ganancia|floatformat:2 }}
+          </div>
         </div>
-        <div class="card-body">
-            <div class="table-responsive">
-                <table class="table align-middle table-hover">
-                    <thead class="table-light">
-                        <tr>
-                            <th>Tipo</th>
-                            <th>Concepto</th>
-                            <th class="text-end">Monto</th>
-                            <th>Fecha</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for ingreso in ingresos %}
-                        <tr>
-                            <td>
-                                <span class="badge bg-success">Ingreso</span>
-                            </td>
-                            <td>{{ ingreso.concepto }}</td>
-                            <td class="text-end fw-semibold text-success">
-                                ${{ ingreso.total|floatformat:2|intcomma }}
-                            </td>
-                            <td>{{ ingreso.fecha|date:"d/m/Y" }}</td>
-                        </tr>
-                        {% endfor %}
-
-                        {% for egreso in egresos %}
-                        <tr>
-                            <td>
-                                <span class="badge bg-danger">Egreso</span>
-                            </td>
-                            <td>{{ egreso.concepto }}</td>
-                            <td class="text-end fw-semibold text-danger">
-                                ${{ egreso.total|floatformat:2|intcomma }}
-                            </td>
-                            <td>{{ egreso.fecha|date:"d/m/Y" }}</td>
-                        </tr>
-                        {% endfor %}
-
-                        {% if not ingresos and not egresos %}
-                        <tr>
-                            <td colspan="4" class="text-center text-muted py-4">
-                                No hay movimientos para el rango seleccionado.
-                            </td>
-                        </tr>
-                        {% endif %}
-                    </tbody>
-                    <tfoot class="table-light">
-                        <tr>
-                            <th colspan="2" class="text-end">Totales</th>
-                            <th class="text-end">
-                                <div class="text-success">Ingresos: ${{ total_ingresos|floatformat:2|intcomma }}</div>
-                                <div class="text-danger">Egresos: ${{ total_egresos|floatformat:2|intcomma }}</div>
-                                <div class="{% if ganancia >= 0 %}text-primary{% else %}text-danger{% endif %}">
-                                    Ganancia: ${{ ganancia|floatformat:2|intcomma }}
-                                </div>
-                            </th>
-                            <th></th>
-                        </tr>
-                    </tfoot>
-                </table>
-            </div>
-        </div>
+      </div>
     </div>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-body">
+      <div class="fw-bold mb-3">Detalle de movimientos</div>
+
+      {% if movimientos %}
+        <div class="table-responsive">
+          <table class="table table-striped align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Tipo</th>
+                <th>Concepto</th>
+                <th class="text-end">Monto</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for mov in movimientos %}
+                <tr>
+                  <td>{{ mov.fecha|date:"d/m/Y" }}</td>
+                  <td>
+                    {% if mov.tipo == "Ingreso" %}
+                      <span class="badge bg-success">Ingreso</span>
+                    {% else %}
+                      <span class="badge bg-danger">Egreso</span>
+                    {% endif %}
+                  </td>
+                  <td>{{ mov.concepto }}</td>
+                  <td class="text-end {% if mov.tipo == 'Ingreso' %}text-success{% else %}text-danger{% endif %}">
+                    ${{ mov.monto|floatformat:2 }}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="text-muted">No hay movimientos en el rango seleccionado.</div>
+      {% endif %}
+    </div>
+  </div>
 
 </div>
 {% endblock %}
