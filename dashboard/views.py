@@ -3605,25 +3605,107 @@ def inventario_historial_view(request):
 # REPORTE DE GANANCIAS PRO
 # ================================
 import io
+import json
 from decimal import Decimal
-
-from django.contrib.auth.decorators import login_required
-from django.db.models import Sum
-from django.http import HttpResponse
-from django.shortcuts import render
 
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import cm
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-from reportlab.lib.styles import getSampleStyleSheet
+
+
+def _iterar_meses(anio_inicio, mes_inicio, anio_fin, mes_fin):
+    anio = anio_inicio
+    mes = mes_inicio
+
+    while (anio < anio_fin) or (anio == anio_fin and mes <= mes_fin):
+        yield anio, mes
+        if mes == 12:
+            anio += 1
+            mes = 1
+        else:
+            mes += 1
+
+
+def _obtener_rango_grafico(fecha_inicio=None, fecha_fin=None):
+    hoy = timezone.localdate()
+
+    if fecha_inicio and fecha_fin:
+        fecha_ini = parse_date(str(fecha_inicio))
+        fecha_fin_real = parse_date(str(fecha_fin))
+
+        if fecha_ini and fecha_fin_real:
+            return fecha_ini, fecha_fin_real
+
+    fecha_fin_real = hoy
+    meses_atras = 5
+
+    anio = hoy.year
+    mes = hoy.month
+
+    for _ in range(meses_atras):
+        if mes == 1:
+            anio -= 1
+            mes = 12
+        else:
+            mes -= 1
+
+    fecha_ini = date(anio, mes, 1)
+    return fecha_ini, fecha_fin_real
+
+
+def _obtener_serie_mensual_ganancias(fecha_inicio=None, fecha_fin=None):
+    fecha_ini, fecha_fin_real = _obtener_rango_grafico(fecha_inicio, fecha_fin)
+
+    labels = []
+    ingresos_data = []
+    egresos_data = []
+    balance_data = []
+
+    for anio, mes in _iterar_meses(fecha_ini.year, fecha_ini.month, fecha_fin_real.year, fecha_fin_real.month):
+        primer_dia = date(anio, mes, 1)
+        ultimo_dia = date(anio, mes, monthrange(anio, mes)[1])
+
+        if anio == fecha_fin_real.year and mes == fecha_fin_real.month:
+            ultimo_dia = min(ultimo_dia, fecha_fin_real)
+
+        ingresos_mes = (
+            Ingreso.objects.filter(fecha__range=(primer_dia, ultimo_dia))
+            .aggregate(total=Sum("total"))
+            .get("total")
+            or Decimal("0")
+        )
+        egresos_mes = (
+            Egreso.objects.filter(fecha__range=(primer_dia, ultimo_dia))
+            .aggregate(total=Sum("total"))
+            .get("total")
+            or Decimal("0")
+        )
+        balance_mes = ingresos_mes - egresos_mes
+
+        labels.append(f"{mes:02d}/{anio}")
+        ingresos_data.append(float(ingresos_mes))
+        egresos_data.append(float(egresos_mes))
+        balance_data.append(float(balance_mes))
+
+    return {
+        "labels": labels,
+        "ingresos": ingresos_data,
+        "egresos": egresos_data,
+        "balance": balance_data,
+    }
 
 
 def _obtener_datos_reporte_ganancias(fecha_inicio=None, fecha_fin=None):
     ingresos = Ingreso.objects.all().order_by("-fecha", "-id")
-    egresos = Egreso.objects.all().order_by("-fecha", "-id")
+    egresos = (
+        Egreso.objects.all()
+        .select_related("insumo", "mantenimiento", "mantenimiento__cliente")
+        .order_by("-fecha", "-id")
+    )
 
     if fecha_inicio:
         ingresos = ingresos.filter(fecha__gte=fecha_inicio)
@@ -3642,15 +3724,20 @@ def _obtener_datos_reporte_ganancias(fecha_inicio=None, fecha_fin=None):
     for i in ingresos:
         movimientos.append({
             "tipo": "Ingreso",
-            "concepto": i.concepto or "-",
+            "concepto": getattr(i, "concepto", "") or "-",
             "monto": i.total or Decimal("0"),
             "fecha": i.fecha,
         })
 
     for e in egresos:
+        if getattr(e, "insumo", None):
+            concepto = str(e.insumo)
+        else:
+            concepto = getattr(e, "concepto", "") or "Egreso"
+
         movimientos.append({
             "tipo": "Egreso",
-            "concepto": e.concepto or "-",
+            "concepto": concepto,
             "monto": e.total or Decimal("0"),
             "fecha": e.fecha,
         })
@@ -3671,6 +3758,9 @@ def _obtener_datos_reporte_ganancias(fecha_inicio=None, fecha_fin=None):
 
 @login_required
 def reporte_ganancias_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
     fecha_inicio = request.GET.get("fecha_inicio") or None
     fecha_fin = request.GET.get("fecha_fin") or None
 
@@ -3679,11 +3769,33 @@ def reporte_ganancias_view(request):
         fecha_fin=fecha_fin,
     )
 
+    serie = _obtener_serie_mensual_ganancias(
+        fecha_inicio=fecha_inicio,
+        fecha_fin=fecha_fin,
+    )
+
+    mejor_mes_valor = max(serie["balance"]) if serie["balance"] else 0
+    peor_mes_valor = min(serie["balance"]) if serie["balance"] else 0
+
+    context.update({
+        "grafico_ganancias": json.dumps(serie),
+        "total_movimientos": len(context["movimientos"]),
+        "ticket_promedio": (
+            float(context["ganancia"]) / len(context["movimientos"])
+            if context["movimientos"] else 0
+        ),
+        "mejor_mes_valor": mejor_mes_valor,
+        "peor_mes_valor": peor_mes_valor,
+    })
+
     return render(request, "dashboard/reporte_ganancias.html", context)
 
 
 @login_required
 def exportar_ganancias_excel(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
     fecha_inicio = request.GET.get("fecha_inicio") or None
     fecha_fin = request.GET.get("fecha_fin") or None
 
@@ -3770,6 +3882,9 @@ def exportar_ganancias_excel(request):
 
 @login_required
 def exportar_ganancias_pdf(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
     fecha_inicio = request.GET.get("fecha_inicio") or None
     fecha_fin = request.GET.get("fecha_fin") or None
 

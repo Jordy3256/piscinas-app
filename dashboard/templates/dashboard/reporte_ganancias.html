@@ -10,7 +10,7 @@
     <div>
       <h4 class="mb-1">Reporte de ganancias</h4>
       <div class="text-muted small">
-        Resumen de ingresos, egresos y ganancia neta
+        Resumen general, evolución mensual y detalle de movimientos
       </div>
     </div>
 
@@ -66,29 +66,25 @@
   </div>
 
   <div class="row g-3 mb-3">
-    <div class="col-12 col-md-4">
+    <div class="col-12 col-md-3">
       <div class="card shadow-sm border-success h-100">
         <div class="card-body text-center">
           <div class="text-muted small">Total ingresos</div>
-          <div class="fs-3 fw-bold text-success">
-            ${{ total_ingresos|floatformat:2 }}
-          </div>
+          <div class="fs-3 fw-bold text-success">${{ total_ingresos|floatformat:2 }}</div>
         </div>
       </div>
     </div>
 
-    <div class="col-12 col-md-4">
+    <div class="col-12 col-md-3">
       <div class="card shadow-sm border-danger h-100">
         <div class="card-body text-center">
           <div class="text-muted small">Total egresos</div>
-          <div class="fs-3 fw-bold text-danger">
-            ${{ total_egresos|floatformat:2 }}
-          </div>
+          <div class="fs-3 fw-bold text-danger">${{ total_egresos|floatformat:2 }}</div>
         </div>
       </div>
     </div>
 
-    <div class="col-12 col-md-4">
+    <div class="col-12 col-md-3">
       <div class="card shadow-sm border-primary h-100">
         <div class="card-body text-center">
           <div class="text-muted small">Ganancia neta</div>
@@ -96,6 +92,59 @@
             ${{ ganancia|floatformat:2 }}
           </div>
         </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-md-3">
+      <div class="card shadow-sm border-secondary h-100">
+        <div class="card-body text-center">
+          <div class="text-muted small">Movimientos</div>
+          <div class="fs-3 fw-bold">{{ total_movimientos }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-12 col-md-4">
+      <div class="card shadow-sm h-100">
+        <div class="card-body text-center">
+          <div class="text-muted small">Ganancia promedio por movimiento</div>
+          <div class="fs-4 fw-bold {% if ticket_promedio < 0 %}text-danger{% else %}text-success{% endif %}">
+            ${{ ticket_promedio|floatformat:2 }}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-md-4">
+      <div class="card shadow-sm h-100 border-success">
+        <div class="card-body text-center">
+          <div class="text-muted small">Mejor mes del rango</div>
+          <div class="fs-4 fw-bold text-success">
+            ${{ mejor_mes_valor|floatformat:2 }}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-md-4">
+      <div class="card shadow-sm h-100 border-danger">
+        <div class="card-body text-center">
+          <div class="text-muted small">Peor mes del rango</div>
+          <div class="fs-4 fw-bold text-danger">
+            ${{ peor_mes_valor|floatformat:2 }}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-3">
+    <div class="card-body">
+      <div class="fw-bold mb-3">📈 Evolución mensual</div>
+      <div style="height: 360px;">
+        <canvas id="graficoGanancias"></canvas>
       </div>
     </div>
   </div>
@@ -142,4 +191,71 @@
   </div>
 
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  (function () {
+    const raw = '{{ grafico_ganancias|escapejs }}';
+    const data = JSON.parse(raw);
+
+    const ctx = document.getElementById('graficoGanancias');
+    if (!ctx) return;
+
+    new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: data.labels,
+        datasets: [
+          {
+            label: 'Ingresos',
+            data: data.ingresos,
+            backgroundColor: 'rgba(25, 135, 84, 0.7)',
+            borderColor: 'rgba(25, 135, 84, 1)',
+            borderWidth: 1
+          },
+          {
+            label: 'Egresos',
+            data: data.egresos,
+            backgroundColor: 'rgba(220, 53, 69, 0.7)',
+            borderColor: 'rgba(220, 53, 69, 1)',
+            borderWidth: 1
+          },
+          {
+            label: 'Balance',
+            data: data.balance,
+            type: 'line',
+            borderColor: 'rgba(13, 110, 253, 1)',
+            backgroundColor: 'rgba(13, 110, 253, 0.15)',
+            borderWidth: 3,
+            tension: 0.25,
+            fill: false
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+          mode: 'index',
+          intersect: false
+        },
+        plugins: {
+          legend: {
+            position: 'top'
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: {
+              callback: function(value) {
+                return '$' + value;
+              }
+            }
+          }
+        }
+      }
+    });
+  })();
+</script>
 {% endblock %}
