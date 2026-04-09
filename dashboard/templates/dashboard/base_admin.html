@@ -224,8 +224,6 @@
           <a class="btn btn-outline-secondary flex-fill" href="/dashboard/operativo/">🧑‍💼 Operativo</a>
           <a class="btn btn-outline-secondary flex-fill" href="/dashboard/inventario/">📦 Inventario</a>
           <a class="btn btn-outline-secondary flex-fill" href="/dashboard/finanzas/flujo/">💰 Finanzas</a>
-          <a class="btn btn-outline-secondary flex-fill" href="/dashboard/finanzas/recurrentes/">♻️ Recurrentes</a>
-          <a class="btn btn-outline-secondary flex-fill" href="/admin/" target="_blank">⚙️ Admin</a>
 
           <button id="btn-install" class="btn btn-primary flex-fill btn-install" type="button">
             📲 Instalar app
@@ -405,7 +403,7 @@
     async function marcarTodasLeidas() {
       try {
         const csrftoken = getCSRFToken();
-        const res = await fetch("/dashboard/notificaciones/marcar-todas/", {
+        const res = await fetch("/dashboard/notificaciones/marcar-todas-leidas/", {
           method: "POST",
           credentials: "same-origin",
           headers: {
