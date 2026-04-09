@@ -46,6 +46,7 @@ from .views import (
     vender_insumo_view,
     agregar_stock_view,
     inventario_historial_view,
+    inventario_ganancias_view,
 
     # Finanzas
     flujo_mensual_view,
@@ -54,8 +55,7 @@ from .views import (
     ingreso_editar_view,
     ingreso_eliminar_view,
     ingreso_manual_crear_view,
-    ingreso_manual_eliminar_view,  # ✅ NUEVO
-
+    ingreso_manual_eliminar_view,
     egreso_manual_crear_view,
     egreso_manual_eliminar_view,
 
@@ -130,6 +130,7 @@ urlpatterns = [
     path("inventario/vender/", vender_insumo_view, name="vender_insumo"),
     path("inventario/agregar/", agregar_stock_view, name="agregar_stock"),
     path("inventario/historial/", inventario_historial_view, name="inventario_historial"),
+    path("inventario/ganancias/", inventario_ganancias_view, name="inventario_ganancias"),
 
     # ======================
     # Finanzas
