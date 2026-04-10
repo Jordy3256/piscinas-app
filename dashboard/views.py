@@ -1783,6 +1783,7 @@ def mantenimiento_historial_view(request):
 # Operativo Admin
 # -------------------
 @login_required
+@login_required
 def admin_operativo_view(request):
     if not es_admin(request.user):
         return render(request, "dashboard/no_autorizado.html", status=403)
@@ -1791,6 +1792,9 @@ def admin_operativo_view(request):
     filtro = (request.GET.get("filtro", "") or "").strip().lower()
     q = (request.GET.get("q", "") or "").strip()
     ver_mas_proximos = (request.GET.get("ver_mas_proximos", "") or "").strip() == "1"
+
+    fecha_seleccionada_str = (request.GET.get("fecha_seleccionada", "") or "").strip()
+    fecha_seleccionada = parse_date(fecha_seleccionada_str) if fecha_seleccionada_str else None
 
     anio_cal = int(request.GET.get("anio_cal", hoy.year))
     mes_cal = int(request.GET.get("mes_cal", hoy.month))
@@ -1804,7 +1808,25 @@ def admin_operativo_view(request):
         .order_by("fecha", "estado", "id")
     )
 
-    if filtro == "atrasados":
+    if fecha_seleccionada:
+        dia_list = list(
+            base_qs.filter(fecha=fecha_seleccionada)
+        )
+        atrasados = list(
+            base_qs.filter(
+                fecha__lt=fecha_seleccionada,
+                estado="pendiente"
+            )
+        )
+        proximos = list(
+            base_qs.filter(
+                fecha__gt=fecha_seleccionada,
+                estado="pendiente"
+            )[:10]
+        )
+        etiqueta_periodo = f"Mantenimientos del {fecha_seleccionada.strftime('%d/%m/%Y')}"
+
+    elif filtro == "atrasados":
         dia_list = []
         atrasados = list(
             base_qs.filter(
@@ -1905,7 +1927,7 @@ def admin_operativo_view(request):
 
     total_proximos_reales = base_qs.filter(fecha__gt=hoy, estado="pendiente").count()
     mostrar_boton_ver_mas_proximos = (
-        not filtro and not ver_mas_proximos and total_proximos_reales > 10
+        not filtro and not ver_mas_proximos and not fecha_seleccionada and total_proximos_reales > 10
     )
 
     return render(
@@ -1934,6 +1956,8 @@ def admin_operativo_view(request):
             "ver_mas_proximos": ver_mas_proximos,
             "mostrar_boton_ver_mas_proximos": mostrar_boton_ver_mas_proximos,
             "total_proximos_reales": total_proximos_reales,
+            "fecha_seleccionada": fecha_seleccionada,
+            "fecha_seleccionada_str": fecha_seleccionada_str,
             "es_admin": True,
         },
     )

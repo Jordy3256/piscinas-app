@@ -101,11 +101,24 @@
     letter-spacing: .04em;
   }
 
+  .mini-calendario .dia-link {
+    text-decoration: none;
+    color: inherit;
+    display: block;
+  }
+
   .mini-calendario .dia-box {
     min-height: 78px;
     border-radius: .75rem;
     padding: .42rem;
     background: #fff;
+    transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+  }
+
+  .mini-calendario .dia-link:hover .dia-box {
+    transform: translateY(-1px);
+    box-shadow: 0 0.25rem 0.6rem rgba(0,0,0,.08);
+    border-color: #0d6efd !important;
   }
 
   .mini-calendario .dia-numero {
@@ -117,6 +130,11 @@
   .mini-calendario .dia-hoy {
     border: 2px solid #0d6efd !important;
     background: #eef5ff;
+  }
+
+  .mini-calendario .dia-seleccionado {
+    border: 2px solid #198754 !important;
+    background: #eefaf3;
   }
 
   .mini-calendario .dia-vacio {
@@ -159,6 +177,7 @@
   .dot-pendiente { background: #ffc107; }
   .dot-atrasado { background: #dc3545; }
   .dot-sinasignar { background: #212529; }
+  .dot-seleccionado { background: #198754; }
 
   .op-grid-top {
     display: grid;
@@ -202,6 +221,13 @@
       <div class="op-chip">Filtro: "{{ q }}"</div>
     {% endif %}
 
+    {% if fecha_seleccionada_str %}
+      <a class="btn btn-outline-success btn-sm w-100 w-md-auto"
+         href="/dashboard/operativo/?anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if modo_actual %}&filtro={{ modo_actual }}{% endif %}">
+        Limpiar día
+      </a>
+    {% endif %}
+
     <a class="btn btn-outline-secondary btn-sm w-100 w-md-auto" href="/dashboard/mantenimientos/historial/">
       🗂 Historial
     </a>
@@ -212,6 +238,11 @@
   <div class="card-body">
     <form class="row g-2 align-items-end" method="get">
       <input type="hidden" name="filtro" value="{{ modo_actual }}">
+      <input type="hidden" name="anio_cal" value="{{ anio_cal }}">
+      <input type="hidden" name="mes_cal" value="{{ mes_cal }}">
+      {% if fecha_seleccionada_str %}
+      <input type="hidden" name="fecha_seleccionada" value="{{ fecha_seleccionada_str }}">
+      {% endif %}
 
       <div class="col-12 col-md-4">
         <label class="form-label mb-1">Buscar</label>
@@ -230,28 +261,28 @@
 
       <div class="col-12 col-md-6">
         <div class="d-grid d-md-flex gap-2">
-          <a class="btn {% if not modo_actual %}btn-primary{% else %}btn-outline-secondary{% endif %}"
+          <a class="btn {% if not modo_actual and not fecha_seleccionada_str %}btn-primary{% else %}btn-outline-secondary{% endif %}"
              href="/dashboard/operativo/{% if q %}?q={{ q|urlencode }}{% endif %}">
             Hoy
           </a>
 
           <a class="btn {% if modo_actual == 'pendientes_hoy' %}btn-primary{% else %}btn-outline-secondary{% endif %}"
-             href="/dashboard/operativo/?filtro=pendientes_hoy{% if q %}&q={{ q|urlencode }}{% endif %}">
+             href="/dashboard/operativo/?filtro=pendientes_hoy&anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}{% if q %}&q={{ q|urlencode }}{% endif %}">
             Pendientes hoy
           </a>
 
           <a class="btn {% if modo_actual == 'sin_asignar' %}btn-primary{% else %}btn-outline-secondary{% endif %}"
-             href="/dashboard/operativo/?filtro=sin_asignar{% if q %}&q={{ q|urlencode }}{% endif %}">
+             href="/dashboard/operativo/?filtro=sin_asignar&anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}{% if q %}&q={{ q|urlencode }}{% endif %}">
             Sin asignar
           </a>
 
           <a class="btn {% if modo_actual == 'atrasados' %}btn-primary{% else %}btn-outline-secondary{% endif %}"
-             href="/dashboard/operativo/?filtro=atrasados{% if q %}&q={{ q|urlencode }}{% endif %}">
+             href="/dashboard/operativo/?filtro=atrasados&anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}{% if q %}&q={{ q|urlencode }}{% endif %}">
             Atrasados
           </a>
 
           <a class="btn {% if modo_actual == 'urgentes' %}btn-primary{% else %}btn-outline-secondary{% endif %}"
-             href="/dashboard/operativo/?filtro=urgentes{% if q %}&q={{ q|urlencode }}{% endif %}">
+             href="/dashboard/operativo/?filtro=urgentes&anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}{% if q %}&q={{ q|urlencode }}{% endif %}">
             Urgentes
           </a>
         </div>
@@ -304,7 +335,7 @@
       ⚠ Hay <strong>{{ total_sin_asignar }}</strong> mantenimientos sin trabajador asignado en los resultados actuales.
     </div>
     <div class="d-grid d-md-flex gap-2">
-      <a class="btn btn-sm btn-outline-danger" href="/dashboard/operativo/?filtro=sin_asignar{% if q %}&q={{ q|urlencode }}{% endif %}">
+      <a class="btn btn-sm btn-outline-danger" href="/dashboard/operativo/?filtro=sin_asignar&anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}{% if q %}&q={{ q|urlencode }}{% endif %}">
         Revisar
       </a>
       <a class="btn btn-sm btn-outline-dark" href="/dashboard/mantenimientos/historial/?estado=pendiente{% if q %}&q={{ q|urlencode }}{% endif %}">
@@ -320,7 +351,7 @@
       <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
         <div>
           <div class="op-section-title">📅 Calendario operativo</div>
-          <div class="op-subtitle">Vista mensual compacta con resumen por día.</div>
+          <div class="op-subtitle">Toca un día para ver sus mantenimientos abajo.</div>
         </div>
 
         <div class="d-grid d-md-flex gap-2 w-100 w-md-auto">
@@ -355,32 +386,37 @@
               {% for dia in semana %}
               <td class="{% if dia.dia == 0 %}dia-vacio{% endif %}">
                 {% if dia.dia > 0 %}
-                <div class="border dia-box {% if dia.es_hoy %}dia-hoy{% endif %}">
-                  <div class="d-flex justify-content-between align-items-center mb-1">
-                    <span class="dia-numero">{{ dia.dia }}</span>
-                    {% if dia.total > 0 %}
-                    <span class="badge bg-primary">{{ dia.total }}</span>
-                    {% endif %}
-                  </div>
+                  <a
+                    class="dia-link"
+                    href="/dashboard/operativo/?fecha_seleccionada={{ dia.fecha|date:'Y-m-d' }}&anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if modo_actual %}&filtro={{ modo_actual }}{% endif %}{% if ver_mas_proximos %}&ver_mas_proximos=1{% endif %}"
+                  >
+                    <div class="border dia-box {% if dia.es_hoy %}dia-hoy{% endif %}{% if fecha_seleccionada and dia.fecha == fecha_seleccionada %} dia-seleccionado{% endif %}">
+                      <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="dia-numero">{{ dia.dia }}</span>
+                        {% if dia.total > 0 %}
+                        <span class="badge bg-primary">{{ dia.total }}</span>
+                        {% endif %}
+                      </div>
 
-                  <div class="mini-resumen">
-                    {% if dia.pendientes > 0 %}
-                    <div class="text-warning fw-semibold">⏳ {{ dia.pendientes }} pendientes</div>
-                    {% endif %}
+                      <div class="mini-resumen">
+                        {% if dia.pendientes > 0 %}
+                        <div class="text-warning fw-semibold">⏳ {{ dia.pendientes }} pendientes</div>
+                        {% endif %}
 
-                    {% if dia.atrasados > 0 %}
-                    <div class="text-danger fw-semibold">🚨 {{ dia.atrasados }} atrasados</div>
-                    {% endif %}
+                        {% if dia.atrasados > 0 %}
+                        <div class="text-danger fw-semibold">🚨 {{ dia.atrasados }} atrasados</div>
+                        {% endif %}
 
-                    {% if dia.sin_asignar > 0 %}
-                    <div class="text-dark fw-semibold">👷 {{ dia.sin_asignar }} sin asignar</div>
-                    {% endif %}
+                        {% if dia.sin_asignar > 0 %}
+                        <div class="text-dark fw-semibold">👷 {{ dia.sin_asignar }} sin asignar</div>
+                        {% endif %}
 
-                    {% if dia.total == 0 %}
-                    <div class="text-muted">Sin mantenimientos</div>
-                    {% endif %}
-                  </div>
-                </div>
+                        {% if dia.total == 0 %}
+                        <div class="text-muted">Sin mantenimientos</div>
+                        {% endif %}
+                      </div>
+                    </div>
+                  </a>
                 {% endif %}
               </td>
               {% endfor %}
@@ -395,6 +431,7 @@
         <div class="op-legend-item"><span class="op-legend-dot dot-pendiente"></span> Pendientes</div>
         <div class="op-legend-item"><span class="op-legend-dot dot-atrasado"></span> Atrasados</div>
         <div class="op-legend-item"><span class="op-legend-dot dot-sinasignar"></span> Sin asignar</div>
+        <div class="op-legend-item"><span class="op-legend-dot dot-seleccionado"></span> Día seleccionado</div>
       </div>
     </div>
   </div>
@@ -688,11 +725,11 @@
       {% if mostrar_boton_ver_mas_proximos or ver_mas_proximos %}
       <div class="mt-3 d-grid d-md-inline-block">
         {% if ver_mas_proximos %}
-        <a class="btn btn-outline-secondary btn-sm" href="?{% if modo_actual %}filtro={{ modo_actual }}&{% endif %}{% if q %}q={{ q|urlencode }}&{% endif %}anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}">
+        <a class="btn btn-outline-secondary btn-sm" href="?{% if modo_actual %}filtro={{ modo_actual }}&{% endif %}{% if q %}q={{ q|urlencode }}&{% endif %}anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}{% if fecha_seleccionada_str %}&fecha_seleccionada={{ fecha_seleccionada_str }}{% endif %}">
           Ver menos
         </a>
         {% else %}
-        <a class="btn btn-outline-primary btn-sm" href="?{% if modo_actual %}filtro={{ modo_actual }}&{% endif %}{% if q %}q={{ q|urlencode }}&{% endif %}anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}&ver_mas_proximos=1">
+        <a class="btn btn-outline-primary btn-sm" href="?{% if modo_actual %}filtro={{ modo_actual }}&{% endif %}{% if q %}q={{ q|urlencode }}&{% endif %}anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}&ver_mas_proximos=1{% if fecha_seleccionada_str %}&fecha_seleccionada={{ fecha_seleccionada_str }}{% endif %}">
           Ver más
         </a>
         {% endif %}
