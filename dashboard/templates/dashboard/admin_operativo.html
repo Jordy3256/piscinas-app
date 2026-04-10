@@ -208,26 +208,43 @@
     font-weight: 700;
     line-height: 1.1;
   }
+
+  .op-calendar-heading {
+    display: flex;
+    flex-direction: column;
+    gap: .15rem;
+  }
+
+  .op-calendar-month {
+    font-size: 1.05rem;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  .op-calendar-year {
+    font-size: .84rem;
+    color: #6c757d;
+  }
 </style>
 
 <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
   <div>
-  <div class="fw-bold fs-4 mobile-op-title">
-    {% if fecha_seleccionada %}
-      📅 {{ etiqueta_periodo }}
-    {% else %}
-      Operativo diario
-    {% endif %}
-  </div>
+    <div class="fw-bold fs-4 mobile-op-title">
+      {% if fecha_seleccionada %}
+        📅 {{ etiqueta_periodo }}
+      {% else %}
+        Operativo diario
+      {% endif %}
+    </div>
 
-  <div class="op-subtitle">
-    {% if fecha_seleccionada %}
-      Mantenimientos programados para el día seleccionado.
-    {% else %}
-      {{ etiqueta_periodo }}
-    {% endif %}
+    <div class="op-subtitle">
+      {% if fecha_seleccionada %}
+        Mantenimientos programados para el día seleccionado.
+      {% else %}
+        {{ etiqueta_periodo }}
+      {% endif %}
+    </div>
   </div>
-</div>
 
   <div class="d-flex gap-2 flex-wrap w-100 w-md-auto">
     {% if q %}
@@ -235,9 +252,9 @@
     {% endif %}
 
     {% if fecha_seleccionada_str %}
-      <a class="btn btn-outline-success btn-sm w-100 w-md-auto"
+      <a class="btn btn-success btn-sm w-100 w-md-auto"
          href="/dashboard/operativo/?anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if modo_actual %}&filtro={{ modo_actual }}{% endif %}">
-        Limpiar día
+        ✨ Limpiar día seleccionado
       </a>
     {% endif %}
 
@@ -362,8 +379,24 @@
   <div class="card shadow-sm mobile-op-card op-card-compact">
     <div class="card-body">
       <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
-        <div>
+        <div class="op-calendar-heading">
           <div class="op-section-title">📅 Calendario operativo</div>
+          <div class="op-calendar-month">
+            {% if mes_cal == 1 %}Enero
+            {% elif mes_cal == 2 %}Febrero
+            {% elif mes_cal == 3 %}Marzo
+            {% elif mes_cal == 4 %}Abril
+            {% elif mes_cal == 5 %}Mayo
+            {% elif mes_cal == 6 %}Junio
+            {% elif mes_cal == 7 %}Julio
+            {% elif mes_cal == 8 %}Agosto
+            {% elif mes_cal == 9 %}Septiembre
+            {% elif mes_cal == 10 %}Octubre
+            {% elif mes_cal == 11 %}Noviembre
+            {% elif mes_cal == 12 %}Diciembre
+            {% endif %}
+          </div>
+          <div class="op-calendar-year">{{ anio_cal }}</div>
           <div class="op-subtitle">Toca un día para ver sus mantenimientos abajo.</div>
         </div>
 
