@@ -1410,37 +1410,62 @@ def dashboard_view(request):
         anio_cal_ant, mes_cal_ant = _mes_anterior(anio_cal, mes_cal)
         anio_cal_sig, mes_cal_sig = _mes_siguiente(anio_cal, mes_cal)
 
-        calendario_trabajador = _build_calendario_mantenimientos(anio_cal, mes_cal, trabajador=trabajador)
+        fecha_seleccionada_str = (request.GET.get("fecha_seleccionada", "") or "").strip()
+        fecha_seleccionada = parse_date(fecha_seleccionada_str) if fecha_seleccionada_str else None
 
-        mantenimientos_hoy = (
-            Mantenimiento.objects.filter(fecha=hoy, trabajadores=trabajador)
-            .select_related("cliente", "contrato")
-            .order_by("estado", "fecha")
+        calendario_trabajador = _build_calendario_mantenimientos(
+            anio_cal,
+            mes_cal,
+            trabajador=trabajador
         )
 
         ver_mas_proximos = request.GET.get("ver_mas_proximos") == "1"
 
-        qs_mantenimientos_proximos = (
-            Mantenimiento.objects.filter(fecha__gt=hoy, trabajadores=trabajador)
-            .select_related("cliente", "contrato")
-            .order_by("fecha")
-        )
-        total_proximos_reales = qs_mantenimientos_proximos.count()
-
-        if ver_mas_proximos:
-            mantenimientos_proximos = qs_mantenimientos_proximos
-        else:
-            mantenimientos_proximos = qs_mantenimientos_proximos[:10]
-
-        mantenimientos_atrasados = (
-            Mantenimiento.objects.filter(
-                fecha__lt=hoy,
-                estado="pendiente",
-                trabajadores=trabajador
+        if fecha_seleccionada:
+            mantenimientos_hoy = (
+                Mantenimiento.objects.filter(
+                    fecha=fecha_seleccionada,
+                    trabajadores=trabajador
+                )
+                .select_related("cliente", "contrato")
+                .order_by("estado", "fecha", "id")
             )
-            .select_related("cliente", "contrato")
-            .order_by("fecha", "id")[:20]
-        )
+
+            mantenimientos_atrasados = Mantenimiento.objects.none()
+            mantenimientos_proximos = Mantenimiento.objects.none()
+            total_proximos_reales = 0
+            mostrar_boton_ver_mas_proximos = False
+
+        else:
+            mantenimientos_hoy = (
+                Mantenimiento.objects.filter(fecha=hoy, trabajadores=trabajador)
+                .select_related("cliente", "contrato")
+                .order_by("estado", "fecha", "id")
+            )
+
+            qs_mantenimientos_proximos = (
+                Mantenimiento.objects.filter(fecha__gt=hoy, trabajadores=trabajador)
+                .select_related("cliente", "contrato")
+                .order_by("fecha", "id")
+            )
+            total_proximos_reales = qs_mantenimientos_proximos.count()
+
+            if ver_mas_proximos:
+                mantenimientos_proximos = qs_mantenimientos_proximos
+            else:
+                mantenimientos_proximos = qs_mantenimientos_proximos[:10]
+
+            mostrar_boton_ver_mas_proximos = total_proximos_reales > 10
+
+            mantenimientos_atrasados = (
+                Mantenimiento.objects.filter(
+                    fecha__lt=hoy,
+                    estado="pendiente",
+                    trabajadores=trabajador
+                )
+                .select_related("cliente", "contrato")
+                .order_by("fecha", "id")[:20]
+            )
 
         ctx = {
             **base_ctx,
@@ -1449,7 +1474,7 @@ def dashboard_view(request):
             "mantenimientos_hoy": mantenimientos_hoy,
             "mantenimientos_proximos": mantenimientos_proximos,
             "total_proximos_reales": total_proximos_reales,
-            "mostrar_boton_ver_mas_proximos": total_proximos_reales > 10,
+            "mostrar_boton_ver_mas_proximos": mostrar_boton_ver_mas_proximos,
             "ver_mas_proximos": ver_mas_proximos,
             "mantenimientos_atrasados": mantenimientos_atrasados,
             "anio_cal": anio_cal,
@@ -1459,11 +1484,11 @@ def dashboard_view(request):
             "anio_cal_sig": anio_cal_sig,
             "mes_cal_sig": mes_cal_sig,
             "calendario_trabajador": calendario_trabajador,
+            "fecha_seleccionada": fecha_seleccionada,
+            "fecha_seleccionada_str": fecha_seleccionada_str,
             "es_admin": False,
         }
         return render(request, "dashboard/dashboard_trabajador.html", ctx)
-
-    return render(request, "dashboard/no_autorizado.html", status=403)
 
 
 # -------------------
