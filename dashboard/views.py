@@ -1783,7 +1783,6 @@ def mantenimiento_historial_view(request):
 # Operativo Admin
 # -------------------
 @login_required
-@login_required
 def admin_operativo_view(request):
     if not es_admin(request.user):
         return render(request, "dashboard/no_autorizado.html", status=403)
@@ -1812,18 +1811,8 @@ def admin_operativo_view(request):
         dia_list = list(
             base_qs.filter(fecha=fecha_seleccionada)
         )
-        atrasados = list(
-            base_qs.filter(
-                fecha__lt=fecha_seleccionada,
-                estado="pendiente"
-            )
-        )
-        proximos = list(
-            base_qs.filter(
-                fecha__gt=fecha_seleccionada,
-                estado="pendiente"
-            )[:10]
-        )
+        atrasados = []
+        proximos = []
         etiqueta_periodo = f"Mantenimientos del {fecha_seleccionada.strftime('%d/%m/%Y')}"
 
     elif filtro == "atrasados":
