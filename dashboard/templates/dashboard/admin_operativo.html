@@ -212,9 +212,22 @@
 
 <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
   <div>
-    <div class="fw-bold fs-4 mobile-op-title">Operativo diario</div>
-    <div class="op-subtitle">{{ etiqueta_periodo }}</div>
+  <div class="fw-bold fs-4 mobile-op-title">
+    {% if fecha_seleccionada %}
+      📅 {{ etiqueta_periodo }}
+    {% else %}
+      Operativo diario
+    {% endif %}
   </div>
+
+  <div class="op-subtitle">
+    {% if fecha_seleccionada %}
+      Mantenimientos programados para el día seleccionado.
+    {% else %}
+      {{ etiqueta_periodo }}
+    {% endif %}
+  </div>
+</div>
 
   <div class="d-flex gap-2 flex-wrap w-100 w-md-auto">
     {% if q %}
