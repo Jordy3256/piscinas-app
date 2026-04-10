@@ -14,11 +14,11 @@
     }
 
     .mobile-op-title {
-      font-size: 1.05rem;
+      font-size: 1.02rem;
     }
 
     .mobile-op-card .card-body {
-      padding: .9rem;
+      padding: .85rem;
     }
 
     .mobile-worker-table {
@@ -30,12 +30,16 @@
     }
 
     .mini-calendario .dia-box {
-      min-height: 88px;
-      padding: .45rem !important;
+      min-height: 84px;
+      padding: .42rem !important;
     }
 
     .mini-calendario .mini-item {
       display: none;
+    }
+
+    .op-kpi .fs-4 {
+      font-size: 1.45rem !important;
     }
   }
 
@@ -48,31 +52,74 @@
   .op-section-title {
     font-size: 1rem;
     font-weight: 700;
+    letter-spacing: .01em;
+  }
+
+  .op-subtitle {
+    color: #6c757d;
+    font-size: .88rem;
   }
 
   .op-chip {
     border-radius: 999px;
-    padding: .35rem .7rem;
+    padding: .35rem .75rem;
     font-size: .82rem;
     font-weight: 600;
     background: #f8f9fa;
     border: 1px solid #e9ecef;
   }
 
+  .op-card-compact .card-body {
+    padding: .85rem;
+  }
+
+  .op-kpi {
+    border-radius: 1rem;
+  }
+
+  .op-kpi .text-muted.small {
+    font-size: .8rem;
+  }
+
+  .op-maint-card .card-body {
+    padding: .95rem;
+  }
+
+  .op-maint-card .fw-bold a {
+    color: inherit;
+  }
+
+  .op-maint-card .fw-bold a:hover {
+    color: #0d6efd;
+  }
+
   .mini-calendario th,
   .mini-calendario td {
     vertical-align: top;
-    padding: .25rem;
+    padding: .22rem;
+  }
+
+  .mini-calendario th {
+    font-size: .78rem;
+    text-transform: uppercase;
+    letter-spacing: .04em;
   }
 
   .mini-calendario .dia-box {
-    min-height: 96px;
-    border-radius: .65rem;
-    padding: .5rem;
+    min-height: 92px;
+    border-radius: .8rem;
+    padding: .48rem;
+    background: #fff;
+    transition: transform .15s ease, box-shadow .15s ease;
+  }
+
+  .mini-calendario .dia-box:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 0.25rem 0.6rem rgba(0,0,0,.08);
   }
 
   .mini-calendario .dia-numero {
-    font-size: 0.88rem;
+    font-size: .85rem;
     font-weight: 700;
     line-height: 1;
   }
@@ -87,46 +134,96 @@
   }
 
   .mini-calendario .mini-item {
-    font-size: 0.7rem;
-    line-height: 1.15;
+    font-size: .68rem;
+    line-height: 1.1;
   }
 
   .mini-calendario .mini-item .mini-card {
-    padding: .2rem .35rem;
+    padding: .18rem .34rem;
     border-radius: .45rem;
     background: #f8f9fa;
   }
 
   .mini-calendario .mini-resumen {
-    font-size: .68rem;
-    line-height: 1.1;
+    font-size: .66rem;
+    line-height: 1.08;
   }
 
   .mini-calendario .mini-resumen div {
     margin-bottom: 2px;
   }
 
-  .op-card-compact .card-body {
-    padding: .85rem;
+  .op-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem 1rem;
+    margin-top: .75rem;
   }
 
-  .op-maint-card .card-body {
+  .op-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: .45rem;
+    font-size: .78rem;
+    color: #6c757d;
+  }
+
+  .op-legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    display: inline-block;
+  }
+
+  .dot-realizado { background: #198754; }
+  .dot-pendiente { background: #ffc107; }
+  .dot-atrasado { background: #dc3545; }
+  .dot-sinasignar { background: #212529; }
+
+  .op-grid-top {
+    display: grid;
+    grid-template-columns: 1.15fr .85fr;
+    gap: .75rem;
+  }
+
+  @media (max-width: 991.98px) {
+    .op-grid-top {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .op-soft-box {
+    border: 1px solid #e9ecef;
+    border-radius: 1rem;
     padding: .9rem;
+    background: #fff;
   }
 
-  .op-maint-card .fw-bold a {
-    color: inherit;
+  .op-soft-box .small-label {
+    color: #6c757d;
+    font-size: .8rem;
   }
 
-  .op-maint-card .fw-bold a:hover {
-    color: #0d6efd;
+  .op-soft-box .big-number {
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 1.1;
+  }
+
+  .op-block-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: start;
+    gap: .75rem;
+    flex-wrap: wrap;
+    margin-bottom: .75rem;
   }
 </style>
 
 <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
   <div>
     <div class="fw-bold fs-4 mobile-op-title">Operativo diario</div>
-    <div class="text-muted small">{{ etiqueta_periodo }}</div>
+    <div class="op-subtitle">{{ etiqueta_periodo }}</div>
   </div>
 
   <div class="d-flex gap-2 flex-wrap w-100 w-md-auto">
@@ -137,57 +234,6 @@
     <a class="btn btn-outline-secondary btn-sm w-100 w-md-auto" href="/dashboard/mantenimientos/historial/">
       🗂 Historial
     </a>
-  </div>
-</div>
-
-<div class="card shadow-sm mb-3 border-info mobile-op-card op-card-compact">
-  <div class="card-body">
-    <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
-      <div>
-        <div class="op-section-title text-info">🗂 Acceso rápido al historial</div>
-        <div class="text-muted small">
-          Consulta mantenimientos históricos según el contexto actual del operativo.
-        </div>
-      </div>
-
-      <div class="d-grid d-md-flex gap-2 w-100">
-        <a class="btn btn-info text-white btn-sm" href="/dashboard/mantenimientos/historial/">
-          Historial completo
-        </a>
-
-        <a class="btn btn-outline-warning btn-sm" href="/dashboard/mantenimientos/historial/?estado=pendiente">
-          Pendientes
-        </a>
-
-        <a class="btn btn-outline-success btn-sm" href="/dashboard/mantenimientos/historial/?estado=realizado">
-          Realizados
-        </a>
-
-        {% if q %}
-        <a class="btn btn-outline-primary btn-sm" href="/dashboard/mantenimientos/historial/?q={{ q|urlencode }}">
-          Buscar en historial
-        </a>
-        {% endif %}
-
-        {% if modo_actual == "urgentes" %}
-        <a class="btn btn-outline-danger btn-sm" href="/dashboard/mantenimientos/historial/?estado=pendiente">
-          Ver urgentes
-        </a>
-        {% elif modo_actual == "atrasados" %}
-        <a class="btn btn-outline-danger btn-sm" href="/dashboard/mantenimientos/historial/?estado=pendiente">
-          Ver atrasados
-        </a>
-        {% elif modo_actual == "pendientes_hoy" %}
-        <a class="btn btn-outline-warning btn-sm" href="/dashboard/mantenimientos/historial/?estado=pendiente">
-          Ver pendientes relacionados
-        </a>
-        {% elif modo_actual == "sin_asignar" %}
-        <a class="btn btn-outline-dark btn-sm" href="/dashboard/mantenimientos/historial/?estado=pendiente">
-          Ver sin asignar relacionados
-        </a>
-        {% endif %}
-      </div>
-    </div>
   </div>
 </div>
 
@@ -243,10 +289,48 @@
   </div>
 </div>
 
+<div class="row g-2 mb-3">
+  <div class="col-6 col-md-3">
+    <div class="card shadow-sm border-primary op-kpi">
+      <div class="card-body py-3">
+        <div class="text-muted small">{{ etiqueta_periodo }}</div>
+        <div class="fs-4 fw-bold text-primary">{{ dia_list|length }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-6 col-md-3">
+    <div class="card shadow-sm border-danger op-kpi">
+      <div class="card-body py-3">
+        <div class="text-muted small">Atrasados</div>
+        <div class="fs-4 fw-bold text-danger">{{ atrasados|length }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-6 col-md-3">
+    <div class="card shadow-sm border-secondary op-kpi">
+      <div class="card-body py-3">
+        <div class="text-muted small">Próximos</div>
+        <div class="fs-4 fw-bold">{{ total_proximos_reales|default:proximos|length }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-6 col-md-3">
+    <div class="card shadow-sm border-warning op-kpi">
+      <div class="card-body py-3">
+        <div class="text-muted small">Sin asignar</div>
+        <div class="fs-4 fw-bold text-warning">{{ total_sin_asignar }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
 {% if total_sin_asignar > 0 %}
-  <div class="alert alert-danger py-2">
+  <div class="alert alert-danger py-2 mb-3">
     <div class="fw-semibold mb-2">
-      ⚠ Atención: hay <strong>{{ total_sin_asignar }}</strong> mantenimientos sin trabajador asignado en los resultados actuales.
+      ⚠ Hay <strong>{{ total_sin_asignar }}</strong> mantenimientos sin trabajador asignado en los resultados actuales.
     </div>
     <div class="d-grid d-md-flex gap-2">
       <a class="btn btn-sm btn-outline-danger" href="/dashboard/operativo/?filtro=sin_asignar{% if q %}&q={{ q|urlencode }}{% endif %}">
@@ -259,210 +343,134 @@
   </div>
 {% endif %}
 
-<div class="row g-2 mb-3">
-  <div class="col-6 col-md-3">
-    <div class="card shadow-sm border-primary op-card-compact">
-      <div class="card-body py-3">
-        <div class="text-muted small">{{ etiqueta_periodo }}</div>
-        <div class="fs-4 fw-bold text-primary">{{ dia_list|length }}</div>
-      </div>
-    </div>
-  </div>
-
-  <div class="col-6 col-md-3">
-    <div class="card shadow-sm border-danger op-card-compact">
-      <div class="card-body py-3">
-        <div class="text-muted small">Atrasados</div>
-        <div class="fs-4 fw-bold text-danger">{{ atrasados|length }}</div>
-      </div>
-    </div>
-  </div>
-
-  <div class="col-6 col-md-3">
-    <div class="card shadow-sm border-secondary op-card-compact">
-      <div class="card-body py-3">
-        <div class="text-muted small">Próximos</div>
-        <div class="fs-4 fw-bold">{{ total_proximos_reales|default:proximos|length }}</div>
-      </div>
-    </div>
-  </div>
-
-  <div class="col-6 col-md-3">
-    <div class="card shadow-sm border-warning op-card-compact">
-      <div class="card-body py-3">
-        <div class="text-muted small">Sin asignar</div>
-        <div class="fs-4 fw-bold text-warning">{{ total_sin_asignar }}</div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div class="row g-2 mb-3">
-  <div class="col-12 col-md-4">
-    <div class="card shadow-sm {% if sin_asignar_atrasados > 0 %}border-danger{% endif %} op-card-compact">
-      <div class="card-body py-3">
-        <div class="text-muted small">Atrasados sin asignar</div>
-        <div class="fs-4 fw-bold {% if sin_asignar_atrasados > 0 %}text-danger{% endif %}">
-          {{ sin_asignar_atrasados }}
+<div class="op-grid-top mb-3">
+  <div class="card shadow-sm mobile-op-card op-card-compact">
+    <div class="card-body">
+      <div class="op-block-header">
+        <div>
+          <div class="op-section-title">📅 Calendario operativo</div>
+          <div class="op-subtitle">Vista mensual compacta de carga, pendientes y asignaciones.</div>
         </div>
-        <div class="mt-2 d-grid">
-          <a class="btn btn-sm btn-outline-danger" href="/dashboard/mantenimientos/historial/?estado=pendiente">
-            Historial pendientes
+
+        <div class="d-grid d-md-flex gap-2 w-100 w-md-auto">
+          <a class="btn btn-outline-secondary btn-sm" href="?anio_cal={{ anio_cal_ant }}&mes_cal={{ mes_cal_ant }}{% if modo_actual %}&filtro={{ modo_actual }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}{% if ver_mas_proximos %}&ver_mas_proximos=1{% endif %}">
+            ← Mes anterior
+          </a>
+          <a class="btn btn-outline-primary btn-sm" href="?anio_cal={{ hoy.year }}&mes_cal={{ hoy.month }}{% if modo_actual %}&filtro={{ modo_actual }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}{% if ver_mas_proximos %}&ver_mas_proximos=1{% endif %}">
+            Hoy
+          </a>
+          <a class="btn btn-outline-secondary btn-sm" href="?anio_cal={{ anio_cal_sig }}&mes_cal={{ mes_cal_sig }}{% if modo_actual %}&filtro={{ modo_actual }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}{% if ver_mas_proximos %}&ver_mas_proximos=1{% endif %}">
+            Mes siguiente →
           </a>
         </div>
       </div>
-    </div>
-  </div>
 
-  <div class="col-12 col-md-4">
-    <div class="card shadow-sm {% if sin_asignar_dia > 0 %}border-warning{% endif %} op-card-compact">
-      <div class="card-body py-3">
-        <div class="text-muted small">{{ etiqueta_periodo }} sin asignar</div>
-        <div class="fs-4 fw-bold {% if sin_asignar_dia > 0 %}text-warning{% endif %}">
-          {{ sin_asignar_dia }}
-        </div>
-        <div class="mt-2 d-grid">
-          <a class="btn btn-sm btn-outline-warning" href="/dashboard/mantenimientos/historial/?estado=pendiente">
-            Ver historial
-          </a>
-        </div>
-      </div>
-    </div>
-  </div>
+      <div class="table-responsive mini-calendario">
+        <table class="table table-bordered align-middle mb-0">
+          <thead class="table-light text-center">
+            <tr>
+              <th>Lun</th>
+              <th>Mar</th>
+              <th>Mié</th>
+              <th>Jue</th>
+              <th>Vie</th>
+              <th>Sáb</th>
+              <th>Dom</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for semana in calendario_operativo.semanas %}
+            <tr>
+              {% for dia in semana %}
+              <td class="{% if dia.dia == 0 %}dia-vacio{% endif %}">
+                {% if dia.dia > 0 %}
+                <div class="border dia-box {% if dia.es_hoy %}dia-hoy{% endif %}">
+                  <div class="d-flex justify-content-between align-items-center mb-1">
+                    <span class="dia-numero">{{ dia.dia }}</span>
+                    {% if dia.total > 0 %}
+                    <span class="badge bg-primary">{{ dia.total }}</span>
+                    {% endif %}
+                  </div>
 
-  <div class="col-12 col-md-4">
-    <div class="card shadow-sm {% if sin_asignar_proximos > 0 %}border-secondary{% endif %} op-card-compact">
-      <div class="card-body py-3">
-        <div class="text-muted small">Próximos sin asignar</div>
-        <div class="fs-4 fw-bold">
-          {{ sin_asignar_proximos }}
-        </div>
-        <div class="mt-2 d-grid">
-          <a class="btn btn-sm btn-outline-secondary" href="/dashboard/mantenimientos/historial/">
-            Historial completo
-          </a>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
+                  <div class="mini-resumen">
+                    {% if dia.realizados > 0 %}
+                    <div class="text-success fw-semibold">✅ {{ dia.realizados }}</div>
+                    {% endif %}
+                    {% if dia.pendientes > 0 %}
+                    <div class="text-warning fw-semibold">⏳ {{ dia.pendientes }}</div>
+                    {% endif %}
+                    {% if dia.atrasados > 0 %}
+                    <div class="text-danger fw-semibold">🚨 {{ dia.atrasados }}</div>
+                    {% endif %}
+                    {% if dia.sin_asignar > 0 %}
+                    <div class="text-dark fw-semibold">👷 {{ dia.sin_asignar }}</div>
+                    {% endif %}
+                  </div>
 
-<div class="card shadow-sm mb-3 mobile-op-card op-card-compact">
-  <div class="card-body">
-    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
-      <div>
-        <div class="op-section-title">📅 Calendario operativo</div>
-        <div class="text-muted small">
-          Vista mensual compacta para revisar carga, pendientes y asignaciones.
-        </div>
-      </div>
-
-      <div class="d-grid d-md-flex gap-2 w-100 w-md-auto">
-        <a class="btn btn-outline-secondary btn-sm" href="?anio_cal={{ anio_cal_ant }}&mes_cal={{ mes_cal_ant }}{% if modo_actual %}&filtro={{ modo_actual }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}{% if ver_mas_proximos %}&ver_mas_proximos=1{% endif %}">
-          ← Mes anterior
-        </a>
-        <a class="btn btn-outline-primary btn-sm" href="?anio_cal={{ hoy.year }}&mes_cal={{ hoy.month }}{% if modo_actual %}&filtro={{ modo_actual }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}{% if ver_mas_proximos %}&ver_mas_proximos=1{% endif %}">
-          Hoy
-        </a>
-        <a class="btn btn-outline-secondary btn-sm" href="?anio_cal={{ anio_cal_sig }}&mes_cal={{ mes_cal_sig }}{% if modo_actual %}&filtro={{ modo_actual }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}{% if ver_mas_proximos %}&ver_mas_proximos=1{% endif %}">
-          Mes siguiente →
-        </a>
-      </div>
-    </div>
-
-    <div class="row g-2 mb-3">
-      <div class="col-12 col-md-4">
-        <div class="card shadow-sm border-primary op-card-compact">
-          <div class="card-body py-3">
-            <div class="text-muted small">Total del mes</div>
-            <div class="fs-4 fw-bold text-primary">{{ calendario_operativo.total_mes }}</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="col-12 col-md-4">
-        <div class="card shadow-sm border-success op-card-compact">
-          <div class="card-body py-3">
-            <div class="text-muted small">Realizados</div>
-            <div class="fs-4 fw-bold text-success">{{ calendario_operativo.total_realizados }}</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="col-12 col-md-4">
-        <div class="card shadow-sm border-warning op-card-compact">
-          <div class="card-body py-3">
-            <div class="text-muted small">Pendientes</div>
-            <div class="fs-4 fw-bold text-warning">{{ calendario_operativo.total_pendientes }}</div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="table-responsive mini-calendario">
-      <table class="table table-bordered align-middle mb-0">
-        <thead class="table-light text-center">
-          <tr>
-            <th>Lun</th>
-            <th>Mar</th>
-            <th>Mié</th>
-            <th>Jue</th>
-            <th>Vie</th>
-            <th>Sáb</th>
-            <th>Dom</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for semana in calendario_operativo.semanas %}
-          <tr>
-            {% for dia in semana %}
-            <td class="{% if dia.dia == 0 %}dia-vacio{% endif %}">
-              {% if dia.dia > 0 %}
-              <div class="border rounded dia-box {% if dia.es_hoy %}dia-hoy{% endif %}">
-                <div class="d-flex justify-content-between align-items-center mb-1">
-                  <span class="dia-numero">{{ dia.dia }}</span>
-                  {% if dia.total > 0 %}
-                  <span class="badge bg-primary">{{ dia.total }}</span>
+                  {% if dia.items %}
+                  <div class="mt-1 vstack gap-1">
+                    {% for m in dia.items|slice:":2" %}
+                    <a href="/dashboard/mantenimientos/{{ m.id }}/" class="text-decoration-none mini-item">
+                      <div class="mini-card">
+                        <div class="fw-semibold text-dark text-truncate">{{ m.cliente }}</div>
+                      </div>
+                    </a>
+                    {% endfor %}
+                  </div>
                   {% endif %}
-                </div>
-
-                <div class="mini-resumen">
-                  {% if dia.realizados > 0 %}
-                  <div class="text-success fw-semibold">✅ {{ dia.realizados }}</div>
-                  {% endif %}
-
-                  {% if dia.pendientes > 0 %}
-                  <div class="text-warning fw-semibold">⏳ {{ dia.pendientes }}</div>
-                  {% endif %}
-
-                  {% if dia.atrasados > 0 %}
-                  <div class="text-danger fw-semibold">🚨 {{ dia.atrasados }}</div>
-                  {% endif %}
-
-                  {% if dia.sin_asignar > 0 %}
-                  <div class="text-dark fw-semibold">👷 {{ dia.sin_asignar }}</div>
-                  {% endif %}
-                </div>
-
-                {% if dia.items %}
-                <div class="mt-1 vstack gap-1">
-                  {% for m in dia.items|slice:":2" %}
-                  <a href="/dashboard/mantenimientos/{{ m.id }}/" class="text-decoration-none mini-item">
-                    <div class="mini-card">
-                      <div class="fw-semibold text-dark text-truncate">{{ m.cliente }}</div>
-                    </div>
-                  </a>
-                  {% endfor %}
                 </div>
                 {% endif %}
-              </div>
-              {% endif %}
-            </td>
+              </td>
+              {% endfor %}
+            </tr>
             {% endfor %}
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="op-legend">
+        <div class="op-legend-item"><span class="op-legend-dot dot-realizado"></span> Realizados</div>
+        <div class="op-legend-item"><span class="op-legend-dot dot-pendiente"></span> Pendientes</div>
+        <div class="op-legend-item"><span class="op-legend-dot dot-atrasado"></span> Atrasados</div>
+        <div class="op-legend-item"><span class="op-legend-dot dot-sinasignar"></span> Sin asignar</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="vstack gap-2">
+    <div class="op-soft-box">
+      <div class="small-label">Total del mes</div>
+      <div class="big-number text-primary">{{ calendario_operativo.total_mes }}</div>
+    </div>
+
+    <div class="op-soft-box">
+      <div class="small-label">Realizados</div>
+      <div class="big-number text-success">{{ calendario_operativo.total_realizados }}</div>
+    </div>
+
+    <div class="op-soft-box">
+      <div class="small-label">Pendientes</div>
+      <div class="big-number text-warning">{{ calendario_operativo.total_pendientes }}</div>
+    </div>
+
+    <div class="op-soft-box">
+      <div class="small-label">Atrasados sin asignar</div>
+      <div class="big-number {% if sin_asignar_atrasados > 0 %}text-danger{% endif %}">{{ sin_asignar_atrasados }}</div>
+      <div class="mt-2 d-grid">
+        <a class="btn btn-sm btn-outline-danger" href="/dashboard/mantenimientos/historial/?estado=pendiente">
+          Historial pendientes
+        </a>
+      </div>
+    </div>
+
+    <div class="op-soft-box">
+      <div class="small-label">{{ etiqueta_periodo }} sin asignar</div>
+      <div class="big-number {% if sin_asignar_dia > 0 %}text-warning{% endif %}">{{ sin_asignar_dia }}</div>
+    </div>
+
+    <div class="op-soft-box">
+      <div class="small-label">Próximos sin asignar</div>
+      <div class="big-number">{{ sin_asignar_proximos }}</div>
     </div>
   </div>
 </div>
@@ -613,7 +621,6 @@
                   {% else %}
                     <span class="badge text-bg-warning">Pendiente</span>
                   {% endif %}
-
                   {% if not m.trabajadores.all %}
                     <span class="badge text-bg-dark">SIN ASIGNAR</span>
                   {% endif %}
@@ -655,7 +662,7 @@
     <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
       <div>
         <div class="op-section-title">🗓 Próximos (Pendientes)</div>
-        <div class="text-muted small">
+        <div class="op-subtitle">
           {% if ver_mas_proximos %}
             Mostrando todos los próximos pendientes{% if total_proximos_reales %} ({{ total_proximos_reales }}){% endif %}.
           {% else %}
