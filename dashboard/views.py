@@ -388,6 +388,152 @@ def _build_calendario_mantenimientos(anio, mes, trabajador=None):
     }
 
 
+def _resolver_hora_mantenimiento(mantenimiento):
+    """
+    Intenta encontrar una hora programada en distintos nombres posibles de campo.
+    Si no existe, devuelve None.
+    """
+    posibles_campos = [
+        "hora",
+        "hora_programada",
+        "hora_visita",
+        "hora_mantenimiento",
+    ]
+
+    for campo in posibles_campos:
+        valor = getattr(mantenimiento, campo, None)
+        if valor:
+            return valor
+
+    return None
+
+
+def _bloque_horario_desde_hora(hora_obj):
+    """
+    Devuelve: manana / tarde / noche / sin_hora
+    """
+    if not hora_obj:
+        return "sin_hora"
+
+    try:
+        hora = int(hora_obj.hour)
+    except Exception:
+        return "sin_hora"
+
+    if 6 <= hora < 12:
+        return "manana"
+    if 12 <= hora < 18:
+        return "tarde"
+    if hora >= 18:
+        return "noche"
+    return "sin_hora"
+
+
+def _build_agenda_semanal_mantenimientos(fecha_base, items):
+    """
+    Construye una agenda semanal de lunes a domingo.
+    Agrupa por día y por bloques:
+    - manana
+    - tarde
+    - noche
+    - sin_hora
+    """
+    inicio_semana = fecha_base - timedelta(days=fecha_base.weekday())
+    fin_semana = inicio_semana + timedelta(days=6)
+
+    por_fecha = {}
+    for mantenimiento in items:
+        fecha_m = getattr(mantenimiento, "fecha", None)
+        if not fecha_m:
+            continue
+        por_fecha.setdefault(fecha_m, []).append(mantenimiento)
+
+    dias = []
+    total_semana = 0
+    total_pendientes = 0
+    total_realizados = 0
+    total_atrasados = 0
+    total_sin_asignar = 0
+
+    for i in range(7):
+        fecha_actual = inicio_semana + timedelta(days=i)
+        items_dia = sorted(
+            por_fecha.get(fecha_actual, []),
+            key=lambda m: (
+                _resolver_hora_mantenimiento(m) is None,
+                _resolver_hora_mantenimiento(m) or "",
+                getattr(m, "estado", "") or "",
+                getattr(m, "id", 0),
+            )
+        )
+
+        bloques = {
+            "manana": [],
+            "tarde": [],
+            "noche": [],
+            "sin_hora": [],
+        }
+
+        pendientes = 0
+        realizados = 0
+        atrasados = 0
+        sin_asignar = 0
+
+        for m in items_dia:
+            hora_m = _resolver_hora_mantenimiento(m)
+            bloque = _bloque_horario_desde_hora(hora_m)
+            bloques[bloque].append(m)
+
+            estado_m = getattr(m, "estado", "") or ""
+            if estado_m == "pendiente":
+                pendientes += 1
+            elif estado_m == "realizado":
+                realizados += 1
+
+            if estado_m == "pendiente" and fecha_actual < timezone.localdate():
+                atrasados += 1
+
+            try:
+                if not m.trabajadores.exists():
+                    sin_asignar += 1
+            except Exception:
+                pass
+
+        total_semana += len(items_dia)
+        total_pendientes += pendientes
+        total_realizados += realizados
+        total_atrasados += atrasados
+        total_sin_asignar += sin_asignar
+
+        dias.append({
+            "fecha": fecha_actual,
+            "dia_numero": fecha_actual.day,
+            "nombre_corto": fecha_actual.strftime("%a"),
+            "es_hoy": fecha_actual == timezone.localdate(),
+            "total": len(items_dia),
+            "pendientes": pendientes,
+            "realizados": realizados,
+            "atrasados": atrasados,
+            "sin_asignar": sin_asignar,
+            "bloques": [
+                {"key": "manana", "label": "🌅 Mañana", "items": bloques["manana"]},
+                {"key": "tarde", "label": "☀️ Tarde", "items": bloques["tarde"]},
+                {"key": "noche", "label": "🌙 Noche", "items": bloques["noche"]},
+                {"key": "sin_hora", "label": "🕘 Sin hora", "items": bloques["sin_hora"]},
+            ],
+        })
+
+    return {
+        "inicio": inicio_semana,
+        "fin": fin_semana,
+        "dias": dias,
+        "total_semana": total_semana,
+        "total_pendientes": total_pendientes,
+        "total_realizados": total_realizados,
+        "total_atrasados": total_atrasados,
+        "total_sin_asignar": total_sin_asignar,
+    }
+
 # -------------------
 # Helpers financiero
 # -------------------
@@ -1816,6 +1962,7 @@ def admin_operativo_view(request):
     filtro = (request.GET.get("filtro", "") or "").strip().lower()
     q = (request.GET.get("q", "") or "").strip()
     ver_mas_proximos = (request.GET.get("ver_mas_proximos", "") or "").strip() == "1"
+    vista_actual = (request.GET.get("vista", "calendario") or "calendario").strip().lower()
 
     fecha_seleccionada_str = (request.GET.get("fecha_seleccionada", "") or "").strip()
     fecha_seleccionada = parse_date(fecha_seleccionada_str) if fecha_seleccionada_str else None
@@ -1838,7 +1985,7 @@ def admin_operativo_view(request):
         )
         atrasados = []
         proximos = []
-        etiqueta_periodo = f"Mantenimientos del {fecha_seleccionada.strftime('%d/%m/%Y')}"
+        etiqueta_periodo = f"Agenda del {fecha_seleccionada.strftime('%d/%m/%Y')}"
 
     elif filtro == "atrasados":
         dia_list = []
@@ -1944,6 +2091,28 @@ def admin_operativo_view(request):
         not filtro and not ver_mas_proximos and not fecha_seleccionada and total_proximos_reales > 10
     )
 
+    # ==========================================
+    # NUEVO: agenda semanal PRO
+    # ==========================================
+    fecha_base_agenda = fecha_seleccionada or hoy
+    inicio_agenda = fecha_base_agenda - timedelta(days=fecha_base_agenda.weekday())
+    fin_agenda = inicio_agenda + timedelta(days=6)
+
+    agenda_items = list(
+        base_qs.filter(fecha__range=(inicio_agenda, fin_agenda))
+    )
+
+    if q:
+        agenda_items = _filtrar_mantenimientos_por_busqueda(agenda_items, q)
+
+    agenda_semanal = _build_agenda_semanal_mantenimientos(
+        fecha_base=fecha_base_agenda,
+        items=agenda_items,
+    )
+
+    semana_anterior = inicio_agenda - timedelta(days=7)
+    semana_siguiente = inicio_agenda + timedelta(days=7)
+
     return render(
         request,
         "dashboard/admin_operativo.html",
@@ -1951,6 +2120,7 @@ def admin_operativo_view(request):
             "hoy": hoy,
             "q": q,
             "modo_actual": filtro,
+            "vista_actual": vista_actual,
             "etiqueta_periodo": etiqueta_periodo,
             "dia_list": dia_list,
             "atrasados": atrasados,
@@ -1972,6 +2142,10 @@ def admin_operativo_view(request):
             "total_proximos_reales": total_proximos_reales,
             "fecha_seleccionada": fecha_seleccionada,
             "fecha_seleccionada_str": fecha_seleccionada_str,
+            "agenda_semanal": agenda_semanal,
+            "agenda_fecha_base": fecha_base_agenda,
+            "agenda_semana_anterior": semana_anterior,
+            "agenda_semana_siguiente": semana_siguiente,
             "es_admin": True,
         },
     )
