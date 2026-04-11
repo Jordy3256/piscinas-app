@@ -1,7 +1,133 @@
 {% extends "dashboard/base_admin.html" %}
 
-{% block title %}Dashboard Admin{% endblock %}
-{% block top_title %}📊 Dashboard (Admin){% endblock %}
+{% block title %}Dashboard Admin
+
+<!-- ================= FACTURACIÓN ================= -->
+<div class="row g-3 mb-3">
+  <div class="col-12 col-md-4">
+    <div class="card shadow-sm border-primary">
+      <div class="card-body">
+        <div class="text-muted small">Facturación del mes</div>
+        <div class="fs-4 fw-bold text-primary">
+          ${{ total_facturas_mes|default:0|floatformat:2 }}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-md-4">
+    <div class="card shadow-sm border-success">
+      <div class="card-body">
+        <div class="text-muted small">Pagado</div>
+        <div class="fs-4 fw-bold text-success">
+          ${{ total_facturas_pagadas_mes|default:0|floatformat:2 }}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-md-4">
+    <div class="card shadow-sm border-warning">
+      <div class="card-body">
+        <div class="text-muted small">Pendiente</div>
+        <div class="fs-4 fw-bold text-warning">
+          ${{ total_facturas_pendientes_mes|default:0|floatformat:2 }}
+        </div>
+        <div class="small text-danger mt-1">
+          {{ total_facturas_vencidas|default:0 }} vencidas
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow-sm mb-3">
+  <div class="card-body d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div>
+      <div class="fw-bold">🧾 Facturación</div>
+      <div class="text-muted small">Gestiona cobros y genera facturas automáticas</div>
+    </div>
+
+    <div class="d-flex gap-2 flex-wrap">
+      <form method="post" action="{% url 'factura_generar_mes' %}">
+        {% csrf_token %}
+        <button class="btn btn-primary btn-sm">
+          Generar facturas
+        </button>
+      </form>
+
+      <a href="{% url 'factura_list' %}" class="btn btn-outline-primary btn-sm">
+        Ver facturas
+      </a>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+{% block top_title %}📊 Dashboard (Admin)
+
+<!-- ================= FACTURACIÓN ================= -->
+<div class="row g-3 mb-3">
+  <div class="col-12 col-md-4">
+    <div class="card shadow-sm border-primary">
+      <div class="card-body">
+        <div class="text-muted small">Facturación del mes</div>
+        <div class="fs-4 fw-bold text-primary">
+          ${{ total_facturas_mes|default:0|floatformat:2 }}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-md-4">
+    <div class="card shadow-sm border-success">
+      <div class="card-body">
+        <div class="text-muted small">Pagado</div>
+        <div class="fs-4 fw-bold text-success">
+          ${{ total_facturas_pagadas_mes|default:0|floatformat:2 }}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-md-4">
+    <div class="card shadow-sm border-warning">
+      <div class="card-body">
+        <div class="text-muted small">Pendiente</div>
+        <div class="fs-4 fw-bold text-warning">
+          ${{ total_facturas_pendientes_mes|default:0|floatformat:2 }}
+        </div>
+        <div class="small text-danger mt-1">
+          {{ total_facturas_vencidas|default:0 }} vencidas
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow-sm mb-3">
+  <div class="card-body d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div>
+      <div class="fw-bold">🧾 Facturación</div>
+      <div class="text-muted small">Gestiona cobros y genera facturas automáticas</div>
+    </div>
+
+    <div class="d-flex gap-2 flex-wrap">
+      <form method="post" action="{% url 'factura_generar_mes' %}">
+        {% csrf_token %}
+        <button class="btn btn-primary btn-sm">
+          Generar facturas
+        </button>
+      </form>
+
+      <a href="{% url 'factura_list' %}" class="btn btn-outline-primary btn-sm">
+        Ver facturas
+      </a>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
 
 {% block content %}
 
@@ -1005,5 +1131,68 @@
     }
   })();
 </script>
+
+
+
+<!-- ================= FACTURACIÓN ================= -->
+<div class="row g-3 mb-3">
+  <div class="col-12 col-md-4">
+    <div class="card shadow-sm border-primary">
+      <div class="card-body">
+        <div class="text-muted small">Facturación del mes</div>
+        <div class="fs-4 fw-bold text-primary">
+          ${{ total_facturas_mes|default:0|floatformat:2 }}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-md-4">
+    <div class="card shadow-sm border-success">
+      <div class="card-body">
+        <div class="text-muted small">Pagado</div>
+        <div class="fs-4 fw-bold text-success">
+          ${{ total_facturas_pagadas_mes|default:0|floatformat:2 }}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-md-4">
+    <div class="card shadow-sm border-warning">
+      <div class="card-body">
+        <div class="text-muted small">Pendiente</div>
+        <div class="fs-4 fw-bold text-warning">
+          ${{ total_facturas_pendientes_mes|default:0|floatformat:2 }}
+        </div>
+        <div class="small text-danger mt-1">
+          {{ total_facturas_vencidas|default:0 }} vencidas
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow-sm mb-3">
+  <div class="card-body d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div>
+      <div class="fw-bold">🧾 Facturación</div>
+      <div class="text-muted small">Gestiona cobros y genera facturas automáticas</div>
+    </div>
+
+    <div class="d-flex gap-2 flex-wrap">
+      <form method="post" action="{% url 'factura_generar_mes' %}">
+        {% csrf_token %}
+        <button class="btn btn-primary btn-sm">
+          Generar facturas
+        </button>
+      </form>
+
+      <a href="{% url 'factura_list' %}" class="btn btn-outline-primary btn-sm">
+        Ver facturas
+      </a>
+    </div>
+  </div>
+</div>
 
 {% endblock %}

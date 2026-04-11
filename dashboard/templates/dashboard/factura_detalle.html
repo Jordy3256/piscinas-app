@@ -1,0 +1,205 @@
+{% extends "dashboard/base_admin.html" %}
+{% load humanize %}
+
+{% block title %}Detalle de factura | Piscinas App{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4">
+        <div>
+            <a href="{% url 'factura_list' %}" class="text-decoration-none small">← Volver a facturación</a>
+            <h1 class="h3 mt-2 mb-1">Factura {{ factura.numero }}</h1>
+            <p class="text-muted mb-0">
+                Revisa el detalle completo de la factura, su estado y registra el pago cuando corresponda.
+            </p>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2">
+            {% if factura.estado == "pagada" %}
+                <span class="badge text-bg-success fs-6">Pagada</span>
+            {% elif factura.estado == "vencida" %}
+                <span class="badge text-bg-danger fs-6">Vencida</span>
+            {% elif factura.estado == "anulada" %}
+                <span class="badge text-bg-secondary fs-6">Anulada</span>
+            {% else %}
+                <span class="badge text-bg-warning fs-6">Pendiente</span>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-white">
+                    <h2 class="h5 mb-0">Información general</h2>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <div class="text-muted small">Cliente</div>
+                            <div class="fw-semibold">{{ factura.cliente }}</div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="text-muted small">Contrato</div>
+                            <div class="fw-semibold">{{ factura.contrato }}</div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-muted small">Período</div>
+                            <div class="fw-semibold">{{ factura.periodo_label }}</div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-muted small">Fecha de emisión</div>
+                            <div class="fw-semibold">{{ factura.fecha_emision|date:"d/m/Y" }}</div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-muted small">Fecha de vencimiento</div>
+                            <div class="fw-semibold">{{ factura.fecha_vencimiento|date:"d/m/Y" }}</div>
+                        </div>
+
+                        {% if factura.pagada_en %}
+                        <div class="col-md-4">
+                            <div class="text-muted small">Pagada en</div>
+                            <div class="fw-semibold text-success">{{ factura.pagada_en|date:"d/m/Y" }}</div>
+                        </div>
+                        {% endif %}
+
+                        {% if factura.ingreso_generado %}
+                        <div class="col-md-8">
+                            <div class="text-muted small">Ingreso generado</div>
+                            <div class="fw-semibold">
+                                {{ factura.ingreso_generado.concepto }} — ${{ factura.ingreso_generado.total|floatformat:2|intcomma }}
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    {% if factura.observaciones %}
+                    <hr>
+                    <div>
+                        <div class="text-muted small mb-1">Observaciones</div>
+                        <div>{{ factura.observaciones|linebreaksbr }}</div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <h2 class="h5 mb-0">Ítems de la factura</h2>
+                    <span class="small text-muted">{{ items|length }} ítem{{ items|length|pluralize }}</span>
+                </div>
+                <div class="card-body p-0">
+                    {% if items %}
+                        <div class="table-responsive">
+                            <table class="table align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Descripción</th>
+                                        <th>Cantidad</th>
+                                        <th>Precio unitario</th>
+                                        <th>Subtotal</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item in items %}
+                                        <tr>
+                                            <td class="fw-semibold">{{ item.descripcion }}</td>
+                                            <td>{{ item.cantidad }}</td>
+                                            <td>${{ item.precio_unitario|floatformat:2|intcomma }}</td>
+                                            <td class="fw-semibold">${{ item.subtotal|floatformat:2|intcomma }}</td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                                <tfoot class="table-light">
+                                    <tr>
+                                        <th colspan="3" class="text-end">Subtotal</th>
+                                        <th>${{ factura.subtotal|floatformat:2|intcomma }}</th>
+                                    </tr>
+                                    <tr>
+                                        <th colspan="3" class="text-end">Impuesto</th>
+                                        <th>${{ factura.impuesto|floatformat:2|intcomma }}</th>
+                                    </tr>
+                                    <tr>
+                                        <th colspan="3" class="text-end fs-6">Total</th>
+                                        <th class="fs-6">${{ factura.total|floatformat:2|intcomma }}</th>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="p-4 text-center text-muted">
+                            Esta factura aún no tiene ítems registrados.
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-white">
+                    <h2 class="h5 mb-0">Resumen financiero</h2>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <div class="text-muted small">Subtotal</div>
+                        <div class="fs-5 fw-semibold">${{ factura.subtotal|floatformat:2|intcomma }}</div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="text-muted small">Impuesto</div>
+                        <div class="fs-5 fw-semibold">${{ factura.impuesto|floatformat:2|intcomma }}</div>
+                    </div>
+                    <div>
+                        <div class="text-muted small">Total a cobrar</div>
+                        <div class="fs-3 fw-bold">${{ factura.total|floatformat:2|intcomma }}</div>
+                    </div>
+                </div>
+            </div>
+
+            {% if factura.estado != "pagada" and factura.estado != "anulada" %}
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-white">
+                    <h2 class="h5 mb-0">Registrar pago</h2>
+                </div>
+                <div class="card-body">
+                    <form method="post" action="{% url 'factura_marcar_pagada' factura.pk %}">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <label class="form-label">Fecha de pago</label>
+                            <input
+                                type="date"
+                                name="fecha_pago"
+                                class="form-control"
+                                value="{{ today|date:'Y-m-d' }}"
+                            >
+                        </div>
+                        <button type="submit" class="btn btn-success w-100">
+                            Marcar como pagada
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if factura.estado != "pagada" and factura.estado != "anulada" %}
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white">
+                    <h2 class="h5 mb-0">Acción administrativa</h2>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small">
+                        Usa esta opción solo cuando necesites invalidar la factura y dejarla fuera del flujo de cobro.
+                    </p>
+                    <form method="post" action="{% url 'factura_anular' factura.pk %}">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-outline-danger w-100">
+                            Anular factura
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -58,6 +58,13 @@ from .views import (
     egreso_manual_crear_view,
     egreso_manual_eliminar_view,
 
+    # Facturación
+    factura_list_view,
+    factura_detalle_view,
+    factura_generar_mes_view,
+    factura_marcar_pagada_view,
+    factura_anular_view,
+
     # Reporte de ganancias
     reporte_ganancias_view,
     exportar_ganancias_excel,
@@ -143,6 +150,15 @@ urlpatterns = [
     path("finanzas/ingresos/nuevo/", ingreso_crear_view, name="ingreso_crear"),
     path("finanzas/ingresos/<int:pk>/editar/", ingreso_editar_view, name="ingreso_editar"),
     path("finanzas/ingresos/<int:pk>/eliminar/", ingreso_eliminar_view, name="ingreso_eliminar"),
+
+    # ======================
+    # FACTURACIÓN
+    # ======================
+    path("finanzas/facturas/", factura_list_view, name="factura_list"),
+    path("finanzas/facturas/generar/", factura_generar_mes_view, name="factura_generar_mes"),
+    path("finanzas/facturas/<int:pk>/", factura_detalle_view, name="factura_detalle"),
+    path("finanzas/facturas/<int:pk>/pagar/", factura_marcar_pagada_view, name="factura_marcar_pagada"),
+    path("finanzas/facturas/<int:pk>/anular/", factura_anular_view, name="factura_anular"),
 
     # ======================
     # Reporte de ganancias
