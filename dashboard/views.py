@@ -3055,12 +3055,7 @@ def factura_list_view(request):
     estado = (request.GET.get("estado", "") or "").strip().lower()
     periodo = (request.GET.get("periodo", "") or "").strip()
 
-    facturas = (
-        Factura.objects
-        .select_related("cliente", "contrato", "ingreso_generado")
-        .prefetch_related("items")
-        .all()
-    )
+    facturas = Factura.objects.all().order_by("-periodo_anio", "-periodo_mes", "-id")
 
     if estado in [
         Factura.ESTADO_PENDIENTE,
@@ -3090,7 +3085,7 @@ def factura_list_view(request):
         request,
         "dashboard/factura_list.html",
         {
-            "facturas": facturas.order_by("-periodo_anio", "-periodo_mes", "-id"),
+            "facturas": facturas,
             "estado_actual": estado,
             "periodo_actual": periodo,
             "total_facturado": total_facturado,
@@ -3132,45 +3127,31 @@ def factura_generar_mes_view(request):
     if not es_admin(request.user):
         return render(request, "dashboard/no_autorizado.html", status=403)
 
-    hoy = timezone.localdate()
-
     try:
-        anio = int(request.POST.get("anio") or hoy.year)
-        mes = int(request.POST.get("mes") or hoy.month)
-    except Exception:
-        anio = hoy.year
-        mes = hoy.month
+        hoy = timezone.localdate()
 
-    resultado = generar_facturas_automaticas(anio=anio, mes=mes)
+        try:
+            anio = int(request.POST.get("anio") or hoy.year)
+            mes = int(request.POST.get("mes") or hoy.month)
+        except Exception:
+            anio = hoy.year
+            mes = hoy.month
 
-    _registrar_actividad(
-        user=request.user,
-        titulo="Facturas generadas",
-        descripcion=(
-            f"{request.user.username} generó facturas del período {mes:02d}/{anio}: "
-            f"{resultado['creadas']} creadas, {resultado['existentes']} existentes."
-        ),
-        url=f"/dashboard/finanzas/facturas/?periodo={anio}-{mes:02d}",
-    )
+        resultado = generar_facturas_automaticas(anio=anio, mes=mes)
 
-    if resultado["creadas"]:
-        messages.success(
-            request,
-            f"Facturación generada: {resultado['creadas']} factura(s) creadas para {mes:02d}/{anio}."
+        return JsonResponse({
+            "ok": True,
+            "resultado": resultado,
+        })
+
+    except Exception as e:
+        import traceback
+        return HttpResponse(
+            "<pre>ERROR GENERAR FACTURAS:\n\n"
+            + traceback.format_exc()
+            + "</pre>",
+            status=500
         )
-    else:
-        messages.info(
-            request,
-            f"No se crearon facturas nuevas para {mes:02d}/{anio}. Ya existían o faltan datos."
-        )
-
-    if resultado["errores"]:
-        messages.warning(
-            request,
-            f"Se encontraron {len(resultado['errores'])} contrato(s) con observaciones."
-        )
-
-    return redirect(f"/dashboard/finanzas/facturas/?periodo={anio}-{mes:02d}")
 
 
 @login_required
