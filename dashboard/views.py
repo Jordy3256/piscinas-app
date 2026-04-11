@@ -1559,13 +1559,14 @@ def dashboard_view(request):
         fecha_seleccionada_str = (request.GET.get("fecha_seleccionada", "") or "").strip()
         fecha_seleccionada = parse_date(fecha_seleccionada_str) if fecha_seleccionada_str else None
 
+        vista_actual = (request.GET.get("vista", "calendario") or "calendario").strip().lower()
+        ver_mas_proximos = request.GET.get("ver_mas_proximos") == "1"
+
         calendario_trabajador = _build_calendario_mantenimientos(
             anio_cal,
             mes_cal,
             trabajador=trabajador
         )
-
-        ver_mas_proximos = request.GET.get("ver_mas_proximos") == "1"
 
         if fecha_seleccionada:
             mantenimientos_hoy = (
@@ -1613,10 +1614,36 @@ def dashboard_view(request):
                 .order_by("fecha", "id")[:20]
             )
 
+        # ==========================================
+        # NUEVO: agenda semanal trabajador
+        # ==========================================
+        fecha_base_agenda = fecha_seleccionada or hoy
+        inicio_agenda = fecha_base_agenda - timedelta(days=fecha_base_agenda.weekday())
+        fin_agenda = inicio_agenda + timedelta(days=6)
+
+        agenda_items = list(
+            Mantenimiento.objects.filter(
+                fecha__range=(inicio_agenda, fin_agenda),
+                trabajadores=trabajador
+            )
+            .select_related("cliente", "contrato")
+            .prefetch_related("trabajadores")
+            .order_by("fecha", "estado", "id")
+        )
+
+        agenda_semanal = _build_agenda_semanal_mantenimientos(
+            fecha_base=fecha_base_agenda,
+            items=agenda_items,
+        )
+
+        semana_anterior = inicio_agenda - timedelta(days=7)
+        semana_siguiente = inicio_agenda + timedelta(days=7)
+
         ctx = {
             **base_ctx,
             "modo": "trabajador",
             "hoy": hoy,
+            "vista_actual": vista_actual,
             "mantenimientos_hoy": mantenimientos_hoy,
             "mantenimientos_proximos": mantenimientos_proximos,
             "total_proximos_reales": total_proximos_reales,
@@ -1632,6 +1659,9 @@ def dashboard_view(request):
             "calendario_trabajador": calendario_trabajador,
             "fecha_seleccionada": fecha_seleccionada,
             "fecha_seleccionada_str": fecha_seleccionada_str,
+            "agenda_semanal": agenda_semanal,
+            "agenda_semana_anterior": semana_anterior,
+            "agenda_semana_siguiente": semana_siguiente,
             "es_admin": False,
         }
         return render(request, "dashboard/dashboard_trabajador.html", ctx)

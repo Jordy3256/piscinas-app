@@ -30,6 +30,10 @@
       min-height: 72px;
       padding: .38rem !important;
     }
+
+    .agenda-day-column {
+      min-width: 260px;
+    }
   }
 
   .worker-subtitle {
@@ -151,6 +155,159 @@
     font-size: .84rem;
     color: #6c757d;
   }
+
+  .worker-view-switch .btn {
+    min-width: 130px;
+  }
+
+  .agenda-board {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(220px, 1fr));
+    gap: .75rem;
+    overflow-x: auto;
+    padding-bottom: .25rem;
+  }
+
+  .agenda-day-column {
+    min-width: 220px;
+    background: #fff;
+    border: 1px solid #e9ecef;
+    border-radius: 1rem;
+    padding: .75rem;
+  }
+
+  .agenda-day-column.agenda-hoy {
+    border: 2px solid #0d6efd;
+    background: #eef5ff;
+  }
+
+  .agenda-day-column.agenda-seleccionado {
+    border: 2px solid #198754;
+    background: #eefaf3;
+  }
+
+  .agenda-day-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: start;
+    gap: .5rem;
+    margin-bottom: .75rem;
+  }
+
+  .agenda-day-name {
+    font-size: .82rem;
+    color: #6c757d;
+    text-transform: uppercase;
+    font-weight: 700;
+    letter-spacing: .04em;
+  }
+
+  .agenda-day-number {
+    font-size: 1.2rem;
+    font-weight: 800;
+    line-height: 1;
+  }
+
+  .agenda-day-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem;
+    margin-bottom: .75rem;
+  }
+
+  .agenda-block {
+    margin-bottom: .7rem;
+    border-top: 1px dashed #dee2e6;
+    padding-top: .55rem;
+  }
+
+  .agenda-block:first-of-type {
+    border-top: 0;
+    padding-top: 0;
+  }
+
+  .agenda-block-title {
+    font-size: .8rem;
+    font-weight: 700;
+    margin-bottom: .45rem;
+    color: #495057;
+  }
+
+  .agenda-item {
+    border: 1px solid #e9ecef;
+    border-radius: .8rem;
+    padding: .55rem;
+    background: #fff;
+    margin-bottom: .45rem;
+  }
+
+  .agenda-item:last-child {
+    margin-bottom: 0;
+  }
+
+  .agenda-item.realizado {
+    border-color: #198754;
+    background: #f1fbf4;
+  }
+
+  .agenda-item.pendiente {
+    border-color: #ffc107;
+    background: #fffaf0;
+  }
+
+  .agenda-item.atrasado {
+    border-color: #dc3545;
+    background: #fff5f5;
+  }
+
+  .agenda-item-title {
+    font-weight: 700;
+    line-height: 1.2;
+    margin-bottom: .25rem;
+  }
+
+  .agenda-item-meta {
+    font-size: .78rem;
+    color: #6c757d;
+    margin-bottom: .45rem;
+  }
+
+  .agenda-empty {
+    color: #6c757d;
+    font-size: .82rem;
+  }
+
+  .agenda-week-summary {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(120px, 1fr));
+    gap: .6rem;
+    margin-bottom: 1rem;
+  }
+
+  @media (max-width: 991.98px) {
+    .agenda-week-summary {
+      grid-template-columns: repeat(2, minmax(120px, 1fr));
+    }
+  }
+
+  .agenda-week-box {
+    border: 1px solid #e9ecef;
+    border-radius: .9rem;
+    padding: .75rem;
+    background: #fff;
+  }
+
+  .agenda-week-box .label {
+    font-size: .78rem;
+    color: #6c757d;
+  }
+
+  .agenda-week-box .value {
+    font-size: 1.35rem;
+    font-weight: 800;
+    line-height: 1.1;
+    margin-top: .2rem;
+  }
 </style>
 
 <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
@@ -179,10 +336,32 @@
 
     {% if fecha_seleccionada_str %}
       <a class="btn btn-success btn-sm"
-         href="/dashboard/home/?anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}">
+         href="/dashboard/home/?anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}{% if vista_actual %}&vista={{ vista_actual }}{% endif %}">
         ✨ Limpiar día seleccionado
       </a>
     {% endif %}
+  </div>
+</div>
+
+<div class="card shadow-sm mb-3">
+  <div class="card-body">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <div>
+        <div class="fw-bold worker-section-title">🧭 Vista</div>
+        <div class="worker-subtitle">Cambia entre calendario mensual y agenda semanal.</div>
+      </div>
+
+      <div class="btn-group worker-view-switch" role="group">
+        <a href="/dashboard/home/?vista=calendario&anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}{% if fecha_seleccionada_str %}&fecha_seleccionada={{ fecha_seleccionada_str }}{% endif %}{% if ver_mas_proximos %}&ver_mas_proximos=1{% endif %}"
+           class="btn {% if vista_actual != 'agenda' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+          📅 Calendario
+        </a>
+        <a href="/dashboard/home/?vista=agenda&anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}{% if fecha_seleccionada_str %}&fecha_seleccionada={{ fecha_seleccionada_str }}{% endif %}{% if ver_mas_proximos %}&ver_mas_proximos=1{% endif %}"
+           class="btn {% if vista_actual == 'agenda' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+          🗓 Agenda semanal
+        </a>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -213,135 +392,242 @@
   </div>
 </div>
 
-<div class="card shadow-sm mb-4">
-  <div class="card-body">
-    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
-      <div class="worker-calendar-heading">
-        <div class="fw-bold worker-section-title">📅 Mi calendario</div>
-        <div class="worker-calendar-month">
-          {% if mes_cal == 1 %}Enero
-          {% elif mes_cal == 2 %}Febrero
-          {% elif mes_cal == 3 %}Marzo
-          {% elif mes_cal == 4 %}Abril
-          {% elif mes_cal == 5 %}Mayo
-          {% elif mes_cal == 6 %}Junio
-          {% elif mes_cal == 7 %}Julio
-          {% elif mes_cal == 8 %}Agosto
-          {% elif mes_cal == 9 %}Septiembre
-          {% elif mes_cal == 10 %}Octubre
-          {% elif mes_cal == 11 %}Noviembre
-          {% elif mes_cal == 12 %}Diciembre
-          {% endif %}
-        </div>
-        <div class="worker-calendar-year">{{ anio_cal }}</div>
-        <div class="worker-subtitle">Toca un día para ver sus mantenimientos.</div>
-      </div>
+{% if vista_actual == "agenda" %}
+  <div class="card shadow-sm mb-4">
+    <div class="card-body">
 
-      <div class="d-grid d-md-flex gap-2 w-100 w-md-auto">
-        <a class="btn btn-outline-secondary btn-sm" href="?anio_cal={{ anio_cal_ant }}&mes_cal={{ mes_cal_ant }}{% if ver_mas_proximos %}&ver_mas_proximos=1{% endif %}">
-          ← Mes anterior
-        </a>
-        <a class="btn btn-outline-primary btn-sm" href="?anio_cal={{ hoy.year }}&mes_cal={{ hoy.month }}{% if ver_mas_proximos %}&ver_mas_proximos=1{% endif %}">
-          Hoy
-        </a>
-        <a class="btn btn-outline-secondary btn-sm" href="?anio_cal={{ anio_cal_sig }}&mes_cal={{ mes_cal_sig }}{% if ver_mas_proximos %}&ver_mas_proximos=1{% endif %}">
-          Mes siguiente →
-        </a>
-      </div>
-    </div>
-
-    <div class="row g-2 mb-3 worker-summary">
-      <div class="col-12 col-md-4">
-        <div class="card shadow-sm border-primary">
-          <div class="card-body py-3">
-            <div class="text-muted small">Total del mes</div>
-            <div class="fs-4 fw-bold text-primary">{{ calendario_trabajador.total_mes }}</div>
+      <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+        <div class="worker-calendar-heading">
+          <div class="fw-bold worker-section-title">🗓 Mi agenda semanal</div>
+          <div class="worker-calendar-month">
+            Semana del {{ agenda_semanal.inicio|date:"d/m/Y" }} al {{ agenda_semanal.fin|date:"d/m/Y" }}
           </div>
+          <div class="worker-subtitle">Bloques por Mañana, Tarde, Noche y Sin hora.</div>
+        </div>
+
+        <div class="d-grid d-md-flex gap-2 w-100 w-md-auto">
+          <a class="btn btn-outline-secondary btn-sm"
+             href="/dashboard/home/?vista=agenda&fecha_seleccionada={{ agenda_semana_anterior|date:'Y-m-d' }}&anio_cal={{ agenda_semana_anterior.year }}&mes_cal={{ agenda_semana_anterior.month }}">
+            ← Semana anterior
+          </a>
+          <a class="btn btn-outline-primary btn-sm"
+             href="/dashboard/home/?vista=agenda&fecha_seleccionada={{ hoy|date:'Y-m-d' }}&anio_cal={{ hoy.year }}&mes_cal={{ hoy.month }}">
+            Hoy
+          </a>
+          <a class="btn btn-outline-secondary btn-sm"
+             href="/dashboard/home/?vista=agenda&fecha_seleccionada={{ agenda_semana_siguiente|date:'Y-m-d' }}&anio_cal={{ agenda_semana_siguiente.year }}&mes_cal={{ agenda_semana_siguiente.month }}">
+            Semana siguiente →
+          </a>
         </div>
       </div>
 
-      <div class="col-12 col-md-4">
-        <div class="card shadow-sm border-success">
-          <div class="card-body py-3">
-            <div class="text-muted small">Realizados</div>
-            <div class="fs-4 fw-bold text-success">{{ calendario_trabajador.total_realizados }}</div>
-          </div>
+      <div class="agenda-week-summary">
+        <div class="agenda-week-box">
+          <div class="label">Total semana</div>
+          <div class="value text-primary">{{ agenda_semanal.total_semana }}</div>
+        </div>
+        <div class="agenda-week-box">
+          <div class="label">Pendientes</div>
+          <div class="value text-warning">{{ agenda_semanal.total_pendientes }}</div>
+        </div>
+        <div class="agenda-week-box">
+          <div class="label">Realizados</div>
+          <div class="value text-success">{{ agenda_semanal.total_realizados }}</div>
+        </div>
+        <div class="agenda-week-box">
+          <div class="label">Atrasados</div>
+          <div class="value text-danger">{{ agenda_semanal.total_atrasados }}</div>
         </div>
       </div>
 
-      <div class="col-12 col-md-4">
-        <div class="card shadow-sm border-warning">
-          <div class="card-body py-3">
-            <div class="text-muted small">Pendientes</div>
-            <div class="fs-4 fw-bold text-warning">{{ calendario_trabajador.total_pendientes }}</div>
-          </div>
-        </div>
-      </div>
-    </div>
+      <div class="agenda-board">
+        {% for dia in agenda_semanal.dias %}
+          <div class="agenda-day-column {% if dia.es_hoy %}agenda-hoy{% endif %}{% if fecha_seleccionada and dia.fecha == fecha_seleccionada %} agenda-seleccionado{% endif %}">
+            <div class="agenda-day-header">
+              <div>
+                <div class="agenda-day-name">{{ dia.nombre_corto }}</div>
+                <div class="agenda-day-number">{{ dia.dia_numero }}</div>
+              </div>
+              <a class="btn btn-outline-primary btn-sm"
+                 href="/dashboard/home/?fecha_seleccionada={{ dia.fecha|date:'Y-m-d' }}&vista=agenda&anio_cal={{ dia.fecha.year }}&mes_cal={{ dia.fecha.month }}">
+                Ver día
+              </a>
+            </div>
 
-    <div class="table-responsive mini-calendario">
-      <table class="table table-bordered align-middle mb-0">
-        <thead class="table-light text-center">
-          <tr>
-            <th>Lun</th>
-            <th>Mar</th>
-            <th>Mié</th>
-            <th>Jue</th>
-            <th>Vie</th>
-            <th>Sáb</th>
-            <th>Dom</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for semana in calendario_trabajador.semanas %}
-          <tr>
-            {% for dia in semana %}
-            <td class="{% if dia.dia == 0 %}dia-vacio{% endif %}">
-              {% if dia.dia > 0 %}
-                <a
-                  class="dia-link"
-                  href="/dashboard/home/?fecha_seleccionada={{ dia.fecha|date:'Y-m-d' }}&anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}{% if ver_mas_proximos %}&ver_mas_proximos=1{% endif %}"
-                >
-                  <div class="border dia-box {% if dia.es_hoy %}dia-hoy{% endif %}{% if fecha_seleccionada and dia.fecha == fecha_seleccionada %} dia-seleccionado{% endif %}">
-                    <div class="d-flex justify-content-between align-items-center mb-1">
-                      <span class="dia-numero">{{ dia.dia }}</span>
-                      {% if dia.total > 0 %}
-                      <span class="badge bg-primary">{{ dia.total }}</span>
-                      {% endif %}
-                    </div>
+            <div class="agenda-day-summary">
+              <span class="badge bg-primary">{{ dia.total }} total</span>
+              {% if dia.pendientes > 0 %}<span class="badge text-bg-warning">{{ dia.pendientes }} pendientes</span>{% endif %}
+              {% if dia.realizados > 0 %}<span class="badge text-bg-success">{{ dia.realizados }} realizados</span>{% endif %}
+              {% if dia.atrasados > 0 %}<span class="badge text-bg-danger">{{ dia.atrasados }} atrasados</span>{% endif %}
+            </div>
 
-                    <div class="mini-resumen">
-                      {% if dia.pendientes > 0 %}
-                      <div class="text-warning fw-semibold">⏳ {{ dia.pendientes }} pendientes</div>
-                      {% endif %}
+            {% for bloque in dia.bloques %}
+              <div class="agenda-block">
+                <div class="agenda-block-title">{{ bloque.label }}</div>
 
-                      {% if dia.realizados > 0 %}
-                      <div class="text-success fw-semibold">✅ {{ dia.realizados }} realizados</div>
-                      {% endif %}
+                {% if bloque.items %}
+                  {% for m in bloque.items %}
+                    <a href="/dashboard/mantenimientos/{{ m.id }}/" class="text-decoration-none">
+                      <div class="agenda-item {% if m.estado == 'realizado' %}realizado{% elif m.estado == 'pendiente' and m.fecha < hoy %}atrasado{% else %}pendiente{% endif %}">
+                        <div class="agenda-item-title">{{ m.cliente }}</div>
+                        <div class="agenda-item-meta">{{ m.contrato }}</div>
 
-                      {% if dia.total == 0 %}
-                      <div class="text-muted">Sin mantenimientos</div>
-                      {% endif %}
-                    </div>
-                  </div>
-                </a>
-              {% endif %}
-            </td>
+                        <div class="d-flex gap-1 flex-wrap">
+                          {% if m.estado == "realizado" %}
+                            <span class="badge text-bg-success">Realizado</span>
+                          {% else %}
+                            <span class="badge text-bg-warning">Pendiente</span>
+                          {% endif %}
+
+                          {% if m.estado == "pendiente" and m.fecha < hoy %}
+                            <span class="badge text-bg-danger">Atrasado</span>
+                          {% endif %}
+                        </div>
+                      </div>
+                    </a>
+                  {% endfor %}
+                {% else %}
+                  <div class="agenda-empty">Sin registros</div>
+                {% endif %}
+              </div>
             {% endfor %}
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
+          </div>
+        {% endfor %}
+      </div>
 
-    <div class="worker-legend">
-      <div class="worker-legend-item"><span class="worker-legend-dot dot-total"></span> Total del día</div>
-      <div class="worker-legend-item"><span class="worker-legend-dot dot-pendiente"></span> Pendientes</div>
-      <div class="worker-legend-item"><span class="worker-legend-dot dot-realizado"></span> Realizados</div>
-      <div class="worker-legend-item"><span class="worker-legend-dot dot-seleccionado"></span> Día seleccionado</div>
     </div>
   </div>
-</div>
+{% else %}
+  <div class="card shadow-sm mb-4">
+    <div class="card-body">
+      <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+        <div class="worker-calendar-heading">
+          <div class="fw-bold worker-section-title">📅 Mi calendario</div>
+          <div class="worker-calendar-month">
+            {% if mes_cal == 1 %}Enero
+            {% elif mes_cal == 2 %}Febrero
+            {% elif mes_cal == 3 %}Marzo
+            {% elif mes_cal == 4 %}Abril
+            {% elif mes_cal == 5 %}Mayo
+            {% elif mes_cal == 6 %}Junio
+            {% elif mes_cal == 7 %}Julio
+            {% elif mes_cal == 8 %}Agosto
+            {% elif mes_cal == 9 %}Septiembre
+            {% elif mes_cal == 10 %}Octubre
+            {% elif mes_cal == 11 %}Noviembre
+            {% elif mes_cal == 12 %}Diciembre
+            {% endif %}
+          </div>
+          <div class="worker-calendar-year">{{ anio_cal }}</div>
+          <div class="worker-subtitle">Toca un día para ver sus mantenimientos.</div>
+        </div>
+
+        <div class="d-grid d-md-flex gap-2 w-100 w-md-auto">
+          <a class="btn btn-outline-secondary btn-sm" href="?anio_cal={{ anio_cal_ant }}&mes_cal={{ mes_cal_ant }}&vista=calendario{% if ver_mas_proximos %}&ver_mas_proximos=1{% endif %}">
+            ← Mes anterior
+          </a>
+          <a class="btn btn-outline-primary btn-sm" href="?anio_cal={{ hoy.year }}&mes_cal={{ hoy.month }}&vista=calendario{% if ver_mas_proximos %}&ver_mas_proximos=1{% endif %}">
+            Hoy
+          </a>
+          <a class="btn btn-outline-secondary btn-sm" href="?anio_cal={{ anio_cal_sig }}&mes_cal={{ mes_cal_sig }}&vista=calendario{% if ver_mas_proximos %}&ver_mas_proximos=1{% endif %}">
+            Mes siguiente →
+          </a>
+        </div>
+      </div>
+
+      <div class="row g-2 mb-3 worker-summary">
+        <div class="col-12 col-md-4">
+          <div class="card shadow-sm border-primary">
+            <div class="card-body py-3">
+              <div class="text-muted small">Total del mes</div>
+              <div class="fs-4 fw-bold text-primary">{{ calendario_trabajador.total_mes }}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-12 col-md-4">
+          <div class="card shadow-sm border-success">
+            <div class="card-body py-3">
+              <div class="text-muted small">Realizados</div>
+              <div class="fs-4 fw-bold text-success">{{ calendario_trabajador.total_realizados }}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-12 col-md-4">
+          <div class="card shadow-sm border-warning">
+            <div class="card-body py-3">
+              <div class="text-muted small">Pendientes</div>
+              <div class="fs-4 fw-bold text-warning">{{ calendario_trabajador.total_pendientes }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="table-responsive mini-calendario">
+        <table class="table table-bordered align-middle mb-0">
+          <thead class="table-light text-center">
+            <tr>
+              <th>Lun</th>
+              <th>Mar</th>
+              <th>Mié</th>
+              <th>Jue</th>
+              <th>Vie</th>
+              <th>Sáb</th>
+              <th>Dom</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for semana in calendario_trabajador.semanas %}
+            <tr>
+              {% for dia in semana %}
+              <td class="{% if dia.dia == 0 %}dia-vacio{% endif %}">
+                {% if dia.dia > 0 %}
+                  <a
+                    class="dia-link"
+                    href="/dashboard/home/?fecha_seleccionada={{ dia.fecha|date:'Y-m-d' }}&anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}&vista=calendario{% if ver_mas_proximos %}&ver_mas_proximos=1{% endif %}"
+                  >
+                    <div class="border dia-box {% if dia.es_hoy %}dia-hoy{% endif %}{% if fecha_seleccionada and dia.fecha == fecha_seleccionada %} dia-seleccionado{% endif %}">
+                      <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="dia-numero">{{ dia.dia }}</span>
+                        {% if dia.total > 0 %}
+                        <span class="badge bg-primary">{{ dia.total }}</span>
+                        {% endif %}
+                      </div>
+
+                      <div class="mini-resumen">
+                        {% if dia.pendientes > 0 %}
+                        <div class="text-warning fw-semibold">⏳ {{ dia.pendientes }} pendientes</div>
+                        {% endif %}
+
+                        {% if dia.realizados > 0 %}
+                        <div class="text-success fw-semibold">✅ {{ dia.realizados }} realizados</div>
+                        {% endif %}
+
+                        {% if dia.total == 0 %}
+                        <div class="text-muted">Sin mantenimientos</div>
+                        {% endif %}
+                      </div>
+                    </div>
+                  </a>
+                {% endif %}
+              </td>
+              {% endfor %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="worker-legend">
+        <div class="worker-legend-item"><span class="worker-legend-dot dot-total"></span> Total del día</div>
+        <div class="worker-legend-item"><span class="worker-legend-dot dot-pendiente"></span> Pendientes</div>
+        <div class="worker-legend-item"><span class="worker-legend-dot dot-realizado"></span> Realizados</div>
+        <div class="worker-legend-item"><span class="worker-legend-dot dot-seleccionado"></span> Día seleccionado</div>
+      </div>
+    </div>
+  </div>
+{% endif %}
 
 {% if not fecha_seleccionada %}
   <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
@@ -395,13 +681,7 @@
       📌 Hoy
     {% endif %}
   </div>
-  <span class="text-muted small">
-    {% if fecha_seleccionada %}
-      Toca para abrir
-    {% else %}
-      Toca para abrir
-    {% endif %}
-  </span>
+  <span class="text-muted small">Toca para abrir</span>
 </div>
 
 {% if mantenimientos_hoy %}
@@ -496,11 +776,11 @@
     {% if mostrar_boton_ver_mas_proximos or ver_mas_proximos %}
       <div class="mt-3 d-grid d-md-inline-block">
         {% if ver_mas_proximos %}
-          <a class="btn btn-outline-secondary btn-sm" href="?anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}">
+          <a class="btn btn-outline-secondary btn-sm" href="?anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}{% if vista_actual %}&vista={{ vista_actual }}{% endif %}">
             Ver menos
           </a>
         {% else %}
-          <a class="btn btn-outline-primary btn-sm" href="?anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}&ver_mas_proximos=1">
+          <a class="btn btn-outline-primary btn-sm" href="?anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}{% if vista_actual %}&vista={{ vista_actual }}{% endif %}&ver_mas_proximos=1">
             Ver más
           </a>
         {% endif %}
