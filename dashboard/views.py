@@ -1,6 +1,7 @@
 # dashboard/views.py
 import json
 import logging
+from decimal import Decimal
 from datetime import date, timedelta
 from calendar import monthrange, monthcalendar
 
@@ -27,7 +28,7 @@ from pywebpush import webpush, WebPushException
 from trabajadores.models import Trabajador
 from inventario.models import Insumo
 from mantenimientos.models import Mantenimiento, UsoInsumo, FotoMantenimiento
-from finanzas.models import Ingreso, Egreso, MovimientoRecurrente
+from finanzas.models import Ingreso, Egreso, MovimientoRecurrente, Factura, FacturaItem
 
 try:
     from .models import PushSubscription
@@ -1270,6 +1271,11 @@ def dashboard_view(request):
             ).order_by("proxima_fecha", "id")[:10]
         )
 
+        actualizar_facturas_vencidas()
+        total_facturas_pendientes = Factura.objects.filter(estado=Factura.ESTADO_PENDIENTE).count()
+        total_facturas_vencidas = Factura.objects.filter(estado=Factura.ESTADO_VENCIDA).count()
+        total_facturas_pagadas = Factura.objects.filter(estado=Factura.ESTADO_PAGADA).count()
+
         mantenimientos_hoy_qs = (
             Mantenimiento.objects.filter(fecha=hoy)
             .select_related("cliente", "contrato")
@@ -1508,6 +1514,9 @@ def dashboard_view(request):
             "variacion_egresos_mes": variacion_egresos_mes,
             "variacion_balance_mes": variacion_balance_mes,
             "recurrentes_proximos_3_dias": recurrentes_proximos_3_dias,
+            "total_facturas_pendientes": total_facturas_pendientes,
+            "total_facturas_vencidas": total_facturas_vencidas,
+            "total_facturas_pagadas": total_facturas_pagadas,
             "total_mantenimientos_hoy": total_mantenimientos_hoy,
             "realizados_hoy": realizados_hoy,
             "pendientes_hoy": pendientes_hoy,
@@ -2869,6 +2878,357 @@ def asignar_trabajadores_view(request, pk):
     )
 
 
+
+# -------------------
+# Facturación automática - helpers
+# -------------------
+def _contrato_activo_para_facturacion(contrato):
+    if contrato is None:
+        return False
+
+    if hasattr(contrato, "activo"):
+        return bool(contrato.activo)
+
+    if hasattr(contrato, "estado"):
+        estado = str(getattr(contrato, "estado", "") or "").strip().lower()
+        if estado in ["activo", "vigente"]:
+            return True
+        if estado in ["inactivo", "cancelado", "finalizado"]:
+            return False
+
+    return True
+
+
+def _obtener_cliente_de_contrato(contrato):
+    return getattr(contrato, "cliente", None)
+
+
+def _obtener_monto_contrato(contrato):
+    posibles_campos = [
+        "monto_mensual",
+        "precio_mensual",
+        "valor_mensual",
+        "mensualidad",
+        "monto",
+        "precio",
+        "valor",
+        "costo",
+    ]
+
+    for campo in posibles_campos:
+        if hasattr(contrato, campo):
+            valor = getattr(contrato, campo, None)
+            if valor is not None:
+                try:
+                    return Decimal(valor)
+                except Exception:
+                    pass
+
+    return Decimal("0.00")
+
+
+def _descripcion_factura_contrato(contrato, anio, mes):
+    base = f"Servicio de mantenimiento de piscina {mes:02d}/{anio}"
+
+    if hasattr(contrato, "nombre") and contrato.nombre:
+        return f"{base} - {contrato.nombre}"
+
+    if hasattr(contrato, "tipo") and contrato.tipo:
+        return f"{base} - {contrato.tipo}"
+
+    return base
+
+
+def _dias_vencimiento_factura():
+    return 5
+
+
+def _crear_factura_para_contrato(contrato, anio, mes):
+    cliente = _obtener_cliente_de_contrato(contrato)
+    if not cliente:
+        return None, False, "Contrato sin cliente"
+
+    monto = _obtener_monto_contrato(contrato)
+    if monto <= 0:
+        return None, False, "Contrato sin monto válido"
+
+    fecha_emision = date(anio, mes, 1)
+    fecha_vencimiento = fecha_emision + timedelta(days=_dias_vencimiento_factura())
+
+    factura, creada = Factura.objects.get_or_create(
+        contrato=contrato,
+        periodo_anio=anio,
+        periodo_mes=mes,
+        defaults={
+            "cliente": cliente,
+            "fecha_emision": fecha_emision,
+            "fecha_vencimiento": fecha_vencimiento,
+            "subtotal": monto,
+            "impuesto": Decimal("0.00"),
+            "total": monto,
+            "estado": Factura.ESTADO_PENDIENTE,
+            "observaciones": "",
+        }
+    )
+
+    if creada:
+        FacturaItem.objects.create(
+            factura=factura,
+            descripcion=_descripcion_factura_contrato(contrato, anio, mes),
+            cantidad=Decimal("1.00"),
+            precio_unitario=monto,
+            subtotal=monto,
+        )
+        factura.actualizar_totales()
+
+    return factura, creada, None
+
+
+def generar_facturas_automaticas(anio=None, mes=None):
+    hoy = timezone.localdate()
+    anio = anio or hoy.year
+    mes = mes or hoy.month
+
+    creadas = 0
+    existentes = 0
+    errores = []
+
+    from contratos.models import Contrato
+
+    contratos = Contrato.objects.select_related("cliente").all().order_by("id")
+
+    for contrato in contratos:
+        if not _contrato_activo_para_facturacion(contrato):
+            continue
+
+        try:
+            _, creada, error = _crear_factura_para_contrato(contrato, anio, mes)
+
+            if error:
+                errores.append(f"Contrato #{contrato.pk}: {error}")
+                continue
+
+            if creada:
+                creadas += 1
+            else:
+                existentes += 1
+
+        except Exception as ex:
+            errores.append(f"Contrato #{contrato.pk}: {ex}")
+
+    return {
+        "creadas": creadas,
+        "existentes": existentes,
+        "errores": errores,
+        "anio": anio,
+        "mes": mes,
+    }
+
+
+def actualizar_facturas_vencidas():
+    hoy = timezone.localdate()
+    facturas = Factura.objects.filter(
+        estado=Factura.ESTADO_PENDIENTE,
+        fecha_vencimiento__lt=hoy,
+    )
+
+    total = 0
+    for factura in facturas:
+        factura.estado = Factura.ESTADO_VENCIDA
+        factura.save(update_fields=["estado", "actualizada_en"])
+        total += 1
+
+    return total
+
+
+# -------------------
+# Facturación automática - vistas
+# -------------------
+@login_required
+@require_GET
+def factura_list_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    actualizar_facturas_vencidas()
+
+    estado = (request.GET.get("estado", "") or "").strip().lower()
+    periodo = (request.GET.get("periodo", "") or "").strip()
+
+    facturas = Factura.objects.all().order_by("-periodo_anio", "-periodo_mes", "-id")
+
+    if estado in [
+        Factura.ESTADO_PENDIENTE,
+        Factura.ESTADO_PAGADA,
+        Factura.ESTADO_VENCIDA,
+        Factura.ESTADO_ANULADA,
+    ]:
+        facturas = facturas.filter(estado=estado)
+
+    if periodo:
+        try:
+            anio_txt, mes_txt = periodo.split("-")
+            facturas = facturas.filter(
+                periodo_anio=int(anio_txt),
+                periodo_mes=int(mes_txt),
+            )
+        except Exception:
+            pass
+
+    total_facturado = facturas.aggregate(total=Sum("total"))["total"] or Decimal("0.00")
+    total_pagado = facturas.filter(estado=Factura.ESTADO_PAGADA).aggregate(total=Sum("total"))["total"] or Decimal("0.00")
+    total_pendiente = facturas.filter(
+        estado__in=[Factura.ESTADO_PENDIENTE, Factura.ESTADO_VENCIDA]
+    ).aggregate(total=Sum("total"))["total"] or Decimal("0.00")
+
+    return render(
+        request,
+        "dashboard/factura_list.html",
+        {
+            "facturas": facturas,
+            "estado_actual": estado,
+            "periodo_actual": periodo,
+            "total_facturado": total_facturado,
+            "total_pagado": total_pagado,
+            "total_pendiente": total_pendiente,
+            "es_admin": True,
+        },
+    )
+
+
+@login_required
+@require_GET
+def factura_detalle_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    actualizar_facturas_vencidas()
+
+    factura = get_object_or_404(
+        Factura.objects.select_related("cliente", "contrato", "ingreso_generado").prefetch_related("items"),
+        pk=pk
+    )
+
+    return render(
+        request,
+        "dashboard/factura_detalle.html",
+        {
+            "factura": factura,
+            "items": factura.items.all(),
+            "es_admin": True,
+        },
+    )
+
+
+@login_required
+@require_http_methods(["POST"])
+@transaction.atomic
+def factura_generar_mes_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    hoy = timezone.localdate()
+
+    try:
+        anio = int(request.POST.get("anio") or hoy.year)
+        mes = int(request.POST.get("mes") or hoy.month)
+    except Exception:
+        anio = hoy.year
+        mes = hoy.month
+
+    resultado = generar_facturas_automaticas(anio=anio, mes=mes)
+
+    _registrar_actividad(
+        user=request.user,
+        titulo="Facturas generadas",
+        descripcion=(
+            f"{request.user.username} generó facturas del período {mes:02d}/{anio}: "
+            f"{resultado['creadas']} creadas, {resultado['existentes']} existentes."
+        ),
+        url=f"/dashboard/finanzas/facturas/?periodo={anio}-{mes:02d}",
+    )
+
+    if resultado["creadas"]:
+        messages.success(
+            request,
+            f"Facturación generada: {resultado['creadas']} factura(s) creadas para {mes:02d}/{anio}."
+        )
+    else:
+        messages.info(
+            request,
+            f"No se crearon facturas nuevas para {mes:02d}/{anio}. Ya existían."
+        )
+
+    if resultado["errores"]:
+        messages.warning(
+            request,
+            f"Se encontraron {len(resultado['errores'])} contrato(s) con observaciones."
+        )
+
+    return redirect(f"/dashboard/finanzas/facturas/?periodo={anio}-{mes:02d}")
+
+
+@login_required
+@require_http_methods(["POST"])
+@transaction.atomic
+def factura_marcar_pagada_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    factura = get_object_or_404(Factura, pk=pk)
+
+    if factura.estado == Factura.ESTADO_ANULADA:
+        messages.warning(request, "No puedes marcar como pagada una factura anulada.")
+        return redirect(f"/dashboard/finanzas/facturas/{factura.pk}/")
+
+    fecha_pago_txt = (request.POST.get("fecha_pago", "") or "").strip()
+    fecha_pago = timezone.localdate()
+
+    if fecha_pago_txt:
+        try:
+            fecha_pago = date.fromisoformat(fecha_pago_txt)
+        except Exception:
+            pass
+
+    factura.marcar_como_pagada(fecha_pago=fecha_pago)
+
+    _registrar_actividad(
+        user=request.user,
+        titulo="Factura pagada",
+        descripcion=f"{request.user.username} marcó como pagada la factura {factura.numero}.",
+        url=f"/dashboard/finanzas/facturas/{factura.pk}/",
+    )
+
+    messages.success(request, f"Factura {factura.numero} marcada como pagada.")
+    return redirect(f"/dashboard/finanzas/facturas/{factura.pk}/")
+
+
+@login_required
+@require_http_methods(["POST"])
+@transaction.atomic
+def factura_anular_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    factura = get_object_or_404(Factura, pk=pk)
+
+    if factura.estado == Factura.ESTADO_PAGADA:
+        messages.warning(request, "No se puede anular una factura que ya fue pagada.")
+        return redirect(f"/dashboard/finanzas/facturas/{factura.pk}/")
+
+    factura.estado = Factura.ESTADO_ANULADA
+    factura.save(update_fields=["estado", "actualizada_en"])
+
+    _registrar_actividad(
+        user=request.user,
+        titulo="Factura anulada",
+        descripcion=f"{request.user.username} anuló la factura {factura.numero}.",
+        url=f"/dashboard/finanzas/facturas/{factura.pk}/",
+    )
+
+    messages.success(request, f"Factura {factura.numero} anulada correctamente.")
+    return redirect(f"/dashboard/finanzas/facturas/{factura.pk}/")
+
 @login_required
 def flujo_mensual_view(request):
     if not es_admin(request.user):
@@ -3616,10 +3976,7 @@ def unread_count_view(request):
 # INVENTARIO PRO
 #======================
 
-from django.db.models import F
-from decimal import Decimal
 from inventario.models import Insumo, VentaInsumo, EntradaStock, MovimientoInventario
-from finanzas.models import Ingreso
 
 
 @login_required
@@ -3910,8 +4267,6 @@ def inventario_historial_view(request):
 # REPORTE DE GANANCIAS PRO
 # ================================
 import io
-import json
-from decimal import Decimal
 
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
