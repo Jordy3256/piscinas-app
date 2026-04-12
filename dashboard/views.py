@@ -3127,31 +3127,45 @@ def factura_generar_mes_view(request):
     if not es_admin(request.user):
         return render(request, "dashboard/no_autorizado.html", status=403)
 
+    hoy = timezone.localdate()
+
     try:
-        hoy = timezone.localdate()
+        anio = int(request.POST.get("anio") or hoy.year)
+        mes = int(request.POST.get("mes") or hoy.month)
+    except Exception:
+        anio = hoy.year
+        mes = hoy.month
 
-        try:
-            anio = int(request.POST.get("anio") or hoy.year)
-            mes = int(request.POST.get("mes") or hoy.month)
-        except Exception:
-            anio = hoy.year
-            mes = hoy.month
+    resultado = generar_facturas_automaticas(anio=anio, mes=mes)
 
-        resultado = generar_facturas_automaticas(anio=anio, mes=mes)
+    _registrar_actividad(
+        user=request.user,
+        titulo="Facturas generadas",
+        descripcion=(
+            f"{request.user.username} generó facturas del período {mes:02d}/{anio}: "
+            f"{resultado['creadas']} creadas, {resultado['existentes']} existentes."
+        ),
+        url=f"/dashboard/finanzas/facturas/?periodo={anio}-{mes:02d}",
+    )
 
-        return JsonResponse({
-            "ok": True,
-            "resultado": resultado,
-        })
-
-    except Exception as e:
-        import traceback
-        return HttpResponse(
-            "<pre>ERROR GENERAR FACTURAS:\n\n"
-            + traceback.format_exc()
-            + "</pre>",
-            status=500
+    if resultado["creadas"]:
+        messages.success(
+            request,
+            f"Facturación generada: {resultado['creadas']} factura(s) creadas para {mes:02d}/{anio}."
         )
+    else:
+        messages.info(
+            request,
+            f"No se crearon facturas nuevas para {mes:02d}/{anio}. Ya existían."
+        )
+
+    if resultado["errores"]:
+        messages.warning(
+            request,
+            f"Se encontraron {len(resultado['errores'])} contrato(s) con observaciones."
+        )
+
+    return redirect(f"/dashboard/finanzas/facturas/?periodo={anio}-{mes:02d}")
 
 
 @login_required
