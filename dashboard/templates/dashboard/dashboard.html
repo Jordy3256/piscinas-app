@@ -1,133 +1,7 @@
 {% extends "dashboard/base_admin.html" %}
 
-{% block title %}Dashboard Admin
-
-<!-- ================= FACTURACIÓN ================= -->
-<div class="row g-3 mb-3">
-  <div class="col-12 col-md-4">
-    <div class="card shadow-sm border-primary">
-      <div class="card-body">
-        <div class="text-muted small">Facturación del mes</div>
-        <div class="fs-4 fw-bold text-primary">
-          ${{ total_facturas_mes|default:0|floatformat:2 }}
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="col-12 col-md-4">
-    <div class="card shadow-sm border-success">
-      <div class="card-body">
-        <div class="text-muted small">Pagado</div>
-        <div class="fs-4 fw-bold text-success">
-          ${{ total_facturas_pagadas_mes|default:0|floatformat:2 }}
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="col-12 col-md-4">
-    <div class="card shadow-sm border-warning">
-      <div class="card-body">
-        <div class="text-muted small">Pendiente</div>
-        <div class="fs-4 fw-bold text-warning">
-          ${{ total_facturas_pendientes_mes|default:0|floatformat:2 }}
-        </div>
-        <div class="small text-danger mt-1">
-          {{ total_facturas_vencidas|default:0 }} vencidas
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div class="card shadow-sm mb-3">
-  <div class="card-body d-flex justify-content-between align-items-center flex-wrap gap-2">
-    <div>
-      <div class="fw-bold">🧾 Facturación</div>
-      <div class="text-muted small">Gestiona cobros y genera facturas automáticas</div>
-    </div>
-
-    <div class="d-flex gap-2 flex-wrap">
-      <form method="post" action="{% url 'factura_generar_mes' %}">
-        {% csrf_token %}
-        <button class="btn btn-primary btn-sm">
-          Generar facturas
-        </button>
-      </form>
-
-      <a href="{% url 'factura_list' %}" class="btn btn-outline-primary btn-sm">
-        Ver facturas
-      </a>
-    </div>
-  </div>
-</div>
-
-{% endblock %}
-{% block top_title %}📊 Dashboard (Admin)
-
-<!-- ================= FACTURACIÓN ================= -->
-<div class="row g-3 mb-3">
-  <div class="col-12 col-md-4">
-    <div class="card shadow-sm border-primary">
-      <div class="card-body">
-        <div class="text-muted small">Facturación del mes</div>
-        <div class="fs-4 fw-bold text-primary">
-          ${{ total_facturas_mes|default:0|floatformat:2 }}
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="col-12 col-md-4">
-    <div class="card shadow-sm border-success">
-      <div class="card-body">
-        <div class="text-muted small">Pagado</div>
-        <div class="fs-4 fw-bold text-success">
-          ${{ total_facturas_pagadas_mes|default:0|floatformat:2 }}
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="col-12 col-md-4">
-    <div class="card shadow-sm border-warning">
-      <div class="card-body">
-        <div class="text-muted small">Pendiente</div>
-        <div class="fs-4 fw-bold text-warning">
-          ${{ total_facturas_pendientes_mes|default:0|floatformat:2 }}
-        </div>
-        <div class="small text-danger mt-1">
-          {{ total_facturas_vencidas|default:0 }} vencidas
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div class="card shadow-sm mb-3">
-  <div class="card-body d-flex justify-content-between align-items-center flex-wrap gap-2">
-    <div>
-      <div class="fw-bold">🧾 Facturación</div>
-      <div class="text-muted small">Gestiona cobros y genera facturas automáticas</div>
-    </div>
-
-    <div class="d-flex gap-2 flex-wrap">
-      <form method="post" action="{% url 'factura_generar_mes' %}">
-        {% csrf_token %}
-        <button class="btn btn-primary btn-sm">
-          Generar facturas
-        </button>
-      </form>
-
-      <a href="{% url 'factura_list' %}" class="btn btn-outline-primary btn-sm">
-        Ver facturas
-      </a>
-    </div>
-  </div>
-</div>
-
-{% endblock %}
+{% block title %}Dashboard Admin{% endblock %}
+{% block top_title %}📊 Dashboard (Admin){% endblock %}
 
 {% block content %}
 
@@ -135,1064 +9,170 @@
 
 <style>
   @media (max-width: 767.98px) {
-    .dashboard-mobile-title {
-      font-size: 1.05rem;
-    }
-
-    .dashboard-mobile-actions .btn,
-    .dashboard-mobile-actions a {
-      width: 100%;
-    }
-
-    .dashboard-mobile-card .card-body {
-      padding: 1rem;
-    }
-
-    .dashboard-mobile-kpi .fs-3,
-    .dashboard-mobile-kpi .fs-4 {
-      font-size: 1.55rem !important;
-    }
+    .dashboard-mobile-title { font-size: 1.05rem; }
+    .dashboard-mobile-actions .btn { width: 100%; }
+    .dashboard-mobile-card .card-body { padding: 1rem; }
   }
 </style>
 
+<!-- ================= ALERTAS ================= -->
 {% if hay_alertas_operativas %}
-<div class="card shadow-sm border-danger mb-3 dashboard-mobile-card">
+<div class="card shadow-sm border-danger mb-3">
   <div class="card-body">
-    <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
-      <div>
-        <div class="fw-bold fs-5 text-danger mb-2 dashboard-mobile-title">
-          ⚠ Alertas operativas
-        </div>
+    <div class="fw-bold text-danger mb-2">⚠ Alertas operativas</div>
 
-        <div class="d-flex flex-wrap gap-2 mb-2">
-          {% if total_atrasados > 0 %}
-          <span class="badge bg-danger fs-6">
-            {{ total_atrasados }} atrasado{{ total_atrasados|pluralize }}
-          </span>
-          {% endif %}
+    <div class="d-flex gap-2 flex-wrap">
+      {% if total_atrasados > 0 %}
+      <span class="badge bg-danger">{{ total_atrasados }} atrasados</span>
+      {% endif %}
 
-          {% if total_pendientes_sin_asignar > 0 %}
-          <span class="badge bg-warning text-dark fs-6">
-            {{ total_pendientes_sin_asignar }} pendiente{{ total_pendientes_sin_asignar|pluralize }} sin asignar
-          </span>
-          {% endif %}
-
-          {% if total_atrasados_sin_asignar > 0 %}
-          <span class="badge bg-dark fs-6">
-            {{ total_atrasados_sin_asignar }} atrasado{{ total_atrasados_sin_asignar|pluralize }} sin asignar
-          </span>
-          {% endif %}
-        </div>
-
-        <div class="text-muted">
-          Revisa el módulo operativo para resolver mantenimientos pendientes.
-        </div>
-      </div>
-
-      <div class="w-100 w-md-auto dashboard-mobile-actions">
-        <a class="btn btn-danger" href="/dashboard/operativo/?filtro=urgentes">
-          🧑‍💼 Ir al operativo
-        </a>
-      </div>
+      {% if total_pendientes_sin_asignar > 0 %}
+      <span class="badge bg-warning text-dark">
+        {{ total_pendientes_sin_asignar }} sin asignar
+      </span>
+      {% endif %}
     </div>
+
+    <a href="/dashboard/operativo/?filtro=urgentes" class="btn btn-danger btn-sm mt-2">
+      Ir al operativo
+    </a>
   </div>
 </div>
-{% else %}
-
-<div class="card shadow-sm border-success mb-3 dashboard-mobile-card">
-  <div class="card-body d-flex justify-content-between align-items-start flex-wrap gap-3">
-    <div>
-      <div class="fw-bold fs-5 text-success dashboard-mobile-title">
-        ✅ Operación al día
-      </div>
-
-      <div class="text-muted">
-        No hay mantenimientos atrasados ni pendientes sin asignar.
-      </div>
-    </div>
-
-    <div class="w-100 w-md-auto dashboard-mobile-actions">
-      <a class="btn btn-outline-success" href="/dashboard/operativo/">
-        Ver operativo
-      </a>
-    </div>
-  </div>
-</div>
-
 {% endif %}
 
-<div class="card shadow-sm mb-3 border-0 dashboard-mobile-card">
+<!-- ================= RENDIMIENTO ================= -->
+<div class="card shadow-sm mb-3">
   <div class="card-body">
-    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
-      <div>
-        <div class="fw-bold fs-5 dashboard-mobile-title">
-          🚀 Rendimiento del día
-        </div>
-        <div class="text-muted small">
-          Resumen operativo y financiero de hoy.
-        </div>
-      </div>
 
-      <div class="text-muted small">
-        {{ hoy|date:"d/m/Y" }}
-      </div>
-    </div>
+    <div class="fw-bold mb-2">🚀 Rendimiento del día</div>
 
-    <div class="row g-2 mb-3 dashboard-mobile-kpi">
+    <div class="row g-2">
       <div class="col-6 col-md-3">
-        <div class="border rounded p-3 h-100 bg-light">
-          <div class="text-muted small">Mantenimientos de hoy</div>
-          <div class="fs-3 fw-bold">
-            {{ total_mantenimientos_hoy }}
-          </div>
+        <div class="border p-2">
+          <small>Mantenimientos</small>
+          <div class="fw-bold">{{ total_mantenimientos_hoy }}</div>
         </div>
       </div>
 
       <div class="col-6 col-md-3">
-        <div class="border rounded p-3 h-100 bg-light">
-          <div class="text-muted small">Realizados hoy</div>
-          <div class="fs-3 fw-bold text-success">
-            {{ realizados_hoy }}
-          </div>
+        <div class="border p-2">
+          <small>Realizados</small>
+          <div class="fw-bold text-success">{{ realizados_hoy }}</div>
         </div>
       </div>
 
       <div class="col-6 col-md-3">
-        <div class="border rounded p-3 h-100 bg-light">
-          <div class="text-muted small">Pendientes de hoy</div>
-          <div class="fs-3 fw-bold text-warning">
-            {{ pendientes_hoy }}
-          </div>
+        <div class="border p-2">
+          <small>Pendientes</small>
+          <div class="fw-bold text-warning">{{ pendientes_hoy }}</div>
         </div>
       </div>
 
       <div class="col-6 col-md-3">
-        <div class="border rounded p-3 h-100 bg-light">
-          <div class="text-muted small">Trabajadores activos hoy</div>
-          <div class="fs-3 fw-bold text-primary">
-            {{ trabajadores_activos_hoy }}
-          </div>
+        <div class="border p-2">
+          <small>Trabajadores</small>
+          <div class="fw-bold">{{ trabajadores_activos_hoy }}</div>
         </div>
       </div>
     </div>
 
-    <div class="row g-2 mb-3 dashboard-mobile-kpi">
-      <div class="col-12 col-md-4">
-        <div class="card shadow-sm border-success h-100">
-          <div class="card-body">
-            <div class="text-muted small">Ingresos del día</div>
-            <div class="fs-4 fw-bold text-success">
-              ${{ ingresos_hoy|floatformat:2 }}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="col-12 col-md-4">
-        <div class="card shadow-sm border-danger h-100">
-          <div class="card-body">
-            <div class="text-muted small">Egresos del día</div>
-            <div class="fs-4 fw-bold text-danger">
-              ${{ egresos_hoy|floatformat:2 }}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="col-12 col-md-4">
-        <div class="card shadow-sm border-primary h-100">
-          <div class="card-body">
-            <div class="text-muted small">Balance del día</div>
-            <div class="fs-4 fw-bold {% if balance_hoy < 0 %}text-danger{% else %}text-primary{% endif %}">
-              ${{ balance_hoy|floatformat:2 }}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="border rounded p-3 bg-light">
-      <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
-        <div class="fw-semibold">
-          Cumplimiento de hoy
-        </div>
-        <span class="badge bg-{{ rendimiento_estado_clase }} fs-6">
-          {{ cumplimiento_hoy }}%
-        </span>
-      </div>
-
-      <div class="progress" style="height: 14px;">
-        <div
-          class="progress-bar bg-{{ rendimiento_estado_clase }}"
-          role="progressbar"
-          style="width: {{ cumplimiento_hoy }}%;"
-          aria-valuenow="{{ cumplimiento_hoy }}"
-          aria-valuemin="0"
-          aria-valuemax="100"
-        ></div>
-      </div>
-
-      <div class="text-muted small mt-2">
-        {% if total_mantenimientos_hoy > 0 %}
-          Se han completado {{ realizados_hoy }} de {{ total_mantenimientos_hoy }} mantenimientos programados para hoy.
-        {% else %}
-          No hay mantenimientos programados para hoy.
-        {% endif %}
-      </div>
-    </div>
   </div>
 </div>
 
-<div class="card shadow-sm mb-3 border-0 dashboard-mobile-card">
+<!-- ================= GRÁFICOS ================= -->
+<div class="card shadow-sm mb-3">
   <div class="card-body">
-    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
-      <div>
-        <div class="fw-bold fs-5 dashboard-mobile-title">
-          📈 Análisis visual
-        </div>
-        <div class="text-muted small">
-          Gráficos reales conectados al resumen financiero y operativo.
-        </div>
-      </div>
-    </div>
+
+    <div class="fw-bold mb-3">📈 Análisis visual</div>
 
     <div class="row g-3">
-      <div class="col-12 col-lg-6">
-        <div class="card border-success shadow-sm h-100">
-          <div class="card-body">
-            <div class="fw-semibold mb-2">💰 Ingresos vs egresos</div>
-            <div style="position: relative; height: 320px;">
-              <canvas id="graficoFinanzas"></canvas>
-            </div>
-          </div>
-        </div>
+      <div class="col-md-6">
+        <canvas id="graficoFinanzas"></canvas>
       </div>
 
-      <div class="col-12 col-lg-6">
-        <div class="card border-primary shadow-sm h-100">
-          <div class="card-body">
-            <div class="fw-semibold mb-2">🧑‍💼 Estado operativo</div>
-            <div style="position: relative; height: 320px;">
-              <canvas id="graficoOperativo"></canvas>
-            </div>
-          </div>
-        </div>
+      <div class="col-md-6">
+        <canvas id="graficoOperativo"></canvas>
       </div>
     </div>
 
-    <div class="text-muted small mt-3">
-      Estos gráficos usan los datos preparados desde el backend en <code>grafico_finanzas</code> y <code>grafico_operativo</code>.
-    </div>
   </div>
 </div>
 
-<div class="card shadow-sm mb-3 border-0 dashboard-mobile-card">
+<!-- ================= PRIORIDADES ================= -->
+<div class="card shadow-sm mb-3">
   <div class="card-body">
-    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
-      <div>
-        <div class="fw-bold fs-5 dashboard-mobile-title">
-          💰 Resumen financiero inteligente
-        </div>
-        <div class="text-muted small">
-          Comparativo del mes actual frente al mes anterior.
-        </div>
+
+    <div class="fw-bold mb-2">🎯 Prioridades del día</div>
+
+    {% if total_requieren_atencion > 0 %}
+      <div class="text-danger">
+        {{ total_requieren_atencion }} requieren atención
       </div>
-
-      <div class="d-grid d-md-flex gap-2 w-100 w-md-auto dashboard-mobile-actions">
-        <a class="btn btn-outline-success btn-sm" href="/dashboard/finanzas/flujo/">
-          Ver flujo mensual
-        </a>
-        <a class="btn btn-outline-dark btn-sm" href="/dashboard/finanzas/recurrentes/">
-          Ver recurrentes
-        </a>
-      </div>
-    </div>
-
-    <div class="row g-3 mb-3">
-      <div class="col-12 col-md-4">
-        <div class="card border-success shadow-sm h-100">
-          <div class="card-body">
-            <div class="text-muted small">Ingresos del mes</div>
-            <div class="fs-4 fw-bold text-success">
-              ${{ resumen_mes_actual.ingresos|floatformat:2 }}
-            </div>
-            <div class="small mt-2 {% if variacion_ingresos_mes >= 0 %}text-success{% else %}text-danger{% endif %}">
-              {% if variacion_ingresos_mes >= 0 %}▲{% else %}▼{% endif %}
-              {{ variacion_ingresos_mes|floatformat:2 }}% vs mes anterior
-            </div>
-            <div class="text-muted small">
-              Mes anterior: ${{ resumen_mes_anterior.ingresos|floatformat:2 }}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="col-12 col-md-4">
-        <div class="card border-danger shadow-sm h-100">
-          <div class="card-body">
-            <div class="text-muted small">Egresos del mes</div>
-            <div class="fs-4 fw-bold text-danger">
-              ${{ resumen_mes_actual.egresos|floatformat:2 }}
-            </div>
-            <div class="small mt-2 {% if variacion_egresos_mes <= 0 %}text-success{% else %}text-danger{% endif %}">
-              {% if variacion_egresos_mes <= 0 %}▼{% else %}▲{% endif %}
-              {{ variacion_egresos_mes|floatformat:2 }}% vs mes anterior
-            </div>
-            <div class="text-muted small">
-              Mes anterior: ${{ resumen_mes_anterior.egresos|floatformat:2 }}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="col-12 col-md-4">
-        <div class="card border-primary shadow-sm h-100">
-          <div class="card-body">
-            <div class="text-muted small">Balance del mes</div>
-            <div class="fs-4 fw-bold {% if resumen_mes_actual.balance < 0 %}text-danger{% else %}text-primary{% endif %}">
-              ${{ resumen_mes_actual.balance|floatformat:2 }}
-            </div>
-            <div class="small mt-2 {% if variacion_balance_mes >= 0 %}text-success{% else %}text-danger{% endif %}">
-              {% if variacion_balance_mes >= 0 %}▲{% else %}▼{% endif %}
-              {{ variacion_balance_mes|floatformat:2 }}% vs mes anterior
-            </div>
-            <div class="text-muted small">
-              Mes anterior: ${{ resumen_mes_anterior.balance|floatformat:2 }}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    {% if recurrentes_proximos_3_dias %}
-    <div class="card border-warning shadow-sm">
-      <div class="card-body">
-        <div class="fw-bold text-warning mb-2">
-          ⏰ Movimientos recurrentes próximos (3 días)
-        </div>
-
-        <div class="vstack gap-2">
-          {% for mov in recurrentes_proximos_3_dias %}
-          <div class="border rounded p-2 bg-light d-flex justify-content-between align-items-start flex-wrap gap-2">
-            <div>
-              <div class="fw-semibold">
-                {{ mov.concepto }}
-              </div>
-              <div class="small text-muted">
-                {{ mov.proxima_fecha|date:"d/m/Y" }} · {{ mov.frecuencia|capfirst }}
-              </div>
-            </div>
-            <div class="text-end">
-              <div class="badge {% if mov.tipo == 'ingreso' %}bg-success{% else %}bg-danger{% endif %}">
-                {{ mov.tipo|capfirst }}
-              </div>
-              <div class="fw-bold mt-1">
-                ${{ mov.monto|floatformat:2 }}
-              </div>
-            </div>
-          </div>
-          {% endfor %}
-        </div>
-
-        <div class="mt-3 d-grid d-md-inline-block">
-          <a href="/dashboard/finanzas/recurrentes/" class="btn btn-outline-warning btn-sm">
-            Administrar recurrentes
-          </a>
-        </div>
-      </div>
-    </div>
     {% else %}
-    <div class="alert alert-light border mb-0">
-      No hay movimientos recurrentes próximos en los siguientes 3 días.
-    </div>
-    {% endif %}
-  </div>
-</div>
-
-<div class="card shadow-sm mb-3 border-0 dashboard-mobile-card">
-  <div class="card-body">
-    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
-      <div>
-        <div class="fw-bold fs-5 dashboard-mobile-title">
-          🎯 Prioridades del día
-        </div>
-        <div class="text-muted small">
-          Lo más importante para resolver hoy.
-        </div>
-      </div>
-      <div class="d-grid d-md-flex gap-2 w-100 w-md-auto dashboard-mobile-actions">
-        <a class="btn btn-outline-secondary btn-sm" href="/dashboard/mantenimientos/historial/">
-          🗂 Ver historial
-        </a>
-        <a class="btn btn-outline-dark btn-sm" href="/dashboard/operativo/">
-          Ver operativo completo
-        </a>
-      </div>
-    </div>
-
-    <div class="row g-3">
-      <div class="col-12 col-lg-4">
-        <div class="card border-danger shadow-sm h-100">
-          <div class="card-body">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <div class="fw-bold text-danger">🚨 Requiere atención inmediata</div>
-              <span class="badge bg-danger">{{ total_requieren_atencion }}</span>
-            </div>
-
-            {% if total_requieren_atencion > 0 %}
-              <div class="small text-muted mb-2">
-                Incluye atrasados y mantenimientos de hoy sin asignar.
-              </div>
-
-              <div class="vstack gap-2">
-                {% for m in requiere_atencion_items %}
-                <div class="border rounded p-2 bg-light">
-                  <div class="fw-semibold">
-                    {{ m.cliente }}
-                  </div>
-                  <div class="small text-muted">
-                    {{ m.fecha|date:"d/m/Y" }} · {{ m.estado|capfirst }}
-                  </div>
-
-                  <div class="mt-2 d-flex flex-wrap gap-1">
-                    {% if m.es_atrasado %}
-                    <span class="badge bg-danger">Atrasado</span>
-                    {% endif %}
-                    {% if m.sin_asignar %}
-                    <span class="badge bg-warning text-dark">Sin asignar</span>
-                    {% endif %}
-                  </div>
-
-                  <div class="mt-2 d-grid d-md-flex gap-2 dashboard-mobile-actions">
-                    <a href="/dashboard/mantenimientos/{{ m.id }}/" class="btn btn-outline-secondary btn-sm">
-                      Abrir
-                    </a>
-                    <a href="/dashboard/operativo/?filtro=urgentes" class="btn btn-outline-danger btn-sm">
-                      Ver lista
-                    </a>
-                    <a href="/dashboard/operativo/asignar/{{ m.id }}/" class="btn btn-outline-primary btn-sm">
-                      Resolver
-                    </a>
-                  </div>
-                </div>
-                {% endfor %}
-              </div>
-
-              <div class="mt-3 d-grid">
-                <a href="/dashboard/operativo/?filtro=urgentes" class="btn btn-danger btn-sm">
-                  Ver todos los urgentes
-                </a>
-              </div>
-            {% else %}
-              <div class="text-muted">
-                No hay prioridades críticas en este momento.
-              </div>
-            {% endif %}
-          </div>
-        </div>
-      </div>
-
-      <div class="col-12 col-lg-4">
-        <div class="card border-warning shadow-sm h-100">
-          <div class="card-body">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <div class="fw-bold text-warning">🟡 Pendientes de hoy</div>
-              <span class="badge bg-warning text-dark">{{ pendientes_hoy }}</span>
-            </div>
-
-            {% if pendientes_hoy_items %}
-              <div class="vstack gap-2">
-                {% for m in pendientes_hoy_items %}
-                <div class="border rounded p-2 bg-light">
-                  <div class="fw-semibold">
-                    {{ m.cliente }}
-                  </div>
-                  <div class="small text-muted">
-                    {{ m.fecha|date:"d/m/Y" }}
-                  </div>
-
-                  <div class="mt-1">
-                    {% if m.trabajadores.count > 0 %}
-                    <span class="badge bg-success">Asignado</span>
-                    {% else %}
-                    <span class="badge bg-warning text-dark">Sin asignar</span>
-                    {% endif %}
-                  </div>
-
-                  <div class="mt-2 d-grid d-md-flex gap-2 dashboard-mobile-actions">
-                    <a href="/dashboard/mantenimientos/{{ m.id }}/" class="btn btn-outline-secondary btn-sm">
-                      Abrir
-                    </a>
-                    <a href="/dashboard/operativo/asignar/{{ m.id }}/" class="btn btn-outline-primary btn-sm">
-                      Asignar
-                    </a>
-                  </div>
-                </div>
-                {% endfor %}
-              </div>
-
-              <div class="mt-3 d-grid d-md-flex gap-2 dashboard-mobile-actions">
-                <a href="/dashboard/operativo/?filtro=pendientes_hoy" class="btn btn-warning btn-sm text-dark">
-                  Ver pendientes de hoy
-                </a>
-                <a href="/dashboard/operativo/?filtro=sin_asignar" class="btn btn-outline-warning btn-sm">
-                  Ver sin asignar
-                </a>
-              </div>
-            {% else %}
-              <div class="text-muted">
-                No hay pendientes de hoy.
-              </div>
-            {% endif %}
-          </div>
-        </div>
-      </div>
-
-      <div class="col-12 col-lg-4">
-        <div class="card border-dark shadow-sm h-100">
-          <div class="card-body">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <div class="fw-bold">👷 Trabajadores con más carga</div>
-              <span class="badge bg-dark">{{ top_trabajadores|length }}</span>
-            </div>
-
-            {% if top_trabajadores %}
-              <div class="vstack gap-2">
-                {% for t in top_trabajadores %}
-                <div class="border rounded p-2 bg-light">
-                  <div class="fw-semibold">
-                    {{ t.username }}
-                  </div>
-
-                  <div class="small text-muted mt-1">
-                    Hoy: {{ t.carga_hoy }} · Atrasados: {{ t.atrasados }} · Próximos: {{ t.proximos }}
-                  </div>
-
-                  <div class="small mt-2">
-                    <span class="badge {% if t.carga_hoy >= 3 or t.atrasados > 0 %}bg-danger{% elif t.carga_hoy == 2 %}bg-warning text-dark{% else %}bg-success{% endif %}">
-                      Carga total: {{ t.carga_total }}
-                    </span>
-                  </div>
-                </div>
-                {% endfor %}
-              </div>
-            {% else %}
-              <div class="text-muted">
-                No hay carga registrada en trabajadores.
-              </div>
-            {% endif %}
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div class="card shadow-sm mb-3 border-0 dashboard-mobile-card">
-  <div class="card-body">
-    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
-      <div>
-        <div class="fw-bold fs-5 dashboard-mobile-title">
-          🚦 Estado del equipo
-        </div>
-        <div class="text-muted small">
-          Vista rápida para decidir a quién asignar el siguiente mantenimiento.
-        </div>
-      </div>
-      <div class="d-grid d-md-flex gap-2 w-100 w-md-auto dashboard-mobile-actions">
-        <a class="btn btn-outline-secondary btn-sm" href="/dashboard/mantenimientos/historial/">
-          🗂 Historial
-        </a>
-        <a class="btn btn-outline-primary btn-sm" href="/dashboard/operativo/">
-          Ir a asignaciones
-        </a>
-      </div>
-    </div>
-
-    <div class="row g-3">
-      <div class="col-12 col-lg-4">
-        <div class="card border-success shadow-sm h-100">
-          <div class="card-body">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <div class="fw-bold text-success">🟢 Libres</div>
-              <span class="badge bg-success">{{ total_trabajadores_libres }}</span>
-            </div>
-
-            {% if trabajadores_libres %}
-              <div class="vstack gap-2">
-                {% for t in trabajadores_libres %}
-                <div class="border rounded p-2 bg-light">
-                  <div class="fw-semibold">{{ t.username }}</div>
-                  <div class="small text-muted">
-                    Hoy: {{ t.carga_hoy }} · Atrasados: {{ t.atrasados }} · Próximos: {{ t.proximos }}
-                  </div>
-                </div>
-                {% endfor %}
-              </div>
-            {% else %}
-              <div class="text-muted">
-                No hay trabajadores libres ahora mismo.
-              </div>
-            {% endif %}
-          </div>
-        </div>
-      </div>
-
-      <div class="col-12 col-lg-4">
-        <div class="card border-warning shadow-sm h-100">
-          <div class="card-body">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <div class="fw-bold text-warning">🟡 Carga media</div>
-              <span class="badge bg-warning text-dark">{{ total_trabajadores_media }}</span>
-            </div>
-
-            {% if trabajadores_media %}
-              <div class="vstack gap-2">
-                {% for t in trabajadores_media %}
-                <div class="border rounded p-2 bg-light">
-                  <div class="fw-semibold">{{ t.username }}</div>
-                  <div class="small text-muted">
-                    Hoy: {{ t.carga_hoy }} · Atrasados: {{ t.atrasados }} · Próximos: {{ t.proximos }}
-                  </div>
-                </div>
-                {% endfor %}
-              </div>
-            {% else %}
-              <div class="text-muted">
-                No hay trabajadores en carga media.
-              </div>
-            {% endif %}
-          </div>
-        </div>
-      </div>
-
-      <div class="col-12 col-lg-4">
-        <div class="card border-danger shadow-sm h-100">
-          <div class="card-body">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <div class="fw-bold text-danger">🔴 Saturados</div>
-              <span class="badge bg-danger">{{ total_trabajadores_saturados }}</span>
-            </div>
-
-            {% if trabajadores_saturados %}
-              <div class="vstack gap-2">
-                {% for t in trabajadores_saturados %}
-                <div class="border rounded p-2 bg-light">
-                  <div class="fw-semibold">{{ t.username }}</div>
-                  <div class="small text-muted">
-                    Hoy: {{ t.carga_hoy }} · Atrasados: {{ t.atrasados }} · Próximos: {{ t.proximos }}
-                  </div>
-                </div>
-                {% endfor %}
-              </div>
-            {% else %}
-              <div class="text-muted">
-                No hay trabajadores saturados.
-              </div>
-            {% endif %}
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="card shadow-sm border-primary mt-3">
-      <div class="card-body">
-        <div class="fw-bold text-primary mb-2">
-          ⭐ Recomendación automática
-        </div>
-
-        {% if trabajador_recomendado %}
-          <div class="fs-5 fw-semibold mb-1">
-            {{ trabajador_recomendado.username }}
-          </div>
-
-          <div class="text-muted mb-2">
-            {{ trabajador_recomendado.motivo }}
-          </div>
-
-          <div class="d-flex flex-wrap gap-2">
-            <span class="badge bg-success">Hoy: {{ trabajador_recomendado.carga_hoy }}</span>
-            <span class="badge bg-warning text-dark">Atrasados: {{ trabajador_recomendado.atrasados }}</span>
-            <span class="badge bg-primary">Próximos: {{ trabajador_recomendado.proximos }}</span>
-            <span class="badge bg-dark">Carga total: {{ trabajador_recomendado.carga_total }}</span>
-          </div>
-        {% else %}
-          <div class="text-muted">
-            No hay una recomendación disponible en este momento.
-          </div>
-        {% endif %}
-      </div>
-    </div>
-  </div>
-</div>
-
-<div class="card shadow-sm mb-3 border-info dashboard-mobile-card">
-  <div class="card-body d-flex justify-content-between align-items-start flex-wrap gap-3">
-    <div>
-      <div class="fw-bold fs-5 text-info dashboard-mobile-title">
-        🗂 Historial de mantenimientos
-      </div>
       <div class="text-muted">
-        Consulta mantenimientos realizados y pendientes con filtros por cliente, trabajador, fecha y estado.
+        Sin prioridades críticas
       </div>
-    </div>
-
-    <div class="d-grid d-md-flex gap-2 w-100 w-md-auto dashboard-mobile-actions">
-      <a class="btn btn-info text-white" href="/dashboard/mantenimientos/historial/">
-        Abrir historial
-      </a>
-      <a class="btn btn-outline-info" href="/dashboard/mantenimientos/historial/?estado=pendiente">
-        Ver pendientes
-      </a>
-      <a class="btn btn-outline-info" href="/dashboard/mantenimientos/historial/?estado=realizado">
-        Ver realizados
-      </a>
-    </div>
-  </div>
-</div>
-
-<div class="row g-2 mb-3 dashboard-mobile-kpi">
-  <div class="col-12 col-md-4">
-    <div class="card shadow-sm">
-      <div class="card-body">
-        <div class="text-muted small">Ingresos acumulados</div>
-        <div class="fs-4 fw-bold">
-          ${{ total_ingresos|floatformat:2 }}
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="col-12 col-md-4">
-    <div class="card shadow-sm">
-      <div class="card-body">
-        <div class="text-muted small">Egresos acumulados</div>
-        <div class="fs-4 fw-bold text-danger">
-          ${{ total_egresos|floatformat:2 }}
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="col-12 col-md-4">
-    <div class="card shadow-sm">
-      <div class="card-body">
-        <div class="text-muted small">Balance acumulado</div>
-        <div class="fs-4 fw-bold {% if balance < 0 %}text-danger{% endif %}">
-          ${{ balance|floatformat:2 }}
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div class="row g-2 mb-3 dashboard-mobile-kpi">
-  <div class="col-12 col-md-4">
-    <div class="card shadow-sm border-danger">
-      <div class="card-body">
-        <div class="text-muted small">Atrasados</div>
-        <div class="fs-4 fw-bold text-danger">
-          {{ total_atrasados }}
-        </div>
-        <div class="mt-2 d-grid">
-          <a href="/dashboard/operativo/?filtro=atrasados" class="btn btn-outline-danger btn-sm">
-            Ver atrasados
-          </a>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="col-12 col-md-4">
-    <div class="card shadow-sm border-warning">
-      <div class="card-body">
-        <div class="text-muted small">
-          Pendientes sin asignar
-        </div>
-
-        <div class="fs-4 fw-bold text-warning">
-          {{ total_pendientes_sin_asignar }}
-        </div>
-
-        <div class="mt-2 d-grid">
-          <a href="/dashboard/operativo/?filtro=sin_asignar" class="btn btn-outline-warning btn-sm">
-            Ver sin asignar
-          </a>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="col-12 col-md-4">
-    <div class="card shadow-sm border-dark">
-      <div class="card-body">
-        <div class="text-muted small">
-          Atrasados sin asignar
-        </div>
-
-        <div class="fs-4 fw-bold">
-          {{ total_atrasados_sin_asignar }}
-        </div>
-
-        <div class="mt-2 d-grid">
-          <a href="/dashboard/operativo/?filtro=urgentes" class="btn btn-outline-dark btn-sm">
-            Ver urgentes
-          </a>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div class="card shadow-sm mb-3 dashboard-mobile-card">
-  <div class="card-body">
-    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
-      <div class="fw-bold">
-        🕘 Actividad reciente
-      </div>
-
-      <div class="d-grid d-md-flex gap-2 w-100 w-md-auto dashboard-mobile-actions">
-        <a class="btn btn-outline-secondary btn-sm" href="/dashboard/mantenimientos/historial/">
-          🗂 Historial
-        </a>
-        <a class="btn btn-outline-secondary btn-sm" href="/dashboard/actividad/">
-          Ver historial completo
-        </a>
-      </div>
-    </div>
-
-    {% if actividades_recientes %}
-    <div class="vstack gap-2">
-      {% for a in actividades_recientes %}
-      <div class="border rounded p-2 bg-light">
-        <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
-          <div class="flex-grow-1">
-            <div class="fw-semibold">
-              {{ a.titulo }}
-            </div>
-
-            <div class="text-muted small">
-              {{ a.descripcion }}
-            </div>
-          </div>
-
-          <div class="text-muted small">
-            {{ a.creada_en|date:"d/m/Y H:i" }}
-          </div>
-        </div>
-
-        {% if a.user %}
-        <div class="small mt-1">
-          <span class="text-muted">Usuario:</span>
-          {{ a.user.username }}
-        </div>
-        {% endif %}
-
-        {% if a.url %}
-        <div class="mt-2 d-grid d-md-inline-block">
-          <a href="{{ a.url }}" class="btn btn-outline-primary btn-sm">
-            Abrir
-          </a>
-        </div>
-        {% endif %}
-      </div>
-      {% endfor %}
-    </div>
-    {% else %}
-    <div class="text-muted">
-      No hay actividad registrada todavía.
-    </div>
     {% endif %}
+
   </div>
 </div>
 
-<div class="card shadow-sm dashboard-mobile-card">
+<!-- ================= EQUIPO ================= -->
+<div class="card shadow-sm mb-3">
   <div class="card-body">
-    <div class="fw-bold mb-2">
-      Accesos rápidos
+
+    <div class="fw-bold mb-2">👷 Estado del equipo</div>
+
+    <div class="row g-2">
+      <div class="col-md-4">
+        <div class="text-success">Libres: {{ total_trabajadores_libres }}</div>
+      </div>
+      <div class="col-md-4">
+        <div class="text-warning">Media: {{ total_trabajadores_media }}</div>
+      </div>
+      <div class="col-md-4">
+        <div class="text-danger">Saturados: {{ total_trabajadores_saturados }}</div>
+      </div>
     </div>
 
-    <div class="d-grid d-md-flex gap-2 dashboard-mobile-actions">
-      <a class="btn btn-outline-dark" href="/dashboard/operativo/">
-        🧑‍💼 Operativo
-      </a>
+  </div>
+</div>
 
-      <a class="btn btn-outline-dark" href="/dashboard/mantenimientos/historial/">
-        🗂 Historial mantenimientos
-      </a>
+<!-- ================= ACTIVIDAD ================= -->
+<div class="card shadow-sm">
+  <div class="card-body">
 
-      <a class="btn btn-outline-dark" href="/dashboard/finanzas/flujo/">
-        💰 Flujo mensual
-      </a>
+    <div class="fw-bold mb-2">🕘 Actividad reciente</div>
 
-      <a class="btn btn-outline-dark" href="/dashboard/finanzas/recurrentes/">
-        🔁 Recurrentes
-      </a>
-
-      <a class="btn btn-outline-secondary" href="/dashboard/actividad/">
-        🕘 Historial actividad
-      </a>
-
-      <a class="btn btn-outline-secondary" href="/admin/">
-        ⚙️ Admin Django
-      </a>
+    {% for a in actividades_recientes %}
+    <div class="border p-2 mb-2">
+      <div class="fw-semibold">{{ a.titulo }}</div>
+      <div class="small text-muted">{{ a.descripcion }}</div>
     </div>
+    {% endfor %}
+
   </div>
 </div>
 
 <script>
-  (function () {
-    try {
-      const rawFinanzas = '{{ grafico_finanzas|default:""|escapejs }}';
-      const rawOperativo = '{{ grafico_operativo|default:""|escapejs }}';
+const f = JSON.parse('{{ grafico_finanzas|escapejs }}');
+const o = JSON.parse('{{ grafico_operativo|escapejs }}');
 
-      if (!rawFinanzas || !rawOperativo) return;
+new Chart(document.getElementById('graficoFinanzas'), {
+  type: 'doughnut',
+  data: {
+    labels: f.labels,
+    datasets: [{ data: f.data }]
+  }
+});
 
-      const dataFinanzas = JSON.parse(rawFinanzas);
-      const dataOperativo = JSON.parse(rawOperativo);
-
-      const canvasFinanzas = document.getElementById('graficoFinanzas');
-      const canvasOperativo = document.getElementById('graficoOperativo');
-
-      if (canvasFinanzas) {
-        new Chart(canvasFinanzas, {
-          type: 'doughnut',
-          data: {
-            labels: dataFinanzas.labels || [],
-            datasets: [{
-              data: dataFinanzas.data || [],
-              backgroundColor: [
-                'rgba(25, 135, 84, 0.85)',
-                'rgba(220, 53, 69, 0.85)'
-              ],
-              borderColor: [
-                'rgba(25, 135, 84, 1)',
-                'rgba(220, 53, 69, 1)'
-              ],
-              borderWidth: 1
-            }]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              legend: {
-                position: 'bottom'
-              }
-            }
-          }
-        });
-      }
-
-      if (canvasOperativo) {
-        new Chart(canvasOperativo, {
-          type: 'bar',
-          data: {
-            labels: dataOperativo.labels || [],
-            datasets: [{
-              label: 'Cantidad',
-              data: dataOperativo.data || [],
-              backgroundColor: [
-                'rgba(25, 135, 84, 0.85)',
-                'rgba(255, 193, 7, 0.85)',
-                'rgba(220, 53, 69, 0.85)',
-                'rgba(13, 110, 253, 0.85)'
-              ],
-              borderColor: [
-                'rgba(25, 135, 84, 1)',
-                'rgba(255, 193, 7, 1)',
-                'rgba(220, 53, 69, 1)',
-                'rgba(13, 110, 253, 1)'
-              ],
-              borderWidth: 1
-            }]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-              y: {
-                beginAtZero: true,
-                ticks: {
-                  precision: 0
-                }
-              }
-            },
-            plugins: {
-              legend: {
-                display: false
-              }
-            }
-          }
-        });
-      }
-    } catch (error) {
-      console.error('Error cargando gráficos del dashboard:', error);
-    }
-  })();
+new Chart(document.getElementById('graficoOperativo'), {
+  type: 'bar',
+  data: {
+    labels: o.labels,
+    datasets: [{ data: o.data }]
+  }
+});
 </script>
-
-
-
-<!-- ================= FACTURACIÓN ================= -->
-<div class="row g-3 mb-3">
-  <div class="col-12 col-md-4">
-    <div class="card shadow-sm border-primary">
-      <div class="card-body">
-        <div class="text-muted small">Facturación del mes</div>
-        <div class="fs-4 fw-bold text-primary">
-          ${{ total_facturas_mes|default:0|floatformat:2 }}
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="col-12 col-md-4">
-    <div class="card shadow-sm border-success">
-      <div class="card-body">
-        <div class="text-muted small">Pagado</div>
-        <div class="fs-4 fw-bold text-success">
-          ${{ total_facturas_pagadas_mes|default:0|floatformat:2 }}
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="col-12 col-md-4">
-    <div class="card shadow-sm border-warning">
-      <div class="card-body">
-        <div class="text-muted small">Pendiente</div>
-        <div class="fs-4 fw-bold text-warning">
-          ${{ total_facturas_pendientes_mes|default:0|floatformat:2 }}
-        </div>
-        <div class="small text-danger mt-1">
-          {{ total_facturas_vencidas|default:0 }} vencidas
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div class="card shadow-sm mb-3">
-  <div class="card-body d-flex justify-content-between align-items-center flex-wrap gap-2">
-    <div>
-      <div class="fw-bold">🧾 Facturación</div>
-      <div class="text-muted small">Gestiona cobros y genera facturas automáticas</div>
-    </div>
-
-    <div class="d-flex gap-2 flex-wrap">
-      <form method="post" action="{% url 'factura_generar_mes' %}">
-        {% csrf_token %}
-        <button class="btn btn-primary btn-sm">
-          Generar facturas
-        </button>
-      </form>
-
-      <a href="{% url 'factura_list' %}" class="btn btn-outline-primary btn-sm">
-        Ver facturas
-      </a>
-    </div>
-  </div>
-</div>
 
 {% endblock %}
