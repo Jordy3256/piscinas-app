@@ -4,6 +4,16 @@
 {% block top_title %}🏠 Inicio (Admin){% endblock %}
 
 {% block content %}
+
+  <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-4">
+    <div>
+      <h3 class="mb-1">Panel administrativo</h3>
+      <div class="text-muted">
+        Accede a los principales módulos de gestión de JVAQUA.
+      </div>
+    </div>
+  </div>
+
   <div class="row g-3">
 
     <div class="col-md-6">
@@ -11,7 +21,9 @@
         <div class="card shadow-sm h-100">
           <div class="card-body">
             <h5 class="mb-1">📊 Dashboard</h5>
-            <div class="text-muted">Resumen financiero</div>
+            <div class="text-muted">
+              Resumen financiero, operativo y rendimiento general.
+            </div>
           </div>
         </div>
       </a>
@@ -22,7 +34,22 @@
         <div class="card shadow-sm h-100">
           <div class="card-body">
             <h5 class="mb-1">🧑‍💼 Operativo</h5>
-            <div class="text-muted">Hoy, atrasados, próximos y asignación</div>
+            <div class="text-muted">
+              Mantenimientos de hoy, atrasados, próximos y asignaciones.
+            </div>
+          </div>
+        </div>
+      </a>
+    </div>
+
+    <div class="col-md-6">
+      <a class="text-decoration-none" href="/dashboard/contratos/">
+        <div class="card shadow-sm h-100">
+          <div class="card-body">
+            <h5 class="mb-1">📄 Contratos</h5>
+            <div class="text-muted">
+              Clientes, frecuencias, formas de pago y valores mensuales.
+            </div>
           </div>
         </div>
       </a>
@@ -33,7 +60,9 @@
         <div class="card shadow-sm h-100">
           <div class="card-body">
             <h5 class="mb-1">📦 Inventario</h5>
-            <div class="text-muted">Stock, ventas, utilidad y movimientos</div>
+            <div class="text-muted">
+              Stock, ventas, utilidad y movimientos de insumos.
+            </div>
           </div>
         </div>
       </a>
@@ -44,22 +73,27 @@
         <div class="card shadow-sm h-100">
           <div class="card-body">
             <h5 class="mb-1">💰 Flujo mensual</h5>
-            <div class="text-muted">Ingresos / egresos + gráficos</div>
+            <div class="text-muted">
+              Ingresos, egresos, balances y gráficos financieros.
+            </div>
           </div>
         </div>
       </a>
     </div>
 
-    <div class="col-12">
+    <div class="col-md-6">
       <a class="text-decoration-none" href="/admin/">
         <div class="card shadow-sm h-100">
           <div class="card-body">
             <h5 class="mb-1">⚙️ Admin Django</h5>
-            <div class="text-muted">Gestión completa de tablas</div>
+            <div class="text-muted">
+              Gestión avanzada y completa de las tablas del sistema.
+            </div>
           </div>
         </div>
       </a>
     </div>
 
   </div>
+
 {% endblock %}
