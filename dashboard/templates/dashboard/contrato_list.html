@@ -5,230 +5,207 @@
 {% block top_title %}📄 Contratos{% endblock %}
 
 {% block top_actions %}
-  <a class="btn btn-primary btn-sm" href="/dashboard/contratos/nuevo/">
-    ➕ Nuevo contrato
-  </a>
-  <a class="btn btn-outline-secondary btn-sm" href="/dashboard/inicio/">
-    Inicio
-  </a>
-  <a class="btn btn-outline-danger btn-sm" href="/logout/">
-    Salir
-  </a>
+  <a class="btn btn-primary btn-sm" href="/dashboard/contratos/nuevo/">➕ Nuevo contrato</a>
+  <a class="btn btn-outline-secondary btn-sm" href="/dashboard/inicio/">Inicio</a>
+  <a class="btn btn-outline-danger btn-sm" href="/logout/">Salir</a>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+  .contracts-page{
+    --cp-primary:#0f766e;
+    --cp-primary-dark:#115e59;
+    --cp-accent:#14b8a6;
+    --cp-ink:#0f172a;
+    --cp-muted:#64748b;
+    --cp-line:#e2e8f0;
+    --cp-soft:#f8fafc;
+    --cp-card:#ffffff;
+  }
+  .contracts-page .cp-hero{
+    position:relative; overflow:hidden; border-radius:24px; padding:28px;
+    background:linear-gradient(135deg,#0f172a 0%,#0f766e 68%,#14b8a6 100%);
+    color:#fff; box-shadow:0 24px 60px rgba(15,23,42,.18); margin-bottom:22px;
+  }
+  .contracts-page .cp-hero:after{
+    content:""; position:absolute; width:280px; height:280px; border-radius:50%;
+    background:rgba(255,255,255,.08); right:-80px; top:-110px;
+  }
+  .contracts-page .cp-eyebrow{font-size:.78rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;opacity:.8}
+  .contracts-page .cp-title{font-size:clamp(1.7rem,3vw,2.45rem);font-weight:800;margin:.45rem 0 .35rem}
+  .contracts-page .cp-subtitle{max-width:760px;margin:0;opacity:.88}
+  .contracts-page .cp-hero-actions{position:relative;z-index:2}
+  .contracts-page .cp-hero .btn-light{border-radius:14px;font-weight:700;padding:.7rem 1rem}
+  .contracts-page .cp-kpi{
+    border:1px solid rgba(226,232,240,.9); border-radius:20px; background:var(--cp-card);
+    box-shadow:0 12px 35px rgba(15,23,42,.07); height:100%; transition:.18s ease;
+  }
+  .contracts-page .cp-kpi:hover{transform:translateY(-3px);box-shadow:0 18px 40px rgba(15,23,42,.1)}
+  .contracts-page .cp-kpi-body{padding:20px}
+  .contracts-page .cp-kpi-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .contracts-page .cp-kpi-icon{
+    width:44px;height:44px;border-radius:14px;display:grid;place-items:center;
+    font-size:1.15rem;background:#ecfeff;color:#0f766e;
+  }
+  .contracts-page .cp-kpi-label{font-size:.78rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--cp-muted)}
+  .contracts-page .cp-kpi-value{font-size:1.85rem;font-weight:800;color:var(--cp-ink);line-height:1.1;margin-top:10px}
+  .contracts-page .cp-panel{
+    border:1px solid var(--cp-line); border-radius:22px; background:#fff;
+    box-shadow:0 14px 40px rgba(15,23,42,.06); overflow:hidden;
+  }
+  .contracts-page .cp-panel-body{padding:20px}
+  .contracts-page .form-label{font-weight:700;color:#334155;font-size:.86rem}
+  .contracts-page .form-control,.contracts-page .form-select{
+    min-height:46px;border-radius:13px;border-color:#dbe3ec;background:#fff;
+  }
+  .contracts-page .form-control:focus,.contracts-page .form-select:focus{
+    border-color:#2dd4bf;box-shadow:0 0 0 .2rem rgba(20,184,166,.14)
+  }
+  .contracts-page .btn{border-radius:12px;font-weight:700}
+  .contracts-page .cp-table thead th{
+    background:#f8fafc;color:#475569;border-bottom:1px solid var(--cp-line);
+    font-size:.76rem;text-transform:uppercase;letter-spacing:.05em;padding:15px 16px;
+  }
+  .contracts-page .cp-table tbody td{padding:16px;border-color:#eef2f7}
+  .contracts-page .cp-table tbody tr:hover{background:#fbfefe}
+  .contracts-page .cp-client-name{font-weight:800;color:#0f172a}
+  .contracts-page .cp-price{font-weight:800;color:#0f766e}
+  .contracts-page .cp-badge{
+    display:inline-flex;align-items:center;gap:6px;padding:.42rem .68rem;border-radius:999px;font-size:.76rem;font-weight:800
+  }
+  .contracts-page .cp-badge-success{background:#dcfce7;color:#166534}
+  .contracts-page .cp-badge-muted{background:#f1f5f9;color:#475569}
+  .contracts-page .cp-badge-light{background:#f8fafc;color:#334155;border:1px solid #e2e8f0}
+  .contracts-page .cp-mobile-card{
+    border:1px solid var(--cp-line);border-radius:18px;padding:18px;background:#fff;
+    box-shadow:0 10px 28px rgba(15,23,42,.05)
+  }
+  .contracts-page .cp-mobile-card hr{border-color:#e9eef4}
+  .contracts-page .pagination .page-link{
+    border-radius:10px!important;margin:0 3px;border-color:#dbe3ec;color:#0f766e;font-weight:700
+  }
+  .contracts-page .pagination .active .page-link{background:#0f766e;border-color:#0f766e}
+  @media(max-width:767.98px){
+    .contracts-page .cp-hero{padding:22px}
+    .contracts-page .cp-panel-body{padding:16px}
+  }
+</style>
 {% endblock %}
 
 {% block content %}
+<div class="contracts-page">
 
-<div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-3">
-  <div>
-    <h3 class="mb-1">Gestión de contratos</h3>
-    <div class="text-muted">
-      Administra clientes, frecuencias, formas de pago y estado de cada contrato.
-    </div>
-  </div>
-
-  <a class="btn btn-primary" href="/dashboard/contratos/nuevo/">
-    ➕ Crear contrato
-  </a>
-</div>
-
-<div class="row g-3 mb-3">
-  <div class="col-6 col-lg-3">
-    <div class="card shadow-sm h-100">
-      <div class="card-body">
-        <div class="small text-muted">Contratos encontrados</div>
-        <div class="fs-3 fw-bold">{{ total_contratos }}</div>
+  <section class="cp-hero">
+    <div class="row align-items-center g-3 position-relative" style="z-index:2">
+      <div class="col-12 col-lg">
+        <div class="cp-eyebrow">Gestión comercial</div>
+        <h1 class="cp-title">Centro de contratos</h1>
+        <p class="cp-subtitle">Administra clientes, frecuencias, formas de pago, estados e ingresos mensuales desde una sola vista.</p>
+      </div>
+      <div class="col-12 col-lg-auto cp-hero-actions">
+        <a class="btn btn-light" href="/dashboard/contratos/nuevo/">➕ Crear contrato</a>
       </div>
     </div>
-  </div>
+  </section>
 
-  <div class="col-6 col-lg-3">
-    <div class="card shadow-sm h-100">
-      <div class="card-body">
-        <div class="small text-muted">Activos</div>
-        <div class="fs-3 fw-bold text-success">{{ total_activos }}</div>
-      </div>
+  <div class="row g-3 mb-3">
+    <div class="col-6 col-xl-3">
+      <div class="cp-kpi"><div class="cp-kpi-body">
+        <div class="cp-kpi-top"><div><div class="cp-kpi-label">Encontrados</div></div><div class="cp-kpi-icon">📄</div></div>
+        <div class="cp-kpi-value">{{ total_contratos }}</div>
+      </div></div>
+    </div>
+    <div class="col-6 col-xl-3">
+      <div class="cp-kpi"><div class="cp-kpi-body">
+        <div class="cp-kpi-top"><div><div class="cp-kpi-label">Activos</div></div><div class="cp-kpi-icon">✅</div></div>
+        <div class="cp-kpi-value text-success">{{ total_activos }}</div>
+      </div></div>
+    </div>
+    <div class="col-6 col-xl-3">
+      <div class="cp-kpi"><div class="cp-kpi-body">
+        <div class="cp-kpi-top"><div><div class="cp-kpi-label">Inactivos</div></div><div class="cp-kpi-icon">⏸️</div></div>
+        <div class="cp-kpi-value text-secondary">{{ total_inactivos }}</div>
+      </div></div>
+    </div>
+    <div class="col-6 col-xl-3">
+      <div class="cp-kpi"><div class="cp-kpi-body">
+        <div class="cp-kpi-top"><div><div class="cp-kpi-label">Ingreso mensual</div></div><div class="cp-kpi-icon">💰</div></div>
+        <div class="cp-kpi-value">${{ ingreso_mensual_estimado|floatformat:2 }}</div>
+      </div></div>
     </div>
   </div>
 
-  <div class="col-6 col-lg-3">
-    <div class="card shadow-sm h-100">
-      <div class="card-body">
-        <div class="small text-muted">Inactivos</div>
-        <div class="fs-3 fw-bold text-secondary">{{ total_inactivos }}</div>
-      </div>
-    </div>
-  </div>
-
-  <div class="col-6 col-lg-3">
-    <div class="card shadow-sm h-100">
-      <div class="card-body">
-        <div class="small text-muted">Ingreso mensual activo</div>
-        <div class="fs-4 fw-bold text-primary">
-          ${{ ingreso_mensual_estimado|floatformat:2 }}
+  <div class="cp-panel mb-3">
+    <div class="cp-panel-body">
+      <form method="get" class="row g-3 align-items-end">
+        <div class="col-12 col-lg-5">
+          <label class="form-label">Buscar</label>
+          <input type="text" name="q" value="{{ q }}" class="form-control" placeholder="Cliente, teléfono, correo o dato personalizado">
         </div>
-      </div>
+        <div class="col-6 col-lg-2">
+          <label class="form-label">Estado</label>
+          <select name="estado" class="form-select">
+            <option value="">Todos</option>
+            <option value="activo" {% if estado == "activo" %}selected{% endif %}>Activos</option>
+            <option value="inactivo" {% if estado == "inactivo" %}selected{% endif %}>Inactivos</option>
+          </select>
+        </div>
+        <div class="col-6 col-lg-3">
+          <label class="form-label">Frecuencia</label>
+          <select name="frecuencia" class="form-select">
+            <option value="">Todas</option>
+            {% for valor, etiqueta in frecuencias %}
+              <option value="{{ valor }}" {% if frecuencia == valor %}selected{% endif %}>{{ etiqueta }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-12 col-lg-2">
+          <div class="d-grid gap-2">
+            <button type="submit" class="btn btn-outline-primary">🔎 Filtrar</button>
+            {% if q or estado or frecuencia %}
+              <a class="btn btn-outline-secondary" href="/dashboard/contratos/">Limpiar</a>
+            {% endif %}
+          </div>
+        </div>
+      </form>
     </div>
   </div>
-</div>
 
-<div class="card shadow-sm mb-3">
-  <div class="card-body">
-    <form method="get" class="row g-2 align-items-end">
-
-      <div class="col-12 col-lg-5">
-        <label class="form-label">Buscar</label>
-        <input
-          type="text"
-          name="q"
-          value="{{ q }}"
-          class="form-control"
-          placeholder="Cliente, teléfono, correo o dato personalizado"
-        >
-      </div>
-
-      <div class="col-6 col-lg-2">
-        <label class="form-label">Estado</label>
-        <select name="estado" class="form-select">
-          <option value="">Todos</option>
-          <option value="activo" {% if estado == "activo" %}selected{% endif %}>
-            Activos
-          </option>
-          <option value="inactivo" {% if estado == "inactivo" %}selected{% endif %}>
-            Inactivos
-          </option>
-        </select>
-      </div>
-
-      <div class="col-6 col-lg-3">
-        <label class="form-label">Frecuencia</label>
-        <select name="frecuencia" class="form-select">
-          <option value="">Todas</option>
-          {% for valor, etiqueta in frecuencias %}
-            <option
-              value="{{ valor }}"
-              {% if frecuencia == valor %}selected{% endif %}
-            >
-              {{ etiqueta }}
-            </option>
-          {% endfor %}
-        </select>
-      </div>
-
-      <div class="col-12 col-lg-2">
-        <div class="d-grid gap-2">
-          <button type="submit" class="btn btn-outline-primary">
-            🔎 Filtrar
-          </button>
-
-          {% if q or estado or frecuencia %}
-            <a class="btn btn-outline-secondary" href="/dashboard/contratos/">
-              Limpiar
-            </a>
-          {% endif %}
-        </div>
-      </div>
-
-    </form>
-  </div>
-</div>
-
-<div class="card shadow-sm">
-  <div class="card-body p-0">
-
+  <div class="cp-panel">
     {% if page_obj and page_obj.object_list %}
-
       <div class="table-responsive d-none d-lg-block">
-        <table class="table table-hover align-middle mb-0">
-          <thead class="table-light">
+        <table class="table cp-table align-middle mb-0">
+          <thead>
             <tr>
-              <th>Cliente</th>
-              <th>Frecuencia</th>
-              <th>Forma de pago</th>
-              <th>Precio mensual</th>
-              <th>Mantenimientos</th>
-              <th>Estado</th>
-              <th class="text-end">Acciones</th>
+              <th>Cliente</th><th>Frecuencia</th><th>Forma de pago</th><th>Precio mensual</th><th>Mantenimientos</th><th>Estado</th><th class="text-end">Acciones</th>
             </tr>
           </thead>
-
           <tbody>
             {% for contrato in page_obj %}
               <tr>
-                <td>
-                  <div class="fw-semibold">{{ contrato.cliente.nombre }}</div>
-                  <div class="small text-muted">
-                    {{ contrato.cliente.telefono }}
-                  </div>
-                </td>
-
-                <td>
-                  {{ contrato.frecuencia_completa }}
-                </td>
-
-                <td>
-                  {{ contrato.forma_pago_completa }}
-                </td>
-
-                <td class="fw-semibold">
-                  ${{ contrato.precio_mensual|floatformat:2 }}
-                </td>
-
-                <td>
-                  <span class="badge text-bg-light">
-                    {{ contrato.total_mantenimientos }}
-                  </span>
-                </td>
-
+                <td><div class="cp-client-name">{{ contrato.cliente.nombre }}</div><div class="small text-muted">{{ contrato.cliente.telefono }}</div></td>
+                <td>{{ contrato.frecuencia_completa }}</td>
+                <td>{{ contrato.forma_pago_completa }}</td>
+                <td class="cp-price">${{ contrato.precio_mensual|floatformat:2 }}</td>
+                <td><span class="cp-badge cp-badge-light">{{ contrato.total_mantenimientos }}</span></td>
                 <td>
                   {% if contrato.activo %}
-                    <span class="badge text-bg-success">Activo</span>
+                    <span class="cp-badge cp-badge-success">● Activo</span>
                   {% else %}
-                    <span class="badge text-bg-secondary">Inactivo</span>
+                    <span class="cp-badge cp-badge-muted">● Inactivo</span>
                   {% endif %}
                 </td>
-
                 <td class="text-end">
-                  <div class="d-inline-flex gap-1">
-                    <a
-                      class="btn btn-sm btn-outline-primary"
-                      href="/dashboard/contratos/{{ contrato.id }}/"
-                    >
-                      Ver
-                    </a>
-
-                    <a
-                      class="btn btn-sm btn-outline-secondary"
-                      href="/dashboard/contratos/{{ contrato.id }}/editar/"
-                    >
-                      Editar
-                    </a>
-
-                    <form
-                      method="post"
-                      action="/dashboard/contratos/{{ contrato.id }}/toggle/"
-                      class="d-inline"
-                    >
+                  <div class="d-inline-flex gap-1 flex-wrap justify-content-end">
+                    <a class="btn btn-sm btn-outline-primary" href="/dashboard/contratos/{{ contrato.id }}/">Ver</a>
+                    <a class="btn btn-sm btn-outline-secondary" href="/dashboard/contratos/{{ contrato.id }}/editar/">Editar</a>
+                    <form method="post" action="/dashboard/contratos/{{ contrato.id }}/toggle/" class="d-inline">
                       {% csrf_token %}
-                      <input
-                        type="hidden"
-                        name="next"
-                        value="{{ request.get_full_path }}"
-                      >
-
+                      <input type="hidden" name="next" value="{{ request.get_full_path }}">
                       {% if contrato.activo %}
-                        <button
-                          type="submit"
-                          class="btn btn-sm btn-outline-danger"
-                        >
-                          Desactivar
-                        </button>
+                        <button type="submit" class="btn btn-sm btn-outline-danger">Desactivar</button>
                       {% else %}
-                        <button
-                          type="submit"
-                          class="btn btn-sm btn-outline-success"
-                        >
-                          Activar
-                        </button>
+                        <button type="submit" class="btn btn-sm btn-outline-success">Activar</button>
                       {% endif %}
                     </form>
                   </div>
@@ -242,92 +219,32 @@
       <div class="d-lg-none p-3">
         <div class="d-grid gap-3">
           {% for contrato in page_obj %}
-            <div class="border rounded-3 p-3 bg-white">
+            <div class="cp-mobile-card">
               <div class="d-flex justify-content-between align-items-start gap-2">
-                <div>
-                  <div class="fw-bold">
-                    {{ contrato.cliente.nombre }}
-                  </div>
-                  <div class="small text-muted">
-                    {{ contrato.cliente.telefono }}
-                  </div>
-                </div>
-
+                <div><div class="cp-client-name">{{ contrato.cliente.nombre }}</div><div class="small text-muted">{{ contrato.cliente.telefono }}</div></div>
                 {% if contrato.activo %}
-                  <span class="badge text-bg-success">Activo</span>
+                  <span class="cp-badge cp-badge-success">Activo</span>
                 {% else %}
-                  <span class="badge text-bg-secondary">Inactivo</span>
+                  <span class="cp-badge cp-badge-muted">Inactivo</span>
                 {% endif %}
               </div>
-
               <hr>
-
-              <div class="small text-muted">Frecuencia</div>
-              <div class="mb-2">
-                {{ contrato.frecuencia_completa }}
-              </div>
-
-              <div class="small text-muted">Forma de pago</div>
-              <div class="mb-2">
-                {{ contrato.forma_pago_completa }}
-              </div>
-
+              <div class="small text-muted">Frecuencia</div><div class="mb-2 fw-semibold">{{ contrato.frecuencia_completa }}</div>
+              <div class="small text-muted">Forma de pago</div><div class="mb-3 fw-semibold">{{ contrato.forma_pago_completa }}</div>
               <div class="row g-2 mb-3">
-                <div class="col-6">
-                  <div class="small text-muted">Precio mensual</div>
-                  <div class="fw-bold text-primary">
-                    ${{ contrato.precio_mensual|floatformat:2 }}
-                  </div>
-                </div>
-
-                <div class="col-6">
-                  <div class="small text-muted">Mantenimientos</div>
-                  <div class="fw-bold">
-                    {{ contrato.total_mantenimientos }}
-                  </div>
-                </div>
+                <div class="col-6"><div class="small text-muted">Precio mensual</div><div class="cp-price">${{ contrato.precio_mensual|floatformat:2 }}</div></div>
+                <div class="col-6"><div class="small text-muted">Mantenimientos</div><div class="fw-bold">{{ contrato.total_mantenimientos }}</div></div>
               </div>
-
               <div class="d-grid gap-2">
-                <a
-                  class="btn btn-outline-primary"
-                  href="/dashboard/contratos/{{ contrato.id }}/"
-                >
-                  Ver contrato
-                </a>
-
-                <a
-                  class="btn btn-outline-secondary"
-                  href="/dashboard/contratos/{{ contrato.id }}/editar/"
-                >
-                  Editar
-                </a>
-
-                <form
-                  method="post"
-                  action="/dashboard/contratos/{{ contrato.id }}/toggle/"
-                >
+                <a class="btn btn-outline-primary" href="/dashboard/contratos/{{ contrato.id }}/">Ver contrato</a>
+                <a class="btn btn-outline-secondary" href="/dashboard/contratos/{{ contrato.id }}/editar/">Editar</a>
+                <form method="post" action="/dashboard/contratos/{{ contrato.id }}/toggle/">
                   {% csrf_token %}
-                  <input
-                    type="hidden"
-                    name="next"
-                    value="{{ request.get_full_path }}"
-                  >
-
+                  <input type="hidden" name="next" value="{{ request.get_full_path }}">
                   {% if contrato.activo %}
-                    <button
-                      type="submit"
-                      class="btn btn-outline-danger w-100"
-                    >
-                      Desactivar
-                    </button>
+                    <button type="submit" class="btn btn-outline-danger w-100">Desactivar</button>
                   {% else %}
-                    <button
-                      type="submit"
-                      class="btn btn-outline-success w-100"
-                    >
-                      Activar
-                    </button>
+                    <button type="submit" class="btn btn-outline-success w-100">Activar</button>
                   {% endif %}
                 </form>
               </div>
@@ -335,58 +252,28 @@
           {% endfor %}
         </div>
       </div>
-
     {% else %}
-      <div class="p-4 text-center">
+      <div class="p-5 text-center">
         <div class="fs-1 mb-2">📄</div>
-        <div class="fw-semibold mb-1">No se encontraron contratos</div>
-        <div class="text-muted mb-3">
-          Crea un contrato nuevo o modifica los filtros de búsqueda.
-        </div>
-
-        <a class="btn btn-primary" href="/dashboard/contratos/nuevo/">
-          ➕ Crear contrato
-        </a>
+        <div class="fw-bold fs-5 mb-1">No se encontraron contratos</div>
+        <div class="text-muted mb-3">Crea un contrato nuevo o modifica los filtros de búsqueda.</div>
+        <a class="btn btn-primary" href="/dashboard/contratos/nuevo/">➕ Crear contrato</a>
       </div>
     {% endif %}
-
   </div>
+
+  {% if page_obj and page_obj.paginator.num_pages > 1 %}
+    <nav class="mt-3" aria-label="Paginación de contratos">
+      <ul class="pagination justify-content-center flex-wrap">
+        {% if page_obj.has_previous %}
+          <li class="page-item"><a class="page-link" href="?{% if querystring %}{{ querystring }}&{% endif %}page={{ page_obj.previous_page_number }}">Anterior</a></li>
+        {% endif %}
+        <li class="page-item active"><span class="page-link">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span></li>
+        {% if page_obj.has_next %}
+          <li class="page-item"><a class="page-link" href="?{% if querystring %}{{ querystring }}&{% endif %}page={{ page_obj.next_page_number }}">Siguiente</a></li>
+        {% endif %}
+      </ul>
+    </nav>
+  {% endif %}
 </div>
-
-{% if page_obj and page_obj.paginator.num_pages > 1 %}
-  <nav class="mt-3" aria-label="Paginación de contratos">
-    <ul class="pagination justify-content-center flex-wrap">
-
-      {% if page_obj.has_previous %}
-        <li class="page-item">
-          <a
-            class="page-link"
-            href="?{% if querystring %}{{ querystring }}&{% endif %}page={{ page_obj.previous_page_number }}"
-          >
-            Anterior
-          </a>
-        </li>
-      {% endif %}
-
-      <li class="page-item active">
-        <span class="page-link">
-          Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
-        </span>
-      </li>
-
-      {% if page_obj.has_next %}
-        <li class="page-item">
-          <a
-            class="page-link"
-            href="?{% if querystring %}{{ querystring }}&{% endif %}page={{ page_obj.next_page_number }}"
-          >
-            Siguiente
-          </a>
-        </li>
-      {% endif %}
-
-    </ul>
-  </nav>
-{% endif %}
-
 {% endblock %}

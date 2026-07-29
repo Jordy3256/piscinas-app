@@ -9,55 +9,470 @@
 
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 
+
   <style>
-    .app-shell { max-width: 900px; margin: 0 auto; }
-    .topbar { position: sticky; top: 0; z-index: 1030; backdrop-filter: blur(8px); }
-    .bottom-nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 1030; }
-    .spacer-bottom { height: 88px; }
+    :root {
+      --jv-primary: #0b5ed7;
+      --jv-primary-dark: #084298;
+      --jv-primary-soft: rgba(11, 94, 215, .10);
+      --jv-accent: #00a6c7;
+      --jv-accent-soft: rgba(0, 166, 199, .12);
+      --jv-success: #198754;
+      --jv-danger: #dc3545;
+      --jv-warning: #f0ad00;
+      --jv-dark: #152238;
+      --jv-muted: #6f7b8a;
+      --jv-border: #e6ebf2;
+      --jv-bg: #f3f6fa;
+      --jv-surface: #ffffff;
+      --jv-radius-sm: 12px;
+      --jv-radius: 18px;
+      --jv-radius-lg: 24px;
+      --jv-shadow-sm: 0 4px 14px rgba(21, 34, 56, .06);
+      --jv-shadow: 0 10px 30px rgba(21, 34, 56, .09);
+      --jv-shadow-hover: 0 16px 38px rgba(21, 34, 56, .14);
+      --jv-transition: all .22s ease;
+    }
 
-    .btn-install { display: none; }
-    .bottom-nav .btn { white-space: nowrap; }
+    * {
+      box-sizing: border-box;
+    }
 
-    #btn-push-admin { display: none; white-space: nowrap; }
-    #btn-push-test  { display: none; white-space: nowrap; }
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body.app-body {
+      min-height: 100vh;
+      margin: 0;
+      color: var(--jv-dark);
+      background:
+        radial-gradient(circle at top left, rgba(11, 94, 215, .07), transparent 28rem),
+        radial-gradient(circle at top right, rgba(0, 166, 199, .06), transparent 24rem),
+        var(--jv-bg);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+
+    a {
+      transition: var(--jv-transition);
+    }
+
+    .app-shell {
+      width: 100%;
+      max-width: 1320px;
+      margin: 0 auto;
+      min-height: 100vh;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 1030;
+      padding: 10px 12px 0;
+      background: rgba(243, 246, 250, .82);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+    }
+
+    .topbar-inner {
+      border: 1px solid rgba(230, 235, 242, .95);
+      border-radius: var(--jv-radius);
+      background: rgba(255, 255, 255, .94);
+      box-shadow: var(--jv-shadow-sm);
+    }
+
+    .brand-mark {
+      width: 42px;
+      height: 42px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 14px;
+      color: #fff;
+      font-weight: 900;
+      letter-spacing: -.04em;
+      background: linear-gradient(135deg, var(--jv-primary), var(--jv-accent));
+      box-shadow: 0 8px 20px rgba(11, 94, 215, .24);
+      flex: 0 0 auto;
+    }
+
+    .brand-copy {
+      min-width: 0;
+    }
+
+    .brand-name {
+      margin: 0;
+      font-size: .72rem;
+      line-height: 1;
+      letter-spacing: .14em;
+      font-weight: 800;
+      color: var(--jv-primary);
+      text-transform: uppercase;
+    }
+
+    .brand-title {
+      margin-top: 5px;
+      font-size: 1.02rem;
+      line-height: 1.15;
+      font-weight: 800;
+      color: var(--jv-dark);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .page-content {
+      padding-top: 22px !important;
+      padding-bottom: 18px !important;
+    }
+
+    .spacer-bottom {
+      height: 104px;
+    }
+
+    /* Tarjetas globales */
+    .card {
+      border: 1px solid var(--jv-border) !important;
+      border-radius: var(--jv-radius) !important;
+      background: rgba(255, 255, 255, .97);
+      box-shadow: var(--jv-shadow-sm);
+      transition: var(--jv-transition);
+      overflow: hidden;
+    }
+
+    a.text-decoration-none > .card:hover,
+    .card.card-hover:hover {
+      transform: translateY(-4px);
+      border-color: rgba(11, 94, 215, .22) !important;
+      box-shadow: var(--jv-shadow-hover);
+    }
+
+    a.text-decoration-none > .card:active,
+    .card.card-hover:active {
+      transform: translateY(-1px) scale(.995);
+    }
+
+    .card-header {
+      padding: 1rem 1.15rem;
+      border-bottom: 1px solid var(--jv-border);
+      background: rgba(248, 250, 253, .88);
+      font-weight: 800;
+    }
+
+    .card-body {
+      padding: 1.15rem;
+    }
+
+    .card-footer {
+      padding: .95rem 1.15rem;
+      border-top: 1px solid var(--jv-border);
+      background: rgba(248, 250, 253, .72);
+    }
+
+    /* Botones */
+    .btn {
+      min-height: 40px;
+      padding: .56rem .9rem;
+      border-radius: 12px;
+      border-width: 1px;
+      font-weight: 700;
+      letter-spacing: -.01em;
+      box-shadow: none;
+      transition: var(--jv-transition);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: .42rem;
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(21, 34, 56, .12);
+    }
+
+    .btn:active {
+      transform: translateY(0) scale(.98);
+    }
+
+    .btn:focus-visible {
+      box-shadow: 0 0 0 .25rem rgba(11, 94, 215, .16);
+    }
+
+    .btn-sm {
+      min-height: 36px;
+      padding: .45rem .72rem;
+      border-radius: 11px;
+      font-size: .84rem;
+    }
+
+    .btn-lg {
+      min-height: 48px;
+      border-radius: 14px;
+      padding: .7rem 1.15rem;
+    }
+
+    .btn-primary {
+      border-color: transparent;
+      background: linear-gradient(135deg, var(--jv-primary), #087bbf);
+      box-shadow: 0 8px 18px rgba(11, 94, 215, .20);
+    }
+
+    .btn-primary:hover,
+    .btn-primary:focus {
+      border-color: transparent;
+      background: linear-gradient(135deg, var(--jv-primary-dark), var(--jv-primary));
+    }
+
+    .btn-success {
+      border-color: transparent;
+      background: linear-gradient(135deg, #198754, #20a66a);
+    }
+
+    .btn-danger {
+      border-color: transparent;
+      background: linear-gradient(135deg, #dc3545, #bb2d3b);
+    }
+
+    .btn-warning {
+      border-color: transparent;
+      background: linear-gradient(135deg, #ffc107, #f0a500);
+      color: #3d3000;
+    }
+
+    .btn-light {
+      border-color: var(--jv-border);
+      background: #fff;
+      color: var(--jv-dark);
+    }
+
+    .btn-outline-primary {
+      color: var(--jv-primary);
+      border-color: rgba(11, 94, 215, .28);
+      background: rgba(11, 94, 215, .035);
+    }
+
+    .btn-outline-secondary {
+      color: #526171;
+      border-color: #d8e0e9;
+      background: #fff;
+    }
+
+    .btn-outline-success {
+      background: rgba(25, 135, 84, .04);
+      border-color: rgba(25, 135, 84, .28);
+    }
+
+    .btn-outline-danger {
+      background: rgba(220, 53, 69, .035);
+      border-color: rgba(220, 53, 69, .25);
+    }
+
+    /* Formularios */
+    .form-label {
+      margin-bottom: .45rem;
+      color: #435062;
+      font-size: .86rem;
+      font-weight: 750;
+    }
+
+    .form-control,
+    .form-select {
+      min-height: 46px;
+      border: 1px solid #dce3ec;
+      border-radius: 13px;
+      background-color: #fff;
+      color: var(--jv-dark);
+      transition: var(--jv-transition);
+    }
+
+    textarea.form-control {
+      min-height: 110px;
+    }
+
+    .form-control:hover,
+    .form-select:hover {
+      border-color: #c7d2df;
+    }
+
+    .form-control:focus,
+    .form-select:focus {
+      border-color: rgba(11, 94, 215, .62);
+      box-shadow: 0 0 0 .25rem rgba(11, 94, 215, .10);
+    }
+
+    .input-group-text {
+      border-color: #dce3ec;
+      border-radius: 13px;
+      background: #f7f9fc;
+      color: var(--jv-muted);
+    }
+
+    .form-check-input {
+      width: 1.15em;
+      height: 1.15em;
+      border-color: #cdd6e1;
+    }
+
+    .form-check-input:checked {
+      background-color: var(--jv-primary);
+      border-color: var(--jv-primary);
+    }
+
+    /* Tablas */
+    .table-responsive {
+      border: 1px solid var(--jv-border);
+      border-radius: var(--jv-radius);
+      background: #fff;
+      overflow: hidden;
+    }
+
+    .table {
+      margin-bottom: 0;
+      vertical-align: middle;
+    }
+
+    .table > :not(caption) > * > * {
+      padding: .88rem .92rem;
+      border-bottom-color: #edf1f5;
+    }
+
+    .table thead th {
+      border-bottom: 1px solid var(--jv-border);
+      background: #f7f9fc;
+      color: #5c6878;
+      font-size: .76rem;
+      font-weight: 800;
+      letter-spacing: .035em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .table tbody tr {
+      transition: background-color .16s ease;
+    }
+
+    .table tbody tr:hover {
+      background: rgba(11, 94, 215, .035);
+    }
+
+    /* Badges y alertas */
+    .badge {
+      padding: .5em .72em;
+      border-radius: 999px;
+      font-weight: 750;
+      letter-spacing: .01em;
+    }
+
+    .alert {
+      border: 1px solid transparent;
+      border-radius: 14px;
+      box-shadow: var(--jv-shadow-sm);
+    }
+
+    .alert-success {
+      border-color: rgba(25, 135, 84, .18);
+      background: rgba(25, 135, 84, .09);
+      color: #11643c;
+    }
+
+    .alert-danger {
+      border-color: rgba(220, 53, 69, .17);
+      background: rgba(220, 53, 69, .08);
+      color: #9e2430;
+    }
+
+    .alert-warning {
+      border-color: rgba(240, 173, 0, .20);
+      background: rgba(255, 193, 7, .13);
+      color: #755800;
+    }
+
+    .alert-info {
+      border-color: rgba(13, 202, 240, .20);
+      background: rgba(13, 202, 240, .10);
+      color: #08758a;
+    }
+
+    /* Dropdowns */
+    .dropdown-menu {
+      padding: .55rem;
+      border: 1px solid var(--jv-border);
+      border-radius: 16px;
+      box-shadow: var(--jv-shadow);
+    }
+
+    .dropdown-item {
+      padding: .62rem .7rem;
+      border-radius: 10px;
+      font-weight: 600;
+    }
+
+    .dropdown-item:hover {
+      background: var(--jv-primary-soft);
+      color: var(--jv-primary-dark);
+    }
+
+    /* Notificaciones */
+    .btn-install {
+      display: none;
+    }
+
+    #btn-push-admin,
+    #btn-push-test {
+      display: none;
+      white-space: nowrap;
+    }
 
     .notif-btn {
       position: relative;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 38px;
-      height: 38px;
-      border-radius: 999px;
+      width: 40px;
+      height: 40px;
+      min-height: 40px;
+      padding: 0;
+      border-radius: 13px;
     }
 
     .notif-badge {
       position: absolute;
-      top: -4px;
-      right: -4px;
-      min-width: 18px;
-      height: 18px;
+      top: -5px;
+      right: -5px;
+      min-width: 19px;
+      height: 19px;
       padding: 0 5px;
+      border: 2px solid #fff;
       border-radius: 999px;
-      font-size: 11px;
-      line-height: 18px;
+      font-size: 10px;
+      font-weight: 800;
+      line-height: 15px;
       text-align: center;
-      background: #dc3545;
+      background: var(--jv-danger);
       color: #fff;
       display: none;
     }
 
     .notif-dropdown-menu {
-      width: 370px;
+      width: 390px;
       max-width: calc(100vw - 24px);
+      padding: 0;
+      overflow: hidden;
     }
 
     .notif-item-unread {
-      background: #f8f9fa;
+      background: rgba(11, 94, 215, .045);
     }
 
     .notif-row {
-      border-bottom: 1px solid #e9ecef;
+      border-bottom: 1px solid var(--jv-border);
+      transition: background-color .18s ease;
+    }
+
+    .notif-row:hover {
+      background: #f8fafc;
     }
 
     .notif-row:last-child {
@@ -70,21 +485,21 @@
     }
 
     .notif-title {
-      font-weight: 600;
+      font-weight: 800;
       line-height: 1.2;
     }
 
     .notif-message {
-      font-size: 0.86rem;
-      color: #6c757d;
       margin-top: 4px;
+      color: var(--jv-muted);
+      font-size: .86rem;
       word-break: break-word;
     }
 
     .notif-date {
-      font-size: 0.78rem;
-      color: #6c757d;
       margin-top: 6px;
+      color: var(--jv-muted);
+      font-size: .76rem;
     }
 
     .notif-actions {
@@ -96,7 +511,8 @@
     }
 
     .notif-actions .btn {
-      padding: 0.2rem 0.45rem;
+      min-height: 32px;
+      padding: .2rem .45rem;
       line-height: 1.1;
     }
 
@@ -105,33 +521,257 @@
     }
 
     .notif-meta {
-      font-size: 0.82rem;
-      color: #6c757d;
+      color: var(--jv-muted);
+      font-size: .82rem;
     }
 
     .notif-section-title {
-      font-size: 0.78rem;
-      font-weight: 700;
-      letter-spacing: .02em;
-      color: #6c757d;
-      background: #fff;
-      padding: 8px 12px;
-      border-bottom: 1px solid #e9ecef;
       position: sticky;
       top: 0;
       z-index: 1;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--jv-border);
+      background: #fff;
+      color: var(--jv-muted);
+      font-size: .76rem;
+      font-weight: 800;
+      letter-spacing: .04em;
+      text-transform: uppercase;
     }
 
     .notif-dot {
       display: inline-block;
       width: 8px;
       height: 8px;
-      border-radius: 999px;
-      background: #dc3545;
       margin-right: 6px;
+      border-radius: 999px;
+      background: var(--jv-danger);
       vertical-align: middle;
     }
+
+    /* Navegación inferior */
+    .bottom-nav {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 1030;
+      padding: 0 12px 10px;
+      pointer-events: none;
+    }
+
+    .bottom-nav-inner {
+      max-width: 1296px;
+      margin: 0 auto;
+      padding: 8px;
+      border: 1px solid rgba(230, 235, 242, .96);
+      border-radius: 20px;
+      background: rgba(255, 255, 255, .94);
+      box-shadow: 0 12px 36px rgba(21, 34, 56, .15);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      pointer-events: auto;
+    }
+
+    .bottom-nav .btn {
+      min-height: 48px;
+      white-space: nowrap;
+      border-color: transparent;
+      border-radius: 14px;
+      color: #5c6878;
+      background: transparent;
+      box-shadow: none;
+    }
+
+    .bottom-nav .btn:hover {
+      color: var(--jv-primary);
+      background: var(--jv-primary-soft);
+      transform: translateY(-1px);
+      box-shadow: none;
+    }
+
+    .bottom-nav .btn.nav-active {
+      color: #fff;
+      background: linear-gradient(135deg, var(--jv-primary), #087bbf);
+      box-shadow: 0 7px 18px rgba(11, 94, 215, .22);
+    }
+
+    .bottom-nav .btn-install {
+      color: #fff;
+      background: linear-gradient(135deg, var(--jv-primary), var(--jv-accent));
+    }
+
+    /* Utilidades visuales */
+    .text-muted {
+      color: var(--jv-muted) !important;
+    }
+
+    .shadow-sm {
+      box-shadow: var(--jv-shadow-sm) !important;
+    }
+
+    .rounded,
+    .rounded-3 {
+      border-radius: var(--jv-radius-sm) !important;
+    }
+
+    .modal-content {
+      border: 1px solid var(--jv-border);
+      border-radius: 20px;
+      box-shadow: var(--jv-shadow);
+      overflow: hidden;
+    }
+
+    .modal-header,
+    .modal-footer {
+      border-color: var(--jv-border);
+    }
+
+    /* Entrada suave */
+    .page-content > * {
+      animation: jvFadeUp .34s ease both;
+    }
+
+    @keyframes jvFadeUp {
+      from {
+        opacity: 0;
+        transform: translateY(7px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @media (max-width: 991.98px) {
+      .app-shell {
+        max-width: 100%;
+      }
+
+      .topbar .container,
+      .page-content.container,
+      .bottom-nav .container {
+        max-width: 100%;
+      }
+
+      .brand-title {
+        max-width: 300px;
+      }
+    }
+
+    @media (max-width: 767.98px) {
+      .topbar {
+        padding: 8px 8px 0;
+      }
+
+      .topbar-inner {
+        border-radius: 16px;
+      }
+
+      .topbar .container {
+        padding: .72rem .78rem !important;
+      }
+
+      .brand-mark {
+        width: 38px;
+        height: 38px;
+        border-radius: 12px;
+      }
+
+      .brand-name {
+        font-size: .65rem;
+      }
+
+      .brand-title {
+        max-width: 170px;
+        font-size: .9rem;
+      }
+
+      .topbar-actions {
+        gap: 6px !important;
+      }
+
+      .topbar-actions .topbar-text-action {
+        width: 40px;
+        min-width: 40px;
+        padding-left: 0;
+        padding-right: 0;
+        font-size: 0;
+      }
+
+      .topbar-actions .topbar-text-action .action-icon {
+        font-size: 1rem;
+      }
+
+      .page-content {
+        padding: 16px 10px 12px !important;
+      }
+
+      .card-body {
+        padding: 1rem;
+      }
+
+      .bottom-nav {
+        padding: 0 7px 7px;
+      }
+
+      .bottom-nav-inner {
+        padding: 6px;
+        border-radius: 17px;
+        overflow-x: auto;
+        scrollbar-width: none;
+      }
+
+      .bottom-nav-inner::-webkit-scrollbar {
+        display: none;
+      }
+
+      .bottom-nav .nav-row {
+        min-width: 650px;
+        flex-wrap: nowrap !important;
+      }
+
+      .bottom-nav .btn {
+        min-width: 96px;
+        min-height: 50px;
+        flex-direction: column;
+        gap: 1px;
+        padding: .35rem .5rem;
+        font-size: .72rem;
+      }
+
+      .bottom-nav .nav-icon {
+        font-size: 1rem;
+        line-height: 1;
+      }
+
+      .spacer-bottom {
+        height: 92px;
+      }
+
+      .notif-dropdown-menu {
+        position: fixed !important;
+        top: 72px !important;
+        right: 8px !important;
+        left: 8px !important;
+        width: auto !important;
+        max-width: none !important;
+        transform: none !important;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        scroll-behavior: auto !important;
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .01ms !important;
+      }
+    }
   </style>
+
 
   <link rel="manifest" href="/dashboard/manifest.json?v=20260311-10">
   <meta name="theme-color" content="#0d6efd">
@@ -141,17 +781,24 @@
   {% block extra_head %}{% endblock %}
 </head>
 
-<body class="bg-light">
+<body class="app-body">
   <div class="app-shell">
 
-    <div class="topbar bg-white border-bottom">
-      <div class="container py-3">
-        <div class="d-flex justify-content-between align-items-center">
-          <div class="fw-bold">
-            {% block top_title %}🧑‍💼 Admin{% endblock %}
-          </div>
+    <div class="topbar">
+      <div class="topbar-inner">
+        <div class="container py-3">
+          <div class="d-flex justify-content-between align-items-center gap-3">
+            <div class="d-flex align-items-center gap-3 min-w-0">
+              <div class="brand-mark">JV</div>
+              <div class="brand-copy">
+                <div class="brand-name">JVAQUA</div>
+                <div class="brand-title">
+                  {% block top_title %}🧑‍💼 Admin{% endblock %}
+                </div>
+              </div>
+            </div>
 
-          <div class="d-flex gap-2 align-items-center">
+            <div class="d-flex gap-2 align-items-center topbar-actions">
             {% block top_actions %}
               <button id="btn-push-admin" class="btn btn-primary btn-sm" type="button">🔔 Activar</button>
               <button id="btn-push-test" class="btn btn-outline-primary btn-sm" type="button">🧪 Test Push</button>
@@ -195,15 +842,16 @@
                 </div>
               </div>
 
-              <a class="btn btn-outline-secondary btn-sm" href="/dashboard/inicio/">Inicio</a>
-              <a class="btn btn-outline-danger btn-sm" href="/logout/">Salir</a>
+              <a class="btn btn-outline-secondary btn-sm topbar-text-action" href="/dashboard/inicio/"><span class="action-icon">🏠</span><span>Inicio</span></a>
+              <a class="btn btn-outline-danger btn-sm topbar-text-action" href="/logout/"><span class="action-icon">↪</span><span>Salir</span></a>
             {% endblock %}
+            </div>
           </div>
         </div>
       </div>
     </div>
 
-    <div class="container py-3">
+    <div class="container page-content">
       {% if messages %}
         <div class="mb-3">
           {% for message in messages %}
@@ -216,17 +864,30 @@
       <div class="spacer-bottom"></div>
     </div>
 
-    <div class="bottom-nav bg-white border-top">
-      <div class="container py-2">
-        <div class="d-flex justify-content-around gap-2 flex-wrap">
-          <a class="btn btn-light flex-fill" href="/dashboard/inicio/">🏠 Inicio</a>
-          <a class="btn btn-outline-secondary flex-fill" href="/dashboard/home/">📊 Dashboard</a>
-          <a class="btn btn-outline-secondary flex-fill" href="/dashboard/operativo/">🧑‍💼 Operativo</a>
-          <a class="btn btn-outline-secondary flex-fill" href="/dashboard/inventario/">📦 Inventario</a>
-          <a class="btn btn-outline-secondary flex-fill" href="/dashboard/finanzas/flujo/">💰 Finanzas</a>
+    <div class="bottom-nav">
+      <div class="bottom-nav-inner">
+        <div class="d-flex justify-content-around gap-2 nav-row">
+          <a class="btn flex-fill {% if request.path == '/dashboard/inicio/' %}nav-active{% endif %}" href="/dashboard/inicio/">
+            <span class="nav-icon">🏠</span><span>Inicio</span>
+          </a>
+          <a class="btn flex-fill {% if request.path == '/dashboard/home/' %}nav-active{% endif %}" href="/dashboard/home/">
+            <span class="nav-icon">📊</span><span>Dashboard</span>
+          </a>
+          <a class="btn flex-fill {% if '/dashboard/operativo/' in request.path %}nav-active{% endif %}" href="/dashboard/operativo/">
+            <span class="nav-icon">🧑‍💼</span><span>Operativo</span>
+          </a>
+          <a class="btn flex-fill {% if '/dashboard/contratos/' in request.path %}nav-active{% endif %}" href="/dashboard/contratos/">
+            <span class="nav-icon">📄</span><span>Contratos</span>
+          </a>
+          <a class="btn flex-fill {% if '/dashboard/inventario/' in request.path %}nav-active{% endif %}" href="/dashboard/inventario/">
+            <span class="nav-icon">📦</span><span>Inventario</span>
+          </a>
+          <a class="btn flex-fill {% if '/dashboard/finanzas/' in request.path %}nav-active{% endif %}" href="/dashboard/finanzas/flujo/">
+            <span class="nav-icon">💰</span><span>Finanzas</span>
+          </a>
 
-          <button id="btn-install" class="btn btn-primary flex-fill btn-install" type="button">
-            📲 Instalar app
+          <button id="btn-install" class="btn flex-fill btn-install" type="button">
+            <span class="nav-icon">📲</span><span>Instalar</span>
           </button>
         </div>
       </div>

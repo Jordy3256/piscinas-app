@@ -8,106 +8,242 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
-  .dashboard-kpi-card {
-    border: 0;
-    border-radius: 1rem;
+  .dashboard-page {
+    --dash-primary: #0b5ed7;
+    --dash-aqua: #00a6c7;
+    --dash-success: #198754;
+    --dash-danger: #dc3545;
+    --dash-warning: #f59e0b;
+    --dash-dark: #152238;
+    --dash-muted: #6f7b8a;
+    --dash-border: #e6ebf2;
+  }
+
+  .dashboard-hero {
+    position: relative;
+    margin-bottom: 1rem;
+    padding: 1.55rem;
+    border: 1px solid rgba(11, 94, 215, .13);
+    border-radius: 23px;
+    background:
+      radial-gradient(circle at 90% 15%, rgba(0, 166, 199, .18), transparent 16rem),
+      linear-gradient(135deg, #ffffff, #f3f8ff 58%, #eefbff);
+    box-shadow: 0 14px 34px rgba(21, 34, 56, .08);
     overflow: hidden;
   }
 
+  .dashboard-hero::after {
+    content: "";
+    position: absolute;
+    width: 150px;
+    height: 150px;
+    right: -55px;
+    bottom: -75px;
+    border-radius: 50%;
+    background: rgba(11, 94, 215, .07);
+  }
+
+  .dashboard-hero-content { position: relative; z-index: 1; }
+
+  .dashboard-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: .45rem;
+    margin-bottom: .65rem;
+    padding: .4rem .68rem;
+    border-radius: 999px;
+    background: rgba(11, 94, 215, .08);
+    color: var(--dash-primary);
+    font-size: .73rem;
+    font-weight: 850;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+  }
+
+  .dashboard-title {
+    margin: 0;
+    color: var(--dash-dark);
+    font-size: clamp(1.55rem, 3vw, 2.15rem);
+    font-weight: 850;
+    letter-spacing: -.04em;
+  }
+
+  .dashboard-subtitle {
+    max-width: 760px;
+    margin: .45rem 0 0;
+    color: var(--dash-muted);
+    font-size: .92rem;
+    line-height: 1.6;
+  }
+
+  .dashboard-kpi-card {
+    position: relative;
+    min-height: 152px;
+    border: 1px solid var(--dash-border) !important;
+    border-radius: 19px !important;
+    background: #fff;
+    box-shadow: 0 8px 24px rgba(21, 34, 56, .07);
+    overflow: hidden;
+    transition: all .22s ease;
+  }
+
+  .dashboard-kpi-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 16px 34px rgba(21, 34, 56, .12);
+  }
+
+  .dashboard-kpi-card::after {
+    content: "";
+    position: absolute;
+    width: 86px;
+    height: 86px;
+    right: -34px;
+    bottom: -34px;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: .07;
+  }
+
   .dashboard-kpi-card .card-body {
-    padding: 1rem 1rem 0.95rem;
+    position: relative;
+    z-index: 1;
+    padding: 1.15rem;
   }
 
   .dashboard-kpi-label {
-    font-size: .82rem;
-    color: #6c757d;
-    margin-bottom: .2rem;
+    margin-bottom: .35rem;
+    color: var(--dash-muted);
+    font-size: .78rem;
+    font-weight: 750;
+    letter-spacing: .025em;
+    text-transform: uppercase;
   }
 
   .dashboard-kpi-value {
-    font-size: 1.55rem;
-    font-weight: 800;
-    line-height: 1.1;
+    color: var(--dash-dark);
+    font-size: clamp(1.35rem, 3vw, 1.85rem);
+    font-weight: 850;
+    letter-spacing: -.035em;
+    line-height: 1.05;
   }
 
   .dashboard-section-card {
-    border: 0;
-    border-radius: 1rem;
+    border: 1px solid var(--dash-border) !important;
+    border-radius: 20px !important;
+    background: rgba(255,255,255,.98);
+    box-shadow: 0 8px 24px rgba(21, 34, 56, .065);
   }
 
+  .dashboard-section-card .card-body { padding: 1.2rem; }
+
   .dashboard-mini-stat {
-    border: 1px solid rgba(0,0,0,.06);
-    border-radius: .85rem;
-    padding: .85rem;
-    background: #fff;
     height: 100%;
+    padding: .95rem;
+    border: 1px solid var(--dash-border);
+    border-radius: 15px;
+    background: linear-gradient(145deg, #fff, #fafcff);
+    transition: all .2s ease;
+  }
+
+  .dashboard-mini-stat:hover {
+    transform: translateY(-2px);
+    border-color: rgba(11, 94, 215, .18);
+    box-shadow: 0 8px 20px rgba(21, 34, 56, .07);
   }
 
   .dashboard-mini-stat .label {
-    font-size: .8rem;
-    color: #6c757d;
-    margin-bottom: .15rem;
+    margin-bottom: .22rem;
+    color: var(--dash-muted);
+    font-size: .76rem;
+    font-weight: 700;
   }
 
   .dashboard-mini-stat .value {
-    font-size: 1.15rem;
-    font-weight: 700;
+    color: var(--dash-dark);
+    font-size: 1.2rem;
+    font-weight: 850;
+    letter-spacing: -.025em;
   }
 
-  .dashboard-list-item {
-    border: 1px solid rgba(0,0,0,.06);
-    border-radius: .85rem;
-    padding: .8rem .9rem;
+  .dashboard-list-item,
+  .dashboard-activity-item {
+    padding: .88rem .95rem;
+    border: 1px solid var(--dash-border);
+    border-radius: 14px;
     background: #fff;
+    transition: all .18s ease;
+  }
+
+  .dashboard-list-item:hover,
+  .dashboard-activity-item:hover {
+    transform: translateX(3px);
+    border-color: rgba(11, 94, 215, .17);
+    background: rgba(11, 94, 215, .025);
   }
 
   .dashboard-ranking-badge {
-    min-width: 34px;
-    height: 34px;
-    border-radius: 999px;
+    min-width: 36px;
+    height: 36px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-weight: 700;
-    background: #f1f3f5;
-    color: #212529;
+    border: 1px solid rgba(11, 94, 215, .12);
+    border-radius: 12px;
+    color: var(--dash-primary);
+    background: rgba(11, 94, 215, .08);
+    font-weight: 850;
   }
 
   .dashboard-chart-wrap {
     position: relative;
-    min-height: 300px;
+    min-height: 320px;
+    padding: .45rem;
+    border: 1px solid var(--dash-border);
+    border-radius: 16px;
+    background: linear-gradient(145deg, #fff, #fbfcfe);
   }
 
   .dashboard-chart-wrap canvas {
     width: 100% !important;
-    height: 300px !important;
+    height: 305px !important;
   }
 
-  .dashboard-activity-item {
-    border: 1px solid rgba(0,0,0,.06);
-    border-radius: .85rem;
-    padding: .8rem .9rem;
-    background: #fff;
-  }
+  .dashboard-soft-success { color: var(--dash-success); background: linear-gradient(145deg, rgba(25,135,84,.10), rgba(255,255,255,.96)); }
+  .dashboard-soft-danger { color: var(--dash-danger); background: linear-gradient(145deg, rgba(220,53,69,.09), rgba(255,255,255,.96)); }
+  .dashboard-soft-warning { color: var(--dash-warning); background: linear-gradient(145deg, rgba(245,158,11,.11), rgba(255,255,255,.96)); }
+  .dashboard-soft-primary { color: var(--dash-primary); background: linear-gradient(145deg, rgba(11,94,215,.09), rgba(255,255,255,.96)); }
+  .dashboard-soft-info { color: var(--dash-aqua); background: linear-gradient(145deg, rgba(0,166,199,.10), rgba(255,255,255,.96)); }
 
-  .dashboard-soft-success { background: rgba(25, 135, 84, .08); }
-  .dashboard-soft-danger { background: rgba(220, 53, 69, .08); }
-  .dashboard-soft-warning { background: rgba(255, 193, 7, .14); }
-  .dashboard-soft-primary { background: rgba(13, 110, 253, .08); }
-  .dashboard-soft-info { background: rgba(13, 202, 240, .10); }
+  .dashboard-section-card .badge { padding: .55em .75em; border-radius: 999px; }
 
   @media (max-width: 767.98px) {
-    .dashboard-mobile-title { font-size: 1.05rem; }
-    .dashboard-mobile-actions .btn { width: 100%; }
-    .dashboard-mobile-card .card-body { padding: 1rem; }
-    .dashboard-kpi-value { font-size: 1.3rem; }
+    .dashboard-hero { padding: 1.25rem; border-radius: 19px; }
+    .dashboard-title { font-size: 1.6rem; }
+    .dashboard-subtitle { font-size: .86rem; }
+    .dashboard-section-card .card-body { padding: 1rem; }
+    .dashboard-kpi-card { min-height: 142px; }
+    .dashboard-kpi-value { font-size: 1.35rem; }
     .dashboard-chart-wrap,
     .dashboard-chart-wrap canvas {
-      min-height: 260px;
-      height: 260px !important;
+      min-height: 265px;
+      height: 265px !important;
     }
   }
 </style>
+
+
+<div class="dashboard-page">
+
+  <section class="dashboard-hero">
+    <div class="dashboard-hero-content">
+      <div class="dashboard-eyebrow">📊 Inteligencia administrativa</div>
+      <h1 class="dashboard-title">Dashboard general de JVAQUA</h1>
+      <p class="dashboard-subtitle">
+        Consulta en tiempo real el comportamiento financiero, operativo y comercial
+        para tomar decisiones con mayor claridad.
+      </p>
+    </div>
+  </section>
 
 <!-- ================= KPIs PRINCIPALES ================= -->
 <div class="row g-3 mb-3">
@@ -829,5 +965,7 @@ new Chart(document.getElementById('graficoTendenciaOperativa'), {
   }
 });
 </script>
+
+</div>
 
 {% endblock %}

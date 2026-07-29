@@ -1,99 +1,638 @@
 {% extends "dashboard/base_admin.html" %}
 
-{% block title %}Inicio Admin{% endblock %}
-{% block top_title %}🏠 Inicio (Admin){% endblock %}
+{% block title %}Centro de Control | JVAQUA{% endblock %}
+{% block top_title %}Centro de Control{% endblock %}
+
+{% block extra_head %}
+<style>
+  .admin-home {
+    --home-blue: #0b5ed7;
+    --home-blue-dark: #084298;
+    --home-aqua: #00a6c7;
+    --home-green: #198754;
+    --home-orange: #f59e0b;
+    --home-purple: #7c3aed;
+    --home-red: #dc3545;
+    --home-dark: #152238;
+    --home-muted: #6f7b8a;
+    --home-border: #e6ebf2;
+  }
+
+  .home-hero {
+    position: relative;
+    padding: 2rem;
+    border: 1px solid rgba(11, 94, 215, .12);
+    border-radius: 24px;
+    background:
+      radial-gradient(circle at top right, rgba(0, 166, 199, .24), transparent 18rem),
+      linear-gradient(135deg, #ffffff 0%, #f4f8ff 55%, #eefbff 100%);
+    box-shadow: 0 14px 34px rgba(21, 34, 56, .08);
+    overflow: hidden;
+  }
+
+  .home-hero::before {
+    content: "";
+    position: absolute;
+    width: 210px;
+    height: 210px;
+    top: -95px;
+    right: -70px;
+    border-radius: 50%;
+    background: rgba(11, 94, 215, .08);
+  }
+
+  .home-hero::after {
+    content: "";
+    position: absolute;
+    width: 130px;
+    height: 130px;
+    right: 110px;
+    bottom: -85px;
+    border-radius: 50%;
+    background: rgba(0, 166, 199, .09);
+  }
+
+  .home-hero-content {
+    position: relative;
+    z-index: 1;
+  }
+
+  .home-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: .45rem;
+    margin-bottom: .85rem;
+    padding: .48rem .72rem;
+    border: 1px solid rgba(11, 94, 215, .14);
+    border-radius: 999px;
+    color: var(--home-blue);
+    background: rgba(255, 255, 255, .75);
+    font-size: .76rem;
+    font-weight: 800;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+  }
+
+  .home-title {
+    max-width: 720px;
+    margin-bottom: .65rem;
+    color: var(--home-dark);
+    font-size: clamp(1.75rem, 4vw, 2.65rem);
+    font-weight: 850;
+    letter-spacing: -.045em;
+    line-height: 1.05;
+  }
+
+  .home-subtitle {
+    max-width: 680px;
+    margin: 0;
+    color: var(--home-muted);
+    font-size: 1rem;
+    line-height: 1.65;
+  }
+
+  .hero-status {
+    display: inline-flex;
+    align-items: center;
+    gap: .55rem;
+    margin-top: 1.25rem;
+    padding: .65rem .85rem;
+    border-radius: 13px;
+    color: #16643e;
+    background: rgba(25, 135, 84, .09);
+    font-size: .86rem;
+    font-weight: 750;
+  }
+
+  .hero-status-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--home-green);
+    box-shadow: 0 0 0 5px rgba(25, 135, 84, .12);
+  }
+
+  .section-heading {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 1rem;
+    margin: 2rem 0 1rem;
+  }
+
+  .section-heading h4 {
+    margin: 0;
+    color: var(--home-dark);
+    font-size: 1.08rem;
+    font-weight: 850;
+    letter-spacing: -.02em;
+  }
+
+  .section-heading p {
+    margin: .25rem 0 0;
+    color: var(--home-muted);
+    font-size: .88rem;
+  }
+
+  .module-card {
+    --module-color: var(--home-blue);
+    --module-soft: rgba(11, 94, 215, .10);
+
+    position: relative;
+    min-height: 210px;
+    padding: 1.35rem;
+    border: 1px solid var(--home-border);
+    border-radius: 21px;
+    background: rgba(255, 255, 255, .98);
+    box-shadow: 0 7px 22px rgba(21, 34, 56, .06);
+    transition: all .24s ease;
+    overflow: hidden;
+  }
+
+  .module-card::after {
+    content: "";
+    position: absolute;
+    width: 95px;
+    height: 95px;
+    right: -42px;
+    bottom: -42px;
+    border-radius: 50%;
+    background: var(--module-soft);
+    transition: all .24s ease;
+  }
+
+  .module-link:hover .module-card {
+    transform: translateY(-6px);
+    border-color: color-mix(in srgb, var(--module-color) 28%, white);
+    box-shadow: 0 18px 38px rgba(21, 34, 56, .12);
+  }
+
+  .module-link:hover .module-card::after {
+    transform: scale(1.3);
+  }
+
+  .module-link:active .module-card {
+    transform: translateY(-2px) scale(.992);
+  }
+
+  .module-icon {
+    width: 52px;
+    height: 52px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 1.05rem;
+    border-radius: 16px;
+    color: var(--module-color);
+    background: var(--module-soft);
+    font-size: 1.5rem;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .7);
+  }
+
+  .module-title {
+    margin-bottom: .45rem;
+    color: var(--home-dark);
+    font-size: 1.08rem;
+    font-weight: 850;
+    letter-spacing: -.02em;
+  }
+
+  .module-description {
+    max-width: 94%;
+    margin: 0;
+    color: var(--home-muted);
+    font-size: .89rem;
+    line-height: 1.55;
+  }
+
+  .module-footer {
+    position: absolute;
+    left: 1.35rem;
+    right: 1.35rem;
+    bottom: 1.2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: var(--module-color);
+    font-size: .8rem;
+    font-weight: 800;
+  }
+
+  .module-arrow {
+    width: 31px;
+    height: 31px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    color: var(--module-color);
+    background: var(--module-soft);
+    transition: all .22s ease;
+  }
+
+  .module-link:hover .module-arrow {
+    transform: translateX(4px);
+    color: #fff;
+    background: var(--module-color);
+  }
+
+  .module-dashboard {
+    --module-color: #0b5ed7;
+    --module-soft: rgba(11, 94, 215, .10);
+  }
+
+  .module-operativo {
+    --module-color: #198754;
+    --module-soft: rgba(25, 135, 84, .10);
+  }
+
+  .module-contratos {
+    --module-color: #7c3aed;
+    --module-soft: rgba(124, 58, 237, .10);
+  }
+
+  .module-inventario {
+    --module-color: #00a6c7;
+    --module-soft: rgba(0, 166, 199, .11);
+  }
+
+  .module-finanzas {
+    --module-color: #f59e0b;
+    --module-soft: rgba(245, 158, 11, .12);
+  }
+
+  .module-admin {
+    --module-color: #64748b;
+    --module-soft: rgba(100, 116, 139, .11);
+  }
+
+  .quick-panel {
+    padding: 1.25rem;
+    border: 1px solid var(--home-border);
+    border-radius: 20px;
+    background: #fff;
+    box-shadow: 0 7px 22px rgba(21, 34, 56, .06);
+  }
+
+  .quick-panel-title {
+    margin-bottom: .85rem;
+    color: var(--home-dark);
+    font-size: .92rem;
+    font-weight: 850;
+  }
+
+  .quick-action {
+    display: flex;
+    align-items: center;
+    gap: .8rem;
+    padding: .85rem;
+    border: 1px solid transparent;
+    border-radius: 14px;
+    color: var(--home-dark);
+    background: #f8fafc;
+    text-decoration: none;
+    transition: all .2s ease;
+  }
+
+  .quick-action:hover {
+    transform: translateX(4px);
+    border-color: rgba(11, 94, 215, .14);
+    color: var(--home-blue);
+    background: rgba(11, 94, 215, .055);
+  }
+
+  .quick-action-icon {
+    width: 38px;
+    height: 38px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 0 4px 12px rgba(21, 34, 56, .07);
+  }
+
+  .quick-action-copy {
+    min-width: 0;
+  }
+
+  .quick-action-copy strong {
+    display: block;
+    font-size: .86rem;
+  }
+
+  .quick-action-copy span {
+    display: block;
+    margin-top: 2px;
+    color: var(--home-muted);
+    font-size: .75rem;
+  }
+
+  .system-card {
+    height: 100%;
+    padding: 1.25rem;
+    border: 1px solid var(--home-border);
+    border-radius: 20px;
+    background:
+      linear-gradient(145deg, rgba(11, 94, 215, .04), rgba(0, 166, 199, .05)),
+      #fff;
+    box-shadow: 0 7px 22px rgba(21, 34, 56, .06);
+  }
+
+  .system-card-label {
+    margin-bottom: .75rem;
+    color: var(--home-muted);
+    font-size: .76rem;
+    font-weight: 800;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+  }
+
+  .system-card-title {
+    margin-bottom: .45rem;
+    color: var(--home-dark);
+    font-size: 1.08rem;
+    font-weight: 850;
+  }
+
+  .system-card-text {
+    margin: 0;
+    color: var(--home-muted);
+    font-size: .86rem;
+    line-height: 1.55;
+  }
+
+  .system-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    margin-top: 1rem;
+    padding: .5rem .65rem;
+    border-radius: 999px;
+    color: #16643e;
+    background: rgba(25, 135, 84, .09);
+    font-size: .74rem;
+    font-weight: 800;
+  }
+
+  @media (max-width: 767.98px) {
+    .home-hero {
+      padding: 1.4rem;
+      border-radius: 20px;
+    }
+
+    .home-title {
+      font-size: 1.75rem;
+    }
+
+    .home-subtitle {
+      font-size: .92rem;
+    }
+
+    .section-heading {
+      align-items: start;
+      margin-top: 1.6rem;
+    }
+
+    .module-card {
+      min-height: 195px;
+    }
+  }
+</style>
+{% endblock %}
 
 {% block content %}
 
-  <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-4">
-    <div>
-      <h3 class="mb-1">Panel administrativo</h3>
-      <div class="text-muted">
-        Accede a los principales módulos de gestión de JVAQUA.
+<div class="admin-home">
+
+  <section class="home-hero">
+    <div class="home-hero-content">
+      <div class="home-eyebrow">
+        <span>💧</span>
+        JVAQUA Management System
       </div>
+
+      <h1 class="home-title">
+        Todo el control de JVAQUA en un solo lugar
+      </h1>
+
+      <p class="home-subtitle">
+        Gestiona las operaciones, contratos, inventario y finanzas desde un
+        centro administrativo más claro, rápido e intuitivo.
+      </p>
+
+      <div class="hero-status">
+        <span class="hero-status-dot"></span>
+        Sistema operativo y funcionando correctamente
+      </div>
+    </div>
+  </section>
+
+  <div class="section-heading">
+    <div>
+      <h4>Módulos principales</h4>
+      <p>Selecciona el área que deseas gestionar.</p>
     </div>
   </div>
 
   <div class="row g-3">
 
-    <div class="col-md-6">
-      <a class="text-decoration-none" href="/dashboard/home/">
-        <div class="card shadow-sm h-100">
-          <div class="card-body">
-            <h5 class="mb-1">📊 Dashboard</h5>
-            <div class="text-muted">
-              Resumen financiero, operativo y rendimiento general.
-            </div>
+    <div class="col-md-6 col-xl-4">
+      <a class="module-link text-decoration-none" href="/dashboard/home/">
+        <article class="module-card module-dashboard">
+          <div class="module-icon">📊</div>
+
+          <h2 class="module-title">Dashboard</h2>
+
+          <p class="module-description">
+            Consulta el resumen financiero, operativo y el rendimiento general
+            del sistema.
+          </p>
+
+          <div class="module-footer">
+            <span>Ver resumen general</span>
+            <span class="module-arrow">→</span>
           </div>
-        </div>
+        </article>
       </a>
     </div>
 
-    <div class="col-md-6">
-      <a class="text-decoration-none" href="/dashboard/operativo/">
-        <div class="card shadow-sm h-100">
-          <div class="card-body">
-            <h5 class="mb-1">🧑‍💼 Operativo</h5>
-            <div class="text-muted">
-              Mantenimientos de hoy, atrasados, próximos y asignaciones.
-            </div>
+    <div class="col-md-6 col-xl-4">
+      <a class="module-link text-decoration-none" href="/dashboard/operativo/">
+        <article class="module-card module-operativo">
+          <div class="module-icon">🧑‍💼</div>
+
+          <h2 class="module-title">Operativo</h2>
+
+          <p class="module-description">
+            Revisa los mantenimientos de hoy, atrasados, próximos y las
+            asignaciones del personal.
+          </p>
+
+          <div class="module-footer">
+            <span>Gestionar operaciones</span>
+            <span class="module-arrow">→</span>
           </div>
-        </div>
+        </article>
       </a>
     </div>
 
-    <div class="col-md-6">
-      <a class="text-decoration-none" href="/dashboard/contratos/">
-        <div class="card shadow-sm h-100">
-          <div class="card-body">
-            <h5 class="mb-1">📄 Contratos</h5>
-            <div class="text-muted">
-              Clientes, frecuencias, formas de pago y valores mensuales.
-            </div>
+    <div class="col-md-6 col-xl-4">
+      <a class="module-link text-decoration-none" href="/dashboard/contratos/">
+        <article class="module-card module-contratos">
+          <div class="module-icon">📄</div>
+
+          <h2 class="module-title">Contratos</h2>
+
+          <p class="module-description">
+            Administra clientes, frecuencias, formas de pago y valores
+            mensuales de cada contrato.
+          </p>
+
+          <div class="module-footer">
+            <span>Administrar contratos</span>
+            <span class="module-arrow">→</span>
           </div>
-        </div>
+        </article>
       </a>
     </div>
 
-    <div class="col-md-6">
-      <a class="text-decoration-none" href="/dashboard/inventario/">
-        <div class="card shadow-sm h-100">
-          <div class="card-body">
-            <h5 class="mb-1">📦 Inventario</h5>
-            <div class="text-muted">
-              Stock, ventas, utilidad y movimientos de insumos.
-            </div>
+    <div class="col-md-6 col-xl-4">
+      <a class="module-link text-decoration-none" href="/dashboard/inventario/">
+        <article class="module-card module-inventario">
+          <div class="module-icon">📦</div>
+
+          <h2 class="module-title">Inventario</h2>
+
+          <p class="module-description">
+            Controla el stock, las ventas, la utilidad y los movimientos de
+            productos e insumos.
+          </p>
+
+          <div class="module-footer">
+            <span>Consultar inventario</span>
+            <span class="module-arrow">→</span>
           </div>
-        </div>
+        </article>
       </a>
     </div>
 
-    <div class="col-md-6">
-      <a class="text-decoration-none" href="/dashboard/finanzas/flujo/">
-        <div class="card shadow-sm h-100">
-          <div class="card-body">
-            <h5 class="mb-1">💰 Flujo mensual</h5>
-            <div class="text-muted">
-              Ingresos, egresos, balances y gráficos financieros.
-            </div>
+    <div class="col-md-6 col-xl-4">
+      <a class="module-link text-decoration-none" href="/dashboard/finanzas/flujo/">
+        <article class="module-card module-finanzas">
+          <div class="module-icon">💰</div>
+
+          <h2 class="module-title">Flujo mensual</h2>
+
+          <p class="module-description">
+            Consulta ingresos, egresos, balances y gráficos financieros
+            organizados por periodo.
+          </p>
+
+          <div class="module-footer">
+            <span>Revisar finanzas</span>
+            <span class="module-arrow">→</span>
           </div>
-        </div>
+        </article>
       </a>
     </div>
 
-    <div class="col-md-6">
-      <a class="text-decoration-none" href="/admin/">
-        <div class="card shadow-sm h-100">
-          <div class="card-body">
-            <h5 class="mb-1">⚙️ Admin Django</h5>
-            <div class="text-muted">
-              Gestión avanzada y completa de las tablas del sistema.
-            </div>
+    <div class="col-md-6 col-xl-4">
+      <a class="module-link text-decoration-none" href="/admin/">
+        <article class="module-card module-admin">
+          <div class="module-icon">⚙️</div>
+
+          <h2 class="module-title">Administración avanzada</h2>
+
+          <p class="module-description">
+            Accede al panel técnico de Django para gestionar directamente las
+            tablas y configuraciones internas.
+          </p>
+
+          <div class="module-footer">
+            <span>Abrir Admin Django</span>
+            <span class="module-arrow">→</span>
           </div>
-        </div>
+        </article>
       </a>
     </div>
 
   </div>
+
+  <div class="section-heading">
+    <div>
+      <h4>Accesos rápidos</h4>
+      <p>Entra directamente a las áreas más utilizadas.</p>
+    </div>
+  </div>
+
+  <div class="row g-3">
+
+    <div class="col-lg-7">
+      <div class="quick-panel h-100">
+        <div class="quick-panel-title">Gestión diaria</div>
+
+        <div class="d-grid gap-2">
+
+          <a class="quick-action" href="/dashboard/operativo/">
+            <span class="quick-action-icon">📅</span>
+            <span class="quick-action-copy">
+              <strong>Revisar mantenimientos</strong>
+              <span>Consulta las actividades operativas programadas.</span>
+            </span>
+          </a>
+
+          <a class="quick-action" href="/dashboard/contratos/">
+            <span class="quick-action-icon">📄</span>
+            <span class="quick-action-copy">
+              <strong>Gestionar contratos</strong>
+              <span>Revisa contratos activos, valores y frecuencias.</span>
+            </span>
+          </a>
+
+          <a class="quick-action" href="/dashboard/inventario/">
+            <span class="quick-action-icon">📦</span>
+            <span class="quick-action-copy">
+              <strong>Consultar existencias</strong>
+              <span>Verifica el stock disponible y sus movimientos.</span>
+            </span>
+          </a>
+
+          <a class="quick-action" href="/dashboard/finanzas/flujo/">
+            <span class="quick-action-icon">💵</span>
+            <span class="quick-action-copy">
+              <strong>Revisar flujo mensual</strong>
+              <span>Consulta ingresos, egresos y balance financiero.</span>
+            </span>
+          </a>
+
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-5">
+      <div class="system-card">
+        <div class="system-card-label">Centro administrativo</div>
+
+        <h3 class="system-card-title">
+          JVAQUA conectado y organizado
+        </h3>
+
+        <p class="system-card-text">
+          Todos los módulos principales permanecen disponibles desde esta
+          pantalla para reducir pasos y facilitar el trabajo diario.
+        </p>
+
+        <div class="system-badge">
+          <span>✓</span>
+          Accesos principales verificados
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</div>
 
 {% endblock %}
