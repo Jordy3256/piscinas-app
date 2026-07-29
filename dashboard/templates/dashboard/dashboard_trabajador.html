@@ -1,7 +1,7 @@
 {% extends "dashboard/base_trabajador.html" %}
 
 {% block title %}Mis mantenimientos{% endblock %}
-{% block top_title %}🧑‍🔧 Mis mantenimientos{% endblock %}
+{% block top_title %}Mis mantenimientos{% endblock %}
 
 {% block content %}
 
@@ -308,42 +308,580 @@
     line-height: 1.1;
     margin-top: .2rem;
   }
+
+  /* =========================================================
+     REDISEÑO PREMIUM JVAQUA · MIS MANTENIMIENTOS
+     Solo presentación visual. No modifica la lógica de Django.
+     ========================================================= */
+
+  :root {
+    --worker-blue: #0b5ed7;
+    --worker-blue-dark: #073b82;
+    --worker-cyan: #078fc5;
+    --worker-green: #169c68;
+    --worker-yellow: #f0a900;
+    --worker-red: #df4054;
+    --worker-ink: #10233f;
+    --worker-muted: #718198;
+    --worker-line: rgba(16, 35, 63, .09);
+    --worker-soft: #f5f9ff;
+    --worker-shadow: 0 12px 30px rgba(20, 54, 94, .10);
+    --worker-shadow-lg: 0 20px 48px rgba(20, 54, 94, .15);
+  }
+
+  .worker-subtitle {
+    color: var(--worker-muted);
+    font-size: .86rem;
+    line-height: 1.45;
+  }
+
+  .worker-section-title {
+    color: var(--worker-ink);
+    font-weight: 900 !important;
+    letter-spacing: -.015em;
+  }
+
+  .card-tap {
+    cursor: pointer;
+  }
+
+  /* Encabezado principal */
+  .worker-page-header {
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 1rem;
+    padding: 1.2rem;
+    border-radius: 24px;
+    color: #fff;
+    background:
+      radial-gradient(circle at 93% 8%, rgba(255,255,255,.20), transparent 10rem),
+      linear-gradient(135deg, var(--worker-blue-dark), var(--worker-blue) 58%, var(--worker-cyan));
+    box-shadow: 0 18px 42px rgba(11, 94, 215, .23);
+  }
+
+  .worker-page-header::after {
+    content: "";
+    position: absolute;
+    right: -60px;
+    bottom: -90px;
+    width: 180px;
+    height: 180px;
+    border-radius: 50%;
+    background: rgba(255,255,255,.08);
+  }
+
+  .worker-page-header > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  .worker-page-title {
+    margin: 0;
+    font-size: clamp(1.2rem, 4vw, 1.65rem);
+    font-weight: 900;
+    line-height: 1.15;
+  }
+
+  .worker-page-header .worker-subtitle {
+    color: rgba(255,255,255,.76);
+  }
+
+  .worker-header-actions .btn {
+    min-height: 40px;
+    border-color: rgba(255,255,255,.25);
+    color: #fff;
+    background: rgba(255,255,255,.13);
+  }
+
+  .worker-header-actions .btn:hover {
+    color: #fff;
+    border-color: rgba(255,255,255,.4);
+    background: rgba(255,255,255,.21);
+  }
+
+  /* Selector de vista */
+  .worker-view-card {
+    border: 1px solid var(--worker-line) !important;
+    border-radius: 22px !important;
+    background: rgba(255,255,255,.96);
+    box-shadow: var(--worker-shadow) !important;
+  }
+
+  .worker-view-switch {
+    padding: 4px;
+    border-radius: 16px;
+    background: #edf4fd;
+  }
+
+  .worker-view-switch .btn {
+    min-width: 138px;
+    border: 0;
+    border-radius: 12px !important;
+    font-size: .82rem;
+    font-weight: 800;
+  }
+
+  .worker-view-switch .btn-primary {
+    background: linear-gradient(135deg, var(--worker-blue), var(--worker-cyan));
+    box-shadow: 0 7px 17px rgba(11,94,215,.22);
+  }
+
+  .worker-view-switch .btn-outline-primary {
+    color: #60738d;
+    background: transparent;
+  }
+
+  /* Resúmenes superiores */
+  .worker-summary > [class*="col-"] > .card,
+  .agenda-week-box {
+    overflow: hidden;
+    position: relative;
+    height: 100%;
+    border: 1px solid var(--worker-line) !important;
+    border-radius: 19px !important;
+    background: rgba(255,255,255,.97);
+    box-shadow: 0 9px 22px rgba(20,54,94,.08) !important;
+  }
+
+  .worker-summary > [class*="col-"] > .card::after,
+  .agenda-week-box::after {
+    content: "";
+    position: absolute;
+    right: -25px;
+    bottom: -35px;
+    width: 82px;
+    height: 82px;
+    border-radius: 50%;
+    background: rgba(11,94,215,.06);
+  }
+
+  .worker-summary .card-body,
+  .agenda-week-box {
+    position: relative;
+    z-index: 1;
+  }
+
+  .worker-summary .text-muted,
+  .agenda-week-box .label {
+    color: var(--worker-muted) !important;
+    font-size: .72rem !important;
+    font-weight: 800;
+    letter-spacing: .025em;
+    text-transform: uppercase;
+  }
+
+  .worker-summary .fs-4,
+  .agenda-week-box .value {
+    color: var(--worker-ink);
+    font-weight: 900 !important;
+  }
+
+  /* Calendario y agenda */
+  .worker-calendar-card {
+    border: 1px solid var(--worker-line) !important;
+    border-radius: 24px !important;
+    box-shadow: var(--worker-shadow) !important;
+  }
+
+  .worker-calendar-month {
+    color: var(--worker-ink);
+    font-size: 1.12rem;
+    font-weight: 900;
+    text-transform: capitalize;
+  }
+
+  .worker-calendar-year {
+    color: var(--worker-muted);
+    font-size: .8rem;
+    font-weight: 700;
+  }
+
+  .worker-calendar-nav .btn {
+    min-height: 39px;
+    border-radius: 12px;
+    font-weight: 800;
+  }
+
+  .mini-calendario {
+    border: 1px solid var(--worker-line);
+    border-radius: 18px;
+    background: #fff;
+  }
+
+  .mini-calendario table {
+    min-width: 690px;
+    border-collapse: separate;
+    border-spacing: 5px;
+    padding: 5px;
+  }
+
+  .mini-calendario .table-bordered > :not(caption) > * > * {
+    border: 0;
+  }
+
+  .mini-calendario thead th {
+    padding: .55rem .2rem;
+    color: #72839a;
+    background: transparent;
+    font-size: .69rem;
+    font-weight: 900;
+  }
+
+  .mini-calendario td {
+    background: transparent;
+  }
+
+  .mini-calendario .dia-box {
+    min-height: 90px;
+    border: 1px solid var(--worker-line) !important;
+    border-radius: 15px;
+    padding: .5rem;
+    background: #fbfdff;
+    transition: transform .17s ease, box-shadow .17s ease, border-color .17s ease;
+  }
+
+  .mini-calendario .dia-link:hover .dia-box {
+    transform: translateY(-2px);
+    border-color: rgba(11,94,215,.35) !important;
+    box-shadow: 0 10px 20px rgba(20,54,94,.11);
+  }
+
+  .mini-calendario .dia-numero {
+    color: var(--worker-ink);
+    font-size: .82rem;
+    font-weight: 900;
+  }
+
+  .mini-calendario .dia-hoy {
+    border: 2px solid var(--worker-blue) !important;
+    background: linear-gradient(145deg, #edf5ff, #f8fbff);
+    box-shadow: 0 8px 18px rgba(11,94,215,.10);
+  }
+
+  .mini-calendario .dia-seleccionado {
+    border: 2px solid var(--worker-green) !important;
+    background: linear-gradient(145deg, #edfbf4, #f8fffb);
+  }
+
+  .mini-calendario .dia-vacio {
+    border-radius: 14px;
+    background: #f4f7fb;
+  }
+
+  .mini-calendario .badge {
+    min-width: 22px;
+    padding: .38em .56em;
+    font-size: .65rem;
+  }
+
+  .mini-calendario .mini-resumen {
+    margin-top: .35rem;
+    font-size: .64rem;
+    line-height: 1.15;
+  }
+
+  .worker-legend {
+    padding: .85rem .95rem;
+    border-radius: 15px;
+    background: #f7faff;
+  }
+
+  .worker-legend-item {
+    color: var(--worker-muted);
+    font-size: .74rem;
+    font-weight: 700;
+  }
+
+  .worker-legend-dot {
+    box-shadow: 0 0 0 4px rgba(16,35,63,.035);
+  }
+
+  /* Agenda semanal */
+  .agenda-board {
+    grid-template-columns: repeat(7, minmax(245px, 1fr));
+    gap: .85rem;
+    padding: .25rem .1rem .75rem;
+    scrollbar-width: thin;
+  }
+
+  .agenda-day-column {
+    min-width: 245px;
+    border: 1px solid var(--worker-line);
+    border-radius: 19px;
+    padding: .85rem;
+    background: #f9fbfe;
+    box-shadow: 0 7px 18px rgba(20,54,94,.06);
+  }
+
+  .agenda-day-column.agenda-hoy {
+    border: 2px solid var(--worker-blue);
+    background: linear-gradient(180deg, #eef5ff, #f9fbff);
+  }
+
+  .agenda-day-column.agenda-seleccionado {
+    border: 2px solid var(--worker-green);
+    background: linear-gradient(180deg, #edfbf4, #fbfffd);
+  }
+
+  .agenda-day-header {
+    align-items: center;
+    margin-bottom: .85rem;
+  }
+
+  .agenda-day-name {
+    color: #72839a;
+    font-size: .7rem;
+    font-weight: 900;
+  }
+
+  .agenda-day-number {
+    color: var(--worker-ink);
+    font-size: 1.45rem;
+    font-weight: 900;
+  }
+
+  .agenda-day-header .btn {
+    border-radius: 11px;
+    font-size: .71rem;
+    font-weight: 800;
+  }
+
+  .agenda-block {
+    border-top-color: rgba(16,35,63,.12);
+  }
+
+  .agenda-block-title {
+    color: #5f718a;
+    font-size: .72rem;
+    font-weight: 900;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+
+  .agenda-item {
+    border: 1px solid var(--worker-line);
+    border-radius: 14px;
+    padding: .7rem;
+    background: #fff;
+    box-shadow: 0 5px 13px rgba(20,54,94,.055);
+    transition: transform .16s ease, box-shadow .16s ease;
+  }
+
+  .agenda-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 20px rgba(20,54,94,.11);
+  }
+
+  .agenda-item.realizado {
+    border-color: rgba(22,156,104,.42);
+    background: #f2fcf7;
+  }
+
+  .agenda-item.pendiente {
+    border-color: rgba(240,169,0,.42);
+    background: #fffaf0;
+  }
+
+  .agenda-item.atrasado {
+    border-color: rgba(223,64,84,.42);
+    background: #fff5f6;
+  }
+
+  .agenda-item-title {
+    color: var(--worker-ink);
+    font-weight: 900;
+  }
+
+  .agenda-item-meta {
+    color: var(--worker-muted);
+  }
+
+  /* Tarjetas de mantenimientos */
+  .worker-list-section {
+    margin-top: .2rem;
+  }
+
+  .worker-list-heading {
+    padding: 0 .15rem;
+  }
+
+  .worker-card {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--worker-line) !important;
+    border-radius: 20px !important;
+    background: rgba(255,255,255,.98);
+    box-shadow: var(--worker-shadow) !important;
+    transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+  }
+
+  .worker-card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--worker-shadow-lg) !important;
+  }
+
+  .worker-card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 5px;
+    background: linear-gradient(180deg, var(--worker-blue), var(--worker-cyan));
+  }
+
+  .worker-card.border-danger::before {
+    background: linear-gradient(180deg, #df4054, #ff7a7a);
+  }
+
+  .worker-card .card-body {
+    padding: 1.05rem 1.05rem 1.05rem 1.2rem;
+  }
+
+  .worker-card .fw-bold {
+    color: var(--worker-ink);
+    font-size: 1rem;
+    font-weight: 900 !important;
+  }
+
+  .worker-card .text-muted {
+    color: var(--worker-muted) !important;
+  }
+
+  .worker-card .btn {
+    min-height: 38px;
+    border-radius: 12px;
+    font-weight: 800;
+  }
+
+  .badge-state {
+    padding: .55em .78em;
+    border-radius: 999px;
+    font-size: .72rem;
+    font-weight: 900;
+  }
+
+  .worker-empty {
+    border: 1px dashed rgba(16,35,63,.16) !important;
+    border-radius: 19px !important;
+    background: rgba(255,255,255,.7);
+    box-shadow: none !important;
+  }
+
+  .worker-empty .card-body {
+    padding: 1.2rem;
+    color: var(--worker-muted) !important;
+    text-align: center;
+  }
+
+  /* Botones Ver más / Ver menos */
+  .worker-more-btn {
+    min-height: 40px;
+    border-radius: 12px;
+    font-weight: 800;
+  }
+
+  @media (min-width: 768px) {
+    .worker-page-header {
+      padding: 1.45rem 1.55rem;
+    }
+  }
+
+  @media (max-width: 767.98px) {
+    .worker-page-header {
+      padding: 1.05rem;
+      border-radius: 21px;
+    }
+
+    .worker-header-actions {
+      width: 100%;
+    }
+
+    .worker-header-actions .btn {
+      flex: 1 1 auto;
+    }
+
+    .worker-view-switch {
+      width: 100%;
+    }
+
+    .worker-view-switch .btn {
+      min-width: 0;
+      flex: 1 1 50%;
+      padding: .65rem .4rem;
+      font-size: .73rem;
+    }
+
+    .worker-summary .card-body {
+      padding: .8rem .65rem !important;
+      text-align: center;
+    }
+
+    .worker-summary .fs-4 {
+      font-size: 1.35rem !important;
+    }
+
+    .mini-calendario table {
+      min-width: 650px;
+    }
+
+    .agenda-day-column {
+      min-width: 270px;
+    }
+
+    .worker-card .btn {
+      width: 100%;
+    }
+  }
+
+  @media (max-width: 420px) {
+    .worker-summary .text-muted {
+      font-size: .62rem !important;
+    }
+
+    .worker-page-title {
+      font-size: 1.18rem;
+    }
+  }
+
 </style>
 
-<div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
-  <div>
-    <div class="fw-bold fs-5">
-      {% if fecha_seleccionada %}
-        📅 Agenda del {{ fecha_seleccionada|date:"d/m/Y" }}
-      {% else %}
-        Mis mantenimientos
-      {% endif %}
+<section class="worker-page-header">
+  <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+    <div>
+      <div class="worker-page-title">
+        {% if fecha_seleccionada %}
+          <i class="bi bi-calendar2-check me-2"></i>Agenda del {{ fecha_seleccionada|date:"d/m/Y" }}
+        {% else %}
+          <i class="bi bi-card-checklist me-2"></i>Mis mantenimientos
+        {% endif %}
+      </div>
+
+      <div class="worker-subtitle mt-2">
+        {% if fecha_seleccionada %}
+          Mantenimientos programados para el día seleccionado.
+        {% else %}
+          Jornada de hoy: {{ hoy|date:"d/m/Y" }}
+        {% endif %}
+      </div>
     </div>
 
-    <div class="worker-subtitle">
-      {% if fecha_seleccionada %}
-        Mantenimientos programados para el día seleccionado.
-      {% else %}
-        Hoy: {{ hoy|date:"d/m/Y" }}
-      {% endif %}
-    </div>
-  </div>
-
-  <div class="d-flex gap-2 flex-wrap">
-    <a class="btn btn-outline-primary btn-sm" href="/dashboard/notificaciones/">
-      🔔 Notificaciones
-    </a>
-
-    {% if fecha_seleccionada_str %}
-      <a class="btn btn-success btn-sm"
-         href="/dashboard/home/?anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}{% if vista_actual %}&vista={{ vista_actual }}{% endif %}">
-        ✨ Limpiar día seleccionado
+    <div class="worker-header-actions d-flex gap-2 flex-wrap">
+      <a class="btn btn-sm" href="/dashboard/notificaciones/">
+        <i class="bi bi-bell me-1"></i> Notificaciones
       </a>
-    {% endif %}
-  </div>
-</div>
 
-<div class="card shadow-sm mb-3">
+      {% if fecha_seleccionada_str %}
+        <a class="btn btn-sm"
+           href="/dashboard/home/?anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}{% if vista_actual %}&vista={{ vista_actual }}{% endif %}">
+          <i class="bi bi-x-circle me-1"></i> Limpiar selección
+        </a>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+<div class="card shadow-sm mb-3 worker-view-card">
   <div class="card-body">
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
       <div>
@@ -393,7 +931,7 @@
 </div>
 
 {% if vista_actual == "agenda" %}
-  <div class="card shadow-sm mb-4">
+  <div class="card shadow-sm mb-4 worker-calendar-card">
     <div class="card-body">
 
       <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
@@ -405,7 +943,7 @@
           <div class="worker-subtitle">Bloques por Mañana, Tarde, Noche y Sin hora.</div>
         </div>
 
-        <div class="d-grid d-md-flex gap-2 w-100 w-md-auto">
+        <div class="d-grid d-md-flex gap-2 w-100 w-md-auto worker-calendar-nav">
           <a class="btn btn-outline-secondary btn-sm"
              href="/dashboard/home/?vista=agenda&fecha_seleccionada={{ agenda_semana_anterior|date:'Y-m-d' }}&anio_cal={{ agenda_semana_anterior.year }}&mes_cal={{ agenda_semana_anterior.month }}">
             ← Semana anterior
@@ -498,7 +1036,7 @@
     </div>
   </div>
 {% else %}
-  <div class="card shadow-sm mb-4">
+  <div class="card shadow-sm mb-4 worker-calendar-card">
     <div class="card-body">
       <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
         <div class="worker-calendar-heading">
@@ -522,14 +1060,14 @@
           <div class="worker-subtitle">Toca un día para ver sus mantenimientos.</div>
         </div>
 
-        <div class="d-grid d-md-flex gap-2 w-100 w-md-auto">
-          <a class="btn btn-outline-secondary btn-sm" href="?anio_cal={{ anio_cal_ant }}&mes_cal={{ mes_cal_ant }}&vista=calendario{% if ver_mas_proximos %}&ver_mas_proximos=1{% endif %}">
+        <div class="d-grid d-md-flex gap-2 w-100 w-md-auto worker-calendar-nav">
+          <a class="btn btn-outline-secondary btn-sm worker-more-btn" href="?anio_cal={{ anio_cal_ant }}&mes_cal={{ mes_cal_ant }}&vista=calendario{% if ver_mas_proximos %}&ver_mas_proximos=1{% endif %}">
             ← Mes anterior
           </a>
-          <a class="btn btn-outline-primary btn-sm" href="?anio_cal={{ hoy.year }}&mes_cal={{ hoy.month }}&vista=calendario{% if ver_mas_proximos %}&ver_mas_proximos=1{% endif %}">
+          <a class="btn btn-outline-primary btn-sm worker-more-btn" href="?anio_cal={{ hoy.year }}&mes_cal={{ hoy.month }}&vista=calendario{% if ver_mas_proximos %}&ver_mas_proximos=1{% endif %}">
             Hoy
           </a>
-          <a class="btn btn-outline-secondary btn-sm" href="?anio_cal={{ anio_cal_sig }}&mes_cal={{ mes_cal_sig }}&vista=calendario{% if ver_mas_proximos %}&ver_mas_proximos=1{% endif %}">
+          <a class="btn btn-outline-secondary btn-sm worker-more-btn" href="?anio_cal={{ anio_cal_sig }}&mes_cal={{ mes_cal_sig }}&vista=calendario{% if ver_mas_proximos %}&ver_mas_proximos=1{% endif %}">
             Mes siguiente →
           </a>
         </div>
@@ -665,7 +1203,7 @@
       {% endfor %}
     </div>
   {% else %}
-    <div class="card shadow-sm mb-4">
+    <div class="card shadow-sm mb-4 worker-empty">
       <div class="card-body text-muted">
         No tienes mantenimientos atrasados.
       </div>
@@ -776,18 +1314,18 @@
     {% if mostrar_boton_ver_mas_proximos or ver_mas_proximos %}
       <div class="mt-3 d-grid d-md-inline-block">
         {% if ver_mas_proximos %}
-          <a class="btn btn-outline-secondary btn-sm" href="?anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}{% if vista_actual %}&vista={{ vista_actual }}{% endif %}">
+          <a class="btn btn-outline-secondary btn-sm worker-more-btn" href="?anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}{% if vista_actual %}&vista={{ vista_actual }}{% endif %}">
             Ver menos
           </a>
         {% else %}
-          <a class="btn btn-outline-primary btn-sm" href="?anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}{% if vista_actual %}&vista={{ vista_actual }}{% endif %}&ver_mas_proximos=1">
+          <a class="btn btn-outline-primary btn-sm worker-more-btn" href="?anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}{% if vista_actual %}&vista={{ vista_actual }}{% endif %}&ver_mas_proximos=1">
             Ver más
           </a>
         {% endif %}
       </div>
     {% endif %}
   {% else %}
-    <div class="card shadow-sm">
+    <div class="card shadow-sm worker-empty">
       <div class="card-body text-muted">
         No hay mantenimientos próximos asignados.
       </div>

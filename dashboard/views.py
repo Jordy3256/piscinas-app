@@ -2617,7 +2617,25 @@ def mantenimiento_detalle_view(request, pk):
             return f"/dashboard/mantenimientos/{mantenimiento.pk}/"
 
         if accion == "guardar_checklist":
-            campos_bool = ["aspirado","cepillado","recoleccion_basura","limpieza_filtros","retrolavado_arena","cloro_granulado","tricloro","alguicida","metasilicato","floculante"]
+            if esta_realizado:
+                messages.error(
+                    request,
+                    "Este mantenimiento está realizado y bloqueado para cambios. Debes volverlo a pendiente para editarlo.",
+                )
+                return redirect(safe_return_url())
+
+            campos_bool = [
+                "aspirado",
+                "cepillado",
+                "recoleccion_basura",
+                "limpieza_filtros",
+                "retrolavado_arena",
+                "cloro_granulado",
+                "tricloro",
+                "alguicida",
+                "metasilicato",
+                "floculante",
+            ]
             for campo in campos_bool:
                 setattr(checklist, campo, request.POST.get(campo) == "on")
             checklist.bomba_estado = request.POST.get("bomba_estado", "")
@@ -2901,6 +2919,34 @@ def mantenimiento_detalle_view(request, pk):
     cantidad_fotos = len(fotos)
     cantidad_usos = lista_usos.count()
     checklist_completo = checklist.completo()
+
+    checklist_limpieza_completados = sum(
+        bool(valor)
+        for valor in [
+            checklist.aspirado,
+            checklist.cepillado,
+            checklist.recoleccion_basura,
+            checklist.limpieza_filtros,
+            checklist.retrolavado_arena,
+        ]
+    )
+    checklist_inspeccion_completados = sum(
+        bool(valor)
+        for valor in [
+            checklist.bomba_estado,
+            checklist.filtro_estado,
+            checklist.nivel_agua,
+        ]
+    )
+    checklist_completados = (
+        checklist_limpieza_completados
+        + checklist_inspeccion_completados
+    )
+    checklist_total = 8
+    checklist_porcentaje = round(
+        (checklist_completados / checklist_total) * 100
+    )
+
     puede_cerrar = cantidad_fotos == 3 and checklist_completo
     puede_subir_fotos = cantidad_fotos < 3 and not esta_realizado
 
@@ -2930,6 +2976,11 @@ def mantenimiento_detalle_view(request, pk):
             "historial_cliente_reciente": historial_cliente_reciente,
             "checklist": checklist,
             "checklist_completo": checklist_completo,
+            "checklist_limpieza_completados": checklist_limpieza_completados,
+            "checklist_inspeccion_completados": checklist_inspeccion_completados,
+            "checklist_completados": checklist_completados,
+            "checklist_total": checklist_total,
+            "checklist_porcentaje": checklist_porcentaje,
         },
     )
 
