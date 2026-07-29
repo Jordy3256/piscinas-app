@@ -1,6 +1,7 @@
 # dashboard/views.py
 import json
 import logging
+from collections import defaultdict
 from decimal import Decimal
 from datetime import date, timedelta
 from calendar import monthrange, monthcalendar
@@ -13,7 +14,7 @@ from django.contrib.auth.models import User
 from django.contrib.staticfiles import finders
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Sum
+from django.db.models import Sum, Count
 from django.db.models import F
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
@@ -27,7 +28,7 @@ from pywebpush import webpush, WebPushException
 
 from trabajadores.models import Trabajador
 from inventario.models import Insumo
-from mantenimientos.models import Mantenimiento, UsoInsumo, FotoMantenimiento
+from mantenimientos.models import Mantenimiento, UsoInsumo, FotoMantenimiento, ChecklistMantenimiento
 from finanzas.models import Ingreso, Egreso, MovimientoRecurrente, Factura, FacturaItem
 
 try:
@@ -567,6 +568,334 @@ def _variacion_porcentual(actual, anterior):
         return round(((actual - anterior) / anterior) * 100, 2)
     except Exception:
         return 0.0
+
+
+
+def _tasa_cumplimiento(realizados, total):
+    try:
+        realizados = int(realizados or 0)
+        total = int(total or 0)
+        if total <= 0:
+            return 0.0
+        return round((realizados / total) * 100, 2)
+    except Exception:
+        return 0.0
+
+
+def _tendencia_desde_variacion(valor):
+    try:
+        valor = float(valor or 0)
+    except Exception:
+        valor = 0.0
+
+    if valor > 0:
+        return "up"
+    if valor < 0:
+        return "down"
+    return "flat"
+
+
+def _estado_variacion_financiera(valor, invertido=False):
+    try:
+        valor = float(valor or 0)
+    except Exception:
+        valor = 0.0
+
+    if valor == 0:
+        return "neutral"
+
+    if invertido:
+        return "positivo" if valor < 0 else "negativo"
+    return "positivo" if valor > 0 else "negativo"
+
+
+def _mes_label(anio, mes):
+    return f"{mes:02d}/{anio}"
+
+
+def _iterar_meses_hacia_atras(fecha_base, cantidad=6):
+    meses = []
+    anio = fecha_base.year
+    mes = fecha_base.month
+
+    for _ in range(max(int(cantidad or 0), 1)):
+        meses.append((anio, mes))
+        anio, mes = _mes_anterior(anio, mes)
+
+    meses.reverse()
+    return meses
+
+
+def _build_serie_financiera_meses(fecha_base, cantidad=6):
+    labels = []
+    ingresos = []
+    egresos = []
+    balances = []
+
+    for anio, mes in _iterar_meses_hacia_atras(fecha_base, cantidad=cantidad):
+        inicio_mes, fin_mes = _inicio_fin_mes(anio, mes)
+        resumen = _resumen_financiero_rango(inicio_mes, fin_mes)
+
+        labels.append(_mes_label(anio, mes))
+        ingresos.append(float(resumen["ingresos"]))
+        egresos.append(float(resumen["egresos"]))
+        balances.append(float(resumen["balance"]))
+
+    return {
+        "labels": labels,
+        "ingresos": ingresos,
+        "egresos": egresos,
+        "balance": balances,
+    }
+
+
+def _build_serie_operativa_meses(fecha_base, cantidad=6):
+    labels = []
+    realizados = []
+    pendientes = []
+    atrasados = []
+
+    for anio, mes in _iterar_meses_hacia_atras(fecha_base, cantidad=cantidad):
+        inicio_mes, fin_mes = _inicio_fin_mes(anio, mes)
+
+        qs_mes = Mantenimiento.objects.filter(fecha__range=(inicio_mes, fin_mes))
+        labels.append(_mes_label(anio, mes))
+        realizados.append(qs_mes.filter(estado="realizado").count())
+        pendientes.append(qs_mes.filter(estado="pendiente").count())
+        atrasados.append(qs_mes.filter(estado="pendiente", fecha__lt=timezone.localdate()).count())
+
+    return {
+        "labels": labels,
+        "realizados": realizados,
+        "pendientes": pendientes,
+        "atrasados": atrasados,
+    }
+
+
+def _top_clientes_facturacion(fecha_inicio, fecha_fin, limite=5):
+    acumulado = {}
+
+    ingresos = (
+        Ingreso.objects.filter(fecha__range=(fecha_inicio, fecha_fin), cliente__isnull=False)
+        .select_related("cliente", "contrato")
+        .order_by("fecha", "id")
+    )
+
+    for ingreso in ingresos:
+        cliente = getattr(ingreso, "cliente", None)
+        if not cliente:
+            continue
+
+        key = getattr(cliente, "pk", None) or str(cliente)
+        if key not in acumulado:
+            acumulado[key] = {
+                "cliente_id": getattr(cliente, "pk", None),
+                "cliente": str(cliente),
+                "total": Decimal("0"),
+                "movimientos": 0,
+            }
+
+        acumulado[key]["total"] += Decimal(getattr(ingreso, "total", 0) or 0)
+        acumulado[key]["movimientos"] += 1
+
+    items = sorted(
+        acumulado.values(),
+        key=lambda x: (-float(x["total"]), -x["movimientos"], x["cliente"])
+    )[:limite]
+
+    for idx, item in enumerate(items, start=1):
+        item["posicion"] = idx
+        item["total_float"] = float(item["total"])
+        item["ticket_promedio"] = round(float(item["total"]) / item["movimientos"], 2) if item["movimientos"] else 0.0
+
+    return items
+
+
+def _top_contratos_facturacion(fecha_inicio, fecha_fin, limite=5):
+    acumulado = {}
+
+    ingresos = (
+        Ingreso.objects.filter(fecha__range=(fecha_inicio, fecha_fin), contrato__isnull=False)
+        .select_related("cliente", "contrato")
+        .order_by("fecha", "id")
+    )
+
+    for ingreso in ingresos:
+        contrato = getattr(ingreso, "contrato", None)
+        if not contrato:
+            continue
+
+        key = getattr(contrato, "pk", None) or str(contrato)
+        cliente = getattr(ingreso, "cliente", None)
+        if key not in acumulado:
+            acumulado[key] = {
+                "contrato_id": getattr(contrato, "pk", None),
+                "contrato": str(contrato),
+                "cliente": str(cliente) if cliente else "-",
+                "total": Decimal("0"),
+                "movimientos": 0,
+            }
+
+        acumulado[key]["total"] += Decimal(getattr(ingreso, "total", 0) or 0)
+        acumulado[key]["movimientos"] += 1
+
+    items = sorted(
+        acumulado.values(),
+        key=lambda x: (-float(x["total"]), -x["movimientos"], x["contrato"])
+    )[:limite]
+
+    for idx, item in enumerate(items, start=1):
+        item["posicion"] = idx
+        item["total_float"] = float(item["total"])
+
+    return items
+
+
+def _top_trabajadores_mes(fecha_inicio, fecha_fin, limite=5):
+    acumulado = {}
+
+    mantenimientos = (
+        Mantenimiento.objects.filter(fecha__range=(fecha_inicio, fecha_fin))
+        .select_related("cliente", "contrato")
+        .prefetch_related("trabajadores", "trabajadores__user")
+        .order_by("fecha", "id")
+    )
+
+    for mantenimiento in mantenimientos:
+        estado = getattr(mantenimiento, "estado", "") or ""
+        for trabajador in mantenimiento.trabajadores.all():
+            username = str(getattr(getattr(trabajador, "user", None), "username", "") or f"Trabajador #{getattr(trabajador, 'pk', '')}")
+            key = getattr(trabajador, "pk", None) or username
+
+            if key not in acumulado:
+                acumulado[key] = {
+                    "trabajador_id": getattr(trabajador, "pk", None),
+                    "username": username,
+                    "total": 0,
+                    "realizados": 0,
+                    "pendientes": 0,
+                }
+
+            acumulado[key]["total"] += 1
+            if estado == "realizado":
+                acumulado[key]["realizados"] += 1
+            else:
+                acumulado[key]["pendientes"] += 1
+
+    items = sorted(
+        acumulado.values(),
+        key=lambda x: (-x["realizados"], -x["total"], x["username"])
+    )[:limite]
+
+    for idx, item in enumerate(items, start=1):
+        item["posicion"] = idx
+        item["cumplimiento"] = _tasa_cumplimiento(item["realizados"], item["total"])
+
+    return items
+
+
+def _top_insumos_mes(fecha_inicio, fecha_fin, limite=5):
+    acumulado = {}
+
+    usos = (
+        UsoInsumo.objects.filter(mantenimiento__fecha__range=(fecha_inicio, fecha_fin))
+        .select_related("insumo", "mantenimiento", "mantenimiento__cliente")
+        .order_by("id")
+    )
+
+    for uso in usos:
+        insumo = getattr(uso, "insumo", None)
+        nombre = str(insumo) if insumo else "Insumo"
+        key = getattr(insumo, "pk", None) or nombre
+
+        if key not in acumulado:
+            acumulado[key] = {
+                "insumo_id": getattr(insumo, "pk", None) if insumo else None,
+                "insumo": nombre,
+                "cantidad_total": 0,
+                "mantenimientos": set(),
+            }
+
+        acumulado[key]["cantidad_total"] += int(getattr(uso, "cantidad", 0) or 0)
+        mantenimiento_id = getattr(uso, "mantenimiento_id", None)
+        if mantenimiento_id:
+            acumulado[key]["mantenimientos"].add(mantenimiento_id)
+
+    items = []
+    for item in acumulado.values():
+        items.append({
+            "insumo_id": item["insumo_id"],
+            "insumo": item["insumo"],
+            "cantidad_total": item["cantidad_total"],
+            "mantenimientos_count": len(item["mantenimientos"]),
+        })
+
+    items = sorted(
+        items,
+        key=lambda x: (-x["cantidad_total"], -x["mantenimientos_count"], x["insumo"])
+    )[:limite]
+
+    for idx, item in enumerate(items, start=1):
+        item["posicion"] = idx
+
+    return items
+
+
+def _kpis_analitica_pro(hoy):
+    inicio_mes, fin_mes = _inicio_fin_mes(hoy.year, hoy.month)
+    anio_ant, mes_ant = _mes_anterior(hoy.year, hoy.month)
+    inicio_mes_ant, fin_mes_ant = _inicio_fin_mes(anio_ant, mes_ant)
+
+    resumen_mes_actual = _resumen_financiero_rango(inicio_mes, fin_mes)
+    resumen_mes_anterior = _resumen_financiero_rango(inicio_mes_ant, fin_mes_ant)
+
+    ingresos_mes_qs = Ingreso.objects.filter(fecha__range=(inicio_mes, fin_mes))
+    ingresos_mes_count = ingresos_mes_qs.count()
+    ticket_promedio_mes = round(float(resumen_mes_actual["ingresos"]) / ingresos_mes_count, 2) if ingresos_mes_count else 0.0
+
+    clientes_activos_ids = set(
+        Mantenimiento.objects.filter(fecha__range=(inicio_mes, fin_mes), cliente__isnull=False)
+        .values_list("cliente_id", flat=True)
+    )
+    clientes_activos_ids.update(
+        Ingreso.objects.filter(fecha__range=(inicio_mes, fin_mes), cliente__isnull=False)
+        .values_list("cliente_id", flat=True)
+    )
+    clientes_activos_ids = {cid for cid in clientes_activos_ids if cid}
+
+    mantenimientos_mes_qs = Mantenimiento.objects.filter(fecha__range=(inicio_mes, fin_mes))
+    mantenimientos_realizados_mes = mantenimientos_mes_qs.filter(estado="realizado").count()
+    mantenimientos_pendientes_mes = mantenimientos_mes_qs.filter(estado="pendiente").count()
+    mantenimientos_atrasados_mes = Mantenimiento.objects.filter(fecha__lt=hoy, estado="pendiente").count()
+    total_mantenimientos_mes = mantenimientos_mes_qs.count()
+
+    cumplimiento_mes = _tasa_cumplimiento(mantenimientos_realizados_mes, total_mantenimientos_mes)
+
+    return {
+        "inicio_mes": inicio_mes,
+        "fin_mes": fin_mes,
+        "inicio_mes_anterior": inicio_mes_ant,
+        "fin_mes_anterior": fin_mes_ant,
+        "resumen_mes_actual": resumen_mes_actual,
+        "resumen_mes_anterior": resumen_mes_anterior,
+        "variacion_ingresos_mes": _variacion_porcentual(resumen_mes_actual["ingresos"], resumen_mes_anterior["ingresos"]),
+        "variacion_egresos_mes": _variacion_porcentual(resumen_mes_actual["egresos"], resumen_mes_anterior["egresos"]),
+        "variacion_balance_mes": _variacion_porcentual(resumen_mes_actual["balance"], resumen_mes_anterior["balance"]),
+        "ticket_promedio_mes": ticket_promedio_mes,
+        "ingresos_mes_count": ingresos_mes_count,
+        "clientes_activos_mes": len(clientes_activos_ids),
+        "mantenimientos_realizados_mes": mantenimientos_realizados_mes,
+        "mantenimientos_pendientes_mes": mantenimientos_pendientes_mes,
+        "mantenimientos_atrasados_mes": mantenimientos_atrasados_mes,
+        "total_mantenimientos_mes": total_mantenimientos_mes,
+        "cumplimiento_mes": cumplimiento_mes,
+        "top_clientes_facturacion": _top_clientes_facturacion(inicio_mes, fin_mes),
+        "top_contratos_facturacion": _top_contratos_facturacion(inicio_mes, fin_mes),
+        "top_trabajadores_mes": _top_trabajadores_mes(inicio_mes, fin_mes),
+        "top_insumos_mes": _top_insumos_mes(inicio_mes, fin_mes),
+        "serie_financiera_6m": _build_serie_financiera_meses(hoy, cantidad=6),
+        "serie_operativa_6m": _build_serie_operativa_meses(hoy, cantidad=6),
+    }
 
 
 # -------------------
@@ -1263,6 +1592,8 @@ def dashboard_view(request):
             resumen_mes_anterior["balance"],
         )
 
+        analitica_pro = _kpis_analitica_pro(hoy)
+
         recurrentes_proximos_3_dias = list(
             MovimientoRecurrente.objects.filter(
                 activo=True,
@@ -1497,6 +1828,22 @@ def dashboard_view(request):
                 int(total_pendientes_sin_asignar),
             ],
         }
+        grafico_tendencia_financiera = {
+            "labels": analitica_pro["serie_financiera_6m"]["labels"],
+            "datasets": [
+                {"label": "Ingresos", "data": analitica_pro["serie_financiera_6m"]["ingresos"]},
+                {"label": "Egresos", "data": analitica_pro["serie_financiera_6m"]["egresos"]},
+                {"label": "Balance", "data": analitica_pro["serie_financiera_6m"]["balance"]},
+            ],
+        }
+        grafico_tendencia_operativa = {
+            "labels": analitica_pro["serie_operativa_6m"]["labels"],
+            "datasets": [
+                {"label": "Realizados", "data": analitica_pro["serie_operativa_6m"]["realizados"]},
+                {"label": "Pendientes", "data": analitica_pro["serie_operativa_6m"]["pendientes"]},
+                {"label": "Atrasados", "data": analitica_pro["serie_operativa_6m"]["atrasados"]},
+            ],
+        }
 
         ctx = {
             **base_ctx,
@@ -1547,6 +1894,33 @@ def dashboard_view(request):
             "actividades_recientes": actividades_recientes,
             "grafico_finanzas": json.dumps(grafico_finanzas),
             "grafico_operativo": json.dumps(grafico_operativo),
+            "grafico_tendencia_financiera": json.dumps(grafico_tendencia_financiera),
+            "grafico_tendencia_operativa": json.dumps(grafico_tendencia_operativa),
+
+            # Analítica PRO
+            "kpi_ticket_promedio_mes": analitica_pro["ticket_promedio_mes"],
+            "kpi_clientes_activos_mes": analitica_pro["clientes_activos_mes"],
+            "kpi_ingresos_mes_count": analitica_pro["ingresos_mes_count"],
+            "kpi_mantenimientos_realizados_mes": analitica_pro["mantenimientos_realizados_mes"],
+            "kpi_mantenimientos_pendientes_mes": analitica_pro["mantenimientos_pendientes_mes"],
+            "kpi_mantenimientos_atrasados_mes": analitica_pro["mantenimientos_atrasados_mes"],
+            "kpi_total_mantenimientos_mes": analitica_pro["total_mantenimientos_mes"],
+            "kpi_cumplimiento_mes": analitica_pro["cumplimiento_mes"],
+
+            "tendencia_ingresos_mes": _tendencia_desde_variacion(analitica_pro["variacion_ingresos_mes"]),
+            "tendencia_egresos_mes": _tendencia_desde_variacion(analitica_pro["variacion_egresos_mes"]),
+            "tendencia_balance_mes": _tendencia_desde_variacion(analitica_pro["variacion_balance_mes"]),
+            "estado_variacion_ingresos_mes": _estado_variacion_financiera(analitica_pro["variacion_ingresos_mes"]),
+            "estado_variacion_egresos_mes": _estado_variacion_financiera(analitica_pro["variacion_egresos_mes"], invertido=True),
+            "estado_variacion_balance_mes": _estado_variacion_financiera(analitica_pro["variacion_balance_mes"]),
+
+            "top_clientes_facturacion": analitica_pro["top_clientes_facturacion"],
+            "top_contratos_facturacion": analitica_pro["top_contratos_facturacion"],
+            "top_trabajadores_mes": analitica_pro["top_trabajadores_mes"],
+            "top_insumos_mes": analitica_pro["top_insumos_mes"],
+            "serie_financiera_6m": analitica_pro["serie_financiera_6m"],
+            "serie_operativa_6m": analitica_pro["serie_operativa_6m"],
+
             "es_admin": True,
         }
         return render(request, "dashboard/dashboard.html", ctx)
@@ -2214,6 +2588,7 @@ def mantenimiento_detalle_view(request, pk):
     es_usuario_admin = es_admin(request.user)
     insumos = Insumo.objects.all().order_by("nombre")
     esta_realizado = mantenimiento.estado == "realizado"
+    checklist, _ = ChecklistMantenimiento.objects.get_or_create(mantenimiento=mantenimiento)
 
     if request.method == "POST":
         accion = request.POST.get("accion")
@@ -2228,12 +2603,29 @@ def mantenimiento_detalle_view(request, pk):
                 return next_url
             return f"/dashboard/mantenimientos/{mantenimiento.pk}/"
 
+        if accion == "guardar_checklist":
+            campos_bool = ["aspirado","cepillado","recoleccion_basura","limpieza_filtros","retrolavado_arena","cloro_granulado","tricloro","alguicida","metasilicato","floculante"]
+            for campo in campos_bool:
+                setattr(checklist, campo, request.POST.get(campo) == "on")
+            checklist.bomba_estado = request.POST.get("bomba_estado", "")
+            checklist.bomba_novedad = request.POST.get("bomba_novedad", "").strip()
+            checklist.filtro_estado = request.POST.get("filtro_estado", "")
+            checklist.filtro_novedad = request.POST.get("filtro_novedad", "").strip()
+            checklist.nivel_agua = request.POST.get("nivel_agua", "")
+            checklist.save()
+            messages.success(request, "Checklist guardado correctamente.")
+            return redirect(safe_return_url())
+
         if accion == "marcar_realizado":
             fotos_qs_validacion = mantenimiento.fotos.all()
             fotos_por_nombre_validacion = {
                 f.descripcion: f for f in fotos_qs_validacion if _nombre_foto_valido(f.descripcion)
             }
             cantidad_fotos_requeridas = len(fotos_por_nombre_validacion)
+
+            if not checklist.completo():
+                messages.error(request, "Debes completar la limpieza y la inspección antes de cerrar el mantenimiento.")
+                return redirect(safe_return_url())
 
             if cantidad_fotos_requeridas < 3:
                 messages.error(
@@ -2495,7 +2887,8 @@ def mantenimiento_detalle_view(request, pk):
 
     cantidad_fotos = len(fotos)
     cantidad_usos = lista_usos.count()
-    puede_cerrar = cantidad_fotos == 3
+    checklist_completo = checklist.completo()
+    puede_cerrar = cantidad_fotos == 3 and checklist_completo
     puede_subir_fotos = cantidad_fotos < 3 and not esta_realizado
 
     foto_inicio = fotos_por_nombre.get("Inicio de Mantenimiento")
@@ -2522,6 +2915,8 @@ def mantenimiento_detalle_view(request, pk):
             "foto_fin": foto_fin,
             "foto_nivel": foto_nivel,
             "historial_cliente_reciente": historial_cliente_reciente,
+            "checklist": checklist,
+            "checklist_completo": checklist_completo,
         },
     )
 
