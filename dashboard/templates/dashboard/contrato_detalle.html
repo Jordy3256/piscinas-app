@@ -1,0 +1,725 @@
+{% extends "dashboard/base_admin.html" %}
+
+{% block title %}
+  Contrato de {{ contrato.cliente.nombre }}
+{% endblock %}
+
+{% block top_title %}
+  📄 Detalle del contrato
+{% endblock %}
+
+{% block top_actions %}
+  <a
+    class="btn btn-primary btn-sm"
+    href="/dashboard/contratos/{{ contrato.id }}/editar/"
+  >
+    ✏️ Editar
+  </a>
+
+  <a
+    class="btn btn-outline-secondary btn-sm"
+    href="/dashboard/contratos/"
+  >
+    Contratos
+  </a>
+
+  <a
+    class="btn btn-outline-danger btn-sm"
+    href="/logout/"
+  >
+    Salir
+  </a>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+  .detail-label {
+    color: #6c757d;
+    font-size: 0.82rem;
+    margin-bottom: 2px;
+  }
+
+  .detail-value {
+    font-weight: 600;
+    word-break: break-word;
+  }
+
+  .summary-card {
+    height: 100%;
+    border: 0;
+  }
+
+  .summary-number {
+    font-size: 1.65rem;
+    font-weight: 700;
+    line-height: 1.1;
+  }
+
+  .status-circle {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 6px;
+  }
+
+  .maintenance-card {
+    transition: transform 0.15s ease;
+  }
+
+  .maintenance-card:hover {
+    transform: translateY(-1px);
+  }
+
+  .section-title {
+    font-weight: 700;
+    margin-bottom: 0;
+  }
+
+  .contract-price {
+    font-size: 2rem;
+    line-height: 1;
+  }
+
+  .table td,
+  .table th {
+    vertical-align: middle;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-3">
+  <div>
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+      <h3 class="mb-0">
+        {{ contrato.cliente.nombre }}
+      </h3>
+
+      {% if contrato.activo %}
+        <span class="badge text-bg-success">
+          Contrato activo
+        </span>
+      {% else %}
+        <span class="badge text-bg-secondary">
+          Contrato inactivo
+        </span>
+      {% endif %}
+    </div>
+
+    <div class="text-muted mt-1">
+      Contrato #{{ contrato.id }}
+      · Inicio: {{ contrato.fecha_inicio|date:"d/m/Y" }}
+    </div>
+  </div>
+
+  <div class="d-flex gap-2 flex-wrap">
+    <a
+      class="btn btn-outline-secondary"
+      href="/dashboard/contratos/"
+    >
+      ← Volver
+    </a>
+
+    <a
+      class="btn btn-primary"
+      href="/dashboard/contratos/{{ contrato.id }}/editar/"
+    >
+      ✏️ Editar contrato
+    </a>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+
+  <div class="col-12 col-lg-7">
+    <div class="card shadow-sm h-100">
+      <div class="card-header bg-white">
+        <div class="section-title">
+          👤 Información del cliente
+        </div>
+      </div>
+
+      <div class="card-body">
+        <div class="row g-3">
+
+          <div class="col-12 col-md-6">
+            <div class="detail-label">Nombre</div>
+            <div class="detail-value">
+              {{ contrato.cliente.nombre }}
+            </div>
+          </div>
+
+          <div class="col-12 col-md-6">
+            <div class="detail-label">Teléfono</div>
+            <div class="detail-value">
+              {% if contrato.cliente.telefono %}
+                <a
+                  href="tel:{{ contrato.cliente.telefono }}"
+                  class="text-decoration-none"
+                >
+                  {{ contrato.cliente.telefono }}
+                </a>
+              {% else %}
+                <span class="text-muted">No registrado</span>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="col-12 col-md-6">
+            <div class="detail-label">Correo electrónico</div>
+            <div class="detail-value">
+              {% if contrato.cliente.email %}
+                <a
+                  href="mailto:{{ contrato.cliente.email }}"
+                  class="text-decoration-none"
+                >
+                  {{ contrato.cliente.email }}
+                </a>
+              {% else %}
+                <span class="text-muted">No registrado</span>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="col-12 col-md-6">
+            <div class="detail-label">Estado del cliente</div>
+            <div class="detail-value">
+              {% if contrato.cliente.activo %}
+                <span class="text-success">
+                  <span class="status-circle bg-success"></span>
+                  Cliente activo
+                </span>
+              {% else %}
+                <span class="text-secondary">
+                  <span class="status-circle bg-secondary"></span>
+                  Cliente inactivo
+                </span>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="col-12">
+            <div class="detail-label">Dirección</div>
+            <div class="detail-value">
+              {% if contrato.cliente.direccion %}
+                {{ contrato.cliente.direccion|linebreaksbr }}
+              {% else %}
+                <span class="text-muted">No registrada</span>
+              {% endif %}
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-5">
+    <div class="card shadow-sm h-100">
+      <div class="card-header bg-white">
+        <div class="section-title">
+          📄 Información del contrato
+        </div>
+      </div>
+
+      <div class="card-body">
+        <div class="mb-3">
+          <div class="detail-label">Precio mensual</div>
+          <div class="contract-price fw-bold text-primary">
+            ${{ contrato.precio_mensual|floatformat:2 }}
+          </div>
+        </div>
+
+        <hr>
+
+        <div class="row g-3">
+          <div class="col-12">
+            <div class="detail-label">Frecuencia</div>
+            <div class="detail-value">
+              {{ contrato.frecuencia_completa }}
+            </div>
+          </div>
+
+          <div class="col-12">
+            <div class="detail-label">Forma de pago</div>
+            <div class="detail-value">
+              {{ contrato.forma_pago_completa }}
+            </div>
+          </div>
+
+          <div class="col-6">
+            <div class="detail-label">Fecha de inicio</div>
+            <div class="detail-value">
+              {{ contrato.fecha_inicio|date:"d/m/Y" }}
+            </div>
+          </div>
+
+          <div class="col-6">
+            <div class="detail-label">Estado</div>
+            <div class="detail-value">
+              {% if contrato.activo %}
+                <span class="badge text-bg-success">Activo</span>
+              {% else %}
+                <span class="badge text-bg-secondary">Inactivo</span>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="row g-3 mb-3">
+
+  <div class="col-6 col-xl-3">
+    <div class="card shadow-sm summary-card">
+      <div class="card-body">
+        <div class="small text-muted mb-1">
+          Mantenimientos
+        </div>
+        <div class="summary-number">
+          {{ total_mantenimientos }}
+        </div>
+        <div class="small text-muted mt-2">
+          Total registrados
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-6 col-xl-3">
+    <div class="card shadow-sm summary-card">
+      <div class="card-body">
+        <div class="small text-muted mb-1">
+          Realizados
+        </div>
+        <div class="summary-number text-success">
+          {{ total_realizados }}
+        </div>
+        <div class="small text-muted mt-2">
+          Servicios completados
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-6 col-xl-3">
+    <div class="card shadow-sm summary-card">
+      <div class="card-body">
+        <div class="small text-muted mb-1">
+          Pendientes
+        </div>
+        <div class="summary-number text-warning">
+          {{ total_pendientes }}
+        </div>
+        <div class="small text-muted mt-2">
+          Por completar
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-6 col-xl-3">
+    <div class="card shadow-sm summary-card">
+      <div class="card-body">
+        <div class="small text-muted mb-1">
+          Atrasados
+        </div>
+        <div class="summary-number text-danger">
+          {{ total_atrasados }}
+        </div>
+        <div class="small text-muted mt-2">
+          Requieren atención
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="row g-3 mb-3">
+
+  <div class="col-12 col-md-4">
+    <div class="card shadow-sm summary-card">
+      <div class="card-body">
+        <div class="small text-muted mb-1">
+          Total facturado
+        </div>
+        <div class="summary-number">
+          ${{ total_facturado|floatformat:2 }}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-md-4">
+    <div class="card shadow-sm summary-card">
+      <div class="card-body">
+        <div class="small text-muted mb-1">
+          Total pagado
+        </div>
+        <div class="summary-number text-success">
+          ${{ total_pagado|floatformat:2 }}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-md-4">
+    <div class="card shadow-sm summary-card">
+      <div class="card-body">
+        <div class="small text-muted mb-1">
+          Saldo pendiente
+        </div>
+        <div class="summary-number text-danger">
+          ${{ total_pendiente|floatformat:2 }}
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="card shadow-sm mb-3">
+  <div class="card-header bg-white">
+    <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">
+      <div>
+        <div class="section-title">
+          ⚡ Acciones rápidas
+        </div>
+        <div class="small text-muted">
+          Accesos relacionados con este contrato.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card-body">
+    <div class="d-flex gap-2 flex-wrap">
+
+      <a
+        class="btn btn-primary"
+        href="/dashboard/contratos/{{ contrato.id }}/editar/"
+      >
+        ✏️ Editar contrato
+      </a>
+
+      <a
+        class="btn btn-outline-primary"
+        href="/dashboard/mantenimientos/historial/?q={{ contrato.cliente.nombre|urlencode }}"
+      >
+        🛠 Ver mantenimientos
+      </a>
+
+      <a
+        class="btn btn-outline-secondary"
+        href="/dashboard/finanzas/facturas/"
+      >
+        🧾 Ver facturas
+      </a>
+
+      <form
+        method="post"
+        action="/dashboard/contratos/{{ contrato.id }}/toggle/"
+        class="d-inline"
+      >
+        {% csrf_token %}
+
+        <input
+          type="hidden"
+          name="next"
+          value="/dashboard/contratos/{{ contrato.id }}/"
+        >
+
+        {% if contrato.activo %}
+          <button
+            type="submit"
+            class="btn btn-outline-danger"
+            onclick="return confirm('¿Deseas desactivar este contrato?');"
+          >
+            ⏸ Desactivar contrato
+          </button>
+        {% else %}
+          <button
+            type="submit"
+            class="btn btn-outline-success"
+            onclick="return confirm('¿Deseas activar este contrato?');"
+          >
+            ▶ Activar contrato
+          </button>
+        {% endif %}
+      </form>
+
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+
+  <div class="col-12 col-xl-7">
+    <div class="card shadow-sm h-100">
+      <div class="card-header bg-white">
+        <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">
+          <div>
+            <div class="section-title">
+              🛠 Mantenimientos recientes
+            </div>
+            <div class="small text-muted">
+              Últimos servicios asociados al contrato.
+            </div>
+          </div>
+
+          <a
+            class="btn btn-sm btn-outline-primary"
+            href="/dashboard/mantenimientos/historial/?q={{ contrato.cliente.nombre|urlencode }}"
+          >
+            Ver historial
+          </a>
+        </div>
+      </div>
+
+      <div class="card-body p-0">
+
+        {% if mantenimientos_recientes %}
+
+          <div class="table-responsive d-none d-md-block">
+            <table class="table table-hover mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th>Fecha</th>
+                  <th>Estado</th>
+                  <th>Técnicos</th>
+                  <th class="text-end">Acción</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {% for mantenimiento in mantenimientos_recientes %}
+                  <tr>
+                    <td>
+                      {{ mantenimiento.fecha|date:"d/m/Y" }}
+                    </td>
+
+                    <td>
+                      {% if mantenimiento.estado == "realizado" %}
+                        <span class="badge text-bg-success">
+                          Realizado
+                        </span>
+                      {% elif mantenimiento.estado == "pendiente" %}
+                        <span class="badge text-bg-warning">
+                          Pendiente
+                        </span>
+                      {% elif mantenimiento.estado == "cancelado" %}
+                        <span class="badge text-bg-secondary">
+                          Cancelado
+                        </span>
+                      {% else %}
+                        <span class="badge text-bg-light">
+                          {{ mantenimiento.get_estado_display|default:mantenimiento.estado }}
+                        </span>
+                      {% endif %}
+                    </td>
+
+                    <td>
+                      {% for trabajador in mantenimiento.trabajadores.all %}
+                        <span class="badge text-bg-light">
+                          {{ trabajador }}
+                        </span>
+                      {% empty %}
+                        <span class="text-muted small">
+                          Sin asignar
+                        </span>
+                      {% endfor %}
+                    </td>
+
+                    <td class="text-end">
+                      <a
+                        class="btn btn-sm btn-outline-primary"
+                        href="/dashboard/mantenimientos/{{ mantenimiento.id }}/"
+                      >
+                        Ver
+                      </a>
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="d-md-none p-3">
+            <div class="d-grid gap-3">
+              {% for mantenimiento in mantenimientos_recientes %}
+                <div class="border rounded-3 p-3 maintenance-card">
+                  <div class="d-flex justify-content-between align-items-start gap-2">
+                    <div>
+                      <div class="small text-muted">
+                        Fecha
+                      </div>
+                      <div class="fw-bold">
+                        {{ mantenimiento.fecha|date:"d/m/Y" }}
+                      </div>
+                    </div>
+
+                    {% if mantenimiento.estado == "realizado" %}
+                      <span class="badge text-bg-success">
+                        Realizado
+                      </span>
+                    {% elif mantenimiento.estado == "pendiente" %}
+                      <span class="badge text-bg-warning">
+                        Pendiente
+                      </span>
+                    {% else %}
+                      <span class="badge text-bg-secondary">
+                        {{ mantenimiento.get_estado_display|default:mantenimiento.estado }}
+                      </span>
+                    {% endif %}
+                  </div>
+
+                  <div class="mt-3">
+                    <div class="small text-muted mb-1">
+                      Técnicos
+                    </div>
+
+                    {% for trabajador in mantenimiento.trabajadores.all %}
+                      <span class="badge text-bg-light">
+                        {{ trabajador }}
+                      </span>
+                    {% empty %}
+                      <span class="small text-muted">
+                        Sin técnicos asignados
+                      </span>
+                    {% endfor %}
+                  </div>
+
+                  <div class="d-grid mt-3">
+                    <a
+                      class="btn btn-outline-primary"
+                      href="/dashboard/mantenimientos/{{ mantenimiento.id }}/"
+                    >
+                      Ver mantenimiento
+                    </a>
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+
+        {% else %}
+          <div class="p-4 text-center">
+            <div class="fs-1 mb-2">🛠</div>
+            <div class="fw-semibold">
+              No existen mantenimientos
+            </div>
+            <div class="text-muted">
+              Este contrato todavía no tiene mantenimientos registrados.
+            </div>
+          </div>
+        {% endif %}
+
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-xl-5">
+    <div class="card shadow-sm h-100">
+      <div class="card-header bg-white">
+        <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">
+          <div>
+            <div class="section-title">
+              🧾 Facturas recientes
+            </div>
+            <div class="small text-muted">
+              Últimas facturas vinculadas al contrato.
+            </div>
+          </div>
+
+          <a
+            class="btn btn-sm btn-outline-primary"
+            href="/dashboard/finanzas/facturas/"
+          >
+            Ver todas
+          </a>
+        </div>
+      </div>
+
+      <div class="card-body p-0">
+
+        {% if facturas %}
+          <div class="list-group list-group-flush">
+
+            {% for factura in facturas %}
+              <a
+                href="/dashboard/finanzas/facturas/{{ factura.id }}/"
+                class="list-group-item list-group-item-action"
+              >
+                <div class="d-flex justify-content-between align-items-start gap-3">
+
+                  <div>
+                    <div class="fw-semibold">
+                      Factura #{{ factura.id }}
+                    </div>
+
+                    <div class="small text-muted">
+                      {% if factura.periodo_mes and factura.periodo_anio %}
+                        Periodo:
+                        {{ factura.periodo_mes }}/{{ factura.periodo_anio }}
+                      {% elif factura.fecha %}
+                        {{ factura.fecha|date:"d/m/Y" }}
+                      {% endif %}
+                    </div>
+                  </div>
+
+                  <div class="text-end">
+                    <div class="fw-bold">
+                      ${{ factura.total|floatformat:2 }}
+                    </div>
+
+                    <div class="mt-1">
+                      {% if factura.estado == "pagada" %}
+                        <span class="badge text-bg-success">
+                          Pagada
+                        </span>
+                      {% elif factura.estado == "vencida" %}
+                        <span class="badge text-bg-danger">
+                          Vencida
+                        </span>
+                      {% elif factura.estado == "anulada" %}
+                        <span class="badge text-bg-secondary">
+                          Anulada
+                        </span>
+                      {% else %}
+                        <span class="badge text-bg-warning">
+                          {{ factura.get_estado_display|default:factura.estado }}
+                        </span>
+                      {% endif %}
+                    </div>
+                  </div>
+
+                </div>
+              </a>
+            {% endfor %}
+
+          </div>
+        {% else %}
+          <div class="p-4 text-center">
+            <div class="fs-1 mb-2">🧾</div>
+            <div class="fw-semibold">
+              No existen facturas
+            </div>
+            <div class="text-muted">
+              Todavía no se han generado facturas para este contrato.
+            </div>
+          </div>
+        {% endif %}
+
+      </div>
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}

@@ -13,7 +13,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.contrib.staticfiles import finders
 from django.core.paginator import Paginator
-from django.db import transaction
+from django.db import transaction, models
 from django.db.models import Sum, Count
 from django.db.models import F
 from django.http import HttpResponse, JsonResponse
@@ -28,8 +28,21 @@ from pywebpush import webpush, WebPushException
 
 from trabajadores.models import Trabajador
 from inventario.models import Insumo
-from mantenimientos.models import Mantenimiento, UsoInsumo, FotoMantenimiento, ChecklistMantenimiento
-from finanzas.models import Ingreso, Egreso, MovimientoRecurrente, Factura, FacturaItem
+from mantenimientos.models import (
+    Mantenimiento,
+    UsoInsumo,
+    FotoMantenimiento,
+    ChecklistMantenimiento,
+)
+from finanzas.models import (
+    Ingreso,
+    Egreso,
+    MovimientoRecurrente,
+    Factura,
+    FacturaItem,
+)
+from clientes.models import Cliente
+from contratos.models import Contrato
 
 try:
     from .models import PushSubscription
@@ -5038,4 +5051,533 @@ def calculadora_quimicos_view(request):
     return render(
         request,
         "dashboard/calculadora_quimicos.html",
+    )
+
+
+# ================================
+# CONTRATOS
+# ================================
+
+FRECUENCIAS_CONTRATO_VALIDAS = {
+    "1_semanal",
+    "2_semanales",
+    "3_semanales",
+    "quincenal",
+    "personalizado",
+}
+
+FORMAS_PAGO_CONTRATO_VALIDAS = {
+    "adelantado",
+    "50_50",
+    "por_visita",
+    "fin_mensualidad",
+    "personalizado",
+}
+
+
+def _validar_datos_contrato(request):
+    cliente_id = (request.POST.get("cliente") or "").strip()
+    frecuencia = (request.POST.get("frecuencia") or "").strip()
+    frecuencia_personalizada = (
+        request.POST.get("frecuencia_personalizada") or ""
+    ).strip()
+    forma_pago = (request.POST.get("forma_pago") or "").strip()
+    forma_pago_personalizada = (
+        request.POST.get("forma_pago_personalizada") or ""
+    ).strip()
+    precio_mensual_str = (
+        request.POST.get("precio_mensual") or ""
+    ).strip()
+    fecha_inicio_str = (
+        request.POST.get("fecha_inicio") or ""
+    ).strip()
+    activo = request.POST.get("activo") == "on"
+
+    errores = []
+
+    cliente = None
+    if not cliente_id.isdigit():
+        errores.append("Debes seleccionar un cliente válido.")
+    else:
+        cliente = Cliente.objects.filter(pk=int(cliente_id)).first()
+        if cliente is None:
+            errores.append("El cliente seleccionado no existe.")
+
+    if frecuencia not in FRECUENCIAS_CONTRATO_VALIDAS:
+        errores.append("Debes seleccionar una frecuencia válida.")
+
+    if frecuencia == "personalizado" and not frecuencia_personalizada:
+        errores.append(
+            "Debes escribir la frecuencia personalizada."
+        )
+
+    if forma_pago not in FORMAS_PAGO_CONTRATO_VALIDAS:
+        errores.append("Debes seleccionar una forma de pago válida.")
+
+    if forma_pago == "personalizado" and not forma_pago_personalizada:
+        errores.append(
+            "Debes escribir la forma de pago personalizada."
+        )
+
+    try:
+        precio_mensual = Decimal(precio_mensual_str)
+        if precio_mensual <= 0:
+            raise ValueError
+    except Exception:
+        precio_mensual = None
+        errores.append(
+            "El precio mensual debe ser un valor mayor que cero."
+        )
+
+    fecha_inicio = parse_date(fecha_inicio_str)
+    if not fecha_inicio:
+        errores.append("Debes seleccionar una fecha de inicio válida.")
+
+    return {
+        "errores": errores,
+        "cliente": cliente,
+        "frecuencia": frecuencia,
+        "frecuencia_personalizada": frecuencia_personalizada,
+        "forma_pago": forma_pago,
+        "forma_pago_personalizada": forma_pago_personalizada,
+        "precio_mensual": precio_mensual,
+        "fecha_inicio": fecha_inicio,
+        "activo": activo,
+    }
+
+
+@login_required
+def contrato_list_view(request):
+    if not es_admin(request.user):
+        return render(
+            request,
+            "dashboard/no_autorizado.html",
+            status=403,
+        )
+
+    q = (request.GET.get("q") or "").strip()
+    estado = (request.GET.get("estado") or "").strip().lower()
+    frecuencia = (
+        request.GET.get("frecuencia") or ""
+    ).strip()
+
+    contratos = (
+        Contrato.objects
+        .select_related("cliente")
+        .annotate(
+            total_mantenimientos=Count(
+                "mantenimiento",
+                distinct=True,
+            )
+        )
+        .order_by("-activo", "cliente__nombre", "id")
+    )
+
+    if q:
+        contratos = contratos.filter(
+            models.Q(cliente__nombre__icontains=q)
+            | models.Q(cliente__telefono__icontains=q)
+            | models.Q(cliente__email__icontains=q)
+            | models.Q(frecuencia_personalizada__icontains=q)
+            | models.Q(forma_pago_personalizada__icontains=q)
+        )
+
+    if estado == "activo":
+        contratos = contratos.filter(activo=True)
+    elif estado == "inactivo":
+        contratos = contratos.filter(activo=False)
+
+    if frecuencia in FRECUENCIAS_CONTRATO_VALIDAS:
+        contratos = contratos.filter(frecuencia=frecuencia)
+
+    total_contratos = contratos.count()
+    total_activos = contratos.filter(activo=True).count()
+    total_inactivos = contratos.filter(activo=False).count()
+
+    ingreso_mensual_estimado = (
+        contratos
+        .filter(activo=True)
+        .aggregate(total=Sum("precio_mensual"))
+        .get("total")
+        or Decimal("0.00")
+    )
+
+    paginator = Paginator(contratos, 20)
+    page_number = request.GET.get("page")
+    page_obj = paginator.get_page(page_number)
+
+    query_params = request.GET.copy()
+    if "page" in query_params:
+        query_params.pop("page")
+    querystring = query_params.urlencode()
+
+    return render(
+        request,
+        "dashboard/contrato_list.html",
+        {
+            "page_obj": page_obj,
+            "q": q,
+            "estado": estado,
+            "frecuencia": frecuencia,
+            "frecuencias": Contrato.FRECUENCIA_CHOICES,
+            "total_contratos": total_contratos,
+            "total_activos": total_activos,
+            "total_inactivos": total_inactivos,
+            "ingreso_mensual_estimado": ingreso_mensual_estimado,
+            "querystring": querystring,
+            "es_admin": True,
+        },
+    )
+
+
+@login_required
+def contrato_crear_view(request):
+    if not es_admin(request.user):
+        return render(
+            request,
+            "dashboard/no_autorizado.html",
+            status=403,
+        )
+
+    clientes = (
+        Cliente.objects
+        .filter(activo=True)
+        .order_by("nombre")
+    )
+
+    datos_formulario = {
+        "cliente_id": "",
+        "frecuencia": "",
+        "frecuencia_personalizada": "",
+        "forma_pago": "",
+        "forma_pago_personalizada": "",
+        "precio_mensual": "",
+        "fecha_inicio": timezone.localdate().isoformat(),
+        "activo": True,
+    }
+
+    if request.method == "POST":
+        validacion = _validar_datos_contrato(request)
+
+        datos_formulario = {
+            "cliente_id": request.POST.get("cliente", ""),
+            "frecuencia": validacion["frecuencia"],
+            "frecuencia_personalizada": (
+                validacion["frecuencia_personalizada"]
+            ),
+            "forma_pago": validacion["forma_pago"],
+            "forma_pago_personalizada": (
+                validacion["forma_pago_personalizada"]
+            ),
+            "precio_mensual": request.POST.get(
+                "precio_mensual",
+                "",
+            ),
+            "fecha_inicio": request.POST.get(
+                "fecha_inicio",
+                "",
+            ),
+            "activo": validacion["activo"],
+        }
+
+        if validacion["errores"]:
+            for error in validacion["errores"]:
+                messages.error(request, error)
+        else:
+            contrato = Contrato.objects.create(
+                cliente=validacion["cliente"],
+                tipo="variable",
+                frecuencia=validacion["frecuencia"],
+                frecuencia_personalizada=(
+                    validacion["frecuencia_personalizada"]
+                ),
+                forma_pago=validacion["forma_pago"],
+                forma_pago_personalizada=(
+                    validacion["forma_pago_personalizada"]
+                ),
+                precio_mensual=validacion["precio_mensual"],
+                fecha_inicio=validacion["fecha_inicio"],
+                activo=validacion["activo"],
+            )
+
+            _registrar_actividad(
+                user=request.user,
+                titulo="Contrato creado",
+                descripcion=(
+                    f"{request.user.username} creó el contrato "
+                    f"de {contrato.cliente} por "
+                    f"${contrato.precio_mensual} mensuales."
+                ),
+                url=f"/dashboard/contratos/{contrato.pk}/",
+            )
+
+            messages.success(
+                request,
+                "Contrato creado correctamente.",
+            )
+            return redirect(
+                f"/dashboard/contratos/{contrato.pk}/"
+            )
+
+    return render(
+        request,
+        "dashboard/contrato_form.html",
+        {
+            "modo": "crear",
+            "contrato": None,
+            "clientes": clientes,
+            "frecuencias": Contrato.FRECUENCIA_CHOICES,
+            "formas_pago": Contrato.FORMA_PAGO_CHOICES,
+            "datos_formulario": datos_formulario,
+            "es_admin": True,
+        },
+    )
+
+
+@login_required
+def contrato_editar_view(request, pk):
+    if not es_admin(request.user):
+        return render(
+            request,
+            "dashboard/no_autorizado.html",
+            status=403,
+        )
+
+    contrato = get_object_or_404(
+        Contrato.objects.select_related("cliente"),
+        pk=pk,
+    )
+
+    clientes = Cliente.objects.order_by(
+        "-activo",
+        "nombre",
+    )
+
+    datos_formulario = {
+        "cliente_id": str(contrato.cliente_id),
+        "frecuencia": contrato.frecuencia,
+        "frecuencia_personalizada": (
+            contrato.frecuencia_personalizada
+        ),
+        "forma_pago": contrato.forma_pago,
+        "forma_pago_personalizada": (
+            contrato.forma_pago_personalizada
+        ),
+        "precio_mensual": contrato.precio_mensual,
+        "fecha_inicio": contrato.fecha_inicio.isoformat(),
+        "activo": contrato.activo,
+    }
+
+    if request.method == "POST":
+        validacion = _validar_datos_contrato(request)
+
+        datos_formulario = {
+            "cliente_id": request.POST.get("cliente", ""),
+            "frecuencia": validacion["frecuencia"],
+            "frecuencia_personalizada": (
+                validacion["frecuencia_personalizada"]
+            ),
+            "forma_pago": validacion["forma_pago"],
+            "forma_pago_personalizada": (
+                validacion["forma_pago_personalizada"]
+            ),
+            "precio_mensual": request.POST.get(
+                "precio_mensual",
+                "",
+            ),
+            "fecha_inicio": request.POST.get(
+                "fecha_inicio",
+                "",
+            ),
+            "activo": validacion["activo"],
+        }
+
+        if validacion["errores"]:
+            for error in validacion["errores"]:
+                messages.error(request, error)
+        else:
+            contrato.cliente = validacion["cliente"]
+            contrato.frecuencia = validacion["frecuencia"]
+            contrato.frecuencia_personalizada = (
+                validacion["frecuencia_personalizada"]
+            )
+            contrato.forma_pago = validacion["forma_pago"]
+            contrato.forma_pago_personalizada = (
+                validacion["forma_pago_personalizada"]
+            )
+            contrato.precio_mensual = (
+                validacion["precio_mensual"]
+            )
+            contrato.fecha_inicio = validacion["fecha_inicio"]
+            contrato.activo = validacion["activo"]
+            contrato.save()
+
+            _registrar_actividad(
+                user=request.user,
+                titulo="Contrato actualizado",
+                descripcion=(
+                    f"{request.user.username} actualizó el contrato "
+                    f"de {contrato.cliente}."
+                ),
+                url=f"/dashboard/contratos/{contrato.pk}/",
+            )
+
+            messages.success(
+                request,
+                "Contrato actualizado correctamente.",
+            )
+            return redirect(
+                f"/dashboard/contratos/{contrato.pk}/"
+            )
+
+    return render(
+        request,
+        "dashboard/contrato_form.html",
+        {
+            "modo": "editar",
+            "contrato": contrato,
+            "clientes": clientes,
+            "frecuencias": Contrato.FRECUENCIA_CHOICES,
+            "formas_pago": Contrato.FORMA_PAGO_CHOICES,
+            "datos_formulario": datos_formulario,
+            "es_admin": True,
+        },
+    )
+
+
+@login_required
+def contrato_detalle_view(request, pk):
+    if not es_admin(request.user):
+        return render(
+            request,
+            "dashboard/no_autorizado.html",
+            status=403,
+        )
+
+    contrato = get_object_or_404(
+        Contrato.objects.select_related("cliente"),
+        pk=pk,
+    )
+
+    mantenimientos = (
+        Mantenimiento.objects
+        .filter(contrato=contrato)
+        .select_related("cliente", "contrato")
+        .prefetch_related("trabajadores")
+        .order_by("-fecha", "-id")
+    )
+
+    total_mantenimientos = mantenimientos.count()
+    total_realizados = mantenimientos.filter(
+        estado="realizado"
+    ).count()
+    total_pendientes = mantenimientos.filter(
+        estado="pendiente"
+    ).count()
+    total_atrasados = mantenimientos.filter(
+        estado="pendiente",
+        fecha__lt=timezone.localdate(),
+    ).count()
+
+    mantenimientos_recientes = mantenimientos[:10]
+
+    facturas = (
+        Factura.objects
+        .filter(contrato=contrato)
+        .order_by("-periodo_anio", "-periodo_mes", "-id")[:10]
+    )
+
+    total_facturado = (
+        Factura.objects
+        .filter(contrato=contrato)
+        .aggregate(total=Sum("total"))
+        .get("total")
+        or Decimal("0.00")
+    )
+
+    total_pagado = (
+        Factura.objects
+        .filter(
+            contrato=contrato,
+            estado=Factura.ESTADO_PAGADA,
+        )
+        .aggregate(total=Sum("total"))
+        .get("total")
+        or Decimal("0.00")
+    )
+
+    total_pendiente = (
+        Factura.objects
+        .filter(
+            contrato=contrato,
+            estado__in=[
+                Factura.ESTADO_PENDIENTE,
+                Factura.ESTADO_VENCIDA,
+            ],
+        )
+        .aggregate(total=Sum("total"))
+        .get("total")
+        or Decimal("0.00")
+    )
+
+    return render(
+        request,
+        "dashboard/contrato_detalle.html",
+        {
+            "contrato": contrato,
+            "mantenimientos_recientes": mantenimientos_recientes,
+            "facturas": facturas,
+            "total_mantenimientos": total_mantenimientos,
+            "total_realizados": total_realizados,
+            "total_pendientes": total_pendientes,
+            "total_atrasados": total_atrasados,
+            "total_facturado": total_facturado,
+            "total_pagado": total_pagado,
+            "total_pendiente": total_pendiente,
+            "es_admin": True,
+        },
+    )
+
+
+@login_required
+@require_http_methods(["POST"])
+def contrato_toggle_view(request, pk):
+    if not es_admin(request.user):
+        return render(
+            request,
+            "dashboard/no_autorizado.html",
+            status=403,
+        )
+
+    contrato = get_object_or_404(Contrato, pk=pk)
+
+    contrato.activo = not contrato.activo
+    contrato.save(update_fields=["activo"])
+
+    estado_texto = (
+        "activado"
+        if contrato.activo
+        else "desactivado"
+    )
+
+    _registrar_actividad(
+        user=request.user,
+        titulo="Estado de contrato actualizado",
+        descripcion=(
+            f"{request.user.username} {estado_texto} "
+            f"el contrato de {contrato.cliente}."
+        ),
+        url=f"/dashboard/contratos/{contrato.pk}/",
+    )
+
+    messages.success(
+        request,
+        f"Contrato {estado_texto} correctamente.",
+    )
+
+    return redirect(
+        request.POST.get(
+            "next",
+            f"/dashboard/contratos/{contrato.pk}/",
+        )
     )
