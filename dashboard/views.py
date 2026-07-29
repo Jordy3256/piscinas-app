@@ -5028,3 +5028,14 @@ def exportar_ganancias_pdf(request):
     response["Content-Disposition"] = 'attachment; filename="reporte_ganancias.pdf"'
     response.write(pdf)
     return response
+
+
+@login_required
+def calculadora_quimicos_view(request):
+    if not es_trabajador(request.user) and not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    return render(
+        request,
+        "dashboard/calculadora_quimicos.html",
+    )

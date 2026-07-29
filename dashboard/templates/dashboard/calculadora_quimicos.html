@@ -1,0 +1,787 @@
+{% extends "dashboard/base_trabajador.html" %}
+
+{% block title %}Calculadora Inteligente{% endblock %}
+{% block top_title %}🧪 Calculadora Inteligente{% endblock %}
+
+{% block content %}
+
+<style>
+  .calculator-shell {
+    max-width: 980px;
+    margin: 0 auto;
+  }
+
+  .calculator-hero {
+    border: 0;
+    border-radius: 1.25rem;
+    overflow: hidden;
+    background: linear-gradient(135deg, #0d6efd 0%, #084298 100%);
+    color: #fff;
+  }
+
+  .calculator-hero .card-body {
+    padding: 1.5rem;
+  }
+
+  .calculator-card {
+    border: 0;
+    border-radius: 1.1rem;
+  }
+
+  .calculator-section-title {
+    font-weight: 800;
+    font-size: 1rem;
+    margin-bottom: .25rem;
+  }
+
+  .calculator-subtitle {
+    color: #6c757d;
+    font-size: .88rem;
+  }
+
+  .method-option {
+    border: 1px solid #dee2e6;
+    border-radius: 1rem;
+    padding: 1rem;
+    cursor: pointer;
+    transition: .15s ease;
+    height: 100%;
+  }
+
+  .method-option:hover {
+    border-color: #0d6efd;
+    box-shadow: 0 .35rem .9rem rgba(13, 110, 253, .08);
+  }
+
+  .method-option.active {
+    border: 2px solid #0d6efd;
+    background: #eef5ff;
+  }
+
+  .method-option input {
+    margin-right: .45rem;
+  }
+
+  .form-label {
+    font-weight: 700;
+  }
+
+  .form-control,
+  .form-select {
+    min-height: 46px;
+    border-radius: .8rem;
+  }
+
+  .condition-box {
+    border: 1px solid #dee2e6;
+    border-radius: .9rem;
+    padding: .9rem 1rem;
+    height: 100%;
+    background: #fff;
+  }
+
+  .result-panel {
+    display: none;
+  }
+
+  .result-panel.show {
+    display: block;
+  }
+
+  .status-box {
+    border-radius: 1rem;
+    padding: 1rem;
+    height: 100%;
+    border: 1px solid #e9ecef;
+    background: #fff;
+  }
+
+  .status-value {
+    font-size: 1.35rem;
+    font-weight: 800;
+  }
+
+  .product-card {
+    border: 1px solid #e9ecef;
+    border-radius: 1rem;
+    padding: 1rem;
+    height: 100%;
+    background: #fff;
+  }
+
+  .product-name {
+    font-weight: 800;
+    margin-bottom: .25rem;
+  }
+
+  .product-dose {
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: #0d6efd;
+  }
+
+  .report-box {
+    border-left: 4px solid #0d6efd;
+    background: #f8f9fa;
+    border-radius: .75rem;
+    padding: 1rem;
+  }
+
+  .warning-box {
+    border-left: 4px solid #ffc107;
+    background: #fff9e8;
+    border-radius: .75rem;
+    padding: 1rem;
+  }
+
+  .advice-box {
+    border-left: 4px solid #198754;
+    background: #eefaf3;
+    border-radius: .75rem;
+    padding: 1rem;
+  }
+
+  .order-list {
+    margin: 0;
+    padding-left: 1.2rem;
+  }
+
+  .order-list li {
+    margin-bottom: .45rem;
+  }
+
+  @media (max-width: 767.98px) {
+    .calculator-hero .card-body {
+      padding: 1.15rem;
+    }
+
+    .calculator-hero h1 {
+      font-size: 1.45rem;
+    }
+
+    .calculator-card .card-body {
+      padding: 1rem;
+    }
+
+    .btn-calculate {
+      width: 100%;
+    }
+  }
+</style>
+
+<div class="calculator-shell">
+
+  <div class="card calculator-hero shadow-sm mb-4">
+    <div class="card-body">
+      <div class="d-flex align-items-start gap-3">
+        <div class="fs-1">🧪</div>
+        <div>
+          <h1 class="h3 fw-bold mb-2">Calculadora Inteligente de Tratamiento Químico</h1>
+          <p class="mb-0 opacity-75">
+            Calcula el volumen, analiza los parámetros del agua y obtén una recomendación técnica orientativa de JVAQUA.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <form id="chemicalCalculator" novalidate>
+
+    <div class="card calculator-card shadow-sm mb-4">
+      <div class="card-body">
+        <div class="calculator-section-title">1. Método de cálculo</div>
+        <div class="calculator-subtitle mb-3">Selecciona cómo deseas ingresar el volumen de la piscina.</div>
+
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="method-option active d-block" id="methodDimensionsCard">
+              <input type="radio" name="calculation_method" value="dimensions" checked>
+              <span class="fw-bold">📐 Calcular por dimensiones</span>
+              <div class="text-muted small mt-1">Ingresa largo, ancho y profundidad promedio.</div>
+            </label>
+          </div>
+
+          <div class="col-md-6">
+            <label class="method-option d-block" id="methodVolumeCard">
+              <input type="radio" name="calculation_method" value="volume">
+              <span class="fw-bold">🌊 Ya conozco el volumen</span>
+              <div class="text-muted small mt-1">Ingresa directamente el volumen total en metros cúbicos.</div>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card calculator-card shadow-sm mb-4">
+      <div class="card-body">
+        <div class="calculator-section-title">2. Datos de la piscina</div>
+        <div class="calculator-subtitle mb-3">Todos los valores deben ser mayores a cero.</div>
+
+        <div id="dimensionsFields">
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label for="poolLength" class="form-label">Largo (m)</label>
+              <input type="number" class="form-control" id="poolLength" min="0.1" step="0.01" placeholder="Ej.: 6">
+            </div>
+
+            <div class="col-md-4">
+              <label for="poolWidth" class="form-label">Ancho (m)</label>
+              <input type="number" class="form-control" id="poolWidth" min="0.1" step="0.01" placeholder="Ej.: 3">
+            </div>
+
+            <div class="col-md-4">
+              <label for="poolDepth" class="form-label">Profundidad promedio (m)</label>
+              <input type="number" class="form-control" id="poolDepth" min="0.1" step="0.01" placeholder="Ej.: 1.50">
+            </div>
+          </div>
+        </div>
+
+        <div id="volumeField" class="d-none">
+          <div class="row">
+            <div class="col-md-6">
+              <label for="knownVolume" class="form-label">Volumen conocido (m³)</label>
+              <input type="number" class="form-control" id="knownVolume" min="0.1" step="0.01" placeholder="Ej.: 27">
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-3">
+          <div class="alert alert-primary mb-0">
+            <strong>Volumen estimado:</strong>
+            <span id="volumePreview">0.00 m³</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card calculator-card shadow-sm mb-4">
+      <div class="card-body">
+        <div class="calculator-section-title">3. Estado actual del agua</div>
+        <div class="calculator-subtitle mb-3">Ingresa los parámetros medidos antes de aplicar productos.</div>
+
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label for="phLevel" class="form-label">pH</label>
+            <input type="number" class="form-control" id="phLevel" min="0" max="14" step="0.1" placeholder="Ej.: 7.4" required>
+          </div>
+
+          <div class="col-md-6">
+            <label for="chlorineLevel" class="form-label">Cloro libre (ppm)</label>
+            <input type="number" class="form-control" id="chlorineLevel" min="0" step="0.1" placeholder="Ej.: 1.5" required>
+          </div>
+
+          <div class="col-md-6">
+            <label for="waterCondition" class="form-label">Condición visual del agua</label>
+            <select class="form-select" id="waterCondition" required>
+              <option value="clear">Cristalina</option>
+              <option value="slightly_cloudy">Ligeramente turbia</option>
+              <option value="very_cloudy">Muy turbia</option>
+              <option value="green">Verde</option>
+            </select>
+          </div>
+
+          <div class="col-md-6">
+            <label for="usageLevel" class="form-label">Nivel de uso</label>
+            <select class="form-select" id="usageLevel" required>
+              <option value="low">Bajo</option>
+              <option value="medium" selected>Medio</option>
+              <option value="high">Alto</option>
+            </select>
+          </div>
+
+          <div class="col-md-6">
+            <div class="condition-box">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="recentRain">
+                <label class="form-check-label fw-bold" for="recentRain">🌧️ Llovió recientemente</label>
+              </div>
+              <div class="text-muted small mt-1">La lluvia puede diluir el desinfectante y aumentar la carga orgánica.</div>
+            </div>
+          </div>
+
+          <div class="col-md-6">
+            <div class="condition-box">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="coveredPool">
+                <label class="form-check-label fw-bold" for="coveredPool">🏠 Piscina cubierta</label>
+              </div>
+              <div class="text-muted small mt-1">Una piscina cubierta recibe menor exposición solar y contaminación exterior.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="formAlert" class="alert alert-danger d-none" role="alert"></div>
+
+    <div class="d-grid d-md-flex justify-content-md-end mb-4">
+      <button type="submit" class="btn btn-primary btn-lg px-5 btn-calculate">
+        🧪 Calcular tratamiento
+      </button>
+    </div>
+
+  </form>
+
+  <section id="resultPanel" class="result-panel">
+
+    <div class="card calculator-card shadow-sm mb-4">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+          <div>
+            <div class="calculator-section-title">Diagnóstico profesional</div>
+            <div class="calculator-subtitle">Resultado orientativo basado en los datos ingresados.</div>
+          </div>
+          <span class="badge text-bg-primary fs-6" id="resultVolume">0.00 m³</span>
+        </div>
+
+        <div class="report-box mb-3">
+          <div class="fw-bold mb-1">Diagnóstico general</div>
+          <div id="generalDiagnosis"></div>
+        </div>
+
+        <div class="row g-3">
+          <div class="col-md-6">
+            <div class="status-box">
+              <div class="text-muted small">Estado del pH</div>
+              <div class="status-value" id="phStatusValue"></div>
+              <div id="phStatusText"></div>
+            </div>
+          </div>
+
+          <div class="col-md-6">
+            <div class="status-box">
+              <div class="text-muted small">Estado del cloro</div>
+              <div class="status-value" id="chlorineStatusValue"></div>
+              <div id="chlorineStatusText"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card calculator-card shadow-sm mb-4">
+      <div class="card-body">
+        <div class="calculator-section-title">Productos recomendados</div>
+        <div class="calculator-subtitle mb-3">Cantidades aproximadas calculadas para el volumen ingresado.</div>
+
+        <div class="row g-3" id="productsGrid"></div>
+      </div>
+    </div>
+
+    <div class="card calculator-card shadow-sm mb-4">
+      <div class="card-body">
+        <div class="calculator-section-title">Orden recomendado de aplicación</div>
+        <div class="calculator-subtitle mb-3">Respeta el orden y nunca mezcles productos químicos directamente.</div>
+
+        <ol class="order-list" id="applicationOrder"></ol>
+      </div>
+    </div>
+
+    <div class="warning-box mb-4">
+      <div class="fw-bold mb-2">⚠️ Advertencias técnicas</div>
+      <div id="warningsText"></div>
+    </div>
+
+    <div class="advice-box mb-4">
+      <div class="fw-bold mb-2">💡 Consejo Técnico JVAQUA</div>
+      <div id="technicalAdvice"></div>
+    </div>
+
+    <div class="d-grid d-md-flex justify-content-md-end mb-4">
+      <button type="button" class="btn btn-outline-primary" id="newCalculationButton">
+        Realizar otro cálculo
+      </button>
+    </div>
+
+  </section>
+
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const form = document.getElementById("chemicalCalculator");
+  const dimensionsFields = document.getElementById("dimensionsFields");
+  const volumeField = document.getElementById("volumeField");
+  const dimensionsCard = document.getElementById("methodDimensionsCard");
+  const volumeCard = document.getElementById("methodVolumeCard");
+  const volumePreview = document.getElementById("volumePreview");
+  const resultPanel = document.getElementById("resultPanel");
+  const formAlert = document.getElementById("formAlert");
+
+  const lengthInput = document.getElementById("poolLength");
+  const widthInput = document.getElementById("poolWidth");
+  const depthInput = document.getElementById("poolDepth");
+  const knownVolumeInput = document.getElementById("knownVolume");
+
+  const phInput = document.getElementById("phLevel");
+  const chlorineInput = document.getElementById("chlorineLevel");
+  const waterConditionInput = document.getElementById("waterCondition");
+  const usageLevelInput = document.getElementById("usageLevel");
+  const recentRainInput = document.getElementById("recentRain");
+  const coveredPoolInput = document.getElementById("coveredPool");
+
+  function selectedMethod() {
+    return document.querySelector('input[name="calculation_method"]:checked').value;
+  }
+
+  function switchMethod(method) {
+    const useDimensions = method === "dimensions";
+
+    dimensionsFields.classList.toggle("d-none", !useDimensions);
+    volumeField.classList.toggle("d-none", useDimensions);
+    dimensionsCard.classList.toggle("active", useDimensions);
+    volumeCard.classList.toggle("active", !useDimensions);
+
+    calculateVolumePreview();
+  }
+
+  document.querySelectorAll('input[name="calculation_method"]').forEach(function (radio) {
+    radio.addEventListener("change", function () {
+      switchMethod(this.value);
+    });
+  });
+
+  function parsePositiveNumber(input) {
+    const value = Number.parseFloat(input.value);
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  }
+
+  function calculateVolume() {
+    if (selectedMethod() === "volume") {
+      return parsePositiveNumber(knownVolumeInput);
+    }
+
+    const length = parsePositiveNumber(lengthInput);
+    const width = parsePositiveNumber(widthInput);
+    const depth = parsePositiveNumber(depthInput);
+
+    if (!length || !width || !depth) {
+      return 0;
+    }
+
+    return length * width * depth;
+  }
+
+  function calculateVolumePreview() {
+    volumePreview.textContent = calculateVolume().toFixed(2) + " m³";
+  }
+
+  [lengthInput, widthInput, depthInput, knownVolumeInput].forEach(function (input) {
+    input.addEventListener("input", calculateVolumePreview);
+  });
+
+  function phStatus(ph) {
+    if (ph < 6.8) {
+      return {
+        label: "🔴 Muy bajo",
+        className: "text-danger",
+        description: "El agua es demasiado ácida. Debe corregirse antes de aplicar el tratamiento principal."
+      };
+    }
+
+    if (ph < 7.2) {
+      return {
+        label: "🟠 Bajo",
+        className: "text-warning",
+        description: "El pH está por debajo del rango ideal de 7.2 a 7.6."
+      };
+    }
+
+    if (ph <= 7.6) {
+      return {
+        label: "🟢 Ideal",
+        className: "text-success",
+        description: "El pH está dentro del rango recomendado."
+      };
+    }
+
+    if (ph <= 8.0) {
+      return {
+        label: "🟠 Alto",
+        className: "text-warning",
+        description: "El pH elevado reduce la efectividad del cloro."
+      };
+    }
+
+    return {
+      label: "🔴 Muy alto",
+      className: "text-danger",
+      description: "El pH está muy elevado y debe corregirse antes de continuar."
+    };
+  }
+
+  function chlorineStatus(chlorine) {
+    if (chlorine < 0.5) {
+      return {
+        label: "🔴 Muy bajo",
+        className: "text-danger",
+        description: "El nivel de desinfección es insuficiente."
+      };
+    }
+
+    if (chlorine < 1) {
+      return {
+        label: "🟠 Bajo",
+        className: "text-warning",
+        description: "El cloro está por debajo del rango ideal de 1 a 3 ppm."
+      };
+    }
+
+    if (chlorine <= 3) {
+      return {
+        label: "🟢 Ideal",
+        className: "text-success",
+        description: "El cloro libre está dentro del rango recomendado."
+      };
+    }
+
+    if (chlorine <= 4) {
+      return {
+        label: "🟠 Alto",
+        className: "text-warning",
+        description: "El cloro está ligeramente por encima del rango ideal."
+      };
+    }
+
+    return {
+      label: "🔴 Excesivo",
+      className: "text-danger",
+      description: "No agregues más cloro hasta que el nivel descienda."
+    };
+  }
+
+  function productCard(icon, name, dose, detail) {
+    return `
+      <div class="col-md-6 col-lg-4">
+        <div class="product-card">
+          <div class="product-name">${icon} ${name}</div>
+          <div class="product-dose">${dose}</div>
+          <div class="text-muted small mt-1">${detail}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  function showError(message) {
+    formAlert.textContent = message;
+    formAlert.classList.remove("d-none");
+    resultPanel.classList.remove("show");
+    formAlert.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  function clearError() {
+    formAlert.classList.add("d-none");
+    formAlert.textContent = "";
+  }
+
+  form.addEventListener("submit", function (event) {
+    event.preventDefault();
+    clearError();
+
+    const volume = calculateVolume();
+    const ph = Number.parseFloat(phInput.value);
+    const chlorine = Number.parseFloat(chlorineInput.value);
+    const waterCondition = waterConditionInput.value;
+    const usageLevel = usageLevelInput.value;
+    const recentRain = recentRainInput.checked;
+    const coveredPool = coveredPoolInput.checked;
+
+    if (!volume || volume <= 0) {
+      showError("Ingresa dimensiones válidas o un volumen conocido mayor a cero.");
+      return;
+    }
+
+    if (!Number.isFinite(ph) || ph < 0 || ph > 14) {
+      showError("Ingresa un valor de pH válido entre 0 y 14.");
+      return;
+    }
+
+    if (!Number.isFinite(chlorine) || chlorine < 0) {
+      showError("Ingresa un valor válido de cloro libre.");
+      return;
+    }
+
+    const phInfo = phStatus(ph);
+    const chlorineInfo = chlorineStatus(chlorine);
+
+    document.getElementById("resultVolume").textContent = volume.toFixed(2) + " m³";
+
+    const phValue = document.getElementById("phStatusValue");
+    phValue.textContent = ph.toFixed(1) + " · " + phInfo.label;
+    phValue.className = "status-value " + phInfo.className;
+    document.getElementById("phStatusText").textContent = phInfo.description;
+
+    const chlorineValue = document.getElementById("chlorineStatusValue");
+    chlorineValue.textContent = chlorine.toFixed(1) + " ppm · " + chlorineInfo.label;
+    chlorineValue.className = "status-value " + chlorineInfo.className;
+    document.getElementById("chlorineStatusText").textContent = chlorineInfo.description;
+
+    const conditionLabels = {
+      clear: "cristalina",
+      slightly_cloudy: "ligeramente turbia",
+      very_cloudy: "muy turbia",
+      green: "verde"
+    };
+
+    const usageLabels = {
+      low: "bajo",
+      medium: "medio",
+      high: "alto"
+    };
+
+    const diagnosisParts = [
+      `La piscina tiene un volumen aproximado de <strong>${volume.toFixed(2)} m³</strong>.`,
+      `El agua se reporta <strong>${conditionLabels[waterCondition]}</strong> y el nivel de uso es <strong>${usageLabels[usageLevel]}</strong>.`
+    ];
+
+    if (recentRain) {
+      diagnosisParts.push("Se registró lluvia reciente, por lo que conviene reforzar la revisión de cloro y filtración.");
+    }
+
+    if (coveredPool) {
+      diagnosisParts.push("La piscina es cubierta, lo que reduce la exposición solar directa.");
+    }
+
+    document.getElementById("generalDiagnosis").innerHTML = diagnosisParts.join(" ");
+
+    const products = [];
+    const order = [];
+    const warnings = [];
+
+    const isCloudy = waterCondition === "slightly_cloudy" || waterCondition === "very_cloudy";
+    const isSevere = waterCondition === "very_cloudy" || waterCondition === "green";
+    const needsGranularChlorine = chlorine < 1 || isCloudy || waterCondition === "green";
+
+    if (needsGranularChlorine) {
+      const granularGrams = volume * 7;
+      products.push(productCard(
+        "🧂",
+        "Cloro granulado",
+        granularGrams.toFixed(0) + " g",
+        "Dosis orientativa de 7 g por m³ para cloro bajo o tratamiento de recuperación."
+      ));
+      order.push("Ajustar primero el pH y luego aplicar el cloro granulado previamente disuelto según el procedimiento técnico.");
+    } else {
+      products.push(productCard(
+        "🧂",
+        "Cloro granulado",
+        "No requerido",
+        "El nivel actual no requiere una dosis adicional de recuperación."
+      ));
+    }
+
+    const tabletCount = Math.max(1, Math.ceil(volume / 30));
+    const trichlorDetail = tabletCount === 1
+      ? "1 pastilla de 200 g"
+      : `${tabletCount} pastillas de 200 g`;
+
+    products.push(productCard(
+      "⚪",
+      "Tricloro",
+      trichlorDetail,
+      "Referencia aproximada de 1 pastilla por cada 25 a 30 m³ para mantenimiento normal."
+    ));
+
+    if (isCloudy || waterCondition === "green" || recentRain || usageLevel === "high") {
+      const algaecideGrams = volume * 2;
+      products.push(productCard(
+        "🧴",
+        "Alguicida",
+        algaecideGrams.toFixed(0) + " g",
+        "Dosis orientativa de 2 g por m³ por turbidez, agua verde, lluvia o uso alto."
+      ));
+      order.push("Aplicar alguicida de forma distribuida alrededor de la piscina con la filtración en funcionamiento.");
+    } else {
+      products.push(productCard(
+        "🧴",
+        "Alguicida",
+        "No requerido",
+        "No se detectan condiciones que obliguen a una aplicación correctiva."
+      ));
+    }
+
+    if (isSevere) {
+      products.push(productCard(
+        "💧",
+        "Floculante",
+        "Según producto",
+        "Recomendado únicamente por agua muy turbia o verde. Respetar la dosificación del fabricante."
+      ));
+      order.push("Aplicar floculante según la etiqueta del producto y dejar sedimentar antes de aspirar a desagüe.");
+    } else {
+      products.push(productCard(
+        "💧",
+        "Floculante",
+        "No requerido",
+        "Solo se recomienda para agua verde o con turbidez alta."
+      ));
+    }
+
+    products.push(productCard(
+      "🧪",
+      "Metasilicato",
+      "Criterio técnico",
+      "Aplicar únicamente según necesidad y concentración del producto utilizado."
+    ));
+
+    if (ph < 7.2 || ph > 7.6) {
+      order.unshift("Corregir el pH hasta dejarlo entre 7.2 y 7.6 antes del tratamiento principal.");
+    } else {
+      order.unshift("Confirmar que el pH se mantiene dentro del rango ideal de 7.2 a 7.6.");
+    }
+
+    if (!needsGranularChlorine) {
+      order.push("Colocar el tricloro en el dosificador o flotador para mantenimiento gradual.");
+    } else {
+      order.push("Una vez estabilizada el agua, usar tricloro para mantener el nivel de cloro.");
+    }
+
+    order.push("Mantener la filtración activa y verificar nuevamente pH y cloro después del tratamiento.");
+
+    warnings.push("No mezclar productos químicos entre sí ni agregarlos simultáneamente en el mismo recipiente.");
+    warnings.push("Usar guantes, protección ocular y seguir siempre la etiqueta y ficha técnica del fabricante.");
+    warnings.push("No permitir el ingreso de bañistas mientras se realiza un tratamiento correctivo.");
+
+    if (chlorine > 4) {
+      warnings.push("El cloro está excesivo: no agregar más cloro y esperar a que el nivel descienda.");
+    }
+
+    if (isSevere) {
+      warnings.push("En agua verde o muy turbia puede ser necesario cepillado, filtración continua y aspirado a desagüe.");
+    }
+
+    let advice = "Mantén un control periódico de pH y cloro para evitar tratamientos correctivos mayores.";
+
+    if (ph > 7.6) {
+      advice = "El pH elevado reduce la efectividad del cloro. Corrige primero el pH y luego realiza el tratamiento recomendado.";
+    } else if (ph < 7.2) {
+      advice = "Un pH bajo puede generar corrosión e irritación. Corrígelo antes de aplicar el tratamiento principal.";
+    } else if (isSevere) {
+      advice = "Después del tratamiento de recuperación, mantén la filtración funcionando durante varias horas y vuelve a medir los parámetros.";
+    } else if (recentRain) {
+      advice = "La lluvia puede diluir el desinfectante. Verifica nuevamente el nivel de cloro al día siguiente.";
+    } else if (usageLevel === "high") {
+      advice = "Con uso alto, aumenta la frecuencia de revisión de pH, cloro y limpieza de filtros.";
+    } else if (coveredPool) {
+      advice = "En piscinas cubiertas, controla la acumulación de cloro y evita sobredosificar por la menor exposición solar.";
+    }
+
+    document.getElementById("productsGrid").innerHTML = products.join("");
+    document.getElementById("applicationOrder").innerHTML = order.map(item => `<li>${item}</li>`).join("");
+    document.getElementById("warningsText").innerHTML = warnings.map(item => `<div class="mb-1">• ${item}</div>`).join("");
+    document.getElementById("technicalAdvice").textContent = advice;
+
+    resultPanel.classList.add("show");
+    resultPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+
+  document.getElementById("newCalculationButton").addEventListener("click", function () {
+    resultPanel.classList.remove("show");
+    form.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+
+  calculateVolumePreview();
+});
+</script>
+
+{% endblock %}

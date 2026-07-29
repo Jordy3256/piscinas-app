@@ -29,6 +29,7 @@ from .views import (
     inicio_view,
     home_view,
     dashboard_view,
+    calculadora_quimicos_view,
 
     # Mantenimientos
     mantenimiento_detalle_view,
@@ -118,6 +119,7 @@ urlpatterns = [
     path("", dashboard_view, name="dashboard"),
     path("home/", home_view, name="home"),
     path("inicio/", inicio_view, name="inicio"),
+    path("herramientas/calculadora-quimicos/",  calculadora_quimicos_view,  name="calculadora_quimicos"),
 
     # ======================
     # Mantenimientos

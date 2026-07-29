@@ -18,6 +18,24 @@
     .app-shell { max-width: 720px; margin: 0 auto; }
     .topbar { position: sticky; top: 0; z-index: 1030; backdrop-filter: blur(8px); }
     .bottom-nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 1030; }
+    .bottom-nav-links {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: .4rem;
+    }
+    .bottom-nav-links .btn {
+      min-width: 0;
+      padding: .55rem .25rem;
+      font-size: .82rem;
+      white-space: nowrap;
+    }
+
+    @media (max-width: 575.98px) {
+      .bottom-nav-links .btn {
+        font-size: .72rem;
+        padding: .5rem .12rem;
+      }
+    }
     .spacer-bottom { height: 90px; }
 
     #btn-install { display: none; }
@@ -221,10 +239,11 @@
 
     <div class="bottom-nav bg-white border-top">
       <div class="container py-2">
-        <div class="d-flex gap-2 flex-wrap">
-          <a class="btn btn-light flex-fill" href="/dashboard/inicio/">🏠 Inicio</a>
-          <a class="btn btn-outline-secondary flex-fill" href="/dashboard/home/">📋 Mis mantenimientos</a>
-          <a class="btn btn-outline-primary flex-fill" href="/dashboard/notificaciones/">🔔 Notificaciones</a>
+        <div class="bottom-nav-links">
+          <a class="btn btn-light" href="/dashboard/inicio/">🏠 Inicio</a>
+          <a class="btn btn-outline-secondary" href="/dashboard/home/">📋 Mantenimientos</a>
+          <a class="btn btn-outline-success" href="{% url 'calculadora_quimicos' %}">🧪 Calculadora</a>
+          <a class="btn btn-outline-primary" href="/dashboard/notificaciones/">🔔 Notificaciones</a>
         </div>
       </div>
     </div>
