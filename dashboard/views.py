@@ -5145,9 +5145,8 @@ def _validar_datos_contrato(request):
     forma_pago_personalizada = (
         request.POST.get("forma_pago_personalizada") or ""
     ).strip()
-    precio_mensual_str = (
-        request.POST.get("precio_mensual") or ""
-    ).strip()
+    precio_mensual_str = (request.POST.get("precio_mensual") or "").strip()
+    valor_tecnico_str = (request.POST.get("valor_tecnico_mensual") or "0").strip()
     fecha_inicio_str = (
         request.POST.get("fecha_inicio") or ""
     ).strip()
@@ -5211,6 +5210,15 @@ def _validar_datos_contrato(request):
             "El precio mensual debe ser un valor mayor que cero."
         )
 
+    try:
+        valor_tecnico_mensual = Decimal(valor_tecnico_str or "0")
+        if valor_tecnico_mensual < 0: raise ValueError
+    except Exception:
+        valor_tecnico_mensual = Decimal("0.00")
+        errores.append("El valor mensual del técnico debe ser cero o mayor.")
+    if valor_tecnico_mensual and not tecnico_designado:
+        errores.append("Debes seleccionar un técnico para asignarle un valor mensual.")
+
     fecha_inicio = parse_date(fecha_inicio_str)
     if not fecha_inicio:
         errores.append("Debes seleccionar una fecha de inicio válida.")
@@ -5223,6 +5231,7 @@ def _validar_datos_contrato(request):
         "forma_pago": forma_pago,
         "forma_pago_personalizada": forma_pago_personalizada,
         "precio_mensual": precio_mensual,
+        "valor_tecnico_mensual": valor_tecnico_mensual,
         "fecha_inicio": fecha_inicio,
         "activo": activo,
         "generacion_automatica": generacion_automatica,
@@ -5564,6 +5573,7 @@ def contrato_crear_view(request):
         "forma_pago": "",
         "forma_pago_personalizada": "",
         "precio_mensual": "",
+        "valor_tecnico_mensual": "",
         "fecha_inicio": timezone.localdate().isoformat(),
         "activo": True,
         "generacion_automatica": True,
@@ -5584,10 +5594,8 @@ def contrato_crear_view(request):
             "forma_pago_personalizada": (
                 validacion["forma_pago_personalizada"]
             ),
-            "precio_mensual": request.POST.get(
-                "precio_mensual",
-                "",
-            ),
+            "precio_mensual": request.POST.get("precio_mensual", ""),
+            "valor_tecnico_mensual": request.POST.get("valor_tecnico_mensual", ""),
             "fecha_inicio": request.POST.get(
                 "fecha_inicio",
                 "",
@@ -5614,6 +5622,7 @@ def contrato_crear_view(request):
                     validacion["forma_pago_personalizada"]
                 ),
                 precio_mensual=validacion["precio_mensual"],
+                valor_tecnico_mensual=validacion["valor_tecnico_mensual"],
                 fecha_inicio=validacion["fecha_inicio"],
                 activo=validacion["activo"],
                 tecnico_designado=validacion["tecnico_designado"],
@@ -5696,6 +5705,7 @@ def contrato_editar_view(request, pk):
             contrato.forma_pago_personalizada
         ),
         "precio_mensual": contrato.precio_mensual,
+        "valor_tecnico_mensual": contrato.valor_tecnico_mensual,
         "fecha_inicio": contrato.fecha_inicio.isoformat(),
         "activo": contrato.activo,
         "generacion_automatica": contrato.generacion_automatica,
@@ -5716,10 +5726,8 @@ def contrato_editar_view(request, pk):
             "forma_pago_personalizada": (
                 validacion["forma_pago_personalizada"]
             ),
-            "precio_mensual": request.POST.get(
-                "precio_mensual",
-                "",
-            ),
+            "precio_mensual": request.POST.get("precio_mensual", ""),
+            "valor_tecnico_mensual": request.POST.get("valor_tecnico_mensual", ""),
             "fecha_inicio": request.POST.get(
                 "fecha_inicio",
                 "",
@@ -5743,9 +5751,8 @@ def contrato_editar_view(request, pk):
             contrato.forma_pago_personalizada = (
                 validacion["forma_pago_personalizada"]
             )
-            contrato.precio_mensual = (
-                validacion["precio_mensual"]
-            )
+            contrato.precio_mensual = validacion["precio_mensual"]
+            contrato.valor_tecnico_mensual = validacion["valor_tecnico_mensual"]
             contrato.fecha_inicio = validacion["fecha_inicio"]
             contrato.activo = validacion["activo"]
             contrato.tecnico_designado = validacion["tecnico_designado"]

@@ -434,3 +434,121 @@ class PagoFactura(models.Model):
             return
         self.activo = False
         self.save(update_fields=["activo", "actualizado_en"])
+
+
+class ObligacionTrabajador(models.Model):
+    ESTADO_PENDIENTE = "pendiente"
+    ESTADO_PARCIAL = "parcial"
+    ESTADO_PAGADO = "pagado"
+    ESTADO_ANULADO = "anulado"
+    ESTADO_CHOICES = [
+        (ESTADO_PENDIENTE, "Pendiente"),
+        (ESTADO_PARCIAL, "Parcial"),
+        (ESTADO_PAGADO, "Pagado"),
+        (ESTADO_ANULADO, "Anulado"),
+    ]
+
+    trabajador = models.ForeignKey("trabajadores.Trabajador", on_delete=models.PROTECT, related_name="obligaciones_pago")
+    contrato = models.ForeignKey(Contrato, on_delete=models.PROTECT, related_name="obligaciones_trabajador")
+    periodo_anio = models.PositiveIntegerField(db_index=True)
+    periodo_mes = models.PositiveIntegerField(db_index=True)
+    valor_acordado = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))])
+    estado = models.CharField(max_length=12, choices=ESTADO_CHOICES, default=ESTADO_PENDIENTE, db_index=True)
+    observaciones = models.TextField(blank=True, default="")
+    creada_en = models.DateTimeField(auto_now_add=True)
+    actualizada_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-periodo_anio", "-periodo_mes", "trabajador__user__username", "id"]
+        constraints = [models.UniqueConstraint(fields=["contrato", "periodo_anio", "periodo_mes"], name="unique_obligacion_trabajador_periodo")]
+        verbose_name = "Obligación de pago a trabajador"
+        verbose_name_plural = "Obligaciones de pago a trabajadores"
+
+    def __str__(self):
+        return f"{self.trabajador} - {self.contrato.cliente} - {self.periodo_mes:02d}/{self.periodo_anio}"
+
+    @property
+    def periodo_label(self):
+        return f"{self.periodo_mes:02d}/{self.periodo_anio}"
+
+    @property
+    def monto_pagado(self):
+        return self.pagos.filter(activo=True).aggregate(total=models.Sum("monto"))["total"] or Decimal("0.00")
+
+    @property
+    def saldo(self):
+        if self.estado == self.ESTADO_ANULADO:
+            return Decimal("0.00")
+        return max(self.valor_acordado - self.monto_pagado, Decimal("0.00"))
+
+    def sincronizar_estado(self):
+        if self.estado == self.ESTADO_ANULADO:
+            return
+        pagado = self.monto_pagado
+        nuevo = self.ESTADO_PAGADO if pagado >= self.valor_acordado else self.ESTADO_PARCIAL if pagado > 0 else self.ESTADO_PENDIENTE
+        if nuevo != self.estado:
+            self.estado = nuevo
+            self.save(update_fields=["estado", "actualizada_en"])
+
+
+class PagoTrabajador(models.Model):
+    obligacion = models.ForeignKey(ObligacionTrabajador, on_delete=models.PROTECT, related_name="pagos")
+    monto = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))])
+    fecha = models.DateField(default=date.today, db_index=True)
+    metodo_pago = models.CharField(max_length=20, choices=MovimientoFinancieroMixin.METODO_CHOICES, default="transferencia")
+    referencia = models.CharField(max_length=120, blank=True, default="")
+    comprobante = models.FileField(upload_to="finanzas/pagos_trabajadores/%Y/%m/", null=True, blank=True)
+    observaciones = models.TextField(blank=True, default="")
+    egreso = models.OneToOneField(Egreso, on_delete=models.SET_NULL, null=True, blank=True, related_name="pago_trabajador")
+    activo = models.BooleanField(default=True, db_index=True)
+    creado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="pagos_trabajador_creados")
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-fecha", "-id"]
+        verbose_name = "Pago a trabajador"
+        verbose_name_plural = "Pagos a trabajadores"
+
+    def __str__(self):
+        return f"{self.obligacion.trabajador} - ${self.monto}"
+
+    def save(self, *args, **kwargs):
+        creando = self._state.adding
+        if self.obligacion_id and self.activo:
+            saldo = self.obligacion.saldo
+            if not creando:
+                anterior = PagoTrabajador.objects.filter(pk=self.pk).values("monto", "activo").first()
+                if anterior and anterior["activo"]:
+                    saldo += anterior["monto"]
+            if self.monto > saldo:
+                from django.core.exceptions import ValidationError
+                raise ValidationError({"monto": f"El pago no puede superar el saldo pendiente de ${saldo:.2f}."})
+        super().save(*args, **kwargs)
+        if self.activo:
+            datos = {
+                "concepto": f"Pago a {self.obligacion.trabajador} - {self.obligacion.periodo_label} - {self.obligacion.contrato.cliente}",
+                "categoria": "tecnicos", "cantidad": 1, "costo_unitario": self.monto,
+                "total": self.monto, "monto_pagado": self.monto, "estado": Egreso.ESTADO_PAGADO,
+                "fecha": self.fecha, "metodo_pago": self.metodo_pago,
+                "proveedor": str(self.obligacion.trabajador),
+                "ciudad_proyecto": self.obligacion.contrato.cliente.ciudad or "",
+                "comprobante": self.comprobante, "observaciones": self.observaciones,
+                "creado_por": self.creado_por,
+            }
+            if self.egreso_id:
+                for campo, valor in datos.items(): setattr(self.egreso, campo, valor)
+                self.egreso.save()
+            else:
+                self.egreso = Egreso.objects.create(**datos)
+                super().save(update_fields=["egreso", "actualizado_en"])
+        elif self.egreso_id and self.egreso.estado != Egreso.ESTADO_ANULADO:
+            self.egreso.estado = Egreso.ESTADO_ANULADO
+            self.egreso.monto_pagado = Decimal("0.00")
+            self.egreso.save(update_fields=["estado", "monto_pagado", "actualizado_en"])
+        self.obligacion.sincronizar_estado()
+
+    def anular(self):
+        if self.activo:
+            self.activo = False
+            self.save(update_fields=["activo", "actualizado_en"])

@@ -1,5 +1,5 @@
 from calendar import monthrange
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from django.contrib import messages
@@ -11,8 +11,11 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.urls import reverse
 
-from .forms import EgresoForm, IngresoForm, PagoFacturaForm
-from .models import Egreso, Factura, Ingreso, PagoFactura
+from .forms import EgresoForm, IngresoForm, PagoFacturaForm, PagoTrabajadorForm
+from .models import Egreso, Factura, Ingreso, PagoFactura, ObligacionTrabajador, PagoTrabajador
+from clientes.models import Cliente
+from contratos.models import Contrato
+
 from .cuentas_por_cobrar import MESES, generar_facturas_periodo, previsualizar_facturas_periodo
 
 
@@ -372,3 +375,78 @@ def generar_facturas_desde_contratos(request):
     if resultado["errores"]:
         messages.warning(request, f"No se pudieron procesar {len(resultado['errores'])} contratos.")
     return redirect(f"{reverse('finanzas_facturas')}?anio={anio}&mes={mes}")
+
+
+@login_required
+def cartera_centro(request):
+    if not _es_admin(request.user): return _denegado(request)
+    hoy = timezone.localdate()
+    q=(request.GET.get("q") or "").strip(); estado=(request.GET.get("estado") or "").strip(); ciudad=(request.GET.get("ciudad") or "").strip()
+    qs=Factura.objects.select_related("cliente","contrato").prefetch_related("pagos").exclude(estado=Factura.ESTADO_ANULADA)
+    if q: qs=qs.filter(Q(cliente__nombre__icontains=q)|Q(cliente__telefono__icontains=q)|Q(numero__icontains=q))
+    if ciudad: qs=qs.filter(cliente__ciudad__icontains=ciudad)
+    facturas=list(qs)
+    if estado: facturas=[f for f in facturas if f.estado_visual==estado]
+    total_por_cobrar=sum((f.saldo for f in facturas),Decimal("0.00")); vencido=sum((f.saldo for f in facturas if f.estado_visual==Factura.ESTADO_VENCIDA),Decimal("0.00"))
+    cobrado_mes=PagoFactura.objects.filter(activo=True,fecha__year=hoy.year,fecha__month=hoy.month).aggregate(t=Sum("monto"))["t"] or Decimal("0.00")
+    proximas=sum(1 for f in facturas if f.saldo>0 and f.fecha_vencimiento>=hoy and f.fecha_vencimiento<=hoy+timedelta(days=7))
+    paginator=Paginator(facturas,25); page_obj=paginator.get_page(request.GET.get("page"))
+    ciudades=Cliente.objects.exclude(ciudad="").values_list("ciudad",flat=True).distinct().order_by("ciudad")
+    return render(request,"finanzas/cartera.html",{"page_obj":page_obj,"total_por_cobrar":total_por_cobrar,"vencido":vencido,"cobrado_mes":cobrado_mes,"proximas":proximas,"q":q,"estado":estado,"ciudad":ciudad,"ciudades":ciudades,"es_admin":True})
+
+@login_required
+def nomina_lista(request):
+    if not _es_admin(request.user): return _denegado(request)
+    hoy=timezone.localdate()
+    try: anio=int(request.GET.get("anio") or hoy.year); mes=int(request.GET.get("mes") or hoy.month)
+    except: anio,mes=hoy.year,hoy.month
+    qs=ObligacionTrabajador.objects.select_related("trabajador__user","contrato__cliente").prefetch_related("pagos").filter(periodo_anio=anio,periodo_mes=mes)
+    trabajador=request.GET.get("trabajador"); estado=request.GET.get("estado")
+    if trabajador: qs=qs.filter(trabajador_id=trabajador)
+    if estado: qs=qs.filter(estado=estado)
+    obligaciones=list(qs); total=sum((o.valor_acordado for o in obligaciones if o.estado!=o.ESTADO_ANULADO),Decimal("0.00")); pagado=sum((o.monto_pagado for o in obligaciones),Decimal("0.00")); pendiente=sum((o.saldo for o in obligaciones),Decimal("0.00"))
+    resumen={}
+    for o in obligaciones:
+        r=resumen.setdefault(o.trabajador_id,{"trabajador":o.trabajador,"contratos":0,"generado":Decimal("0"),"pagado":Decimal("0"),"pendiente":Decimal("0")})
+        r["contratos"]+=1; r["generado"]+=o.valor_acordado; r["pagado"]+=o.monto_pagado; r["pendiente"]+=o.saldo
+    from trabajadores.models import Trabajador
+    return render(request,"finanzas/nomina_lista.html",{"obligaciones":obligaciones,"resumen":list(resumen.values()),"total":total,"pagado":pagado,"pendiente":pendiente,"anio":anio,"mes":mes,"meses":MESES,"trabajadores":Trabajador.objects.filter(activo=True).select_related("user"),"trabajador_id":trabajador,"estado":estado,"estados":ObligacionTrabajador.ESTADO_CHOICES,"es_admin":True})
+
+@login_required
+def nomina_generar(request):
+    if not _es_admin(request.user): return _denegado(request)
+    if request.method!="POST": return redirect("finanzas_nomina")
+    hoy=timezone.localdate()
+    try: anio=int(request.POST.get("anio") or hoy.year); mes=int(request.POST.get("mes") or hoy.month)
+    except: messages.error(request,"Periodo inválido."); return redirect("finanzas_nomina")
+    creadas=0; omitidas=0; sin_configurar=0
+    for c in Contrato.objects.filter(activo=True).select_related("tecnico_designado"):
+        if not c.tecnico_designado_id or not c.valor_tecnico_mensual or c.valor_tecnico_mensual<=0:
+            sin_configurar+=1; continue
+        _,created=ObligacionTrabajador.objects.get_or_create(contrato=c,periodo_anio=anio,periodo_mes=mes,defaults={"trabajador":c.tecnico_designado,"valor_acordado":c.valor_tecnico_mensual})
+        creadas += int(created); omitidas += int(not created)
+    messages.success(request,f"Nómina generada: {creadas} obligaciones nuevas, {omitidas} ya existentes y {sin_configurar} contratos sin técnico o valor configurado.")
+    return redirect(f"/dashboard/finanzas/nomina/?anio={anio}&mes={mes}")
+
+@login_required
+def nomina_detalle(request,pk):
+    if not _es_admin(request.user): return _denegado(request)
+    o=get_object_or_404(ObligacionTrabajador.objects.select_related("trabajador__user","contrato__cliente").prefetch_related("pagos__egreso"),pk=pk)
+    return render(request,"finanzas/nomina_detalle.html",{"obligacion":o,"es_admin":True})
+
+@login_required
+def nomina_pago_nuevo(request,pk):
+    if not _es_admin(request.user): return _denegado(request)
+    o=get_object_or_404(ObligacionTrabajador,pk=pk)
+    if o.estado==o.ESTADO_ANULADO or o.saldo<=0: messages.warning(request,"Esta obligación no admite nuevos pagos."); return redirect("finanzas_nomina_detalle",pk=pk)
+    form=PagoTrabajadorForm(request.POST or None,request.FILES or None,obligacion=o)
+    if request.method=="POST" and form.is_valid():
+        pago=form.save(commit=False); pago.obligacion=o; pago.creado_por=request.user; pago.save(); messages.success(request,"Pago registrado y egreso creado automáticamente."); return redirect("finanzas_nomina_detalle",pk=pk)
+    return render(request,"finanzas/pago_trabajador_form.html",{"form":form,"obligacion":o,"es_admin":True})
+
+@login_required
+def nomina_pago_anular(request,pk,pago_pk):
+    if not _es_admin(request.user): return _denegado(request)
+    o=get_object_or_404(ObligacionTrabajador,pk=pk); pago=get_object_or_404(PagoTrabajador,pk=pago_pk,obligacion=o)
+    if request.method=="POST": pago.anular(); messages.success(request,"Pago y egreso vinculados anulados.")
+    return redirect("finanzas_nomina_detalle",pk=pk)

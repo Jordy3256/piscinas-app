@@ -208,6 +208,10 @@
                 <span class="input-group-text">$</span>
                 <input type="number" id="precio_mensual" name="precio_mensual" class="form-control" min="0.01" step="0.01" value="{{ datos_formulario.precio_mensual }}" placeholder="0.00" required>
               </div>
+              <label for="valor_tecnico_mensual" class="form-label">Pago mensual al técnico</label>
+              <div class="input-group mb-3"><span class="input-group-text">$</span><input type="number" id="valor_tecnico_mensual" name="valor_tecnico_mensual" class="form-control" min="0" step="0.01" value="{{ datos_formulario.valor_tecnico_mensual }}" placeholder="0.00"></div>
+              <div class="form-text mb-3">Este valor se usará para generar la nómina mensual del técnico. Los periodos ya generados conservarán su valor histórico.</div>
+
               <label for="fecha_inicio" class="form-label">Fecha de inicio <span class="text-danger">*</span></label>
               <input type="date" id="fecha_inicio" name="fecha_inicio" class="form-control" value="{{ datos_formulario.fecha_inicio }}" required>
             </div>

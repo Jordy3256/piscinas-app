@@ -77,6 +77,13 @@ class Contrato(models.Model):
         decimal_places=2,
     )
 
+    valor_tecnico_mensual = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        help_text="Valor mensual acordado con el técnico por este contrato.",
+    )
+
     fecha_inicio = models.DateField()
 
     tecnico_designado = models.ForeignKey(

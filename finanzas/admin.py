@@ -45,3 +45,7 @@ class PagoFacturaAdmin(admin.ModelAdmin):
     list_filter = ("activo", "metodo_pago", "fecha")
     search_fields = ("factura__numero", "factura__cliente__nombre", "referencia")
     readonly_fields = ("ingreso", "creado_en", "actualizado_en")
+
+from .models import ObligacionTrabajador, PagoTrabajador
+admin.site.register(ObligacionTrabajador)
+admin.site.register(PagoTrabajador)
