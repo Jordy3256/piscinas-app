@@ -15,10 +15,10 @@
     </div>
     <form method="post" action="{% url 'finanzas_facturas_generar' %}" class="cx-generator">{% csrf_token %}
       <label>Mes
-        <select name="mes" required>{% for numero,nombre in meses %}<option value="{{ numero }}" {% if mes == numero %}selected{% endif %}>{{ nombre }}</option>{% endfor %}</select>
+        <select name="mes" required>{% for numero,nombre in meses %}<option value="{{ numero }}" {% if mes_generacion == numero %}selected{% endif %}>{{ nombre }}</option>{% endfor %}</select>
       </label>
       <label>Año
-        <input type="number" name="anio" value="{{ anio }}" min="2020" max="2100" required>
+        <input type="number" name="anio" value="{{ anio_generacion }}" min="2020" max="2100" required>
       </label>
       <button class="btn btn-light fw-bold" name="accion" value="previsualizar" type="submit">Revisar antes de generar</button>
     </form>
@@ -53,12 +53,13 @@
   </section>
 
   <section class="cx-card">
+    <div class="cx-row mb-3"><div><strong>Listado de cuentas</strong><div class="small text-muted">{{ total_registros }} registro{{ total_registros|pluralize }} encontrado{{ total_registros|pluralize }}</div></div><a class="btn btn-sm btn-outline-primary" href="{% url 'finanzas_facturas' %}">Ver lista completa</a></div>
     <form method="get" class="cx-filter mb-3">
       <input class="wide" type="search" name="q" value="{{ q }}" placeholder="Cliente, teléfono o factura">
       <select name="estado"><option value="">Todos los estados</option>{% for value,label in estados %}<option value="{{ value }}" {% if estado == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
-      <input type="number" name="anio" value="{{ anio }}" min="2020" max="2100">
-      <input type="number" name="mes" value="{{ mes }}" min="1" max="12" placeholder="Mes">
-      <button class="btn btn-primary" type="submit">Filtrar</button>
+      <input type="number" name="anio" value="{{ anio_filtro }}" min="2020" max="2100" placeholder="Todos">
+      <input type="number" name="mes" value="{{ mes_filtro }}" min="1" max="12" placeholder="Todos">
+      <div class="d-flex gap-2"><button class="btn btn-primary flex-fill" type="submit">Filtrar</button><a class="btn btn-outline-secondary" href="{% url 'finanzas_facturas' %}" title="Mostrar lista completa">Todas</a></div>
     </form>
 
     <div class="cx-desktop">

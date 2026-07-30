@@ -261,40 +261,83 @@ def movimiento_eliminar(request, tipo, pk):
 def facturas_lista(request):
     if not _es_admin(request.user):
         return _denegado(request)
+
     hoy = timezone.localdate()
     q = (request.GET.get("q") or "").strip()
     estado = (request.GET.get("estado") or "").strip()
+    anio_raw = (request.GET.get("anio") or "").strip()
+    mes_raw = (request.GET.get("mes") or "").strip()
+
+    anio_filtro = None
+    mes_filtro = None
     try:
-        anio = int(request.GET.get("anio") or hoy.year)
-        mes_raw = request.GET.get("mes")
-        mes = int(mes_raw) if mes_raw else None
+        if anio_raw:
+            anio_filtro = int(anio_raw)
+            if not 2020 <= anio_filtro <= 2100:
+                raise ValueError
+        if mes_raw:
+            mes_filtro = int(mes_raw)
+            if not 1 <= mes_filtro <= 12:
+                raise ValueError
     except (TypeError, ValueError):
-        anio, mes = hoy.year, None
+        messages.warning(request, "El periodo indicado no es válido; se mostró la lista completa.")
+        anio_filtro = None
+        mes_filtro = None
 
-    facturas = Factura.objects.select_related("cliente", "contrato").prefetch_related("pagos")
-    facturas = facturas.filter(periodo_anio=anio)
-    if mes:
-        facturas = facturas.filter(periodo_mes=mes)
+    facturas_qs = (
+        Factura.objects.select_related("cliente", "contrato")
+        .prefetch_related("pagos")
+        .order_by("-periodo_anio", "-periodo_mes", "cliente__nombre", "-id")
+    )
+    if anio_filtro:
+        facturas_qs = facturas_qs.filter(periodo_anio=anio_filtro)
+    if mes_filtro:
+        facturas_qs = facturas_qs.filter(periodo_mes=mes_filtro)
     if estado:
-        facturas = facturas.filter(estado=estado)
+        if estado == Factura.ESTADO_VENCIDA:
+            facturas_qs = facturas_qs.filter(
+                estado__in=[Factura.ESTADO_PENDIENTE, Factura.ESTADO_PARCIAL, Factura.ESTADO_VENCIDA],
+                fecha_vencimiento__lt=hoy,
+            )
+        else:
+            facturas_qs = facturas_qs.filter(estado=estado)
     if q:
-        facturas = facturas.filter(Q(numero__icontains=q) | Q(cliente__nombre__icontains=q) | Q(cliente__telefono__icontains=q))
+        facturas_qs = facturas_qs.filter(
+            Q(numero__icontains=q)
+            | Q(cliente__nombre__icontains=q)
+            | Q(cliente__telefono__icontains=q)
+            | Q(cliente__ciudad__icontains=q)
+        )
 
-    facturas = list(facturas)
-    total_facturado = sum((f.total for f in facturas if f.estado != Factura.ESTADO_ANULADA), Decimal("0.00"))
-    total_cobrado = sum((f.monto_pagado for f in facturas if f.estado != Factura.ESTADO_ANULADA), Decimal("0.00"))
-    total_pendiente = sum((f.saldo for f in facturas if f.estado != Factura.ESTADO_ANULADA), Decimal("0.00"))
-    total_vencido = sum((f.saldo for f in facturas if f.estado_visual == Factura.ESTADO_VENCIDA), Decimal("0.00"))
+    facturas = list(facturas_qs)
+    activas = [f for f in facturas if f.estado != Factura.ESTADO_ANULADA]
+    total_facturado = sum((f.total for f in activas), Decimal("0.00"))
+    total_cobrado = sum((f.monto_pagado for f in activas), Decimal("0.00"))
+    total_pendiente = sum((f.saldo for f in activas), Decimal("0.00"))
+    total_vencido = sum((f.saldo for f in activas if f.estado_visual == Factura.ESTADO_VENCIDA), Decimal("0.00"))
 
-    paginator = Paginator(facturas, 20)
+    paginator = Paginator(facturas, 25)
     page_obj = paginator.get_page(request.GET.get("page"))
-    params = request.GET.copy(); params.pop("page", None)
+    params = request.GET.copy()
+    params.pop("page", None)
+
     return render(request, "finanzas/facturas_lista.html", {
-        "page_obj": page_obj, "q": q, "estado": estado, "anio": anio, "mes": mes or hoy.month,
-        "estados": Factura.ESTADO_CHOICES, "querystring": params.urlencode(),
-        "total_facturado": total_facturado, "total_cobrado": total_cobrado,
-        "total_pendiente": total_pendiente, "total_vencido": total_vencido,
-        "meses": MESES, "es_admin": True,
+        "page_obj": page_obj,
+        "q": q,
+        "estado": estado,
+        "anio_filtro": anio_filtro or "",
+        "mes_filtro": mes_filtro or "",
+        "anio_generacion": hoy.year,
+        "mes_generacion": hoy.month,
+        "estados": Factura.ESTADO_CHOICES,
+        "querystring": params.urlencode(),
+        "total_facturado": total_facturado,
+        "total_cobrado": total_cobrado,
+        "total_pendiente": total_pendiente,
+        "total_vencido": total_vencido,
+        "meses": MESES,
+        "total_registros": paginator.count,
+        "es_admin": True,
     })
 
 
@@ -359,20 +402,34 @@ def generar_facturas_desde_contratos(request):
     accion = (request.POST.get("accion") or "previsualizar").strip().lower()
     if accion != "generar":
         vista_previa = previsualizar_facturas_periodo(anio, mes)
-        facturas = Factura.objects.select_related("cliente", "contrato").filter(
-            periodo_anio=anio, periodo_mes=mes
+        facturas_qs = (
+            Factura.objects.select_related("cliente", "contrato")
+            .prefetch_related("pagos")
+            .filter(periodo_anio=anio, periodo_mes=mes)
+            .order_by("cliente__nombre", "-id")
         )
-        facturas = list(facturas)
-        paginator = Paginator(facturas, 20)
+        facturas = list(facturas_qs)
+        activas = [f for f in facturas if f.estado != Factura.ESTADO_ANULADA]
+        paginator = Paginator(facturas, 25)
         page_obj = paginator.get_page(1)
         return render(request, "finanzas/facturas_lista.html", {
-            "page_obj": page_obj, "q": "", "estado": "", "anio": anio, "mes": mes,
-            "estados": Factura.ESTADO_CHOICES, "querystring": f"anio={anio}&mes={mes}",
-            "total_facturado": sum((f.total for f in facturas if f.estado != Factura.ESTADO_ANULADA), Decimal("0.00")),
-            "total_cobrado": sum((f.monto_pagado for f in facturas if f.estado != Factura.ESTADO_ANULADA), Decimal("0.00")),
-            "total_pendiente": sum((f.saldo for f in facturas if f.estado != Factura.ESTADO_ANULADA), Decimal("0.00")),
-            "total_vencido": sum((f.saldo for f in facturas if f.estado_visual == Factura.ESTADO_VENCIDA), Decimal("0.00")),
-            "meses": MESES, "vista_previa": vista_previa, "es_admin": True,
+            "page_obj": page_obj,
+            "q": "",
+            "estado": "",
+            "anio_filtro": anio,
+            "mes_filtro": mes,
+            "anio_generacion": anio,
+            "mes_generacion": mes,
+            "estados": Factura.ESTADO_CHOICES,
+            "querystring": f"anio={anio}&mes={mes}",
+            "total_facturado": sum((f.total for f in activas), Decimal("0.00")),
+            "total_cobrado": sum((f.monto_pagado for f in activas), Decimal("0.00")),
+            "total_pendiente": sum((f.saldo for f in activas), Decimal("0.00")),
+            "total_vencido": sum((f.saldo for f in activas if f.estado_visual == Factura.ESTADO_VENCIDA), Decimal("0.00")),
+            "meses": MESES,
+            "vista_previa": vista_previa,
+            "total_registros": paginator.count,
+            "es_admin": True,
         })
 
     resultado = generar_facturas_periodo(anio, mes, usuario=request.user)

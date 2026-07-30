@@ -145,7 +145,7 @@ INSTALLED_APPS = [
     "mantenimientos",
     "checklists",
     "inventario",
-    "finanzas",
+    "finanzas.apps.FinanzasConfig",
 
     "dashboard.apps.DashboardConfig",
 ]
