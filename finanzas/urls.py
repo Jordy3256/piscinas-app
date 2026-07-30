@@ -6,6 +6,7 @@ urlpatterns = [
     path("cartera/", views.cartera_centro, name="finanzas_cartera"),
     path("nomina/", views.nomina_lista, name="finanzas_nomina"),
     path("nomina/generar/", views.nomina_generar, name="finanzas_nomina_generar"),
+    path("nomina/trabajador/<int:trabajador_pk>/pdf/", views.nomina_trabajador_pdf, name="finanzas_nomina_trabajador_pdf"),
     path("nomina/<int:pk>/", views.nomina_detalle, name="finanzas_nomina_detalle"),
     path("nomina/<int:pk>/pago/", views.nomina_pago_nuevo, name="finanzas_nomina_pago_nuevo"),
     path("nomina/<int:pk>/pagos/<int:pago_pk>/anular/", views.nomina_pago_anular, name="finanzas_nomina_pago_anular"),

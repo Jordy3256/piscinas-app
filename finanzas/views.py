@@ -7,9 +7,11 @@ from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db.models import Q, Sum
 from django.shortcuts import get_object_or_404, redirect, render
+from django.http import HttpResponse
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.urls import reverse
+from django.utils.text import slugify
 
 from .forms import EgresoForm, IngresoForm, PagoFacturaForm, PagoTrabajadorForm
 from .models import Egreso, Factura, Ingreso, PagoFactura, ObligacionTrabajador, PagoTrabajador
@@ -17,6 +19,13 @@ from clientes.models import Cliente
 from contratos.models import Contrato
 
 from .cuentas_por_cobrar import MESES, generar_facturas_periodo, previsualizar_facturas_periodo
+
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import mm
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
 
 
 def _es_admin(user):
@@ -398,8 +407,13 @@ def cartera_centro(request):
 def nomina_lista(request):
     if not _es_admin(request.user): return _denegado(request)
     hoy=timezone.localdate()
-    try: anio=int(request.GET.get("anio") or hoy.year); mes=int(request.GET.get("mes") or hoy.month)
-    except: anio,mes=hoy.year,hoy.month
+    try:
+        anio = int(request.GET.get("anio") or hoy.year)
+        mes = int(request.GET.get("mes") or hoy.month)
+        if mes < 1 or mes > 12 or anio < 2020 or anio > 2100:
+            raise ValueError
+    except (TypeError, ValueError):
+        anio, mes = hoy.year, hoy.month
     qs=ObligacionTrabajador.objects.select_related("trabajador__user","contrato__cliente").prefetch_related("pagos").filter(periodo_anio=anio,periodo_mes=mes)
     trabajador=request.GET.get("trabajador"); estado=request.GET.get("estado")
     if trabajador: qs=qs.filter(trabajador_id=trabajador)
@@ -407,7 +421,7 @@ def nomina_lista(request):
     obligaciones=list(qs); total=sum((o.valor_acordado for o in obligaciones if o.estado!=o.ESTADO_ANULADO),Decimal("0.00")); pagado=sum((o.monto_pagado for o in obligaciones),Decimal("0.00")); pendiente=sum((o.saldo for o in obligaciones),Decimal("0.00"))
     resumen={}
     for o in obligaciones:
-        r=resumen.setdefault(o.trabajador_id,{"trabajador":o.trabajador,"contratos":0,"generado":Decimal("0"),"pagado":Decimal("0"),"pendiente":Decimal("0")})
+        r=resumen.setdefault(o.trabajador_id,{"trabajador_id":o.trabajador_id,"trabajador":o.trabajador,"contratos":0,"generado":Decimal("0"),"pagado":Decimal("0"),"pendiente":Decimal("0")})
         r["contratos"]+=1; r["generado"]+=o.valor_acordado; r["pagado"]+=o.monto_pagado; r["pendiente"]+=o.saldo
     from trabajadores.models import Trabajador
     return render(request,"finanzas/nomina_lista.html",{"obligaciones":obligaciones,"resumen":list(resumen.values()),"total":total,"pagado":pagado,"pendiente":pendiente,"anio":anio,"mes":mes,"meses":MESES,"trabajadores":Trabajador.objects.filter(activo=True).select_related("user"),"trabajador_id":trabajador,"estado":estado,"estados":ObligacionTrabajador.ESTADO_CHOICES,"es_admin":True})
@@ -417,8 +431,14 @@ def nomina_generar(request):
     if not _es_admin(request.user): return _denegado(request)
     if request.method!="POST": return redirect("finanzas_nomina")
     hoy=timezone.localdate()
-    try: anio=int(request.POST.get("anio") or hoy.year); mes=int(request.POST.get("mes") or hoy.month)
-    except: messages.error(request,"Periodo inválido."); return redirect("finanzas_nomina")
+    try:
+        anio = int(request.POST.get("anio") or hoy.year)
+        mes = int(request.POST.get("mes") or hoy.month)
+        if mes < 1 or mes > 12 or anio < 2020 or anio > 2100:
+            raise ValueError
+    except (TypeError, ValueError):
+        messages.error(request, "Periodo inválido. Selecciona correctamente el mes y el año.")
+        return redirect("finanzas_nomina")
     creadas=0; omitidas=0; sin_configurar=0
     for c in Contrato.objects.filter(activo=True).select_related("tecnico_designado"):
         if not c.tecnico_designado_id or not c.valor_tecnico_mensual or c.valor_tecnico_mensual<=0:
@@ -427,6 +447,169 @@ def nomina_generar(request):
         creadas += int(created); omitidas += int(not created)
     messages.success(request,f"Nómina generada: {creadas} obligaciones nuevas, {omitidas} ya existentes y {sin_configurar} contratos sin técnico o valor configurado.")
     return redirect(f"/dashboard/finanzas/nomina/?anio={anio}&mes={mes}")
+
+def _nombre_trabajador(trabajador):
+    nombre = trabajador.user.get_full_name().strip()
+    return nombre or trabajador.user.username
+
+
+def _pie_pagina(canvas, doc):
+    canvas.saveState()
+    canvas.setFont("Helvetica", 8)
+    canvas.setFillColor(colors.HexColor("#64748B"))
+    canvas.drawString(18 * mm, 12 * mm, "JVAQUA - Resumen de nómina operativa")
+    canvas.drawRightString(192 * mm, 12 * mm, f"Página {doc.page}")
+    canvas.restoreState()
+
+
+@login_required
+def nomina_trabajador_pdf(request, trabajador_pk):
+    if not _es_admin(request.user):
+        return _denegado(request)
+
+    hoy = timezone.localdate()
+    try:
+        anio = int(request.GET.get("anio") or hoy.year)
+        mes = int(request.GET.get("mes") or hoy.month)
+        if mes < 1 or mes > 12 or anio < 2020 or anio > 2100:
+            raise ValueError
+    except (TypeError, ValueError):
+        anio, mes = hoy.year, hoy.month
+
+    from trabajadores.models import Trabajador
+    trabajador = get_object_or_404(Trabajador.objects.select_related("user"), pk=trabajador_pk)
+    obligaciones = list(
+        ObligacionTrabajador.objects
+        .select_related("contrato__cliente", "trabajador__user")
+        .prefetch_related("pagos")
+        .filter(trabajador=trabajador, periodo_anio=anio, periodo_mes=mes)
+        .order_by("contrato__cliente__nombre", "id")
+    )
+
+    generado = sum((o.valor_acordado for o in obligaciones if o.estado != o.ESTADO_ANULADO), Decimal("0.00"))
+    pagado = sum((o.monto_pagado for o in obligaciones), Decimal("0.00"))
+    pendiente = sum((o.saldo for o in obligaciones), Decimal("0.00"))
+
+    nombre = _nombre_trabajador(trabajador)
+    filename = f"nomina-{slugify(nombre) or trabajador.pk}-{anio}-{mes:02d}.pdf"
+    response = HttpResponse(content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+
+    doc = SimpleDocTemplate(
+        response,
+        pagesize=A4,
+        rightMargin=18 * mm,
+        leftMargin=18 * mm,
+        topMargin=18 * mm,
+        bottomMargin=20 * mm,
+        title=f"Nómina {nombre} {mes:02d}/{anio}",
+        author="JVAQUA",
+    )
+    styles = getSampleStyleSheet()
+    styles.add(ParagraphStyle(name="TituloJVA", parent=styles["Title"], fontName="Helvetica-Bold", fontSize=20, leading=24, textColor=colors.HexColor("#0F4C81"), alignment=TA_CENTER, spaceAfter=4 * mm))
+    styles.add(ParagraphStyle(name="SubtituloJVA", parent=styles["Normal"], fontName="Helvetica", fontSize=10, leading=14, textColor=colors.HexColor("#475569"), alignment=TA_CENTER, spaceAfter=7 * mm))
+    styles.add(ParagraphStyle(name="Celda", parent=styles["Normal"], fontSize=8.5, leading=11))
+    styles.add(ParagraphStyle(name="CeldaDerecha", parent=styles["Normal"], fontSize=8.5, leading=11, alignment=TA_RIGHT))
+
+    nombre_mes = dict(MESES).get(mes, str(mes))
+    story = [
+        Paragraph("JVAQUA", styles["TituloJVA"]),
+        Paragraph("RESUMEN INDIVIDUAL DE NÓMINA OPERATIVA", styles["Heading2"]),
+        Paragraph(f"Trabajador: <b>{nombre}</b><br/>Periodo: <b>{nombre_mes} {anio}</b><br/>Fecha de emisión: {hoy.strftime('%d/%m/%Y')}", styles["SubtituloJVA"]),
+    ]
+
+    resumen_data = [
+        ["Contratos", "Total generado", "Total pagado", "Saldo pendiente"],
+        [str(len(obligaciones)), f"${generado:.2f}", f"${pagado:.2f}", f"${pendiente:.2f}"],
+    ]
+    resumen_tabla = Table(resumen_data, colWidths=[38 * mm, 46 * mm, 46 * mm, 46 * mm])
+    resumen_tabla.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0F4C81")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTNAME", (0, 1), (-1, 1), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("BACKGROUND", (0, 1), (-1, 1), colors.HexColor("#EAF3FA")),
+        ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E1")),
+        ("INNERGRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#CBD5E1")),
+        ("TOPPADDING", (0, 0), (-1, -1), 8),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+    ]))
+    story.extend([resumen_tabla, Spacer(1, 7 * mm), Paragraph("Detalle por contrato", styles["Heading2"]), Spacer(1, 2 * mm)])
+
+    detalle = [["#", "Cliente / Contrato", "Valor", "Pagado", "Saldo", "Estado"]]
+    for i, o in enumerate(obligaciones, 1):
+        cliente = str(o.contrato.cliente)
+        detalle.append([
+            str(i),
+            Paragraph(cliente, styles["Celda"]),
+            Paragraph(f"${o.valor_acordado:.2f}", styles["CeldaDerecha"]),
+            Paragraph(f"${o.monto_pagado:.2f}", styles["CeldaDerecha"]),
+            Paragraph(f"${o.saldo:.2f}", styles["CeldaDerecha"]),
+            o.get_estado_display(),
+        ])
+    if not obligaciones:
+        detalle.append(["", Paragraph("No existen obligaciones generadas para este trabajador en el periodo seleccionado.", styles["Celda"]), "", "", "", ""])
+
+    tabla = Table(detalle, repeatRows=1, colWidths=[9 * mm, 73 * mm, 25 * mm, 25 * mm, 25 * mm, 24 * mm])
+    tabla.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#163A5F")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 8.5),
+        ("ALIGN", (0, 0), (0, -1), "CENTER"),
+        ("ALIGN", (2, 1), (4, -1), "RIGHT"),
+        ("ALIGN", (5, 1), (5, -1), "CENTER"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F8FAFC")]),
+        ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#CBD5E1")),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+    ]))
+    story.append(tabla)
+
+    pagos_activos = []
+    for o in obligaciones:
+        for pago in o.pagos.all():
+            if pago.activo:
+                pagos_activos.append((pago, o))
+    if pagos_activos:
+        story.extend([Spacer(1, 7 * mm), Paragraph("Pagos registrados", styles["Heading2"]), Spacer(1, 2 * mm)])
+        pagos_data = [["Fecha", "Cliente", "Método", "Referencia", "Monto"]]
+        for pago, obligacion in sorted(pagos_activos, key=lambda x: (x[0].fecha, x[0].pk)):
+            pagos_data.append([
+                pago.fecha.strftime("%d/%m/%Y"),
+                Paragraph(str(obligacion.contrato.cliente), styles["Celda"]),
+                pago.get_metodo_pago_display(),
+                Paragraph(pago.referencia or "-", styles["Celda"]),
+                Paragraph(f"${pago.monto:.2f}", styles["CeldaDerecha"]),
+            ])
+        pagos_table = Table(pagos_data, repeatRows=1, colWidths=[25 * mm, 61 * mm, 30 * mm, 40 * mm, 25 * mm])
+        pagos_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0F766E")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 8.2),
+            ("ALIGN", (4, 1), (4, -1), "RIGHT"),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F0FDFA")]),
+            ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#CBD5E1")),
+            ("TOPPADDING", (0, 0), (-1, -1), 6),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ]))
+        story.append(pagos_table)
+
+    story.extend([
+        Spacer(1, 10 * mm),
+        Paragraph("Este documento resume las obligaciones generadas y los pagos registrados en el sistema para el periodo indicado.", styles["Normal"]),
+        Spacer(1, 13 * mm),
+        Table([["______________________________", "______________________________"], ["Responsable JVAQUA", "Trabajador"]], colWidths=[85 * mm, 85 * mm], style=TableStyle([("ALIGN", (0, 0), (-1, -1), "CENTER"), ("FONTSIZE", (0, 0), (-1, -1), 9), ("TOPPADDING", (0, 1), (-1, 1), 5)])),
+    ])
+
+    doc.build(story, onFirstPage=_pie_pagina, onLaterPages=_pie_pagina)
+    return response
+
 
 @login_required
 def nomina_detalle(request,pk):
