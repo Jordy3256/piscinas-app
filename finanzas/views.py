@@ -9,10 +9,11 @@ from django.db.models import Q, Sum
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.dateparse import parse_date
+from django.urls import reverse
 
 from .forms import EgresoForm, IngresoForm, PagoFacturaForm
 from .models import Egreso, Factura, Ingreso, PagoFactura
-from .cuentas_por_cobrar import generar_facturas_periodo
+from .cuentas_por_cobrar import MESES, generar_facturas_periodo, previsualizar_facturas_periodo
 
 
 def _es_admin(user):
@@ -277,10 +278,11 @@ def facturas_lista(request):
     page_obj = paginator.get_page(request.GET.get("page"))
     params = request.GET.copy(); params.pop("page", None)
     return render(request, "finanzas/facturas_lista.html", {
-        "page_obj": page_obj, "q": q, "estado": estado, "anio": anio, "mes": mes or "",
+        "page_obj": page_obj, "q": q, "estado": estado, "anio": anio, "mes": mes or hoy.month,
         "estados": Factura.ESTADO_CHOICES, "querystring": params.urlencode(),
         "total_facturado": total_facturado, "total_cobrado": total_cobrado,
-        "total_pendiente": total_pendiente, "total_vencido": total_vencido, "es_admin": True,
+        "total_pendiente": total_pendiente, "total_vencido": total_vencido,
+        "meses": MESES, "es_admin": True,
     })
 
 
@@ -331,17 +333,42 @@ def generar_facturas_desde_contratos(request):
         return _denegado(request)
     if request.method != "POST":
         return redirect("finanzas_facturas")
+
     hoy = timezone.localdate()
     try:
         anio = int(request.POST.get("anio") or hoy.year)
         mes = int(request.POST.get("mes") or hoy.month)
-        if not 1 <= mes <= 12:
+        if not 1 <= mes <= 12 or not 2020 <= anio <= 2100:
             raise ValueError
     except (TypeError, ValueError):
-        messages.error(request, "Periodo inválido.")
+        messages.error(request, "Selecciona un mes y un año válidos.")
         return redirect("finanzas_facturas")
+
+    accion = (request.POST.get("accion") or "previsualizar").strip().lower()
+    if accion != "generar":
+        vista_previa = previsualizar_facturas_periodo(anio, mes)
+        facturas = Factura.objects.select_related("cliente", "contrato").filter(
+            periodo_anio=anio, periodo_mes=mes
+        )
+        facturas = list(facturas)
+        paginator = Paginator(facturas, 20)
+        page_obj = paginator.get_page(1)
+        return render(request, "finanzas/facturas_lista.html", {
+            "page_obj": page_obj, "q": "", "estado": "", "anio": anio, "mes": mes,
+            "estados": Factura.ESTADO_CHOICES, "querystring": f"anio={anio}&mes={mes}",
+            "total_facturado": sum((f.total for f in facturas if f.estado != Factura.ESTADO_ANULADA), Decimal("0.00")),
+            "total_cobrado": sum((f.monto_pagado for f in facturas if f.estado != Factura.ESTADO_ANULADA), Decimal("0.00")),
+            "total_pendiente": sum((f.saldo for f in facturas if f.estado != Factura.ESTADO_ANULADA), Decimal("0.00")),
+            "total_vencido": sum((f.saldo for f in facturas if f.estado_visual == Factura.ESTADO_VENCIDA), Decimal("0.00")),
+            "meses": MESES, "vista_previa": vista_previa, "es_admin": True,
+        })
+
     resultado = generar_facturas_periodo(anio, mes, usuario=request.user)
-    messages.success(request, f"Mensualidades: {resultado['creadas']} creadas y {resultado['existentes']} ya existentes.")
+    messages.success(
+        request,
+        f"Proceso completado: {resultado['creadas']} mensualidades creadas, "
+        f"{resultado['existentes']} omitidas y ${resultado['valor_generado']:.2f} generados."
+    )
     if resultado["errores"]:
         messages.warning(request, f"No se pudieron procesar {len(resultado['errores'])} contratos.")
-    return redirect(f"/finanzas/facturas/?anio={anio}&mes={mes}")
+    return redirect(f"{reverse('finanzas_facturas')}?anio={anio}&mes={mes}")
