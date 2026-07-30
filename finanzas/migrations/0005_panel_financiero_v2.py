@@ -21,6 +21,11 @@ def marcar_existentes_pagados(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
+    # PostgreSQL necesita confirmar las actualizaciones de datos antes de crear
+    # los índices diferidos de esta migración. Evita el error:
+    # "cannot CREATE INDEX ... because it has pending trigger events".
+    atomic = False
+
     dependencies = [
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
         ("finanzas", "0004_factura_facturaitem_and_more"),
