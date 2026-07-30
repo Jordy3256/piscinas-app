@@ -426,6 +426,20 @@ def nomina_lista(request):
     from trabajadores.models import Trabajador
     return render(request,"finanzas/nomina_lista.html",{"obligaciones":obligaciones,"resumen":list(resumen.values()),"total":total,"pagado":pagado,"pendiente":pendiente,"anio":anio,"mes":mes,"meses":MESES,"trabajadores":Trabajador.objects.filter(activo=True).select_related("user"),"trabajador_id":trabajador,"estado":estado,"estados":ObligacionTrabajador.ESTADO_CHOICES,"es_admin":True})
 
+def _fecha_pago_programada_contrato(contrato, anio, mes):
+    """Usa la misma fecha de vencimiento/cobro de la factura del contrato."""
+    factura = (
+        Factura.objects
+        .filter(contrato=contrato, periodo_anio=anio, periodo_mes=mes)
+        .only("fecha_vencimiento")
+        .first()
+    )
+    if factura and factura.fecha_vencimiento:
+        return factura.fecha_vencimiento
+    # Mantiene la regla actual de cobro: emisión el día 1 y vencimiento 5 días después.
+    return date(anio, mes, 1) + timedelta(days=5)
+
+
 @login_required
 def nomina_generar(request):
     if not _es_admin(request.user): return _denegado(request)
@@ -443,7 +457,20 @@ def nomina_generar(request):
     for c in Contrato.objects.filter(activo=True).select_related("tecnico_designado"):
         if not c.tecnico_designado_id or not c.valor_tecnico_mensual or c.valor_tecnico_mensual<=0:
             sin_configurar+=1; continue
-        _,created=ObligacionTrabajador.objects.get_or_create(contrato=c,periodo_anio=anio,periodo_mes=mes,defaults={"trabajador":c.tecnico_designado,"valor_acordado":c.valor_tecnico_mensual})
+        fecha_programada = _fecha_pago_programada_contrato(c, anio, mes)
+        obligacion, created = ObligacionTrabajador.objects.get_or_create(
+            contrato=c,
+            periodo_anio=anio,
+            periodo_mes=mes,
+            defaults={
+                "trabajador": c.tecnico_designado,
+                "valor_acordado": c.valor_tecnico_mensual,
+                "fecha_pago_programada": fecha_programada,
+            },
+        )
+        if not created and obligacion.fecha_pago_programada != fecha_programada:
+            obligacion.fecha_pago_programada = fecha_programada
+            obligacion.save(update_fields=["fecha_pago_programada", "actualizada_en"])
         creadas += int(created); omitidas += int(not created)
     messages.success(request,f"Nómina generada: {creadas} obligaciones nuevas, {omitidas} ya existentes y {sin_configurar} contratos sin técnico o valor configurado.")
     return redirect(f"/dashboard/finanzas/nomina/?anio={anio}&mes={mes}")
@@ -538,29 +565,31 @@ def nomina_trabajador_pdf(request, trabajador_pk):
     ]))
     story.extend([resumen_tabla, Spacer(1, 7 * mm), Paragraph("Detalle por contrato", styles["Heading2"]), Spacer(1, 2 * mm)])
 
-    detalle = [["#", "Cliente / Contrato", "Valor", "Pagado", "Saldo", "Estado"]]
+    detalle = [["#", "Cliente / Contrato", "Fecha de pago", "Valor", "Pagado", "Saldo", "Estado"]]
     for i, o in enumerate(obligaciones, 1):
         cliente = str(o.contrato.cliente)
         detalle.append([
             str(i),
             Paragraph(cliente, styles["Celda"]),
+            o.fecha_pago_programada.strftime("%d/%m/%Y"),
             Paragraph(f"${o.valor_acordado:.2f}", styles["CeldaDerecha"]),
             Paragraph(f"${o.monto_pagado:.2f}", styles["CeldaDerecha"]),
             Paragraph(f"${o.saldo:.2f}", styles["CeldaDerecha"]),
             o.get_estado_display(),
         ])
     if not obligaciones:
-        detalle.append(["", Paragraph("No existen obligaciones generadas para este trabajador en el periodo seleccionado.", styles["Celda"]), "", "", "", ""])
+        detalle.append(["", Paragraph("No existen obligaciones generadas para este trabajador en el periodo seleccionado.", styles["Celda"]), "", "", "", "", ""])
 
-    tabla = Table(detalle, repeatRows=1, colWidths=[9 * mm, 73 * mm, 25 * mm, 25 * mm, 25 * mm, 24 * mm])
+    tabla = Table(detalle, repeatRows=1, colWidths=[7 * mm, 55 * mm, 25 * mm, 23 * mm, 23 * mm, 23 * mm, 25 * mm])
     tabla.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#163A5F")),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
         ("FONTSIZE", (0, 0), (-1, -1), 8.5),
         ("ALIGN", (0, 0), (0, -1), "CENTER"),
-        ("ALIGN", (2, 1), (4, -1), "RIGHT"),
-        ("ALIGN", (5, 1), (5, -1), "CENTER"),
+        ("ALIGN", (2, 1), (2, -1), "CENTER"),
+        ("ALIGN", (3, 1), (5, -1), "RIGHT"),
+        ("ALIGN", (6, 1), (6, -1), "CENTER"),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F8FAFC")]),
         ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#CBD5E1")),

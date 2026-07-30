@@ -453,6 +453,10 @@ class ObligacionTrabajador(models.Model):
     periodo_anio = models.PositiveIntegerField(db_index=True)
     periodo_mes = models.PositiveIntegerField(db_index=True)
     valor_acordado = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))])
+    fecha_pago_programada = models.DateField(
+        db_index=True,
+        help_text="Fecha prevista para pagar al trabajador; coincide con la fecha de cobro del contrato en este periodo.",
+    )
     estado = models.CharField(max_length=12, choices=ESTADO_CHOICES, default=ESTADO_PENDIENTE, db_index=True)
     observaciones = models.TextField(blank=True, default="")
     creada_en = models.DateTimeField(auto_now_add=True)

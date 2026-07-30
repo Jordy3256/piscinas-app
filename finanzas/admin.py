@@ -47,5 +47,18 @@ class PagoFacturaAdmin(admin.ModelAdmin):
     readonly_fields = ("ingreso", "creado_en", "actualizado_en")
 
 from .models import ObligacionTrabajador, PagoTrabajador
-admin.site.register(ObligacionTrabajador)
-admin.site.register(PagoTrabajador)
+
+
+@admin.register(ObligacionTrabajador)
+class ObligacionTrabajadorAdmin(admin.ModelAdmin):
+    list_display = ("trabajador", "contrato", "periodo_label", "fecha_pago_programada", "valor_acordado", "estado")
+    list_filter = ("estado", "periodo_anio", "periodo_mes", "fecha_pago_programada")
+    search_fields = ("trabajador__user__username", "trabajador__user__first_name", "trabajador__user__last_name", "contrato__cliente__nombre")
+
+
+@admin.register(PagoTrabajador)
+class PagoTrabajadorAdmin(admin.ModelAdmin):
+    list_display = ("fecha", "obligacion", "monto", "metodo_pago", "activo")
+    list_filter = ("activo", "metodo_pago", "fecha")
+    search_fields = ("obligacion__contrato__cliente__nombre", "obligacion__trabajador__user__username", "referencia")
+    readonly_fields = ("egreso", "creado_en", "actualizado_en")
