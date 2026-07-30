@@ -5131,6 +5131,7 @@ FORMAS_PAGO_CONTRATO_VALIDAS = {
     "50_50",
     "por_visita",
     "fin_mensualidad",
+    "dia_fijo",
     "personalizado",
 }
 
@@ -5145,6 +5146,7 @@ def _validar_datos_contrato(request):
     forma_pago_personalizada = (
         request.POST.get("forma_pago_personalizada") or ""
     ).strip()
+    dia_pago_raw = (request.POST.get("dia_pago") or "").strip()
     precio_mensual_str = (request.POST.get("precio_mensual") or "").strip()
     valor_tecnico_str = (request.POST.get("valor_tecnico_mensual") or "0").strip()
     fecha_inicio_str = (
@@ -5180,6 +5182,15 @@ def _validar_datos_contrato(request):
         errores.append(
             "Debes escribir la forma de pago personalizada."
         )
+
+    dia_pago = None
+    if forma_pago == "dia_fijo":
+        try:
+            dia_pago = int(dia_pago_raw)
+            if not 1 <= dia_pago <= 31:
+                raise ValueError
+        except (TypeError, ValueError):
+            errores.append("Debes seleccionar un día fijo de pago entre 1 y 31.")
 
     tecnico_designado = None
     if tecnico_id:
@@ -5230,6 +5241,7 @@ def _validar_datos_contrato(request):
         "frecuencia_personalizada": frecuencia_personalizada,
         "forma_pago": forma_pago,
         "forma_pago_personalizada": forma_pago_personalizada,
+        "dia_pago": dia_pago,
         "precio_mensual": precio_mensual,
         "valor_tecnico_mensual": valor_tecnico_mensual,
         "fecha_inicio": fecha_inicio,
@@ -5572,6 +5584,7 @@ def contrato_crear_view(request):
         "frecuencia_personalizada": "",
         "forma_pago": "",
         "forma_pago_personalizada": "",
+        "dia_pago": "",
         "precio_mensual": "",
         "valor_tecnico_mensual": "",
         "fecha_inicio": timezone.localdate().isoformat(),
@@ -5594,6 +5607,7 @@ def contrato_crear_view(request):
             "forma_pago_personalizada": (
                 validacion["forma_pago_personalizada"]
             ),
+            "dia_pago": validacion["dia_pago"] or "",
             "precio_mensual": request.POST.get("precio_mensual", ""),
             "valor_tecnico_mensual": request.POST.get("valor_tecnico_mensual", ""),
             "fecha_inicio": request.POST.get(
@@ -5621,6 +5635,7 @@ def contrato_crear_view(request):
                 forma_pago_personalizada=(
                     validacion["forma_pago_personalizada"]
                 ),
+                dia_pago=validacion["dia_pago"],
                 precio_mensual=validacion["precio_mensual"],
                 valor_tecnico_mensual=validacion["valor_tecnico_mensual"],
                 fecha_inicio=validacion["fecha_inicio"],
@@ -5704,6 +5719,7 @@ def contrato_editar_view(request, pk):
         "forma_pago_personalizada": (
             contrato.forma_pago_personalizada
         ),
+        "dia_pago": contrato.dia_pago or "",
         "precio_mensual": contrato.precio_mensual,
         "valor_tecnico_mensual": contrato.valor_tecnico_mensual,
         "fecha_inicio": contrato.fecha_inicio.isoformat(),
@@ -5726,6 +5742,7 @@ def contrato_editar_view(request, pk):
             "forma_pago_personalizada": (
                 validacion["forma_pago_personalizada"]
             ),
+            "dia_pago": validacion["dia_pago"] or "",
             "precio_mensual": request.POST.get("precio_mensual", ""),
             "valor_tecnico_mensual": request.POST.get("valor_tecnico_mensual", ""),
             "fecha_inicio": request.POST.get(
@@ -5751,6 +5768,7 @@ def contrato_editar_view(request, pk):
             contrato.forma_pago_personalizada = (
                 validacion["forma_pago_personalizada"]
             )
+            contrato.dia_pago = validacion["dia_pago"]
             contrato.precio_mensual = validacion["precio_mensual"]
             contrato.valor_tecnico_mensual = validacion["valor_tecnico_mensual"]
             contrato.fecha_inicio = validacion["fecha_inicio"]

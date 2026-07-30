@@ -4,6 +4,8 @@ from . import views
 
 urlpatterns = [
     path("cartera/", views.cartera_centro, name="finanzas_cartera"),
+    path("calendario/", views.calendario_financiero, name="finanzas_calendario"),
+    path("clientes/<int:cliente_pk>/estado-cuenta.pdf", views.cliente_estado_cuenta_pdf, name="finanzas_cliente_estado_cuenta_pdf"),
     path("nomina/", views.nomina_lista, name="finanzas_nomina"),
     path("nomina/generar/", views.nomina_generar, name="finanzas_nomina_generar"),
     path("nomina/trabajador/<int:trabajador_pk>/pdf/", views.nomina_trabajador_pdf, name="finanzas_nomina_trabajador_pdf"),
@@ -15,6 +17,8 @@ urlpatterns = [
     path("facturas/<int:pk>/", views.factura_detalle, name="finanzas_factura_detalle"),
     path("facturas/<int:pk>/pago/", views.factura_pago_nuevo, name="finanzas_factura_pago_nuevo"),
     path("facturas/<int:pk>/pagos/<int:pago_pk>/anular/", views.factura_pago_anular, name="finanzas_factura_pago_anular"),
+    path("pagos/factura/<int:pago_pk>/comprobante.pdf", views.pago_factura_comprobante_pdf, name="finanzas_pago_factura_comprobante_pdf"),
+    path("pagos/trabajador/<int:pago_pk>/comprobante.pdf", views.pago_trabajador_comprobante_pdf, name="finanzas_pago_trabajador_comprobante_pdf"),
     path("flujo/", views.panel_financiero, name="flujo_mensual"),
     path("movimientos/", views.movimientos, name="finanzas_movimientos"),
     path("ingresos/nuevo/", views.ingreso_form, name="finanzas_ingreso_nuevo"),

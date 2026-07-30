@@ -288,6 +288,8 @@
     const formaPagoSelect = document.getElementById("forma_pago");
     const formaPagoContainer = document.getElementById("forma-pago-personalizada-container");
     const formaPagoInput = document.getElementById("forma_pago_personalizada");
+    const diaPagoWrap = document.getElementById("dia_pago_wrap");
+    const diaPagoInput = document.getElementById("dia_pago");
     const formulario = document.getElementById("contrato-form");
     const botonGuardar = document.getElementById("guardar-contrato");
     const tecnicoSelect = document.getElementById("tecnico_designado");
@@ -338,10 +340,16 @@
 
     function actualizarFormaPagoPersonalizada() {
       const esPersonalizada = formaPagoSelect && formaPagoSelect.value === "personalizado";
+      const esDiaFijo = formaPagoSelect && formaPagoSelect.value === "dia_fijo";
       if (formaPagoContainer) formaPagoContainer.style.display = esPersonalizada ? "block" : "none";
       if (formaPagoInput) {
         formaPagoInput.required = esPersonalizada;
         if (!esPersonalizada) formaPagoInput.value = "";
+      }
+      if (diaPagoWrap) diaPagoWrap.style.display = esDiaFijo ? "block" : "none";
+      if (diaPagoInput) {
+        diaPagoInput.required = esDiaFijo;
+        if (!esDiaFijo) diaPagoInput.value = "";
       }
     }
 

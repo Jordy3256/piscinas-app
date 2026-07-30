@@ -445,20 +445,82 @@ def generar_facturas_desde_contratos(request):
 
 @login_required
 def cartera_centro(request):
-    if not _es_admin(request.user): return _denegado(request)
+    if not _es_admin(request.user):
+        return _denegado(request)
+
     hoy = timezone.localdate()
-    q=(request.GET.get("q") or "").strip(); estado=(request.GET.get("estado") or "").strip(); ciudad=(request.GET.get("ciudad") or "").strip()
-    qs=Factura.objects.select_related("cliente","contrato").prefetch_related("pagos").exclude(estado=Factura.ESTADO_ANULADA)
-    if q: qs=qs.filter(Q(cliente__nombre__icontains=q)|Q(cliente__telefono__icontains=q)|Q(numero__icontains=q))
-    if ciudad: qs=qs.filter(cliente__ciudad__icontains=ciudad)
-    facturas=list(qs)
-    if estado: facturas=[f for f in facturas if f.estado_visual==estado]
-    total_por_cobrar=sum((f.saldo for f in facturas),Decimal("0.00")); vencido=sum((f.saldo for f in facturas if f.estado_visual==Factura.ESTADO_VENCIDA),Decimal("0.00"))
-    cobrado_mes=PagoFactura.objects.filter(activo=True,fecha__year=hoy.year,fecha__month=hoy.month).aggregate(t=Sum("monto"))["t"] or Decimal("0.00")
-    proximas=sum(1 for f in facturas if f.saldo>0 and f.fecha_vencimiento>=hoy and f.fecha_vencimiento<=hoy+timedelta(days=7))
-    paginator=Paginator(facturas,25); page_obj=paginator.get_page(request.GET.get("page"))
-    ciudades=Cliente.objects.exclude(ciudad="").values_list("ciudad",flat=True).distinct().order_by("ciudad")
-    return render(request,"finanzas/cartera.html",{"page_obj":page_obj,"total_por_cobrar":total_por_cobrar,"vencido":vencido,"cobrado_mes":cobrado_mes,"proximas":proximas,"q":q,"estado":estado,"ciudad":ciudad,"ciudades":ciudades,"es_admin":True})
+    q = (request.GET.get("q") or "").strip()
+    estado = (request.GET.get("estado") or "todas").strip()
+    ciudad = (request.GET.get("ciudad") or "").strip()
+    anio_raw = (request.GET.get("anio") or "").strip()
+    mes_raw = (request.GET.get("mes") or "").strip()
+    por_pagina_raw = (request.GET.get("por_pagina") or "25").strip()
+
+    try:
+        anio = int(anio_raw) if anio_raw else None
+        mes = int(mes_raw) if mes_raw else None
+        if anio and not 2020 <= anio <= 2100: raise ValueError
+        if mes and not 1 <= mes <= 12: raise ValueError
+    except (TypeError, ValueError):
+        anio = mes = None
+        messages.warning(request, "El periodo indicado no es válido.")
+
+    try:
+        por_pagina = int(por_pagina_raw)
+        if por_pagina not in {25, 50, 100}: raise ValueError
+    except (TypeError, ValueError):
+        por_pagina = 25
+
+    qs = Factura.objects.select_related("cliente", "contrato").prefetch_related("pagos").all()
+    if q:
+        qs = qs.filter(Q(cliente__nombre__icontains=q) | Q(cliente__telefono__icontains=q) | Q(numero__icontains=q) | Q(cliente__ciudad__icontains=q))
+    if ciudad:
+        qs = qs.filter(cliente__ciudad__iexact=ciudad)
+    if anio:
+        qs = qs.filter(periodo_anio=anio)
+    if mes:
+        qs = qs.filter(periodo_mes=mes)
+    if estado == "pendiente":
+        qs = qs.filter(estado=Factura.ESTADO_PENDIENTE, fecha_vencimiento__gte=hoy)
+    elif estado == "parcial":
+        qs = qs.filter(estado=Factura.ESTADO_PARCIAL, fecha_vencimiento__gte=hoy)
+    elif estado == "vencida":
+        qs = qs.filter(estado__in=[Factura.ESTADO_PENDIENTE, Factura.ESTADO_PARCIAL, Factura.ESTADO_VENCIDA], fecha_vencimiento__lt=hoy)
+    elif estado == "pagada":
+        qs = qs.filter(estado=Factura.ESTADO_PAGADA)
+    elif estado == "anulada":
+        qs = qs.filter(estado=Factura.ESTADO_ANULADA)
+    qs = qs.order_by("-periodo_anio", "-periodo_mes", "fecha_vencimiento", "cliente__nombre", "-id")
+
+    facturas_totales = list(qs)
+    activas = [f for f in facturas_totales if f.estado != Factura.ESTADO_ANULADA]
+    total_por_cobrar = sum((f.saldo for f in activas), Decimal("0.00"))
+    vencido = sum((f.saldo for f in activas if f.estado_visual == Factura.ESTADO_VENCIDA), Decimal("0.00"))
+    cobrado_mes = PagoFactura.objects.filter(activo=True, fecha__year=hoy.year, fecha__month=hoy.month).aggregate(t=Sum("monto"))["t"] or Decimal("0.00")
+    proximas = sum(1 for f in activas if f.saldo > 0 and hoy <= f.fecha_vencimiento <= hoy + timedelta(days=7))
+
+    antiguedad = {"por_vencer": Decimal("0.00"), "dias_1_7": Decimal("0.00"), "dias_8_15": Decimal("0.00"), "dias_16_30": Decimal("0.00"), "mas_30": Decimal("0.00")}
+    for factura in activas:
+        if factura.saldo <= 0: continue
+        dias = (hoy - factura.fecha_vencimiento).days
+        if dias <= 0: antiguedad["por_vencer"] += factura.saldo
+        elif dias <= 7: antiguedad["dias_1_7"] += factura.saldo
+        elif dias <= 15: antiguedad["dias_8_15"] += factura.saldo
+        elif dias <= 30: antiguedad["dias_16_30"] += factura.saldo
+        else: antiguedad["mas_30"] += factura.saldo
+
+    paginator = Paginator(facturas_totales, por_pagina)
+    page_obj = paginator.get_page(request.GET.get("page"))
+    params = request.GET.copy(); params.pop("page", None)
+    ciudades = Cliente.objects.exclude(ciudad="").values_list("ciudad", flat=True).distinct().order_by("ciudad")
+
+    return render(request, "finanzas/cartera.html", {
+        "page_obj": page_obj, "total_registros": paginator.count, "total_por_cobrar": total_por_cobrar,
+        "vencido": vencido, "cobrado_mes": cobrado_mes, "proximas": proximas, "antiguedad": antiguedad,
+        "q": q, "estado": estado, "ciudad": ciudad, "anio_filtro": anio or "", "mes_filtro": mes or "",
+        "por_pagina": por_pagina, "ciudades": ciudades, "meses": MESES, "querystring": params.urlencode(), "es_admin": True,
+    })
+
 
 @login_required
 def nomina_lista(request):
@@ -719,3 +781,66 @@ def nomina_pago_anular(request,pk,pago_pk):
     o=get_object_or_404(ObligacionTrabajador,pk=pk); pago=get_object_or_404(PagoTrabajador,pk=pago_pk,obligacion=o)
     if request.method=="POST": pago.anular(); messages.success(request,"Pago y egreso vinculados anulados.")
     return redirect("finanzas_nomina_detalle",pk=pk)
+
+
+def _pdf_response(nombre_archivo, titulo, subtitulo, filas, encabezados, resumen=None):
+    response = HttpResponse(content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename="{nombre_archivo}"'
+    doc = SimpleDocTemplate(response, pagesize=A4, rightMargin=14*mm, leftMargin=14*mm, topMargin=14*mm, bottomMargin=14*mm)
+    estilos = getSampleStyleSheet()
+    elementos = [Paragraph(titulo, ParagraphStyle("TituloJVA", parent=estilos["Title"], alignment=TA_CENTER, fontSize=17)), Paragraph(subtitulo, ParagraphStyle("SubJVA", parent=estilos["Normal"], alignment=TA_CENTER, textColor=colors.HexColor("#5b6472"))), Spacer(1, 7*mm)]
+    if resumen:
+        datos = [[Paragraph(str(k), estilos["BodyText"]), Paragraph(str(v), estilos["BodyText"])] for k,v in resumen]
+        tabla = Table(datos, colWidths=[70*mm, 80*mm]); tabla.setStyle(TableStyle([("BACKGROUND",(0,0),(0,-1),colors.HexColor("#eef4fb")),("GRID",(0,0),(-1,-1),0.25,colors.HexColor("#cbd5e1")),("PADDING",(0,0),(-1,-1),6)])); elementos += [tabla, Spacer(1, 6*mm)]
+    data = [[Paragraph(str(x), estilos["BodyText"]) for x in encabezados]] + [[Paragraph(str(x), estilos["BodyText"]) for x in fila] for fila in filas]
+    tabla = Table(data, repeatRows=1)
+    tabla.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#123b66")),("TEXTCOLOR",(0,0),(-1,0),colors.white),("GRID",(0,0),(-1,-1),0.25,colors.HexColor("#cbd5e1")),("VALIGN",(0,0),(-1,-1),"TOP"),("PADDING",(0,0),(-1,-1),5)]))
+    elementos.append(tabla); doc.build(elementos); return response
+
+
+@login_required
+def cliente_estado_cuenta_pdf(request, cliente_pk):
+    if not _es_admin(request.user): return _denegado(request)
+    cliente = get_object_or_404(Cliente, pk=cliente_pk)
+    facturas = list(Factura.objects.filter(cliente=cliente).prefetch_related("pagos").order_by("-periodo_anio", "-periodo_mes"))
+    filas = [(f.numero, f.periodo_label, f.fecha_vencimiento.strftime("%d/%m/%Y"), f"${f.total:.2f}", f"${f.monto_pagado:.2f}", f"${f.saldo:.2f}", f.estado_visual.title()) for f in facturas]
+    activas=[f for f in facturas if f.estado != Factura.ESTADO_ANULADA]
+    resumen=[("Cliente", cliente.nombre),("Teléfono", cliente.telefono or "—"),("Total facturado", f"${sum((f.total for f in activas), Decimal('0')):.2f}"),("Total cobrado", f"${sum((f.monto_pagado for f in activas), Decimal('0')):.2f}"),("Saldo pendiente", f"${sum((f.saldo for f in activas), Decimal('0')):.2f}")]
+    return _pdf_response(f"estado-cuenta-{slugify(cliente.nombre)}.pdf", "JVAQUA · Estado de cuenta", "Historial financiero del cliente", filas, ["Factura","Periodo","Vence","Total","Cobrado","Saldo","Estado"], resumen)
+
+
+@login_required
+def pago_factura_comprobante_pdf(request, pago_pk):
+    if not _es_admin(request.user): return _denegado(request)
+    pago=get_object_or_404(PagoFactura.objects.select_related("factura__cliente", "factura__contrato"), pk=pago_pk)
+    f=pago.factura
+    resumen=[("Comprobante", f"REC-{pago.pk:06d}"),("Cliente", f.cliente.nombre),("Factura", f.numero),("Periodo", f.periodo_label),("Fecha", pago.fecha.strftime("%d/%m/%Y")),("Forma de pago", pago.get_metodo_pago_display()),("Referencia", pago.referencia or "—"),("Valor recibido", f"${pago.monto:.2f}"),("Saldo actual", f"${f.saldo:.2f}")]
+    return _pdf_response(f"recibo-{pago.pk:06d}.pdf", "JVAQUA · Comprobante de pago", "Cobro de servicio de mantenimiento", [], ["Detalle"], resumen)
+
+
+@login_required
+def pago_trabajador_comprobante_pdf(request, pago_pk):
+    if not _es_admin(request.user): return _denegado(request)
+    pago=get_object_or_404(PagoTrabajador.objects.select_related("obligacion__trabajador", "obligacion__contrato__cliente"), pk=pago_pk)
+    o=pago.obligacion
+    resumen=[("Comprobante", f"PAG-{pago.pk:06d}"),("Trabajador", str(o.trabajador)),("Cliente / contrato", str(o.contrato.cliente)),("Periodo", o.periodo_label),("Fecha", pago.fecha.strftime("%d/%m/%Y")),("Forma de pago", pago.get_metodo_pago_display()),("Referencia", pago.referencia or "—"),("Valor pagado", f"${pago.monto:.2f}"),("Saldo actual", f"${o.saldo:.2f}")]
+    return _pdf_response(f"pago-trabajador-{pago.pk:06d}.pdf", "JVAQUA · Comprobante de pago", "Pago operativo a trabajador", [], ["Detalle"], resumen)
+
+
+@login_required
+def calendario_financiero(request):
+    if not _es_admin(request.user): return _denegado(request)
+    hoy=timezone.localdate()
+    try:
+        anio=int(request.GET.get("anio", hoy.year)); mes=int(request.GET.get("mes", hoy.month)); assert 1 <= mes <= 12
+    except Exception: anio,mes=hoy.year,hoy.month
+    inicio,fin=_rango_mes(anio,mes)
+    eventos=[]
+    for f in Factura.objects.filter(fecha_vencimiento__range=(inicio,fin)).exclude(estado=Factura.ESTADO_ANULADA).select_related("cliente"):
+        eventos.append({"fecha":f.fecha_vencimiento,"tipo":"Cobro programado","detalle":f.cliente.nombre,"valor":f.saldo,"estado":f.estado_visual})
+    for o in ObligacionTrabajador.objects.filter(fecha_pago_programada__range=(inicio,fin)).exclude(estado=ObligacionTrabajador.ESTADO_ANULADO).select_related("trabajador","contrato__cliente"):
+        eventos.append({"fecha":o.fecha_pago_programada,"tipo":"Pago a trabajador","detalle":f"{o.trabajador} · {o.contrato.cliente}","valor":o.saldo,"estado":o.estado})
+    for i in Ingreso.objects.filter(fecha__range=(inicio,fin)).exclude(estado=Ingreso.ESTADO_ANULADO): eventos.append({"fecha":i.fecha,"tipo":"Ingreso realizado","detalle":i.concepto,"valor":i.monto_pagado,"estado":"pagado"})
+    for e in Egreso.objects.filter(fecha__range=(inicio,fin)).exclude(estado=Egreso.ESTADO_ANULADO): eventos.append({"fecha":e.fecha,"tipo":"Egreso realizado","detalle":e.concepto,"valor":e.monto_pagado,"estado":"pagado"})
+    eventos.sort(key=lambda x:(x["fecha"],x["tipo"],x["detalle"]))
+    return render(request,"finanzas/calendario.html",{"eventos":eventos,"anio":anio,"mes":mes,"meses":MESES,"es_admin":True})

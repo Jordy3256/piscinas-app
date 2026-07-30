@@ -1,7 +1,58 @@
-{% extends "dashboard/base_admin.html" %}{% block title %}Centro de Cartera{% endblock %}{% block top_title %}💳 Centro de Cartera{% endblock %}{% block content %}
-<style>.kpi{border:0;border-radius:18px;box-shadow:0 10px 30px #0f172a12}.table-card{border:0;border-radius:20px;overflow:hidden;box-shadow:0 12px 34px #0f172a12}.badge-vencida{background:#fee2e2;color:#991b1b}.badge-pendiente{background:#e0f2fe;color:#075985}.badge-parcial{background:#fef3c7;color:#92400e}.badge-pagada{background:#dcfce7;color:#166534}</style>
-<div class="d-flex justify-content-between align-items-center mb-3"><div><h2 class="fw-bold mb-1">Cuentas por cobrar</h2><p class="text-muted mb-0">Control de cobros, vencimientos y saldos.</p></div><a class="btn btn-outline-primary" href="{% url 'finanzas_facturas' %}">Ver facturas</a></div>
-<div class="row g-3 mb-4"><div class="col-6 col-lg-3"><div class="card kpi p-3"><small>Total por cobrar</small><h3>${{ total_por_cobrar|floatformat:2 }}</h3></div></div><div class="col-6 col-lg-3"><div class="card kpi p-3"><small>Cobrado este mes</small><h3>${{ cobrado_mes|floatformat:2 }}</h3></div></div><div class="col-6 col-lg-3"><div class="card kpi p-3"><small>Vencido</small><h3>${{ vencido|floatformat:2 }}</h3></div></div><div class="col-6 col-lg-3"><div class="card kpi p-3"><small>Próximos 7 días</small><h3>{{ proximas }}</h3></div></div></div>
-<form class="card table-card p-3 mb-3" method="get"><div class="row g-2"><div class="col-lg-4"><input class="form-control" name="q" value="{{ q }}" placeholder="Cliente, teléfono o factura"></div><div class="col-lg-3"><select class="form-select" name="estado"><option value="">Todos los estados</option><option value="pendiente" {% if estado == 'pendiente' %}selected{% endif %}>Pendiente</option><option value="parcial" {% if estado == 'parcial' %}selected{% endif %}>Parcial</option><option value="vencida" {% if estado == 'vencida' %}selected{% endif %}>Vencida</option><option value="pagada" {% if estado == 'pagada' %}selected{% endif %}>Pagada</option></select></div><div class="col-lg-3"><select class="form-select" name="ciudad"><option value="">Todas las ciudades</option>{% for c in ciudades %}<option {% if ciudad == c %}selected{% endif %}>{{ c }}</option>{% endfor %}</select></div><div class="col-lg-2 d-grid"><button class="btn btn-primary">Filtrar</button></div></div></form>
-<div class="card table-card"><div class="table-responsive"><table class="table align-middle mb-0"><thead><tr><th>Cliente</th><th>Periodo</th><th>Vence</th><th>Total</th><th>Saldo</th><th>Estado</th><th></th></tr></thead><tbody>{% for f in page_obj %}<tr><td><strong>{{ f.cliente.nombre }}</strong><br><small>{{ f.cliente.ciudad }}</small></td><td>{{ f.periodo_label }}</td><td>{{ f.fecha_vencimiento|date:'d/m/Y' }}</td><td>${{ f.total|floatformat:2 }}</td><td><strong>${{ f.saldo|floatformat:2 }}</strong></td><td><span class="badge badge-{{ f.estado_visual }}">{{ f.estado_visual|title }}</span></td><td><a class="btn btn-sm btn-primary" href="{% url 'finanzas_factura_detalle' f.pk %}">{% if f.saldo > 0 %}Registrar pago{% else %}Ver{% endif %}</a></td></tr>{% empty %}<tr><td colspan="7" class="text-center p-5">No hay cuentas para los filtros seleccionados.</td></tr>{% endfor %}</tbody></table></div></div>
+{% extends "dashboard/base_admin.html" %}
+{% load humanize %}
+{% block title %}Centro de Cartera{% endblock %}
+{% block content %}
+<style>
+.fc-wrap{max-width:1500px;margin:auto}.fc-head{display:flex;justify-content:space-between;gap:16px;align-items:center;flex-wrap:wrap}.fc-actions{display:flex;gap:8px;flex-wrap:wrap}.fc-kpis,.fc-aging{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin:18px 0}.fc-aging{grid-template-columns:repeat(5,minmax(0,1fr))}.fc-card{background:#fff;border:1px solid #e5eaf0;border-radius:16px;padding:18px;box-shadow:0 8px 24px rgba(15,23,42,.05)}.fc-label{font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:#64748b}.fc-value{font-size:1.55rem;font-weight:800;color:#0f2942}.fc-tabs{display:flex;gap:8px;overflow:auto;padding-bottom:4px;margin-bottom:16px}.fc-tab{white-space:nowrap;padding:9px 14px;border-radius:999px;border:1px solid #dbe3ec;text-decoration:none;color:#334155;background:#fff}.fc-tab.active{background:#123b66;color:white;border-color:#123b66}.fc-filter{display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr auto;gap:10px}.fc-filter input,.fc-filter select{min-height:42px;border:1px solid #dbe3ec;border-radius:10px;padding:8px 10px}.fc-table{width:100%;border-collapse:collapse}.fc-table th,.fc-table td{padding:12px 10px;border-bottom:1px solid #edf1f5;text-align:left;vertical-align:middle}.fc-table th{font-size:.78rem;text-transform:uppercase;color:#64748b}.badge-f{display:inline-flex;padding:5px 9px;border-radius:999px;font-size:.75rem;font-weight:700}.pendiente{background:#fff7d6;color:#805b00}.parcial{background:#e7f0ff;color:#1e4f91}.vencida{background:#ffe5e5;color:#a11}.pagada{background:#e3f8ea;color:#176534}.anulada{background:#eceff3;color:#53606d}.fc-mobile{display:none}.fc-pager{display:flex;justify-content:center;gap:8px;margin-top:18px;align-items:center}@media(max-width:1000px){.fc-kpis{grid-template-columns:repeat(2,1fr)}.fc-aging{grid-template-columns:repeat(2,1fr)}.fc-filter{grid-template-columns:1fr 1fr}.fc-desktop{display:none}.fc-mobile{display:grid;gap:10px}.fc-item{background:#fff;border:1px solid #e5eaf0;border-radius:14px;padding:14px}}@media(max-width:560px){.fc-kpis,.fc-aging,.fc-filter{grid-template-columns:1fr}}
+</style>
+<div class="fc-wrap">
+  <div class="fc-head">
+    <div><h1 class="h3 fw-bold mb-1">Centro de Cartera</h1><p class="text-muted mb-0">Consulta completa de cobros, saldos, vencimientos e historial.</p></div>
+    <div class="fc-actions"><a class="btn btn-outline-primary" href="{% url 'finanzas_calendario' %}">Calendario financiero</a><a class="btn btn-primary" href="{% url 'finanzas_facturas' %}">Generar cuentas</a></div>
+  </div>
+
+  <section class="fc-kpis">
+    <article class="fc-card"><div class="fc-label">Total por cobrar</div><div class="fc-value">${{ total_por_cobrar|floatformat:2|intcomma }}</div></article>
+    <article class="fc-card"><div class="fc-label">Cobrado este mes</div><div class="fc-value text-success">${{ cobrado_mes|floatformat:2|intcomma }}</div></article>
+    <article class="fc-card"><div class="fc-label">Cartera vencida</div><div class="fc-value text-danger">${{ vencido|floatformat:2|intcomma }}</div></article>
+    <article class="fc-card"><div class="fc-label">Próximos 7 días</div><div class="fc-value">{{ proximas }}</div></article>
+  </section>
+
+  <section class="fc-card mb-3">
+    <div class="fw-bold mb-2">Antigüedad de cartera</div>
+    <div class="fc-aging m-0">
+      <div><div class="fc-label">Por vencer</div><strong>${{ antiguedad.por_vencer|floatformat:2 }}</strong></div>
+      <div><div class="fc-label">1–7 días</div><strong>${{ antiguedad.dias_1_7|floatformat:2 }}</strong></div>
+      <div><div class="fc-label">8–15 días</div><strong>${{ antiguedad.dias_8_15|floatformat:2 }}</strong></div>
+      <div><div class="fc-label">16–30 días</div><strong>${{ antiguedad.dias_16_30|floatformat:2 }}</strong></div>
+      <div><div class="fc-label">Más de 30 días</div><strong>${{ antiguedad.mas_30|floatformat:2 }}</strong></div>
+    </div>
+  </section>
+
+  <section class="fc-card">
+    <div class="fc-tabs">
+      <a class="fc-tab {% if estado == 'todas' %}active{% endif %}" href="?estado=todas">Todas</a>
+      <a class="fc-tab {% if estado == 'pendiente' %}active{% endif %}" href="?estado=pendiente">Pendientes</a>
+      <a class="fc-tab {% if estado == 'parcial' %}active{% endif %}" href="?estado=parcial">Parciales</a>
+      <a class="fc-tab {% if estado == 'vencida' %}active{% endif %}" href="?estado=vencida">Vencidas</a>
+      <a class="fc-tab {% if estado == 'pagada' %}active{% endif %}" href="?estado=pagada">Pagadas</a>
+      <a class="fc-tab {% if estado == 'anulada' %}active{% endif %}" href="?estado=anulada">Anuladas</a>
+    </div>
+    <form method="get" class="fc-filter mb-3">
+      <input type="hidden" name="estado" value="{{ estado }}">
+      <input type="search" name="q" value="{{ q }}" placeholder="Cliente, teléfono, ciudad o factura">
+      <select name="ciudad"><option value="">Todas las ciudades</option>{% for c in ciudades %}<option value="{{ c }}" {% if ciudad == c %}selected{% endif %}>{{ c }}</option>{% endfor %}</select>
+      <select name="mes"><option value="">Todos los meses</option>{% for n,nombre in meses %}<option value="{{ n }}" {% if mes_filtro == n %}selected{% endif %}>{{ nombre }}</option>{% endfor %}</select>
+      <input type="number" name="anio" value="{{ anio_filtro }}" min="2020" max="2100" placeholder="Todos los años">
+      <select name="por_pagina"><option value="25" {% if por_pagina == 25 %}selected{% endif %}>25 por página</option><option value="50" {% if por_pagina == 50 %}selected{% endif %}>50 por página</option><option value="100" {% if por_pagina == 100 %}selected{% endif %}>100 por página</option></select>
+      <div class="d-flex gap-2"><button class="btn btn-primary" type="submit">Filtrar</button><a class="btn btn-outline-secondary" href="{% url 'finanzas_cartera' %}">Limpiar</a></div>
+    </form>
+    <div class="d-flex justify-content-between mb-2"><strong>Lista completa</strong><span class="text-muted">{{ total_registros }} registros</span></div>
+    <div class="fc-desktop"><table class="fc-table"><thead><tr><th>Factura</th><th>Cliente</th><th>Ciudad</th><th>Periodo</th><th>Vencimiento</th><th>Total</th><th>Cobrado</th><th>Saldo</th><th>Estado</th><th></th></tr></thead><tbody>
+    {% for factura in page_obj %}<tr><td>{{ factura.numero }}</td><td><strong>{{ factura.cliente.nombre }}</strong><div class="small text-muted">{{ factura.cliente.telefono }}</div></td><td>{{ factura.cliente.ciudad|default:"—" }}</td><td>{{ factura.periodo_label }}</td><td>{{ factura.fecha_vencimiento|date:"d/m/Y" }}</td><td>${{ factura.total|floatformat:2 }}</td><td>${{ factura.monto_pagado|floatformat:2 }}</td><td><strong>${{ factura.saldo|floatformat:2 }}</strong></td><td><span class="badge-f {{ factura.estado_visual }}">{{ factura.estado_visual|title }}</span></td><td><a class="btn btn-sm btn-outline-primary" href="{% url 'finanzas_factura_detalle' factura.pk %}">Ver</a></td></tr>{% empty %}<tr><td colspan="10" class="text-center text-muted py-4">No hay registros para los filtros seleccionados.</td></tr>{% endfor %}
+    </tbody></table></div>
+    <div class="fc-mobile">{% for factura in page_obj %}<article class="fc-item"><div class="d-flex justify-content-between"><div><strong>{{ factura.cliente.nombre }}</strong><div class="small text-muted">{{ factura.numero }} · {{ factura.periodo_label }}</div></div><span class="badge-f {{ factura.estado_visual }}">{{ factura.estado_visual|title }}</span></div><div class="d-flex justify-content-between mt-3"><span>Vence {{ factura.fecha_vencimiento|date:"d/m/Y" }}</span><strong>Saldo ${{ factura.saldo|floatformat:2 }}</strong></div><a class="btn btn-sm btn-outline-primary w-100 mt-3" href="{% url 'finanzas_factura_detalle' factura.pk %}">Ver cuenta</a></article>{% empty %}<div class="text-muted text-center py-4">No hay registros.</div>{% endfor %}</div>
+    {% if page_obj.has_other_pages %}<nav class="fc-pager">{% if page_obj.has_previous %}<a class="btn btn-sm btn-outline-secondary" href="?{{ querystring }}&page={{ page_obj.previous_page_number }}">Anterior</a>{% endif %}<span>Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>{% if page_obj.has_next %}<a class="btn btn-sm btn-outline-secondary" href="?{{ querystring }}&page={{ page_obj.next_page_number }}">Siguiente</a>{% endif %}</nav>{% endif %}
+  </section>
+</div>
 {% endblock %}

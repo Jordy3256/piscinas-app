@@ -28,6 +28,7 @@ class Contrato(models.Model):
         ("50_50", "50/50"),
         ("por_visita", "Por visita"),
         ("fin_mensualidad", "Fin de la mensualidad"),
+        ("dia_fijo", "Día fijo mensual"),
         ("personalizado", "Personalizado"),
     ]
 
@@ -63,6 +64,12 @@ class Contrato(models.Model):
         choices=FORMA_PAGO_CHOICES,
         blank=True,
         default="",
+    )
+
+    dia_pago = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text="Día acordado para el cobro mensual (1 a 31).",
     )
 
     forma_pago_personalizada = models.CharField(
@@ -208,6 +215,11 @@ class Contrato(models.Model):
 
         if self.forma_pago != "personalizado":
             self.forma_pago_personalizada = ""
+
+        if self.forma_pago != "dia_fijo":
+            self.dia_pago = None
+        elif self.dia_pago is not None:
+            self.dia_pago = max(1, min(int(self.dia_pago), 31))
 
         self.sincronizar_tipo_compatibilidad()
 

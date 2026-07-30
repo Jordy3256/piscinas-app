@@ -22,6 +22,8 @@ def fecha_vencimiento_contrato(contrato, anio, mes):
         dia = 1
     elif contrato.forma_pago == "fin_mensualidad":
         dia = ultimo
+    elif contrato.forma_pago == "dia_fijo" and contrato.dia_pago:
+        dia = min(max(int(contrato.dia_pago), 1), ultimo)
     else:
         dia = min(getattr(contrato.fecha_inicio, "day", 5) or 5, ultimo)
     return date(anio, mes, dia)
