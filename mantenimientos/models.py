@@ -31,6 +31,10 @@ class Mantenimiento(models.Model):
         choices=ESTADO_CHOICES,
         default="pendiente",
     )
+    automatico = models.BooleanField(
+        default=False,
+        help_text="Indica si fue generado desde la programación automática del contrato.",
+    )
     observaciones = models.TextField(blank=True)
 
     def total_egresos(self):

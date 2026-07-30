@@ -1,0 +1,809 @@
+{% extends "dashboard/base_admin.html" %}
+
+{% block title %}Flujo mensual{% endblock %}
+{% block top_title %}💰 Flujo mensual{% endblock %}
+
+{% block content %}
+
+<style>
+  .flujo-card {
+    border: 0;
+    border-radius: 1rem;
+    overflow: hidden;
+  }
+
+  .flujo-card .card-body {
+    padding: 1rem;
+  }
+
+  .flujo-kpi-label {
+    font-size: .82rem;
+    color: #6c757d;
+    margin-bottom: .2rem;
+  }
+
+  .flujo-kpi-value {
+    font-size: 1.55rem;
+    font-weight: 800;
+    line-height: 1.1;
+  }
+
+  .flujo-soft-success { background: rgba(25, 135, 84, .08); }
+  .flujo-soft-danger { background: rgba(220, 53, 69, .08); }
+  .flujo-soft-warning { background: rgba(255, 193, 7, .14); }
+  .flujo-soft-primary { background: rgba(13, 110, 253, .08); }
+  .flujo-soft-secondary { background: rgba(108, 117, 125, .08); }
+
+  .flujo-section-card {
+    border: 0;
+    border-radius: 1rem;
+  }
+
+  .flujo-mini-stat {
+    border: 1px solid rgba(0,0,0,.06);
+    border-radius: .9rem;
+    padding: .9rem;
+    background: #fff;
+    height: 100%;
+  }
+
+  .flujo-mini-stat .label {
+    font-size: .8rem;
+    color: #6c757d;
+    margin-bottom: .15rem;
+  }
+
+  .flujo-mini-stat .value {
+    font-size: 1.08rem;
+    font-weight: 700;
+  }
+
+  .flujo-item {
+    border: 1px solid rgba(0,0,0,.06);
+    border-radius: .9rem;
+    padding: .85rem .95rem;
+    background: #fff;
+  }
+
+  .flujo-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    padding: .22rem .6rem;
+    font-size: .72rem;
+    font-weight: 700;
+  }
+
+  .flujo-pill-success {
+    background: rgba(25, 135, 84, .12);
+    color: #198754;
+  }
+
+  .flujo-pill-danger {
+    background: rgba(220, 53, 69, .12);
+    color: #dc3545;
+  }
+
+  .flujo-pill-warning {
+    background: rgba(255, 193, 7, .22);
+    color: #8a6d00;
+  }
+
+  .flujo-pill-secondary {
+    background: rgba(108, 117, 125, .15);
+    color: #495057;
+  }
+
+  .flujo-table thead th {
+    white-space: nowrap;
+    font-size: .82rem;
+  }
+
+  .flujo-table td {
+    vertical-align: middle;
+  }
+
+  @media (max-width: 767.98px) {
+    .flujo-kpi-value {
+      font-size: 1.25rem;
+    }
+  }
+</style>
+
+<div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+  <div>
+    <div class="text-muted small">Selecciona mes y año para revisar el flujo y la facturación</div>
+  </div>
+
+  <form method="get" class="d-flex flex-wrap gap-2">
+    <div>
+      <label class="form-label mb-1 small">Año</label>
+      <input type="number" class="form-control" name="anio" value="{{ anio }}" min="2000" max="2100">
+    </div>
+
+    <div>
+      <label class="form-label mb-1 small">Mes</label>
+      <input type="number" class="form-control" name="mes" value="{{ mes }}" min="1" max="12">
+    </div>
+
+    <div class="d-grid" style="min-width:140px;">
+      <label class="form-label mb-1 small">&nbsp;</label>
+      <button class="btn btn-primary" type="submit">Aplicar</button>
+    </div>
+  </form>
+</div>
+
+<!-- ================= ACCESOS RÁPIDOS ================= -->
+<div class="card shadow-sm border-primary flujo-section-card mb-3">
+  <div class="card-body">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+      <div>
+        <div class="fw-bold mb-1">📊 Finanzas PRO</div>
+        <div class="text-muted small">
+          Exporta reportes, revisa recurrentes y controla la facturación del período.
+        </div>
+      </div>
+
+      <div class="d-flex flex-wrap gap-2">
+        <a
+          href="{% url 'reporte_ganancias' %}?fecha_inicio={{ primer_dia|date:'Y-m-d' }}&fecha_fin={{ ultimo_dia|date:'Y-m-d' }}"
+          class="btn btn-outline-primary"
+        >
+          Ver reporte
+        </a>
+
+        <a
+          href="{% url 'exportar_ganancias_excel' %}?fecha_inicio={{ fecha_inicio_reporte }}&fecha_fin={{ fecha_fin_reporte }}"
+          class="btn btn-success"
+        >
+          Excel
+        </a>
+
+        <a
+          href="{% url 'exportar_ganancias_pdf' %}?fecha_inicio={{ fecha_inicio_reporte }}&fecha_fin={{ fecha_fin_reporte }}"
+          class="btn btn-danger"
+        >
+          PDF
+        </a>
+
+        <a href="/dashboard/finanzas/recurrentes/" class="btn btn-outline-secondary">
+          ♻️ Recurrentes
+        </a>
+
+        <a href="{% url 'factura_list' %}" class="btn btn-primary">
+          🧾 Facturación
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= KPIs DEL MES ================= -->
+<div class="row g-3 mb-3">
+  <div class="col-12 col-md-4">
+    <div class="card shadow-sm flujo-card flujo-soft-success">
+      <div class="card-body">
+        <div class="flujo-kpi-label">Ingresos del mes</div>
+        <div class="flujo-kpi-value text-success">${{ resumen_mes_actual.ingresos|floatformat:2 }}</div>
+        <div class="small mt-2 {% if variacion_ingresos_mes >= 0 %}text-success{% else %}text-danger{% endif %}">
+          {% if variacion_ingresos_mes >= 0 %}▲{% else %}▼{% endif %}
+          {{ variacion_ingresos_mes|floatformat:2 }}% vs mes anterior
+        </div>
+        <div class="small text-muted">
+          Mes anterior: ${{ resumen_mes_anterior.ingresos|floatformat:2 }}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-md-4">
+    <div class="card shadow-sm flujo-card flujo-soft-danger">
+      <div class="card-body">
+        <div class="flujo-kpi-label">Egresos del mes</div>
+        <div class="flujo-kpi-value text-danger">${{ resumen_mes_actual.egresos|floatformat:2 }}</div>
+        <div class="small mt-2 {% if variacion_egresos_mes <= 0 %}text-success{% else %}text-danger{% endif %}">
+          {% if variacion_egresos_mes <= 0 %}▼{% else %}▲{% endif %}
+          {{ variacion_egresos_mes|floatformat:2 }}% vs mes anterior
+        </div>
+        <div class="small text-muted">
+          Mes anterior: ${{ resumen_mes_anterior.egresos|floatformat:2 }}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-md-4">
+    <div class="card shadow-sm flujo-card flujo-soft-primary">
+      <div class="card-body">
+        <div class="flujo-kpi-label">Balance del mes</div>
+        <div class="flujo-kpi-value {% if resumen_mes_actual.balance < 0 %}text-danger{% else %}text-primary{% endif %}">
+          ${{ resumen_mes_actual.balance|floatformat:2 }}
+        </div>
+        <div class="small mt-2 {% if variacion_balance_mes >= 0 %}text-success{% else %}text-danger{% endif %}">
+          {% if variacion_balance_mes >= 0 %}▲{% else %}▼{% endif %}
+          {{ variacion_balance_mes|floatformat:2 }}% vs mes anterior
+        </div>
+        <div class="small text-muted">
+          Mes anterior: ${{ resumen_mes_anterior.balance|floatformat:2 }}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= DESGLOSE DEL MES ================= -->
+<div class="row g-3 mb-3">
+  <div class="col-6 col-md-2">
+    <div class="card shadow-sm flujo-section-card h-100">
+      <div class="card-body">
+        <div class="flujo-kpi-label">Total ingresos</div>
+        <div class="flujo-kpi-value">${{ total_ingresos|floatformat:2 }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-6 col-md-2">
+    <div class="card shadow-sm flujo-section-card h-100 border-success">
+      <div class="card-body">
+        <div class="flujo-kpi-label">Ingresos manuales</div>
+        <div class="flujo-kpi-value text-success">${{ total_ingresos_manuales|floatformat:2 }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-6 col-md-2">
+    <div class="card shadow-sm flujo-section-card h-100 border-secondary">
+      <div class="card-body">
+        <div class="flujo-kpi-label">Ingresos automáticos</div>
+        <div class="flujo-kpi-value">${{ total_ingresos_automaticos|floatformat:2 }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-6 col-md-2">
+    <div class="card shadow-sm flujo-section-card h-100">
+      <div class="card-body">
+        <div class="flujo-kpi-label">Total egresos</div>
+        <div class="flujo-kpi-value text-danger">${{ total_egresos|floatformat:2 }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-6 col-md-2">
+    <div class="card shadow-sm flujo-section-card h-100 border-warning">
+      <div class="card-body">
+        <div class="flujo-kpi-label">Egresos manuales</div>
+        <div class="flujo-kpi-value text-warning">${{ total_egresos_manuales|floatformat:2 }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-6 col-md-2">
+    <div class="card shadow-sm flujo-section-card h-100 border-secondary">
+      <div class="card-body">
+        <div class="flujo-kpi-label">Egresos automáticos</div>
+        <div class="flujo-kpi-value">${{ total_egresos_automaticos|floatformat:2 }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= RESUMEN DEL DÍA ================= -->
+<div class="row g-3 mb-3">
+  <div class="col-12 col-md-3">
+    <div class="card shadow-sm flujo-card flujo-soft-success h-100">
+      <div class="card-body">
+        <div class="flujo-kpi-label">Ingresos del día</div>
+        <div class="flujo-kpi-value text-success">${{ total_ingresos_hoy|floatformat:2 }}</div>
+        <div class="small text-muted mt-2">
+          Manuales: ${{ total_ingresos_hoy_manuales|floatformat:2 }} · Automáticos: ${{ total_ingresos_hoy_automaticos|floatformat:2 }}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-md-3">
+    <div class="card shadow-sm flujo-card flujo-soft-danger h-100">
+      <div class="card-body">
+        <div class="flujo-kpi-label">Egresos del día</div>
+        <div class="flujo-kpi-value text-danger">${{ total_egresos_hoy|floatformat:2 }}</div>
+        <div class="small text-muted mt-2">
+          Manuales: ${{ total_egresos_hoy_manuales|floatformat:2 }} · Automáticos: ${{ total_egresos_hoy_automaticos|floatformat:2 }}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-md-3">
+    <div class="card shadow-sm flujo-card flujo-soft-primary h-100">
+      <div class="card-body">
+        <div class="flujo-kpi-label">Balance del día</div>
+        <div class="flujo-kpi-value {% if balance_hoy < 0 %}text-danger{% else %}text-primary{% endif %}">
+          ${{ balance_hoy|floatformat:2 }}
+        </div>
+        <div class="small text-muted mt-2">
+          Resumen diario dentro del módulo financiero.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-md-3">
+    <div class="card shadow-sm flujo-card flujo-soft-secondary h-100">
+      <div class="card-body">
+        <div class="flujo-kpi-label">Fecha actual</div>
+        <div class="flujo-kpi-value">{{ hoy|date:"d/m/Y" }}</div>
+        <div class="small text-muted mt-2">
+          Corte financiero visible para hoy.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= RECURRENTES + FACTURACIÓN ================= -->
+<div class="row g-3 mb-3">
+  <div class="col-12 col-xl-6">
+    <div class="card shadow-sm border-warning flujo-section-card h-100">
+      <div class="card-body">
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+          <div>
+            <div class="fw-bold mb-1">⏰ Recurrentes próximos</div>
+            <div class="text-muted small">Cobros o pagos programados para los próximos 3 días.</div>
+          </div>
+          <a href="/dashboard/finanzas/recurrentes/" class="btn btn-outline-warning btn-sm">
+            Administrar recurrentes
+          </a>
+        </div>
+
+        {% if recurrentes_proximos_3_dias %}
+          <div class="d-grid gap-2">
+            {% for mov in recurrentes_proximos_3_dias %}
+            <div class="flujo-item">
+              <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
+                <div>
+                  <div class="fw-semibold">{{ mov.concepto }}</div>
+                  <div class="small text-muted">
+                    {{ mov.proxima_fecha|date:"d/m/Y" }} · {{ mov.frecuencia|capfirst }}
+                  </div>
+                </div>
+
+                <div class="text-end">
+                  <div class="flujo-pill {% if mov.tipo == 'ingreso' %}flujo-pill-success{% else %}flujo-pill-danger{% endif %}">
+                    {{ mov.tipo|capfirst }}
+                  </div>
+                  <div class="fw-bold mt-1 {% if mov.tipo == 'ingreso' %}text-success{% else %}text-danger{% endif %}">
+                    ${{ mov.monto|floatformat:2 }}
+                  </div>
+                </div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="text-muted">No hay movimientos recurrentes próximos.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-xl-6">
+    <div class="card shadow-sm flujo-section-card h-100">
+      <div class="card-body">
+        <div class="fw-bold mb-3">🧾 Estado de facturación</div>
+
+        <div class="row g-2">
+          <div class="col-12 col-md-4">
+            <div class="flujo-mini-stat border-primary">
+              <div class="label">Facturación del mes</div>
+              <div class="value text-primary">${{ total_facturas_mes|default:0|floatformat:2 }}</div>
+              <div class="small text-muted mt-2">Emitido en el período actual.</div>
+            </div>
+          </div>
+
+          <div class="col-12 col-md-4">
+            <div class="flujo-mini-stat border-success">
+              <div class="label">Facturas pagadas</div>
+              <div class="value text-success">${{ total_facturas_pagadas_mes|default:0|floatformat:2 }}</div>
+              <div class="small text-muted mt-2">
+                {{ total_facturas_pagadas_count|default:0 }} pagada(s)
+              </div>
+            </div>
+          </div>
+
+          <div class="col-12 col-md-4">
+            <div class="flujo-mini-stat border-warning">
+              <div class="label">Pendiente por cobrar</div>
+              <div class="value text-warning">${{ total_facturas_pendientes_mes|default:0|floatformat:2 }}</div>
+              <div class="small mt-2">
+                <span class="text-danger fw-semibold">{{ total_facturas_vencidas|default:0 }}</span>
+                <span class="text-muted">vencida(s)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2 mt-3">
+          <form method="post" action="{% url 'factura_generar_mes' %}" class="d-flex flex-wrap gap-2">
+            {% csrf_token %}
+            <input type="hidden" name="anio" value="{{ anio }}">
+            <input type="hidden" name="mes" value="{{ mes }}">
+            <button class="btn btn-primary" type="submit">
+              🧾 Generar facturas de este mes
+            </button>
+          </form>
+
+          <a href="{% url 'factura_list' %}?periodo={{ anio }}-{% if mes < 10 %}0{% endif %}{{ mes }}" class="btn btn-outline-primary">
+            Ver facturas del período
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= BALANCE PRINCIPAL ================= -->
+<div class="card shadow-sm flujo-section-card mb-3">
+  <div class="card-body">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+      <div>
+        <div class="text-muted small">Balance general del período</div>
+        {% if balance >= 0 %}
+          <div class="flujo-kpi-value text-success">${{ balance|floatformat:2 }}</div>
+        {% else %}
+          <div class="flujo-kpi-value text-danger">${{ balance|floatformat:2 }}</div>
+        {% endif %}
+      </div>
+
+      <div class="small text-muted">
+        Período: {{ primer_dia|date:"d/m/Y" }} al {{ ultimo_dia|date:"d/m/Y" }}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= FORMULARIOS MANUALES ================= -->
+<div class="row g-3 mb-3">
+  <div class="col-12 col-xl-6">
+    <div class="card shadow-sm border-success flujo-section-card h-100">
+      <div class="card-body">
+        <div class="fw-bold mb-3">💵 Registrar ingreso manual</div>
+
+        <form method="post" action="/dashboard/finanzas/ingresos/manual/nuevo/" class="row g-2">
+          {% csrf_token %}
+          <input type="hidden" name="next" value="/dashboard/finanzas/flujo/?anio={{ anio }}&mes={{ mes }}">
+
+          <div class="col-12 col-md-7">
+            <label class="form-label small text-muted">Concepto</label>
+            <input
+              type="text"
+              name="concepto"
+              class="form-control"
+              placeholder="Ej: Pago cliente, servicio adicional, cobro pendiente"
+              required
+            >
+          </div>
+
+          <div class="col-6 col-md-2">
+            <label class="form-label small text-muted">Total</label>
+            <input
+              type="number"
+              step="0.01"
+              min="0.01"
+              name="total"
+              class="form-control"
+              required
+            >
+          </div>
+
+          <div class="col-6 col-md-2">
+            <label class="form-label small text-muted">Fecha</label>
+            <input
+              type="date"
+              name="fecha"
+              class="form-control"
+              value="{{ primer_dia|date:'Y-m-d' }}"
+              required
+            >
+          </div>
+
+          <div class="col-12 col-md-1 d-grid">
+            <label class="form-label small text-muted d-none d-md-block">&nbsp;</label>
+            <button class="btn btn-success" type="submit">Guardar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-xl-6">
+    <div class="card shadow-sm border-warning flujo-section-card h-100">
+      <div class="card-body">
+        <div class="fw-bold mb-3">🧾 Registrar egreso manual</div>
+
+        <form method="post" action="/dashboard/finanzas/egresos/manual/nuevo/" class="row g-2">
+          {% csrf_token %}
+          <input type="hidden" name="next" value="/dashboard/finanzas/flujo/?anio={{ anio }}&mes={{ mes }}">
+
+          <div class="col-12 col-md-4">
+            <label class="form-label small text-muted">Concepto</label>
+            <input
+              type="text"
+              name="concepto"
+              class="form-control"
+              placeholder="Ej: Gasolina, transporte, herramientas"
+              required
+            >
+          </div>
+
+          <div class="col-12 col-md-3">
+            <label class="form-label small text-muted">Categoría</label>
+            <input
+              type="text"
+              name="categoria"
+              class="form-control"
+              placeholder="Ej: Movilidad, compras, varios"
+            >
+          </div>
+
+          <div class="col-6 col-md-2">
+            <label class="form-label small text-muted">Total</label>
+            <input
+              type="number"
+              step="0.01"
+              min="0.01"
+              name="total"
+              class="form-control"
+              required
+            >
+          </div>
+
+          <div class="col-6 col-md-2">
+            <label class="form-label small text-muted">Fecha</label>
+            <input
+              type="date"
+              name="fecha"
+              class="form-control"
+              value="{{ primer_dia|date:'Y-m-d' }}"
+              required
+            >
+          </div>
+
+          <div class="col-12 col-md-1 d-grid">
+            <label class="form-label small text-muted d-none d-md-block">&nbsp;</label>
+            <button class="btn btn-warning text-dark" type="submit">Guardar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= TOPS DEL MES ================= -->
+<div class="row g-3 mb-3">
+  <div class="col-12 col-lg-6">
+    <div class="card shadow-sm flujo-section-card h-100">
+      <div class="card-body">
+        <div class="fw-bold mb-3">🏆 Top ingresos del mes</div>
+
+        {% if top_ingresos %}
+          <div class="d-grid gap-2">
+            {% for i in top_ingresos %}
+            <div class="flujo-item">
+              <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
+                <div>
+                  <div class="fw-semibold">{{ i.concepto }}</div>
+                  <div class="small text-muted">
+                    {{ i.fecha|date:"d/m/Y" }}
+                    {% if i in ingresos_manuales_qs %}
+                      · <span class="flujo-pill flujo-pill-success">Manual</span>
+                    {% else %}
+                      · <span class="flujo-pill flujo-pill-secondary">Automático</span>
+                    {% endif %}
+                  </div>
+                </div>
+                <div class="fw-bold text-success">${{ i.total|floatformat:2 }}</div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="text-muted">No hay ingresos registrados este mes.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-6">
+    <div class="card shadow-sm flujo-section-card h-100">
+      <div class="card-body">
+        <div class="fw-bold mb-3">💸 Top egresos del mes</div>
+
+        {% if top_egresos %}
+          <div class="d-grid gap-2">
+            {% for e in top_egresos %}
+            <div class="flujo-item">
+              <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
+                <div>
+                  <div class="fw-semibold">
+                    {% if e.insumo %}
+                      {{ e.insumo }}
+                    {% else %}
+                      {{ e.concepto|default:"Egreso" }}
+                    {% endif %}
+                  </div>
+                  <div class="small text-muted">
+                    {{ e.fecha|date:"d/m/Y" }}
+                    {% if e.mantenimiento %}
+                      · {{ e.mantenimiento.cliente }}
+                    {% endif %}
+                  </div>
+                </div>
+                <div class="fw-bold text-danger">${{ e.total|floatformat:2 }}</div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="text-muted">No hay egresos registrados este mes.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= BALANCE ACUMULADO ================= -->
+<div class="card shadow-sm flujo-section-card mb-3">
+  <div class="card-body">
+    <div class="fw-bold mb-3">📈 Balance acumulado del mes</div>
+
+    {% if resumen_diario %}
+      <div class="table-responsive">
+        <table class="table table-sm table-striped mb-0 align-middle flujo-table">
+          <thead>
+            <tr>
+              <th>Día</th>
+              <th class="text-end">Ingresos</th>
+              <th class="text-end">Egresos</th>
+              <th class="text-end">Balance acumulado</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for fila in resumen_diario %}
+            <tr>
+              <td>{{ fila.dia }}</td>
+              <td class="text-end">${{ fila.ingresos|floatformat:2 }}</td>
+              <td class="text-end">${{ fila.egresos|floatformat:2 }}</td>
+              <td class="text-end {% if fila.balance_acumulado < 0 %}text-danger{% else %}text-success{% endif %}">
+                ${{ fila.balance_acumulado|floatformat:2 }}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="text-muted">No hay datos diarios disponibles.</div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ================= DETALLE DEL MES ================= -->
+<div class="card shadow-sm flujo-section-card mb-3">
+  <div class="card-body">
+    <div class="fw-bold mb-3">📅 Detalle del mes</div>
+
+    <div class="row g-3">
+      <div class="col-12 col-lg-6">
+        <div class="fw-semibold mb-2">Ingresos</div>
+        {% if ingresos_qs %}
+          <div class="table-responsive">
+            <table class="table table-sm table-striped mb-0 align-middle flujo-table">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Concepto</th>
+                  <th>Tipo</th>
+                  <th class="text-end">Total</th>
+                  <th class="text-end">Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for i in ingresos_qs %}
+                <tr>
+                  <td>{{ i.fecha|date:"d/m/Y" }}</td>
+                  <td>{{ i.concepto }}</td>
+                  <td>
+                    {% if i in ingresos_manuales_qs %}
+                      <span class="flujo-pill flujo-pill-success">Manual</span>
+                    {% else %}
+                      <span class="flujo-pill flujo-pill-secondary">Automático</span>
+                    {% endif %}
+                  </td>
+                  <td class="text-end">${{ i.total|floatformat:2 }}</td>
+                  <td class="text-end">
+                    {% if i in ingresos_manuales_qs %}
+                      <form method="post" action="/dashboard/finanzas/ingresos/manual/{{ i.id }}/eliminar/" onsubmit="return confirm('¿Eliminar este ingreso manual?');">
+                        {% csrf_token %}
+                        <button class="btn btn-outline-danger btn-sm" type="submit">Eliminar</button>
+                      </form>
+                    {% else %}
+                      <span class="text-muted small">—</span>
+                    {% endif %}
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <div class="text-muted">No hay ingresos en este mes.</div>
+        {% endif %}
+      </div>
+
+      <div class="col-12 col-lg-6">
+        <div class="fw-semibold mb-2">Egresos</div>
+        {% if egresos_qs %}
+          <div class="table-responsive">
+            <table class="table table-sm table-striped mb-0 align-middle flujo-table">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Detalle</th>
+                  <th>Tipo</th>
+                  <th class="text-end">Total</th>
+                  <th class="text-end">Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for e in egresos_qs %}
+                <tr>
+                  <td>{{ e.fecha|date:"d/m/Y" }}</td>
+                  <td>
+                    {% if e in egresos_manuales_qs %}
+                      <div class="fw-semibold">{{ e.concepto }}</div>
+                      {% if e.categoria %}
+                        <div class="small text-muted">{{ e.categoria }}</div>
+                      {% endif %}
+                    {% else %}
+                      <div class="fw-semibold">{{ e.insumo }}</div>
+                      {% if e.mantenimiento %}
+                        <div class="small text-muted">
+                          Mant.: {{ e.mantenimiento.cliente }} - {{ e.mantenimiento.fecha|date:"d/m/Y" }}
+                        </div>
+                      {% endif %}
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if e in egresos_manuales_qs %}
+                      <span class="flujo-pill flujo-pill-warning">Manual</span>
+                    {% else %}
+                      <span class="flujo-pill flujo-pill-secondary">Automático</span>
+                    {% endif %}
+                  </td>
+                  <td class="text-end">${{ e.total|floatformat:2 }}</td>
+                  <td class="text-end">
+                    {% if e in egresos_manuales_qs %}
+                      <form method="post" action="/dashboard/finanzas/egresos/manual/{{ e.id }}/eliminar/" onsubmit="return confirm('¿Eliminar este egreso manual?');">
+                        {% csrf_token %}
+                        <button class="btn btn-outline-danger btn-sm" type="submit">Eliminar</button>
+                      </form>
+                    {% else %}
+                      <span class="text-muted small">—</span>
+                    {% endif %}
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <div class="text-muted">No hay egresos en este mes.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

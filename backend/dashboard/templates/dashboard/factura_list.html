@@ -1,0 +1,79 @@
+{% extends "dashboard/base_admin.html" %}
+
+{% block title %}Facturas{% endblock %}
+{% block top_title %}🧾 Facturas{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+      <div>
+        <h4 class="mb-1">Listado de facturas</h4>
+        <div class="text-muted small">Panel de facturación automática</div>
+      </div>
+
+      <a href="/dashboard/finanzas/flujo/" class="btn btn-outline-secondary btn-sm">
+        Volver a flujo mensual
+      </a>
+    </div>
+
+    <div class="row g-2 mb-3">
+      <div class="col-12 col-md-4">
+        <div class="border rounded p-3 bg-light">
+          <div class="text-muted small">Total facturado</div>
+          <div class="fs-4 fw-bold">${{ total_facturado|floatformat:2 }}</div>
+        </div>
+      </div>
+
+      <div class="col-12 col-md-4">
+        <div class="border rounded p-3 bg-light">
+          <div class="text-muted small">Total pagado</div>
+          <div class="fs-4 fw-bold text-success">${{ total_pagado|floatformat:2 }}</div>
+        </div>
+      </div>
+
+      <div class="col-12 col-md-4">
+        <div class="border rounded p-3 bg-light">
+          <div class="text-muted small">Total pendiente</div>
+          <div class="fs-4 fw-bold text-warning">${{ total_pendiente|floatformat:2 }}</div>
+        </div>
+      </div>
+    </div>
+
+    {% if facturas %}
+      <div class="table-responsive">
+        <table class="table table-sm table-striped align-middle">
+          <thead>
+            <tr>
+              <th>Número</th>
+              <th>Período</th>
+              <th>Total</th>
+              <th>Estado</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for factura in facturas %}
+              <tr>
+                <td>{{ factura.numero }}</td>
+                <td>{{ factura.periodo_label }}</td>
+                <td>${{ factura.total|floatformat:2 }}</td>
+                <td>{{ factura.estado }}</td>
+                <td>
+                  <a href="{% url 'factura_detalle' factura.pk %}" class="btn btn-sm btn-outline-primary">
+                    Ver
+                  </a>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="alert alert-light border mb-0">
+        No hay facturas registradas todavía.
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

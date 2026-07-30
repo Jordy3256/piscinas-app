@@ -1,0 +1,85 @@
+{% extends "dashboard/base_admin.html" %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="mb-4">
+        <h2 class="mb-1">
+            {% if modo == "editar" %}
+                Editar movimiento recurrente
+            {% else %}
+                Eliminar movimiento recurrente
+            {% endif %}
+        </h2>
+        <p class="text-muted mb-0">
+            {% if modo == "editar" %}
+                Actualiza los datos del movimiento recurrente.
+            {% else %}
+                Confirma si deseas eliminar este movimiento.
+            {% endif %}
+        </p>
+    </div>
+
+    <div class="card shadow-sm border-0">
+        <div class="card-body">
+            {% if modo == "editar" %}
+            <form method="post" class="row g-3">
+                {% csrf_token %}
+
+                <div class="col-md-3">
+                    <label class="form-label">Tipo</label>
+                    <select name="tipo" class="form-select" required>
+                        <option value="ingreso" {% if movimiento.tipo == "ingreso" %}selected{% endif %}>Ingreso</option>
+                        <option value="egreso" {% if movimiento.tipo == "egreso" %}selected{% endif %}>Egreso</option>
+                    </select>
+                </div>
+
+                <div class="col-md-5">
+                    <label class="form-label">Concepto</label>
+                    <input type="text" name="concepto" class="form-control" value="{{ movimiento.concepto }}" required>
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Monto</label>
+                    <input type="number" step="0.01" min="0.01" name="monto" class="form-control" value="{{ movimiento.monto }}" required>
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Frecuencia</label>
+                    <select name="frecuencia" class="form-select" required>
+                        <option value="mensual" {% if movimiento.frecuencia == "mensual" %}selected{% endif %}>Mensual</option>
+                        <option value="semanal" {% if movimiento.frecuencia == "semanal" %}selected{% endif %}>Semanal</option>
+                    </select>
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Próxima fecha</label>
+                    <input type="date" name="proxima_fecha" class="form-control" value="{{ movimiento.proxima_fecha|date:'Y-m-d' }}" required>
+                </div>
+
+                <div class="col-md-4 d-flex align-items-end">
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" name="activo" id="activo" {% if movimiento.activo %}checked{% endif %}>
+                        <label class="form-check-label" for="activo">Activo</label>
+                    </div>
+                </div>
+
+                <div class="col-12">
+                    <button class="btn btn-primary">Guardar cambios</button>
+                    <a href="{% url 'movimientos_recurrentes' %}" class="btn btn-outline-secondary">Volver</a>
+                </div>
+            </form>
+            {% else %}
+            <form method="post">
+                {% csrf_token %}
+                <div class="alert alert-warning">
+                    Vas a eliminar el movimiento recurrente:
+                    <strong>{{ movimiento.concepto }}</strong> — ${{ movimiento.monto }}
+                </div>
+                <button class="btn btn-danger">Sí, eliminar</button>
+                <a href="{% url 'movimientos_recurrentes' %}" class="btn btn-outline-secondary">Cancelar</a>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

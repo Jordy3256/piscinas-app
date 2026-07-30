@@ -37,6 +37,7 @@ from .views import (
     contrato_crear_view,
     contrato_editar_view,
     contrato_detalle_view,
+    contrato_regenerar_programacion_view,
     contrato_toggle_view,
 
     # Mantenimientos
@@ -236,6 +237,11 @@ urlpatterns = [
         "contratos/<int:pk>/editar/",
         contrato_editar_view,
         name="contrato_editar",
+    ),
+    path(
+        "contratos/<int:pk>/regenerar-programacion/",
+        contrato_regenerar_programacion_view,
+        name="contrato_regenerar_programacion",
     ),
     path(
         "contratos/<int:pk>/toggle/",

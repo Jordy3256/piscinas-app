@@ -55,8 +55,15 @@
   .contract-form-page .cf-note{
     border:1px solid #ccfbf1;background:#f0fdfa;color:#115e59;border-radius:14px;padding:14px;font-size:.88rem
   }
+  .contract-form-page .cf-days{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+  .contract-form-page .cf-day{position:relative}
+  .contract-form-page .cf-day input{position:absolute;opacity:0;pointer-events:none}
+  .contract-form-page .cf-day label{display:flex;align-items:center;justify-content:center;min-height:46px;padding:8px;border:1px solid #dbe3ec;border-radius:13px;background:#fff;font-weight:750;color:#475569;cursor:pointer;transition:.18s}
+  .contract-form-page .cf-day input:checked+label{background:#0f766e;border-color:#0f766e;color:#fff;box-shadow:0 8px 18px rgba(15,118,110,.18)}
+  .contract-form-page .cf-day input:focus-visible+label{outline:3px solid rgba(20,184,166,.22)}
+  .contract-form-page .cf-auto-status{border-radius:14px;padding:14px;background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;font-size:.88rem}
   @media(max-width:991.98px){.contract-form-page .cf-side-card{position:static}}
-  @media(max-width:767.98px){.contract-form-page .cf-hero{padding:22px}.contract-form-page .cf-card-body{padding:17px}}
+  @media(max-width:767.98px){.contract-form-page .cf-hero{padding:22px}.contract-form-page .cf-card-body{padding:17px}.contract-form-page .cf-days{grid-template-columns:repeat(2,minmax(0,1fr))}}
 </style>
 {% endblock %}
 
@@ -123,6 +130,46 @@
           </div>
         </div>
 
+        <div class="cf-card mb-3" id="programacion-operativa-card">
+          <div class="cf-card-header">
+            <div class="cf-card-title">🧑‍🔧 Programación operativa</div>
+            <div class="cf-card-subtitle">Asigna el técnico y los días fijos. El sistema creará automáticamente un mes completo de visitas.</div>
+          </div>
+          <div class="cf-card-body">
+            <div class="row g-3">
+              <div class="col-12">
+                <label for="tecnico_designado" class="form-label">Técnico designado <span class="text-danger auto-required">*</span></label>
+                <select id="tecnico_designado" name="tecnico_designado" class="form-select">
+                  <option value="">Selecciona un técnico</option>
+                  {% for trabajador in trabajadores %}
+                    <option value="{{ trabajador.id }}" {% if datos_formulario.tecnico_id|stringformat:"s" == trabajador.id|stringformat:"s" %}selected{% endif %}>{{ trabajador }}</option>
+                  {% endfor %}
+                </select>
+                <div class="form-text">Todas las visitas automáticas quedarán asignadas directamente a este técnico.</div>
+              </div>
+
+              <div class="col-12" id="dias-visita-container">
+                <label class="form-label">Días de visita <span class="text-danger auto-required">*</span></label>
+                <div class="cf-days">
+                  {% for numero, nombre in dias_semana %}
+                    <div class="cf-day">
+                      <input type="checkbox" id="dia_{{ numero }}" name="dias_visita" value="{{ numero }}" {% if numero in datos_formulario.dias_visita %}checked{% endif %}>
+                      <label for="dia_{{ numero }}">{{ nombre }}</label>
+                    </div>
+                  {% endfor %}
+                </div>
+                <div class="form-text mt-2" id="dias-ayuda">Selecciona la frecuencia para conocer cuántos días debes marcar.</div>
+              </div>
+
+              <div class="col-12">
+                <div class="cf-auto-status">
+                  <strong>Automatización mensual:</strong> al guardar, se generarán las visitas desde la fecha de inicio hasta la misma fecha del mes siguiente. Cada día el sistema podrá completar nuevamente el horizonte de un mes sin duplicar registros.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="cf-card mb-3">
           <div class="cf-card-header">
             <div class="cf-card-title">💳 Forma de pago</div>
@@ -170,7 +217,11 @@
                 <input class="form-check-input" type="checkbox" role="switch" id="activo" name="activo" {% if datos_formulario.activo %}checked{% endif %}>
                 <label class="form-check-label fw-semibold ms-2" for="activo">Contrato activo</label>
               </div>
-              <div class="cf-note mt-3">Los contratos inactivos se conservan en el historial, pero se identifican como suspendidos o finalizados.</div>
+              <div class="form-check form-switch mt-3">
+                <input class="form-check-input" type="checkbox" role="switch" id="generacion_automatica" name="generacion_automatica" {% if datos_formulario.generacion_automatica %}checked{% endif %}>
+                <label class="form-check-label fw-semibold ms-2" for="generacion_automatica">Generar mantenimientos automáticamente</label>
+              </div>
+              <div class="cf-note mt-3">Al desactivar el contrato o la automatización, se retirarán únicamente las visitas futuras automáticas pendientes. El historial y los mantenimientos manuales se conservarán.</div>
             </div>
           </div>
 
@@ -206,6 +257,10 @@
     const formaPagoInput = document.getElementById("forma_pago_personalizada");
     const formulario = document.getElementById("contrato-form");
     const botonGuardar = document.getElementById("guardar-contrato");
+    const tecnicoSelect = document.getElementById("tecnico_designado");
+    const generacionAutomatica = document.getElementById("generacion_automatica");
+    const diasChecks = Array.from(document.querySelectorAll('input[name="dias_visita"]'));
+    const diasAyuda = document.getElementById("dias-ayuda");
 
     function actualizarFrecuenciaPersonalizada() {
       const esPersonalizada = frecuenciaSelect && frecuenciaSelect.value === "personalizado";
@@ -225,14 +280,45 @@
       }
     }
 
-    if (frecuenciaSelect) frecuenciaSelect.addEventListener("change", actualizarFrecuenciaPersonalizada);
+    function actualizarProgramacion() {
+      const frecuencia = frecuenciaSelect ? frecuenciaSelect.value : "";
+      const automatica = generacionAutomatica ? generacionAutomatica.checked : false;
+      const cantidades = {"1_semanal":1,"2_semanales":2,"3_semanales":3,"quincenal":1};
+      const cantidad = cantidades[frecuencia];
+      const personalizada = frecuencia === "personalizado";
+
+      if (tecnicoSelect) tecnicoSelect.required = automatica && !personalizada;
+      diasChecks.forEach((check) => { check.disabled = personalizada || !automatica; });
+
+      if (diasAyuda) {
+        if (personalizada) diasAyuda.textContent = "La frecuencia personalizada requiere programación manual.";
+        else if (!automatica) diasAyuda.textContent = "La generación automática está desactivada.";
+        else if (cantidad === 1) diasAyuda.textContent = "Selecciona exactamente 1 día de visita.";
+        else if (cantidad) diasAyuda.textContent = `Selecciona exactamente ${cantidad} días de visita.`;
+        else diasAyuda.textContent = "Selecciona la frecuencia para configurar los días.";
+      }
+    }
+
+    if (frecuenciaSelect) frecuenciaSelect.addEventListener("change", function(){ actualizarFrecuenciaPersonalizada(); actualizarProgramacion(); });
     if (formaPagoSelect) formaPagoSelect.addEventListener("change", actualizarFormaPagoPersonalizada);
+    if (generacionAutomatica) generacionAutomatica.addEventListener("change", actualizarProgramacion);
 
     actualizarFrecuenciaPersonalizada();
     actualizarFormaPagoPersonalizada();
+    actualizarProgramacion();
 
     if (formulario && botonGuardar) {
-      formulario.addEventListener("submit", function () {
+      formulario.addEventListener("submit", function (event) {
+        const frecuencia = frecuenciaSelect ? frecuenciaSelect.value : "";
+        const automatica = generacionAutomatica ? generacionAutomatica.checked : false;
+        const cantidades = {"1_semanal":1,"2_semanales":2,"3_semanales":3,"quincenal":1};
+        const esperados = cantidades[frecuencia];
+        const seleccionados = diasChecks.filter((check) => check.checked).length;
+        if (automatica && esperados && seleccionados !== esperados) {
+          event.preventDefault();
+          alert(`Debes seleccionar exactamente ${esperados} ${esperados === 1 ? "día" : "días"} de visita.`);
+          return;
+        }
         if (!formulario.checkValidity()) return;
         botonGuardar.disabled = true;
         botonGuardar.textContent = "Guardando...";

@@ -1,6 +1,7 @@
 from django.db import models
 
 from clientes.models import Cliente
+from trabajadores.models import Trabajador
 
 
 class Contrato(models.Model):
@@ -78,6 +79,30 @@ class Contrato(models.Model):
 
     fecha_inicio = models.DateField()
 
+    tecnico_designado = models.ForeignKey(
+        Trabajador,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="contratos_designados",
+    )
+
+    dias_visita = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Días de visita representados de 0 (lunes) a 6 (domingo).",
+    )
+
+    generacion_automatica = models.BooleanField(
+        default=True,
+        help_text="Genera automáticamente un mes de mantenimientos futuros.",
+    )
+
+    programado_hasta = models.DateField(
+        null=True,
+        blank=True,
+    )
+
     activo = models.BooleanField(
         default=True,
     )
@@ -123,6 +148,28 @@ class Contrato(models.Model):
         return "Sin definir"
 
     forma_pago_completa.short_description = "Forma de pago"
+
+    def dias_visita_completos(self):
+        nombres = {
+            0: "Lunes",
+            1: "Martes",
+            2: "Miércoles",
+            3: "Jueves",
+            4: "Viernes",
+            5: "Sábado",
+            6: "Domingo",
+        }
+        dias = []
+        for valor in self.dias_visita or []:
+            try:
+                numero = int(valor)
+            except (TypeError, ValueError):
+                continue
+            if numero in nombres and numero not in dias:
+                dias.append(numero)
+        return ", ".join(nombres[dia] for dia in sorted(dias)) or "Sin definir"
+
+    dias_visita_completos.short_description = "Días de visita"
 
     def sincronizar_tipo_compatibilidad(self):
         """

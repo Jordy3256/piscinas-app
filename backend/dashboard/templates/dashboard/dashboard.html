@@ -1,0 +1,971 @@
+{% extends "dashboard/base_admin.html" %}
+
+{% block title %}Dashboard Admin{% endblock %}
+{% block top_title %}📊 Dashboard (Admin){% endblock %}
+
+{% block content %}
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+  .dashboard-page {
+    --dash-primary: #0b5ed7;
+    --dash-aqua: #00a6c7;
+    --dash-success: #198754;
+    --dash-danger: #dc3545;
+    --dash-warning: #f59e0b;
+    --dash-dark: #152238;
+    --dash-muted: #6f7b8a;
+    --dash-border: #e6ebf2;
+  }
+
+  .dashboard-hero {
+    position: relative;
+    margin-bottom: 1rem;
+    padding: 1.55rem;
+    border: 1px solid rgba(11, 94, 215, .13);
+    border-radius: 23px;
+    background:
+      radial-gradient(circle at 90% 15%, rgba(0, 166, 199, .18), transparent 16rem),
+      linear-gradient(135deg, #ffffff, #f3f8ff 58%, #eefbff);
+    box-shadow: 0 14px 34px rgba(21, 34, 56, .08);
+    overflow: hidden;
+  }
+
+  .dashboard-hero::after {
+    content: "";
+    position: absolute;
+    width: 150px;
+    height: 150px;
+    right: -55px;
+    bottom: -75px;
+    border-radius: 50%;
+    background: rgba(11, 94, 215, .07);
+  }
+
+  .dashboard-hero-content { position: relative; z-index: 1; }
+
+  .dashboard-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: .45rem;
+    margin-bottom: .65rem;
+    padding: .4rem .68rem;
+    border-radius: 999px;
+    background: rgba(11, 94, 215, .08);
+    color: var(--dash-primary);
+    font-size: .73rem;
+    font-weight: 850;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+  }
+
+  .dashboard-title {
+    margin: 0;
+    color: var(--dash-dark);
+    font-size: clamp(1.55rem, 3vw, 2.15rem);
+    font-weight: 850;
+    letter-spacing: -.04em;
+  }
+
+  .dashboard-subtitle {
+    max-width: 760px;
+    margin: .45rem 0 0;
+    color: var(--dash-muted);
+    font-size: .92rem;
+    line-height: 1.6;
+  }
+
+  .dashboard-kpi-card {
+    position: relative;
+    min-height: 152px;
+    border: 1px solid var(--dash-border) !important;
+    border-radius: 19px !important;
+    background: #fff;
+    box-shadow: 0 8px 24px rgba(21, 34, 56, .07);
+    overflow: hidden;
+    transition: all .22s ease;
+  }
+
+  .dashboard-kpi-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 16px 34px rgba(21, 34, 56, .12);
+  }
+
+  .dashboard-kpi-card::after {
+    content: "";
+    position: absolute;
+    width: 86px;
+    height: 86px;
+    right: -34px;
+    bottom: -34px;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: .07;
+  }
+
+  .dashboard-kpi-card .card-body {
+    position: relative;
+    z-index: 1;
+    padding: 1.15rem;
+  }
+
+  .dashboard-kpi-label {
+    margin-bottom: .35rem;
+    color: var(--dash-muted);
+    font-size: .78rem;
+    font-weight: 750;
+    letter-spacing: .025em;
+    text-transform: uppercase;
+  }
+
+  .dashboard-kpi-value {
+    color: var(--dash-dark);
+    font-size: clamp(1.35rem, 3vw, 1.85rem);
+    font-weight: 850;
+    letter-spacing: -.035em;
+    line-height: 1.05;
+  }
+
+  .dashboard-section-card {
+    border: 1px solid var(--dash-border) !important;
+    border-radius: 20px !important;
+    background: rgba(255,255,255,.98);
+    box-shadow: 0 8px 24px rgba(21, 34, 56, .065);
+  }
+
+  .dashboard-section-card .card-body { padding: 1.2rem; }
+
+  .dashboard-mini-stat {
+    height: 100%;
+    padding: .95rem;
+    border: 1px solid var(--dash-border);
+    border-radius: 15px;
+    background: linear-gradient(145deg, #fff, #fafcff);
+    transition: all .2s ease;
+  }
+
+  .dashboard-mini-stat:hover {
+    transform: translateY(-2px);
+    border-color: rgba(11, 94, 215, .18);
+    box-shadow: 0 8px 20px rgba(21, 34, 56, .07);
+  }
+
+  .dashboard-mini-stat .label {
+    margin-bottom: .22rem;
+    color: var(--dash-muted);
+    font-size: .76rem;
+    font-weight: 700;
+  }
+
+  .dashboard-mini-stat .value {
+    color: var(--dash-dark);
+    font-size: 1.2rem;
+    font-weight: 850;
+    letter-spacing: -.025em;
+  }
+
+  .dashboard-list-item,
+  .dashboard-activity-item {
+    padding: .88rem .95rem;
+    border: 1px solid var(--dash-border);
+    border-radius: 14px;
+    background: #fff;
+    transition: all .18s ease;
+  }
+
+  .dashboard-list-item:hover,
+  .dashboard-activity-item:hover {
+    transform: translateX(3px);
+    border-color: rgba(11, 94, 215, .17);
+    background: rgba(11, 94, 215, .025);
+  }
+
+  .dashboard-ranking-badge {
+    min-width: 36px;
+    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(11, 94, 215, .12);
+    border-radius: 12px;
+    color: var(--dash-primary);
+    background: rgba(11, 94, 215, .08);
+    font-weight: 850;
+  }
+
+  .dashboard-chart-wrap {
+    position: relative;
+    min-height: 320px;
+    padding: .45rem;
+    border: 1px solid var(--dash-border);
+    border-radius: 16px;
+    background: linear-gradient(145deg, #fff, #fbfcfe);
+  }
+
+  .dashboard-chart-wrap canvas {
+    width: 100% !important;
+    height: 305px !important;
+  }
+
+  .dashboard-soft-success { color: var(--dash-success); background: linear-gradient(145deg, rgba(25,135,84,.10), rgba(255,255,255,.96)); }
+  .dashboard-soft-danger { color: var(--dash-danger); background: linear-gradient(145deg, rgba(220,53,69,.09), rgba(255,255,255,.96)); }
+  .dashboard-soft-warning { color: var(--dash-warning); background: linear-gradient(145deg, rgba(245,158,11,.11), rgba(255,255,255,.96)); }
+  .dashboard-soft-primary { color: var(--dash-primary); background: linear-gradient(145deg, rgba(11,94,215,.09), rgba(255,255,255,.96)); }
+  .dashboard-soft-info { color: var(--dash-aqua); background: linear-gradient(145deg, rgba(0,166,199,.10), rgba(255,255,255,.96)); }
+
+  .dashboard-section-card .badge { padding: .55em .75em; border-radius: 999px; }
+
+  @media (max-width: 767.98px) {
+    .dashboard-hero { padding: 1.25rem; border-radius: 19px; }
+    .dashboard-title { font-size: 1.6rem; }
+    .dashboard-subtitle { font-size: .86rem; }
+    .dashboard-section-card .card-body { padding: 1rem; }
+    .dashboard-kpi-card { min-height: 142px; }
+    .dashboard-kpi-value { font-size: 1.35rem; }
+    .dashboard-chart-wrap,
+    .dashboard-chart-wrap canvas {
+      min-height: 265px;
+      height: 265px !important;
+    }
+  }
+</style>
+
+
+<div class="dashboard-page">
+
+  <section class="dashboard-hero">
+    <div class="dashboard-hero-content">
+      <div class="dashboard-eyebrow">📊 Inteligencia administrativa</div>
+      <h1 class="dashboard-title">Dashboard general de JVAQUA</h1>
+      <p class="dashboard-subtitle">
+        Consulta en tiempo real el comportamiento financiero, operativo y comercial
+        para tomar decisiones con mayor claridad.
+      </p>
+    </div>
+  </section>
+
+<!-- ================= KPIs PRINCIPALES ================= -->
+<div class="row g-3 mb-3">
+  <div class="col-6 col-md-3">
+    <div class="card shadow-sm dashboard-kpi-card dashboard-soft-success">
+      <div class="card-body">
+        <div class="dashboard-kpi-label">Ingresos del mes</div>
+        <div class="dashboard-kpi-value text-success">${{ resumen_mes_actual.ingresos|floatformat:2 }}</div>
+        <div class="small mt-2 text-{{ estado_variacion_ingresos_mes }}">
+          {{ tendencia_ingresos_mes }} {{ variacion_ingresos_mes }}% vs mes anterior
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-6 col-md-3">
+    <div class="card shadow-sm dashboard-kpi-card dashboard-soft-danger">
+      <div class="card-body">
+        <div class="dashboard-kpi-label">Egresos del mes</div>
+        <div class="dashboard-kpi-value text-danger">${{ resumen_mes_actual.egresos|floatformat:2 }}</div>
+        <div class="small mt-2 text-{{ estado_variacion_egresos_mes }}">
+          {{ tendencia_egresos_mes }} {{ variacion_egresos_mes }}% vs mes anterior
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-6 col-md-3">
+    <div class="card shadow-sm dashboard-kpi-card dashboard-soft-primary">
+      <div class="card-body">
+        <div class="dashboard-kpi-label">Balance del mes</div>
+        <div class="dashboard-kpi-value text-primary">${{ resumen_mes_actual.balance|floatformat:2 }}</div>
+        <div class="small mt-2 text-{{ estado_variacion_balance_mes }}">
+          {{ tendencia_balance_mes }} {{ variacion_balance_mes }}% vs mes anterior
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-6 col-md-3">
+    <div class="card shadow-sm dashboard-kpi-card dashboard-soft-info">
+      <div class="card-body">
+        <div class="dashboard-kpi-label">Ticket promedio</div>
+        <div class="dashboard-kpi-value text-dark">${{ kpi_ticket_promedio_mes|floatformat:2 }}</div>
+        <div class="small mt-2 text-muted">
+          {{ kpi_ingresos_mes_count }} ingreso{{ kpi_ingresos_mes_count|pluralize }} registrado{{ kpi_ingresos_mes_count|pluralize }}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= ALERTAS + RESUMEN HOY ================= -->
+<div class="row g-3 mb-3">
+
+  <div class="col-lg-5">
+    {% if hay_alertas_operativas %}
+    <div class="card shadow-sm border-danger dashboard-section-card h-100">
+      <div class="card-body">
+        <div class="fw-bold text-danger mb-2">⚠ Alertas operativas</div>
+
+        <div class="d-flex gap-2 flex-wrap mb-3">
+          {% if total_atrasados > 0 %}
+          <span class="badge bg-danger">{{ total_atrasados }} atrasados</span>
+          {% endif %}
+
+          {% if total_pendientes_sin_asignar > 0 %}
+          <span class="badge bg-warning text-dark">
+            {{ total_pendientes_sin_asignar }} sin asignar
+          </span>
+          {% endif %}
+
+          {% if total_atrasados_sin_asignar > 0 %}
+          <span class="badge bg-dark">
+            {{ total_atrasados_sin_asignar }} atrasados sin asignar
+          </span>
+          {% endif %}
+        </div>
+
+        {% if requiere_atencion_items %}
+          <div class="d-grid gap-2">
+            {% for m in requiere_atencion_items %}
+            <div class="dashboard-list-item">
+              <div class="fw-semibold">{{ m.cliente }}</div>
+              <div class="small text-muted">
+                {{ m.fecha|date:"d/m/Y" }}
+                {% if m.es_atrasado %} · Atrasado{% endif %}
+                {% if m.sin_asignar %} · Sin asignar{% endif %}
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        {% endif %}
+
+        <a href="/dashboard/operativo/?filtro=urgentes" class="btn btn-danger btn-sm mt-3">
+          Ir al operativo
+        </a>
+      </div>
+    </div>
+    {% else %}
+    <div class="card shadow-sm dashboard-section-card h-100">
+      <div class="card-body">
+        <div class="fw-bold mb-2">✅ Operación bajo control</div>
+        <div class="text-muted">
+          No hay alertas operativas críticas en este momento.
+        </div>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="col-lg-7">
+    <div class="card shadow-sm dashboard-section-card h-100">
+      <div class="card-body">
+        <div class="fw-bold mb-3">🚀 Rendimiento del día</div>
+
+        <div class="row g-2">
+          <div class="col-6 col-md-3">
+            <div class="dashboard-mini-stat">
+              <div class="label">Mantenimientos</div>
+              <div class="value">{{ total_mantenimientos_hoy }}</div>
+            </div>
+          </div>
+
+          <div class="col-6 col-md-3">
+            <div class="dashboard-mini-stat">
+              <div class="label">Realizados</div>
+              <div class="value text-success">{{ realizados_hoy }}</div>
+            </div>
+          </div>
+
+          <div class="col-6 col-md-3">
+            <div class="dashboard-mini-stat">
+              <div class="label">Pendientes</div>
+              <div class="value text-warning">{{ pendientes_hoy }}</div>
+            </div>
+          </div>
+
+          <div class="col-6 col-md-3">
+            <div class="dashboard-mini-stat">
+              <div class="label">Trabajadores</div>
+              <div class="value">{{ trabajadores_activos_hoy }}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row g-2 mt-1">
+          <div class="col-md-4">
+            <div class="dashboard-mini-stat">
+              <div class="label">Cumplimiento hoy</div>
+              <div class="value text-{{ rendimiento_estado_clase }}">{{ cumplimiento_hoy }}%</div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="dashboard-mini-stat">
+              <div class="label">Ingresos hoy</div>
+              <div class="value text-success">${{ ingresos_hoy|floatformat:2 }}</div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="dashboard-mini-stat">
+              <div class="label">Balance hoy</div>
+              <div class="value {% if balance_hoy >= 0 %}text-primary{% else %}text-danger{% endif %}">
+                ${{ balance_hoy|floatformat:2 }}
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ================= ANALÍTICA PRO ================= -->
+<div class="card shadow-sm dashboard-section-card mb-3">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+      <div class="fw-bold">📈 Analítica PRO del mes</div>
+      <div class="small text-muted">
+        Comparativo con el mes anterior
+      </div>
+    </div>
+
+    <div class="row g-2">
+      <div class="col-6 col-md-3">
+        <div class="dashboard-mini-stat">
+          <div class="label">Clientes activos</div>
+          <div class="value">{{ kpi_clientes_activos_mes }}</div>
+        </div>
+      </div>
+
+      <div class="col-6 col-md-3">
+        <div class="dashboard-mini-stat">
+          <div class="label">Total mantenimientos</div>
+          <div class="value">{{ kpi_total_mantenimientos_mes }}</div>
+        </div>
+      </div>
+
+      <div class="col-6 col-md-2">
+        <div class="dashboard-mini-stat">
+          <div class="label">Realizados</div>
+          <div class="value text-success">{{ kpi_mantenimientos_realizados_mes }}</div>
+        </div>
+      </div>
+
+      <div class="col-6 col-md-2">
+        <div class="dashboard-mini-stat">
+          <div class="label">Pendientes</div>
+          <div class="value text-warning">{{ kpi_mantenimientos_pendientes_mes }}</div>
+        </div>
+      </div>
+
+      <div class="col-6 col-md-2">
+        <div class="dashboard-mini-stat">
+          <div class="label">Atrasados</div>
+          <div class="value text-danger">{{ kpi_mantenimientos_atrasados_mes }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-2 mt-1">
+      <div class="col-md-4">
+        <div class="dashboard-mini-stat">
+          <div class="label">Cumplimiento mensual</div>
+          <div class="value text-primary">{{ kpi_cumplimiento_mes }}%</div>
+        </div>
+      </div>
+
+      <div class="col-md-4">
+        <div class="dashboard-mini-stat">
+          <div class="label">Facturas pendientes</div>
+          <div class="value text-warning">{{ total_facturas_pendientes }}</div>
+        </div>
+      </div>
+
+      <div class="col-md-4">
+        <div class="dashboard-mini-stat">
+          <div class="label">Facturas vencidas</div>
+          <div class="value text-danger">{{ total_facturas_vencidas }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= GRÁFICOS BASE ================= -->
+<div class="card shadow-sm dashboard-section-card mb-3">
+  <div class="card-body">
+    <div class="fw-bold mb-3">📊 Análisis visual</div>
+
+    <div class="row g-3">
+      <div class="col-lg-6">
+        <div class="dashboard-chart-wrap">
+          <canvas id="graficoFinanzas"></canvas>
+        </div>
+      </div>
+
+      <div class="col-lg-6">
+        <div class="dashboard-chart-wrap">
+          <canvas id="graficoOperativo"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= TENDENCIAS PRO ================= -->
+<div class="card shadow-sm dashboard-section-card mb-3">
+  <div class="card-body">
+    <div class="fw-bold mb-3">📉 Tendencias PRO (últimos 6 meses)</div>
+
+    <div class="row g-3">
+      <div class="col-xl-6">
+        <div class="dashboard-chart-wrap">
+          <canvas id="graficoTendenciaFinanciera"></canvas>
+        </div>
+      </div>
+
+      <div class="col-xl-6">
+        <div class="dashboard-chart-wrap">
+          <canvas id="graficoTendenciaOperativa"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= PRIORIDADES + EQUIPO ================= -->
+<div class="row g-3 mb-3">
+
+  <div class="col-lg-5">
+    <div class="card shadow-sm dashboard-section-card h-100">
+      <div class="card-body">
+        <div class="fw-bold mb-3">🎯 Prioridades del día</div>
+
+        {% if total_requieren_atencion > 0 %}
+          <div class="mb-3">
+            <span class="badge bg-danger">{{ total_requieren_atencion }} requieren atención</span>
+          </div>
+
+          <div class="d-grid gap-2">
+            {% for m in requiere_atencion_items %}
+            <a href="/dashboard/mantenimientos/{{ m.id }}/" class="text-decoration-none text-dark">
+              <div class="dashboard-list-item">
+                <div class="fw-semibold">{{ m.cliente }}</div>
+                <div class="small text-muted">
+                  {{ m.fecha|date:"d/m/Y" }}
+                  {% if m.es_atrasado %} · Atrasado{% endif %}
+                  {% if m.sin_asignar %} · Sin asignar{% endif %}
+                </div>
+              </div>
+            </a>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="text-muted">
+            Sin prioridades críticas.
+          </div>
+        {% endif %}
+
+        {% if trabajador_recomendado %}
+        <div class="mt-3 dashboard-list-item">
+          <div class="fw-semibold">💡 Trabajador recomendado</div>
+          <div>{{ trabajador_recomendado.username }}</div>
+          <div class="small text-muted mt-1">{{ trabajador_recomendado.motivo }}</div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-7">
+    <div class="card shadow-sm dashboard-section-card h-100">
+      <div class="card-body">
+        <div class="fw-bold mb-3">👷 Estado del equipo</div>
+
+        <div class="row g-2 mb-3">
+          <div class="col-md-4">
+            <div class="dashboard-mini-stat">
+              <div class="label">Libres</div>
+              <div class="value text-success">{{ total_trabajadores_libres }}</div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="dashboard-mini-stat">
+              <div class="label">Carga media</div>
+              <div class="value text-warning">{{ total_trabajadores_media }}</div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="dashboard-mini-stat">
+              <div class="label">Saturados</div>
+              <div class="value text-danger">{{ total_trabajadores_saturados }}</div>
+            </div>
+          </div>
+        </div>
+
+        {% if top_trabajadores %}
+        <div class="d-grid gap-2">
+          {% for t in top_trabajadores %}
+          <div class="dashboard-list-item">
+            <div class="d-flex justify-content-between align-items-center">
+              <div>
+                <div class="fw-semibold">{{ t.username }}</div>
+                <div class="small text-muted">
+                  Hoy: {{ t.carga_hoy }} · Atrasados: {{ t.atrasados }} · Próximos: {{ t.proximos }}
+                </div>
+              </div>
+              <span class="badge 
+                {% if t.estado == 'libre' %}bg-success
+                {% elif t.estado == 'media' %}bg-warning text-dark
+                {% else %}bg-danger{% endif %}">
+                {{ t.estado|title }}
+              </span>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-muted">No hay resumen de trabajadores disponible.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ================= RANKINGS PRO ================= -->
+<div class="row g-3 mb-3">
+
+  <div class="col-xl-3 col-md-6">
+    <div class="card shadow-sm dashboard-section-card h-100">
+      <div class="card-body">
+        <div class="fw-bold mb-3">🏆 Top clientes</div>
+
+        {% if top_clientes_facturacion %}
+          <div class="d-grid gap-2">
+            {% for item in top_clientes_facturacion %}
+            <div class="dashboard-list-item">
+              <div class="d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center gap-2">
+                  <span class="dashboard-ranking-badge">{{ forloop.counter }}</span>
+                  <div>
+                    <div class="fw-semibold">{{ item.cliente }}</div>
+                    <div class="small text-muted">Facturación del mes</div>
+                  </div>
+                </div>
+                <div class="fw-bold text-success">${{ item.total|floatformat:2 }}</div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="text-muted">Sin datos de facturación por cliente.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xl-3 col-md-6">
+    <div class="card shadow-sm dashboard-section-card h-100">
+      <div class="card-body">
+        <div class="fw-bold mb-3">📄 Top contratos</div>
+
+        {% if top_contratos_facturacion %}
+          <div class="d-grid gap-2">
+            {% for item in top_contratos_facturacion %}
+            <div class="dashboard-list-item">
+              <div class="d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center gap-2">
+                  <span class="dashboard-ranking-badge">{{ forloop.counter }}</span>
+                  <div>
+                    <div class="fw-semibold">{{ item.contrato }}</div>
+                    <div class="small text-muted">{{ item.cliente }}</div>
+                  </div>
+                </div>
+                <div class="fw-bold text-primary">${{ item.total|floatformat:2 }}</div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="text-muted">Sin datos de contratos facturados.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xl-3 col-md-6">
+    <div class="card shadow-sm dashboard-section-card h-100">
+      <div class="card-body">
+        <div class="fw-bold mb-3">👷 Top trabajadores del mes</div>
+
+        {% if top_trabajadores_mes %}
+          <div class="d-grid gap-2">
+            {% for item in top_trabajadores_mes %}
+            <div class="dashboard-list-item">
+              <div class="d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center gap-2">
+                  <span class="dashboard-ranking-badge">{{ forloop.counter }}</span>
+                  <div>
+                    <div class="fw-semibold">{{ item.trabajador }}</div>
+                    <div class="small text-muted">Mantenimientos realizados</div>
+                  </div>
+                </div>
+                <div class="fw-bold">{{ item.total }}</div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="text-muted">Sin datos de trabajadores este mes.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xl-3 col-md-6">
+    <div class="card shadow-sm dashboard-section-card h-100">
+      <div class="card-body">
+        <div class="fw-bold mb-3">🧪 Insumos más usados</div>
+
+        {% if top_insumos_mes %}
+          <div class="d-grid gap-2">
+            {% for item in top_insumos_mes %}
+            <div class="dashboard-list-item">
+              <div class="d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center gap-2">
+                  <span class="dashboard-ranking-badge">{{ forloop.counter }}</span>
+                  <div>
+                    <div class="fw-semibold">{{ item.insumo }}</div>
+                    <div class="small text-muted">Consumo del mes</div>
+                  </div>
+                </div>
+                <div class="fw-bold">{{ item.total }}</div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="text-muted">Sin consumo registrado de insumos.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ================= FACTURACIÓN + RECURRENTES ================= -->
+<div class="row g-3 mb-3">
+
+  <div class="col-lg-6">
+    <div class="card shadow-sm dashboard-section-card h-100">
+      <div class="card-body">
+        <div class="fw-bold mb-3">🧾 Estado de facturación</div>
+
+        <div class="row g-2">
+          <div class="col-md-4">
+            <div class="dashboard-mini-stat">
+              <div class="label">Pendientes</div>
+              <div class="value text-warning">{{ total_facturas_pendientes }}</div>
+            </div>
+          </div>
+
+          <div class="col-md-4">
+            <div class="dashboard-mini-stat">
+              <div class="label">Vencidas</div>
+              <div class="value text-danger">{{ total_facturas_vencidas }}</div>
+            </div>
+          </div>
+
+          <div class="col-md-4">
+            <div class="dashboard-mini-stat">
+              <div class="label">Pagadas</div>
+              <div class="value text-success">{{ total_facturas_pagadas }}</div>
+            </div>
+          </div>
+        </div>
+
+        <a href="/dashboard/finanzas/facturas/" class="btn btn-outline-primary btn-sm mt-3">
+          Ver facturación
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card shadow-sm dashboard-section-card h-100">
+      <div class="card-body">
+        <div class="fw-bold mb-3">🔁 Recurrentes próximos (3 días)</div>
+
+        {% if recurrentes_proximos_3_dias %}
+          <div class="d-grid gap-2">
+            {% for mov in recurrentes_proximos_3_dias %}
+            <div class="dashboard-list-item">
+              <div class="d-flex justify-content-between align-items-center">
+                <div>
+                  <div class="fw-semibold">{{ mov.concepto }}</div>
+                  <div class="small text-muted">
+                    {{ mov.proxima_fecha|date:"d/m/Y" }} · {{ mov.frecuencia|title }} · {{ mov.tipo|title }}
+                  </div>
+                </div>
+                <div class="fw-bold {% if mov.tipo == 'ingreso' %}text-success{% else %}text-danger{% endif %}">
+                  ${{ mov.monto|floatformat:2 }}
+                </div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="text-muted">No hay movimientos recurrentes próximos.</div>
+        {% endif %}
+
+        <a href="/dashboard/finanzas/recurrentes/" class="btn btn-outline-secondary btn-sm mt-3">
+          Ver recurrentes
+        </a>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ================= ACTIVIDAD ================= -->
+<div class="card shadow-sm dashboard-section-card">
+  <div class="card-body">
+
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+      <div class="fw-bold">🕘 Actividad reciente</div>
+      <a href="/dashboard/actividad/" class="btn btn-outline-dark btn-sm">
+        Ver historial
+      </a>
+    </div>
+
+    {% if actividades_recientes %}
+      <div class="d-grid gap-2">
+        {% for a in actividades_recientes %}
+        <div class="dashboard-activity-item">
+          <div class="fw-semibold">{{ a.titulo }}</div>
+          <div class="small text-muted">{{ a.descripcion }}</div>
+        </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="text-muted">No hay actividad reciente registrada.</div>
+    {% endif %}
+
+  </div>
+</div>
+
+<script>
+const f = JSON.parse('{{ grafico_finanzas|escapejs }}');
+const o = JSON.parse('{{ grafico_operativo|escapejs }}');
+const tf = JSON.parse('{{ grafico_tendencia_financiera|escapejs }}');
+const to = JSON.parse('{{ grafico_tendencia_operativa|escapejs }}');
+
+new Chart(document.getElementById('graficoFinanzas'), {
+  type: 'doughnut',
+  data: {
+    labels: f.labels,
+    datasets: [{
+      data: f.data,
+      borderWidth: 1
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { position: 'bottom' }
+    }
+  }
+});
+
+new Chart(document.getElementById('graficoOperativo'), {
+  type: 'bar',
+  data: {
+    labels: o.labels,
+    datasets: [{
+      label: 'Cantidad',
+      data: o.data,
+      borderWidth: 1
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false }
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        ticks: { precision: 0 }
+      }
+    }
+  }
+});
+
+new Chart(document.getElementById('graficoTendenciaFinanciera'), {
+  type: 'line',
+  data: {
+    labels: tf.labels,
+    datasets: tf.datasets.map(ds => ({
+      label: ds.label,
+      data: ds.data,
+      tension: 0.35,
+      fill: false,
+      borderWidth: 2
+    }))
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: {
+      mode: 'index',
+      intersect: false
+    },
+    plugins: {
+      legend: { position: 'bottom' }
+    },
+    scales: {
+      y: {
+        beginAtZero: true
+      }
+    }
+  }
+});
+
+new Chart(document.getElementById('graficoTendenciaOperativa'), {
+  type: 'line',
+  data: {
+    labels: to.labels,
+    datasets: to.datasets.map(ds => ({
+      label: ds.label,
+      data: ds.data,
+      tension: 0.35,
+      fill: false,
+      borderWidth: 2
+    }))
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: {
+      mode: 'index',
+      intersect: false
+    },
+    plugins: {
+      legend: { position: 'bottom' }
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        ticks: { precision: 0 }
+      }
+    }
+  }
+});
+</script>
+
+</div>
+
+{% endblock %}

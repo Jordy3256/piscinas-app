@@ -1,0 +1,181 @@
+{% extends "dashboard/base_admin.html" %}
+
+{% block title %}Inventario{% endblock %}
+{% block top_title %}📦 Inventario{% endblock %}
+
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+  <div>
+    <div class="fw-bold fs-5">Control de inventario</div>
+    <div class="text-muted small">Administra stock, ventas, utilidad y movimientos de tus insumos</div>
+  </div>
+
+  <div class="d-flex flex-wrap gap-2">
+    <a href="/dashboard/inventario/historial/" class="btn btn-outline-primary">
+      📊 Ver historial
+    </a>
+
+    <!-- ✅ FIX -->
+    <a href="{% url 'reporte_ganancias' %}" class="btn btn-outline-success">
+      💰 Ver ganancias
+    </a>
+
+    <a href="/admin/inventario/insumo/add/" class="btn btn-primary">
+      + Nuevo insumo
+    </a>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-12 col-md-3">
+    <div class="card shadow-sm">
+      <div class="card-body text-center">
+        <div class="text-muted small">Total insumos</div>
+        <div class="fs-3 fw-bold">{{ total_insumos }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-md-3">
+    <div class="card shadow-sm border-warning">
+      <div class="card-body text-center">
+        <div class="text-muted small">Bajo stock</div>
+        <div class="fs-3 fw-bold text-warning">{{ bajo_stock }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-md-3">
+    <div class="card shadow-sm border-primary">
+      <div class="card-body text-center">
+        <div class="text-muted small">Stock total</div>
+        <div class="fs-3 fw-bold text-primary">{{ stock_total }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-md-3">
+    <div class="card shadow-sm border-success">
+      <div class="card-body text-center">
+        <div class="text-muted small">Ventas del mes</div>
+        <div class="fs-3 fw-bold text-success">${{ total_ventas_mes|floatformat:2 }}</div>
+        <div class="small text-muted">{{ unidades_vendidas_mes }} unidades</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-12 col-md-6">
+    <div class="card shadow-sm border-success">
+      <div class="card-body text-center">
+        <div class="text-muted small">Ganancia del mes</div>
+        <div class="fs-3 fw-bold text-success">${{ ganancia_mes|floatformat:2 }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-md-6">
+    <div class="card shadow-sm border-secondary">
+      <div class="card-body text-center">
+        <div class="text-muted small">Resumen rápido</div>
+        <div class="small">
+          Historial, ventas, entradas y utilidad centralizados
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-12 col-lg-6">
+    <div class="card shadow-sm h-100 border-success">
+      <div class="card-body">
+        <div class="fw-bold mb-3">💰 Registrar venta</div>
+
+        <form method="post" action="/dashboard/inventario/vender/" class="row g-2">
+          {% csrf_token %}
+
+          <div class="col-12">
+            <label class="form-label small text-muted">Insumo</label>
+            <select name="insumo_id" class="form-select" required>
+              <option value="">Selecciona un insumo</option>
+              {% for i in insumos %}
+                <option value="{{ i.id }}">
+                  {{ i.nombre }} · Stock: {{ i.stock }} · Precio: ${{ i.precio|floatformat:2 }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="col-12">
+            <label class="form-label small text-muted">Cantidad</label>
+            <input type="number" name="cantidad" min="1" class="form-control" required>
+          </div>
+
+          <div class="col-12 d-grid">
+            <button type="submit" class="btn btn-success">
+              Registrar venta
+            </button>
+          </div>
+        </form>
+
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-6">
+    <div class="card shadow-sm h-100 border-primary">
+      <div class="card-body">
+        <div class="fw-bold mb-3">📥 Agregar stock</div>
+
+        <form method="post" action="/dashboard/inventario/agregar/" class="row g-2">
+          {% csrf_token %}
+
+          <div class="col-12">
+            <label class="form-label small text-muted">Insumo</label>
+            <select name="insumo_id" class="form-select" required>
+              <option value="">Selecciona un insumo</option>
+              {% for i in insumos %}
+                <option value="{{ i.id }}">
+                  {{ i.nombre }} · Stock actual: {{ i.stock }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="col-12 col-md-4">
+            <input type="number" name="cantidad" min="1" class="form-control" placeholder="Cantidad" required>
+          </div>
+
+          <div class="col-12 col-md-8">
+            <input type="text" name="observacion" class="form-control" placeholder="Observación">
+          </div>
+
+          <div class="col-12 d-grid">
+            <button type="submit" class="btn btn-primary">
+              Agregar stock
+            </button>
+          </div>
+        </form>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ✅ FIX EN OTROS BOTONES -->
+<div class="card shadow-sm">
+  <div class="card-body d-flex justify-content-between">
+    <a href="/dashboard/inventario/historial/" class="btn btn-outline-primary">
+      Historial
+    </a>
+
+    <a href="{% url 'reporte_ganancias' %}" class="btn btn-outline-success">
+      Reporte de ganancias
+    </a>
+  </div>
+</div>
+
+{% endblock %}

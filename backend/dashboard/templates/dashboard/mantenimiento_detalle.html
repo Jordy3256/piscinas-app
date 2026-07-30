@@ -1,0 +1,1218 @@
+{% extends "dashboard/base_app.html" %}
+
+{% block title %}Detalle de mantenimiento{% endblock %}
+{% block top_title %}Detalle del mantenimiento{% endblock %}
+
+{% block content %}
+
+<style>
+  @media (max-width: 767.98px) {
+    .mobile-stack-actions > * {
+      width: 100%;
+    }
+
+    .mobile-stack-actions .btn,
+    .mobile-stack-actions button {
+      width: 100%;
+    }
+
+    .mobile-card-title {
+      font-size: 1rem;
+    }
+
+    .mobile-photo-img {
+      max-height: 240px !important;
+      cursor: zoom-in;
+    }
+
+    .mobile-section-title {
+      font-size: 1rem;
+    }
+
+    .mobile-table-actions .btn {
+      width: 100%;
+      margin-bottom: .35rem;
+    }
+
+    .mobile-tight-card .card-body {
+      padding: 0.9rem;
+    }
+  }
+
+  .foto-clickable {
+    cursor: zoom-in;
+  }
+
+  .visor-imagen-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.92);
+    z-index: 9999;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+
+  .visor-imagen-overlay.activo {
+    display: flex;
+  }
+
+  .visor-imagen-contenido {
+    position: relative;
+    max-width: 96vw;
+    max-height: 96vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .visor-imagen-contenido img {
+    max-width: 96vw;
+    max-height: 92vh;
+    border-radius: 10px;
+    box-shadow: 0 0 30px rgba(0, 0, 0, 0.35);
+  }
+
+  .visor-cerrar {
+    position: absolute;
+    top: -10px;
+    right: -10px;
+    width: 42px;
+    height: 42px;
+    border: none;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.9);
+    font-size: 1.4rem;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  /* =========================================================
+     JVAQUA · DETALLE DE MANTENIMIENTO PREMIUM
+     Rediseño visual sin alterar formularios, rutas ni lógica.
+     ========================================================= */
+
+  :root {
+    --jv-blue: #0b5ed7;
+    --jv-blue-dark: #063b82;
+    --jv-cyan: #078fc5;
+    --jv-green: #159a67;
+    --jv-yellow: #f1ad14;
+    --jv-red: #df4054;
+    --jv-ink: #10233f;
+    --jv-muted: #718198;
+    --jv-line: rgba(16, 35, 63, .09);
+    --jv-soft: #f5f9ff;
+    --jv-shadow: 0 12px 30px rgba(20, 54, 94, .10);
+    --jv-shadow-lg: 0 20px 50px rgba(20, 54, 94, .15);
+  }
+
+  .detail-hero {
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 1rem;
+    padding: 1.25rem;
+    border-radius: 25px;
+    color: #fff;
+    background:
+      radial-gradient(circle at 92% 5%, rgba(255,255,255,.21), transparent 11rem),
+      linear-gradient(135deg, var(--jv-blue-dark), var(--jv-blue) 56%, var(--jv-cyan));
+    box-shadow: 0 18px 44px rgba(11,94,215,.24);
+  }
+
+  .detail-hero::after {
+    content: "";
+    position: absolute;
+    right: -45px;
+    bottom: -85px;
+    width: 170px;
+    height: 170px;
+    border-radius: 50%;
+    background: rgba(255,255,255,.08);
+  }
+
+  .detail-hero > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  .detail-client-name {
+    margin: 0;
+    font-size: clamp(1.28rem, 4vw, 1.75rem);
+    font-weight: 900;
+    line-height: 1.15;
+    letter-spacing: -.02em;
+  }
+
+  .detail-meta {
+    margin-top: .45rem;
+    color: rgba(255,255,255,.78);
+    font-size: .84rem;
+  }
+
+  .detail-status {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    padding: .58rem .85rem;
+    border: 1px solid rgba(255,255,255,.22);
+    border-radius: 999px;
+    background: rgba(255,255,255,.14);
+    color: #fff;
+    font-size: .78rem;
+    font-weight: 900;
+    backdrop-filter: blur(8px);
+  }
+
+  .detail-hero-actions .btn {
+    min-height: 42px;
+    border: 1px solid rgba(255,255,255,.22);
+    border-radius: 13px;
+    color: #fff;
+    background: rgba(255,255,255,.14);
+    font-weight: 800;
+  }
+
+  .detail-hero-actions .btn:hover {
+    color: #fff;
+    border-color: rgba(255,255,255,.38);
+    background: rgba(255,255,255,.22);
+  }
+
+  .detail-observation {
+    margin-top: 1rem;
+    padding: .9rem 1rem;
+    border: 1px solid rgba(255,255,255,.16);
+    border-radius: 16px;
+    background: rgba(0,0,0,.08);
+  }
+
+  .detail-observation-label {
+    color: rgba(255,255,255,.65);
+    font-size: .69rem;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+  }
+
+  .detail-observation-text {
+    margin-top: .25rem;
+    color: #fff;
+    font-size: .9rem;
+    line-height: 1.45;
+  }
+
+  .premium-card {
+    border: 1px solid var(--jv-line) !important;
+    border-radius: 22px !important;
+    background: rgba(255,255,255,.98);
+    box-shadow: var(--jv-shadow) !important;
+    overflow: hidden;
+  }
+
+  .premium-card .card-body {
+    padding: 1.1rem;
+  }
+
+  .premium-card-title {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    margin-bottom: .9rem;
+    color: var(--jv-ink);
+    font-size: 1rem;
+    font-weight: 900;
+    letter-spacing: -.01em;
+  }
+
+  .premium-card-title i {
+    display: inline-grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 11px;
+    color: var(--jv-blue);
+    background: #edf5ff;
+  }
+
+  .premium-card .form-control,
+  .premium-card .form-select {
+    min-height: 48px;
+    border: 1px solid rgba(16,35,63,.13);
+    border-radius: 13px;
+    background-color: #fbfdff;
+  }
+
+  .premium-card .form-control:focus,
+  .premium-card .form-select:focus {
+    border-color: rgba(11,94,215,.55);
+    box-shadow: 0 0 0 .22rem rgba(11,94,215,.10);
+  }
+
+  .premium-card .btn {
+    min-height: 42px;
+    border-radius: 12px;
+    font-weight: 800;
+  }
+
+  .premium-card .btn-lg {
+    min-height: 52px;
+    border-radius: 15px;
+    font-size: .95rem;
+    font-weight: 900;
+  }
+
+  .premium-card .btn-primary {
+    border: 0;
+    background: linear-gradient(135deg, var(--jv-blue), var(--jv-cyan));
+    box-shadow: 0 8px 18px rgba(11,94,215,.19);
+  }
+
+  .premium-card .btn-success {
+    border: 0;
+    background: linear-gradient(135deg, #13895d, #22ad78);
+    box-shadow: 0 8px 18px rgba(21,154,103,.18);
+  }
+
+  .premium-card .btn-warning {
+    border: 0;
+    color: #432f00;
+    background: linear-gradient(135deg, #f1ad14, #ffc94a);
+  }
+
+  .premium-alert {
+    border: 1px solid var(--jv-line) !important;
+    border-radius: 18px !important;
+    box-shadow: 0 8px 22px rgba(20,54,94,.07);
+  }
+
+  .validation-card {
+    position: relative;
+  }
+
+  .validation-card::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 5px;
+    background: var(--jv-yellow);
+  }
+
+  .validation-card.border-success::before {
+    background: var(--jv-green);
+  }
+
+  .validation-summary {
+    border: 0 !important;
+    border-radius: 16px !important;
+    padding: 1rem !important;
+  }
+
+  .photo-progress {
+    height: 9px;
+    margin-top: .65rem;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(16,35,63,.08);
+  }
+
+  .photo-progress-bar {
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--jv-blue), var(--jv-cyan));
+  }
+
+  .photo-status-item {
+    border: 1px solid var(--jv-line) !important;
+    border-radius: 15px !important;
+    padding: .85rem .95rem !important;
+    background: #fbfdff !important;
+  }
+
+  .photo-status-item.bg-success-subtle {
+    border-color: rgba(21,154,103,.32) !important;
+    background: #f1fbf6 !important;
+  }
+
+  .photo-status-item .fw-semibold {
+    color: var(--jv-ink);
+    font-weight: 850 !important;
+  }
+
+  .status-action-card {
+    position: sticky;
+    top: 72px;
+    z-index: 5;
+  }
+
+  .history-item,
+  .usage-mobile-item,
+  .expense-mobile-item {
+    border: 1px solid var(--jv-line) !important;
+    border-radius: 16px !important;
+    background: #f9fbfe !important;
+  }
+
+  .photo-upload-panel {
+    border: 1px solid rgba(11,94,215,.13) !important;
+    border-radius: 18px !important;
+    background: linear-gradient(145deg, #f3f8ff, #fbfdff) !important;
+  }
+
+  .photo-upload-panel .form-label {
+    color: var(--jv-ink);
+    font-size: .82rem;
+    font-weight: 850 !important;
+  }
+
+  .photo-card {
+    overflow: hidden;
+    border: 1px solid var(--jv-line) !important;
+    border-radius: 18px !important;
+    background: #fbfdff;
+    transition: transform .18s ease, box-shadow .18s ease;
+  }
+
+  .photo-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 13px 25px rgba(20,54,94,.10);
+  }
+
+  .photo-card.bg-success-subtle {
+    border-color: rgba(21,154,103,.3) !important;
+    background: #f3fcf7 !important;
+  }
+
+  .mobile-photo-img {
+    width: 100%;
+    min-height: 180px;
+    border: 0 !important;
+    border-radius: 13px !important;
+    background: #edf2f7;
+    object-fit: cover;
+  }
+
+  .table-premium {
+    overflow: hidden;
+    border: 1px solid var(--jv-line);
+    border-radius: 16px;
+  }
+
+  .table-premium table {
+    margin: 0 !important;
+  }
+
+  .table-premium thead th {
+    padding: .8rem;
+    border-bottom: 1px solid var(--jv-line);
+    color: #677991;
+    background: #f4f8fd;
+    font-size: .7rem;
+    font-weight: 900;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+  }
+
+  .table-premium tbody td {
+    padding: .8rem;
+    border-color: rgba(16,35,63,.06);
+    vertical-align: middle;
+  }
+
+  .badge {
+    border-radius: 999px;
+    font-weight: 850;
+  }
+
+  .visor-imagen-overlay {
+    backdrop-filter: blur(7px);
+  }
+
+  .visor-imagen-contenido img {
+    border: 1px solid rgba(255,255,255,.15);
+    border-radius: 18px;
+    box-shadow: 0 25px 70px rgba(0,0,0,.55);
+  }
+
+  .visor-cerrar {
+    display: grid;
+    place-items: center;
+    top: -15px;
+    right: -15px;
+    width: 46px;
+    height: 46px;
+    box-shadow: 0 10px 25px rgba(0,0,0,.28);
+  }
+
+  @media (min-width: 992px) {
+    .detail-hero {
+      padding: 1.5rem 1.6rem;
+    }
+
+    .premium-card .card-body {
+      padding: 1.25rem;
+    }
+  }
+
+  @media (max-width: 767.98px) {
+    .detail-hero {
+      padding: 1.05rem;
+      border-radius: 21px;
+    }
+
+    .detail-hero-actions {
+      width: 100%;
+    }
+
+    .detail-hero-actions .btn {
+      flex: 1 1 auto;
+      width: auto;
+    }
+
+    .detail-status {
+      margin-top: .15rem;
+    }
+
+    .status-action-card {
+      position: static;
+    }
+
+    .premium-card {
+      border-radius: 19px !important;
+    }
+
+    .premium-card .card-body {
+      padding: .95rem;
+    }
+
+    .mobile-photo-img {
+      max-height: 260px !important;
+      min-height: 190px;
+    }
+  }
+
+  .checklist-section {
+    border: 1px solid var(--jv-line);
+    border-radius: 18px;
+    padding: 1rem;
+    background: #fbfdff;
+  }
+
+  .checklist-section-title {
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+    margin-bottom: .85rem;
+    color: var(--jv-ink);
+    font-weight: 900;
+  }
+
+  .check-option {
+    position: relative;
+  }
+
+  .check-option input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .check-option label {
+    display: flex;
+    align-items: center;
+    gap: .7rem;
+    min-height: 50px;
+    padding: .8rem .9rem;
+    border: 1px solid rgba(16,35,63,.11);
+    border-radius: 14px;
+    background: #fff;
+    color: var(--jv-ink);
+    font-weight: 800;
+    cursor: pointer;
+    transition: .18s ease;
+  }
+
+  .check-option label::before {
+    content: "";
+    flex: 0 0 22px;
+    width: 22px;
+    height: 22px;
+    border: 2px solid #b8c5d5;
+    border-radius: 7px;
+    background: #fff;
+  }
+
+  .check-option input:checked + label {
+    border-color: rgba(21,154,103,.42);
+    background: #f1fbf6;
+  }
+
+  .check-option input:checked + label::before {
+    content: "✓";
+    display: grid;
+    place-items: center;
+    border-color: var(--jv-green);
+    background: var(--jv-green);
+    color: #fff;
+    font-size: .82rem;
+    font-weight: 900;
+  }
+
+  .inspection-choice {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .55rem;
+  }
+
+  .inspection-choice input {
+    position: absolute;
+    opacity: 0;
+  }
+
+  .inspection-choice label {
+    min-height: 46px;
+    display: grid;
+    place-items: center;
+    padding: .65rem;
+    border: 1px solid rgba(16,35,63,.12);
+    border-radius: 13px;
+    background: #fff;
+    color: var(--jv-ink);
+    font-size: .82rem;
+    font-weight: 850;
+    text-align: center;
+    cursor: pointer;
+  }
+
+  .inspection-choice input:checked + label {
+    border-color: rgba(11,94,215,.45);
+    background: #edf5ff;
+    color: var(--jv-blue-dark);
+    box-shadow: inset 0 0 0 1px rgba(11,94,215,.08);
+  }
+
+  .checklist-progress {
+    height: 10px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(16,35,63,.08);
+  }
+
+  .checklist-progress > span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--jv-green), var(--jv-cyan));
+  }
+
+</style>
+
+<section class="detail-hero">
+  <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+    <div class="flex-grow-1">
+      <h1 class="detail-client-name">{{ m.cliente }}</h1>
+      <div class="detail-meta">
+        <i class="bi bi-calendar3 me-1"></i>{{ m.fecha }}
+        <span class="mx-1">·</span>
+        <i class="bi bi-file-earmark-text me-1"></i>Contrato: {{ m.contrato }}
+      </div>
+    </div>
+
+    <div>
+      {% if m.estado == "realizado" %}
+        <span class="detail-status"><i class="bi bi-check-circle-fill"></i> Realizado</span>
+      {% else %}
+        <span class="detail-status"><i class="bi bi-hourglass-split"></i> Pendiente</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="detail-hero-actions d-flex flex-wrap gap-2 mt-3">
+    {% if m.cliente.telefono %}
+      <a class="btn btn-sm"
+         href="https://wa.me/{{ m.cliente.telefono }}"
+         target="_blank">
+        <i class="bi bi-whatsapp me-1"></i> WhatsApp
+      </a>
+    {% endif %}
+
+    {% if m.cliente.direccion %}
+      <a class="btn btn-sm"
+         href="https://www.google.com/maps/search/?api=1&query={{ m.cliente.direccion|urlencode }}"
+         target="_blank">
+        <i class="bi bi-geo-alt me-1"></i> Ver ubicación
+      </a>
+    {% endif %}
+  </div>
+
+  <div class="detail-observation">
+    <div class="detail-observation-label">Observaciones</div>
+    <div class="detail-observation-text">
+      {{ m.observaciones|default:"(sin observaciones)"|linebreaksbr }}
+    </div>
+  </div>
+</section>
+
+{% if esta_realizado %}
+
+<div class="alert alert-secondary border shadow-sm premium-alert">
+  <div class="fw-bold mb-1">🔒 Mantenimiento bloqueado</div>
+  <div>
+    Este mantenimiento ya fue marcado como realizado. No se pueden modificar fotos ni insumos hasta volverlo a pendiente.
+  </div>
+</div>
+{% endif %}
+
+<div class="card shadow-sm mb-3 mobile-tight-card premium-card {% if checklist_completo %}border-success{% endif %}">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap mb-3">
+      <div class="premium-card-title mb-0">
+        <i class="bi bi-ui-checks-grid"></i><span>Checklist del mantenimiento</span>
+      </div>
+      {% if checklist_completo %}
+        <span class="badge bg-success">Completo</span>
+      {% else %}
+        <span class="badge bg-warning text-dark">{{ checklist_completados }} de {{ checklist_total }}</span>
+      {% endif %}
+    </div>
+
+    <div class="small text-muted mb-2">Progreso de limpieza e inspección</div>
+    <div class="checklist-progress mb-4">
+      <span style="width: {{ checklist_porcentaje }}%;"></span>
+    </div>
+
+    {% if esta_realizado %}
+      <div class="alert alert-secondary mb-3">
+        El checklist está bloqueado porque el mantenimiento ya fue realizado.
+      </div>
+    {% endif %}
+
+    <form method="post" id="checklistForm">
+      {% csrf_token %}
+      <input type="hidden" name="accion" value="guardar_checklist">
+      <input type="hidden" name="next" value="{{ request.get_full_path }}">
+
+      <div class="row g-3">
+        <div class="col-12">
+          <div class="checklist-section">
+            <div class="checklist-section-title"><i class="bi bi-search"></i> 1. Inspección inicial</div>
+            <div class="row g-3">
+              <div class="col-12 col-lg-4">
+                <label class="form-label fw-bold">Estado de la bomba</label>
+                <div class="inspection-choice">
+                  <div>
+                    <input type="radio" id="bomba_correcto" name="bomba_estado" value="correcto" {% if checklist.bomba_estado == 'correcto' %}checked{% endif %} {% if esta_realizado %}disabled{% endif %}>
+                    <label for="bomba_correcto">Funciona correctamente</label>
+                  </div>
+                  <div>
+                    <input type="radio" id="bomba_novedad" name="bomba_estado" value="novedad" {% if checklist.bomba_estado == 'novedad' %}checked{% endif %} {% if esta_realizado %}disabled{% endif %}>
+                    <label for="bomba_novedad">Presenta novedad</label>
+                  </div>
+                </div>
+                <div class="mt-2 {% if checklist.bomba_estado != 'novedad' %}d-none{% endif %}" id="bombaNovedadWrap">
+                  <textarea class="form-control" name="bomba_novedad" rows="3" placeholder="Describe la novedad de la bomba" {% if esta_realizado %}disabled{% endif %}>{{ checklist.bomba_novedad }}</textarea>
+                </div>
+              </div>
+
+              <div class="col-12 col-lg-4">
+                <label class="form-label fw-bold">Estado del filtro</label>
+                <div class="inspection-choice">
+                  <div>
+                    <input type="radio" id="filtro_correcto" name="filtro_estado" value="correcto" {% if checklist.filtro_estado == 'correcto' %}checked{% endif %} {% if esta_realizado %}disabled{% endif %}>
+                    <label for="filtro_correcto">Funciona correctamente</label>
+                  </div>
+                  <div>
+                    <input type="radio" id="filtro_novedad" name="filtro_estado" value="novedad" {% if checklist.filtro_estado == 'novedad' %}checked{% endif %} {% if esta_realizado %}disabled{% endif %}>
+                    <label for="filtro_novedad">Presenta novedad</label>
+                  </div>
+                </div>
+                <div class="mt-2 {% if checklist.filtro_estado != 'novedad' %}d-none{% endif %}" id="filtroNovedadWrap">
+                  <textarea class="form-control" name="filtro_novedad" rows="3" placeholder="Describe la novedad del filtro" {% if esta_realizado %}disabled{% endif %}>{{ checklist.filtro_novedad }}</textarea>
+                </div>
+              </div>
+
+              <div class="col-12 col-lg-4">
+                <label class="form-label fw-bold">Nivel de agua</label>
+                <select class="form-select" name="nivel_agua" {% if esta_realizado %}disabled{% endif %}>
+                  <option value="">Selecciona una opción</option>
+                  <option value="bajo" {% if checklist.nivel_agua == 'bajo' %}selected{% endif %}>Bajo</option>
+                  <option value="normal" {% if checklist.nivel_agua == 'normal' %}selected{% endif %}>Normal</option>
+                  <option value="alto" {% if checklist.nivel_agua == 'alto' %}selected{% endif %}>Alto</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-12 col-xl-7">
+          <div class="checklist-section h-100">
+            <div class="checklist-section-title"><i class="bi bi-stars"></i> 2. Limpieza realizada</div>
+            <div class="row g-2">
+              <div class="col-12 col-md-6 check-option"><input id="aspirado" type="checkbox" name="aspirado" {% if checklist.aspirado %}checked{% endif %} {% if esta_realizado %}disabled{% endif %}><label for="aspirado">Aspirado</label></div>
+              <div class="col-12 col-md-6 check-option"><input id="cepillado" type="checkbox" name="cepillado" {% if checklist.cepillado %}checked{% endif %} {% if esta_realizado %}disabled{% endif %}><label for="cepillado">Cepillado</label></div>
+              <div class="col-12 col-md-6 check-option"><input id="recoleccion_basura" type="checkbox" name="recoleccion_basura" {% if checklist.recoleccion_basura %}checked{% endif %} {% if esta_realizado %}disabled{% endif %}><label for="recoleccion_basura">Recolección de basura</label></div>
+              <div class="col-12 col-md-6 check-option"><input id="limpieza_filtros" type="checkbox" name="limpieza_filtros" {% if checklist.limpieza_filtros %}checked{% endif %} {% if esta_realizado %}disabled{% endif %}><label for="limpieza_filtros">Limpieza de filtros</label></div>
+              <div class="col-12 check-option"><input id="retrolavado_arena" type="checkbox" name="retrolavado_arena" {% if checklist.retrolavado_arena %}checked{% endif %} {% if esta_realizado %}disabled{% endif %}><label for="retrolavado_arena">Retrolavado de arena</label></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-12 col-xl-5">
+          <div class="checklist-section h-100">
+            <div class="checklist-section-title"><i class="bi bi-droplet"></i> 3. Tratamiento químico aplicado</div>
+            <div class="row g-2">
+              <div class="col-12 check-option"><input id="cloro_granulado" type="checkbox" name="cloro_granulado" {% if checklist.cloro_granulado %}checked{% endif %} {% if esta_realizado %}disabled{% endif %}><label for="cloro_granulado">Cloro granulado</label></div>
+              <div class="col-12 check-option"><input id="tricloro" type="checkbox" name="tricloro" {% if checklist.tricloro %}checked{% endif %} {% if esta_realizado %}disabled{% endif %}><label for="tricloro">Tricloro en pastilla</label></div>
+              <div class="col-12 check-option"><input id="metasilicato" type="checkbox" name="metasilicato" {% if checklist.metasilicato %}checked{% endif %} {% if esta_realizado %}disabled{% endif %}><label for="metasilicato">Metasilicato</label></div>
+              <div class="col-12 check-option"><input id="alguicida" type="checkbox" name="alguicida" {% if checklist.alguicida %}checked{% endif %} {% if esta_realizado %}disabled{% endif %}><label for="alguicida">Alguicida</label></div>
+              <div class="col-12 check-option"><input id="floculante" type="checkbox" name="floculante" {% if checklist.floculante %}checked{% endif %} {% if esta_realizado %}disabled{% endif %}><label for="floculante">Floculante</label></div>
+            </div>
+            <div class="small text-muted mt-2">Marca únicamente los productos que realmente aplicaste.</div>
+          </div>
+        </div>
+      </div>
+
+      {% if not esta_realizado %}
+        <button class="btn btn-primary btn-lg w-100 mt-3" type="submit">
+          <i class="bi bi-save me-1"></i> Guardar checklist
+        </button>
+      {% endif %}
+    </form>
+  </div>
+</div>
+
+{% if m.estado != "realizado" %}
+<div class="card shadow-sm mb-3 {% if puede_cerrar %}border-success{% else %}border-warning{% endif %} mobile-tight-card premium-card validation-card">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+      <div>
+        <div class="premium-card-title mb-1">
+          <i class="bi bi-clipboard2-check"></i>
+          <span>Validación de cierre y fotografías</span>
+        </div>
+        <div class="small text-muted">Completa el checklist y carga las tres evidencias obligatorias desde este único panel.</div>
+      </div>
+      {% if puede_cerrar %}
+        <span class="badge bg-success fs-6">Listo para cerrar</span>
+      {% else %}
+        <span class="badge bg-warning text-dark fs-6">Faltan requisitos</span>
+      {% endif %}
+    </div>
+
+    <div class="row g-3 mb-3">
+      <div class="col-12 col-lg-5">
+        <div class="border rounded p-3 h-100 validation-summary {% if checklist_completo %}bg-success-subtle border-success{% else %}bg-warning-subtle border-warning{% endif %}">
+          <div class="fw-semibold mb-1">{% if checklist_completo %}✅{% else %}⚠{% endif %} Checklist del mantenimiento</div>
+          <div class="small text-muted">
+            {% if checklist_completo %}La limpieza y la inspección están completas.{% else %}Debes completar y guardar la limpieza y la inspección.{% endif %}
+          </div>
+        </div>
+      </div>
+      <div class="col-12 col-lg-7">
+        <div class="border rounded p-3 h-100 validation-summary {% if cantidad_fotos == 3 %}bg-success-subtle border-success{% else %}bg-warning-subtle border-warning{% endif %}">
+          <div class="d-flex justify-content-between align-items-center gap-2">
+            <div>
+              <div class="fw-semibold mb-1">{% if cantidad_fotos == 3 %}✅{% else %}⚠{% endif %} Fotografías obligatorias</div>
+              <div class="small text-muted">{{ cantidad_fotos }} de 3 fotografías cargadas.</div>
+            </div>
+            <span class="badge {% if cantidad_fotos == 3 %}bg-success{% else %}bg-secondary{% endif %}">{{ cantidad_fotos }}/3</span>
+          </div>
+          <div class="photo-progress" aria-label="Progreso de fotografías">
+            <div class="photo-progress-bar" style="width: {% if cantidad_fotos == 3 %}100{% elif cantidad_fotos == 2 %}66.66{% elif cantidad_fotos == 1 %}33.33{% else %}0{% endif %}%;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <form method="post" enctype="multipart/form-data" class="row g-3">
+      {% csrf_token %}
+      <input type="hidden" name="accion" value="subir_fotos_requeridas">
+
+      <div class="col-12 col-lg-4">
+        <div class="border rounded p-3 h-100 photo-card {% if foto_inicio %}bg-success-subtle border-success{% endif %}">
+          <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+            <div class="fw-semibold">1. Inicio de mantenimiento</div>
+            {% if foto_inicio %}<span class="badge bg-success">Subida</span>{% else %}<span class="badge bg-secondary">Pendiente</span>{% endif %}
+          </div>
+          {% if foto_inicio %}
+            <img src="{{ foto_inicio.imagen.url }}" class="img-fluid rounded border w-100 mb-2 mobile-photo-img foto-clickable" alt="Inicio de mantenimiento" data-full="{{ foto_inicio.imagen.url }}" style="object-fit:cover;max-height:180px;">
+            <button type="submit" class="btn btn-sm btn-outline-danger w-100" formmethod="post" formaction="/dashboard/fotos/{{ foto_inicio.id }}/eliminar/" onclick="return confirm('¿Seguro que deseas eliminar esta foto?');">🗑 Eliminar foto</button>
+          {% else %}
+            <input class="form-control" type="file" name="foto_inicio" accept="image/*">
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="col-12 col-lg-4">
+        <div class="border rounded p-3 h-100 photo-card {% if foto_fin %}bg-success-subtle border-success{% endif %}">
+          <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+            <div class="fw-semibold">2. Fin de mantenimiento</div>
+            {% if foto_fin %}<span class="badge bg-success">Subida</span>{% else %}<span class="badge bg-secondary">Pendiente</span>{% endif %}
+          </div>
+          {% if foto_fin %}
+            <img src="{{ foto_fin.imagen.url }}" class="img-fluid rounded border w-100 mb-2 mobile-photo-img foto-clickable" alt="Fin de mantenimiento" data-full="{{ foto_fin.imagen.url }}" style="object-fit:cover;max-height:180px;">
+            <button type="submit" class="btn btn-sm btn-outline-danger w-100" formmethod="post" formaction="/dashboard/fotos/{{ foto_fin.id }}/eliminar/" onclick="return confirm('¿Seguro que deseas eliminar esta foto?');">🗑 Eliminar foto</button>
+          {% else %}
+            <input class="form-control" type="file" name="foto_fin" accept="image/*">
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="col-12 col-lg-4">
+        <div class="border rounded p-3 h-100 photo-card {% if foto_nivel %}bg-success-subtle border-success{% endif %}">
+          <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+            <div class="fw-semibold">3. Nivel pH y Cl</div>
+            {% if foto_nivel %}<span class="badge bg-success">Subida</span>{% else %}<span class="badge bg-secondary">Pendiente</span>{% endif %}
+          </div>
+          {% if foto_nivel %}
+            <img src="{{ foto_nivel.imagen.url }}" class="img-fluid rounded border w-100 mb-2 mobile-photo-img foto-clickable" alt="Nivel pH y Cl" data-full="{{ foto_nivel.imagen.url }}" style="object-fit:cover;max-height:180px;">
+            <button type="submit" class="btn btn-sm btn-outline-danger w-100" formmethod="post" formaction="/dashboard/fotos/{{ foto_nivel.id }}/eliminar/" onclick="return confirm('¿Seguro que deseas eliminar esta foto?');">🗑 Eliminar foto</button>
+          {% else %}
+            <input class="form-control" type="file" name="foto_nivel" accept="image/*">
+          {% endif %}
+        </div>
+      </div>
+
+      {% if cantidad_fotos < 3 %}
+      <div class="col-12">
+        <button class="btn btn-primary w-100" type="submit"><i class="bi bi-cloud-arrow-up me-1"></i> Subir fotos seleccionadas</button>
+      </div>
+      {% endif %}
+    </form>
+
+    {% if not puede_cerrar %}
+    <div class="alert alert-warning mt-3 mb-0">
+      <div class="fw-semibold mb-1">Antes de cerrar este mantenimiento falta:</div>
+      <ul class="mb-0 ps-3">
+        {% if not checklist_completo %}<li>Completar y guardar la limpieza y la inspección.</li>{% endif %}
+        {% if not foto_inicio %}<li>Subir la foto de inicio de mantenimiento.</li>{% endif %}
+        {% if not foto_fin %}<li>Subir la foto de fin de mantenimiento.</li>{% endif %}
+        {% if not foto_nivel %}<li>Subir la foto de nivel pH y Cl.</li>{% endif %}
+      </ul>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+<div class="card shadow-sm mb-3 mobile-tight-card premium-card status-action-card">
+  <div class="card-body">
+    <div class="premium-card-title"><i class="bi bi-bullseye"></i><span>Estado del mantenimiento</span></div>
+
+
+<div class="d-grid gap-2">
+  {% if m.estado != 'realizado' %}
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="accion" value="marcar_realizado">
+      <button class="btn {% if puede_cerrar %}btn-success{% else %}btn-outline-success{% endif %} btn-lg">
+        ✅ Marcar como realizado
+      </button>
+    </form>
+
+    {% if not puede_cerrar %}
+    <div class="small text-muted">
+      El sistema no permitirá cerrarlo hasta completar el checklist y subir las 3 fotos obligatorias.
+    </div>
+    {% endif %}
+  {% else %}
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="accion" value="marcar_pendiente">
+      <button class="btn btn-warning btn-lg">↩️ Volver a pendiente</button>
+    </form>
+  {% endif %}
+</div>
+
+
+  </div>
+</div>
+
+{% if es_admin %}
+
+<div class="card shadow-sm mb-3 border-info mobile-tight-card premium-card">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+      <div class="premium-card-title mb-0"><i class="bi bi-clock-history"></i><span>Historial reciente del cliente</span></div>
+      <a class="btn btn-outline-info btn-sm w-100 w-sm-auto" href="/dashboard/mantenimientos/historial/?cliente={{ m.cliente.id }}">
+        Ver historial completo
+      </a>
+    </div>
+
+
+{% if historial_cliente_reciente %}
+  <div class="vstack gap-2">
+    {% for h in historial_cliente_reciente %}
+      <div class="border rounded p-3 bg-light history-item">
+        <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
+          <div class="flex-grow-1">
+            <div class="fw-semibold">
+              {{ h.fecha|date:"d/m/Y" }} · {{ h.contrato }}
+            </div>
+
+            <div class="small text-muted mt-1">
+              {% if h.estado == "realizado" %}
+                <span class="badge bg-success">Realizado</span>
+              {% else %}
+                <span class="badge bg-warning text-dark">Pendiente</span>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="w-100 w-sm-auto">
+            <a href="/dashboard/mantenimientos/{{ h.id }}/" class="btn btn-outline-primary btn-sm w-100">
+              Abrir
+            </a>
+          </div>
+        </div>
+
+        <div class="small mt-2">
+          <strong>Trabajadores:</strong>
+          {% for t in h.trabajadores.all %}
+            {{ t.user.username }}{% if not forloop.last %}, {% endif %}
+          {% empty %}
+            <span class="text-muted">Sin asignar</span>
+          {% endfor %}
+        </div>
+
+        {% if h.observaciones %}
+        <div class="small text-muted mt-2">
+          {{ h.observaciones|truncatechars:140 }}
+        </div>
+        {% endif %}
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="text-muted">
+    No hay mantenimientos anteriores registrados para este cliente.
+  </div>
+{% endif %}
+
+
+  </div>
+</div>
+{% endif %}
+
+<div class="card shadow-sm mb-3 {% if esta_realizado %}border-secondary{% endif %} mobile-tight-card premium-card">
+  <div class="card-body">
+    <div class="premium-card-title"><i class="bi bi-droplet-half"></i><span>Registrar insumo usado</span></div>
+
+
+{% if esta_realizado %}
+  <div class="alert alert-secondary mb-0">
+    Este mantenimiento está bloqueado. Para registrar nuevos insumos primero debes volverlo a pendiente.
+  </div>
+{% else %}
+  <form method="post" class="row g-2">
+    {% csrf_token %}
+    <input type="hidden" name="accion" value="agregar_insumo">
+
+    <div class="col-12">
+      <select class="form-select form-select-lg" name="insumo_id" required>
+        <option value="">-- Selecciona un insumo --</option>
+        {% for i in insumos %}
+          <option value="{{ i.id }}">{{ i.nombre }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="col-12">
+      <input class="form-control form-control-lg" type="number" name="cantidad" min="1" placeholder="Cantidad" required>
+    </div>
+
+    <div class="col-12">
+      <button class="btn btn-primary btn-lg w-100" type="submit">Agregar insumo</button>
+    </div>
+  </form>
+{% endif %}
+
+
+  </div>
+</div>
+
+<div class="card shadow-sm mb-3 {% if esta_realizado %}border-secondary{% endif %} mobile-tight-card premium-card">
+  <div class="card-body">
+    <div class="premium-card-title"><i class="bi bi-box-seam"></i><span>Insumos utilizados</span></div>
+
+
+{% if lista_usos %}
+  <div class="table-responsive d-none d-md-block table-premium">
+    <table class="table table-sm table-striped mb-0 align-middle">
+      <thead>
+        <tr>
+          <th>Insumo</th>
+          <th>Cant.</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in lista_usos %}
+        <tr>
+          <td>{{ u.insumo }}</td>
+          <td>{{ u.cantidad }}</td>
+          <td class="text-nowrap">
+            {% if esta_realizado %}
+              <button type="button" class="btn btn-sm btn-outline-secondary" disabled>🔒 Editar</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary" disabled>🔒 Eliminar</button>
+            {% else %}
+              <a class="btn btn-sm btn-outline-primary" href="/dashboard/usos/{{ u.id }}/editar/">Editar</a>
+              <a class="btn btn-sm btn-outline-danger" href="/dashboard/usos/{{ u.id }}/eliminar/">Eliminar</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="d-md-none vstack gap-2">
+    {% for u in lista_usos %}
+    <div class="border rounded p-3 bg-light usage-mobile-item">
+      <div class="fw-semibold">{{ u.insumo }}</div>
+      <div class="small text-muted">Cantidad: {{ u.cantidad }}</div>
+
+      <div class="mt-3 mobile-table-actions">
+        {% if esta_realizado %}
+          <button type="button" class="btn btn-sm btn-outline-secondary" disabled>🔒 Editar</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary" disabled>🔒 Eliminar</button>
+        {% else %}
+          <a class="btn btn-sm btn-outline-primary" href="/dashboard/usos/{{ u.id }}/editar/">Editar</a>
+          <a class="btn btn-sm btn-outline-danger" href="/dashboard/usos/{{ u.id }}/eliminar/">Eliminar</a>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="text-muted">No hay insumos registrados en este mantenimiento.</div>
+{% endif %}
+
+
+  </div>
+</div>
+
+{% if es_admin %}
+
+<div class="card shadow-sm mb-3 mobile-tight-card premium-card">
+  <div class="card-body">
+    <div class="premium-card-title"><i class="bi bi-cash-stack"></i><span>Egresos del mantenimiento</span></div>
+
+
+{% if lista_egresos %}
+  <div class="table-responsive d-none d-md-block table-premium">
+    <table class="table table-sm table-striped mb-2">
+      <thead>
+        <tr>
+          <th>Insumo</th>
+          <th>Cant.</th>
+          <th>Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in lista_egresos %}
+        <tr>
+          <td>{{ e.insumo }}</td>
+          <td>{{ e.cantidad }}</td>
+          <td>{{ e.total }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="d-md-none vstack gap-2">
+    {% for e in lista_egresos %}
+    <div class="border rounded p-3 bg-light expense-mobile-item">
+      <div class="fw-semibold">{{ e.insumo }}</div>
+      <div class="small text-muted">Cantidad: {{ e.cantidad }}</div>
+      <div class="small text-muted">Total: {{ e.total }}</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="mt-3"><strong>Total egresos:</strong> {{ total_egresos }}</div>
+{% else %}
+  <div class="text-muted">No hay egresos registrados.</div>
+{% endif %}
+
+
+  </div>
+</div>
+{% endif %}
+
+<div id="visorImagen" class="visor-imagen-overlay" aria-hidden="true">
+  <div class="visor-imagen-contenido">
+    <button type="button" class="visor-cerrar" id="cerrarVisor" aria-label="Cerrar">×</button>
+    <img id="imagenAmpliada" src="" alt="Vista ampliada">
+  </div>
+</div>
+
+<script>
+
+  (function () {
+    function controlarNovedad(nombre, contenedorId) {
+      const radios = document.querySelectorAll('input[name="' + nombre + '"]');
+      const contenedor = document.getElementById(contenedorId);
+      if (!contenedor || !radios.length) return;
+
+      function actualizar() {
+        const seleccionado = document.querySelector('input[name="' + nombre + '"]:checked');
+        contenedor.classList.toggle('d-none', !seleccionado || seleccionado.value !== 'novedad');
+      }
+
+      radios.forEach(function (radio) {
+        radio.addEventListener('change', actualizar);
+      });
+      actualizar();
+    }
+
+    controlarNovedad('bomba_estado', 'bombaNovedadWrap');
+    controlarNovedad('filtro_estado', 'filtroNovedadWrap');
+  })();
+
+  (function () {
+    const visor = document.getElementById("visorImagen");
+    const imagenAmpliada = document.getElementById("imagenAmpliada");
+    const cerrarVisor = document.getElementById("cerrarVisor");
+    const imagenes = document.querySelectorAll(".foto-clickable");
+
+    function abrirVisor(src, altText) {
+      imagenAmpliada.src = src;
+      imagenAmpliada.alt = altText || "Vista ampliada";
+      visor.classList.add("activo");
+      visor.setAttribute("aria-hidden", "false");
+      document.body.style.overflow = "hidden";
+    }
+
+    function cerrar() {
+      visor.classList.remove("activo");
+      visor.setAttribute("aria-hidden", "true");
+      imagenAmpliada.src = "";
+      document.body.style.overflow = "";
+    }
+
+    imagenes.forEach((img) => {
+      img.addEventListener("click", function () {
+        abrirVisor(this.dataset.full || this.src, this.alt);
+      });
+    });
+
+    cerrarVisor.addEventListener("click", cerrar);
+
+    visor.addEventListener("click", function (e) {
+      if (e.target === visor) {
+        cerrar();
+      }
+    });
+
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && visor.classList.contains("activo")) {
+        cerrar();
+      }
+    });
+  })();
+</script>
+
+{% endblock %}

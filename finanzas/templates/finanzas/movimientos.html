@@ -1,0 +1,31 @@
+{% extends "dashboard/base_admin.html" %}
+{% load humanize %}
+{% block title %}Movimientos financieros{% endblock %}
+{% block top_title %}💳 Movimientos{% endblock %}
+{% block content %}
+<style>
+.mv-shell{display:grid;gap:15px}.mv-head,.mv-card{background:#fff;border:1px solid var(--jv-border);border-radius:20px;box-shadow:var(--jv-shadow-sm)}.mv-head{padding:18px;display:flex;justify-content:space-between;gap:14px;align-items:center;flex-wrap:wrap}.mv-head h1{font-size:1.25rem;font-weight:900;margin:0}.mv-actions{display:flex;gap:8px;flex-wrap:wrap}.mv-actions .btn{border-radius:12px;font-weight:800}.mv-filter{padding:14px;display:grid;grid-template-columns:2fr repeat(4,1fr) auto;gap:9px}.mv-filter input,.mv-filter select{border:1px solid var(--jv-border);border-radius:12px;padding:10px 11px;width:100%;background:#fff}.mv-list{display:grid;gap:9px}.mv-row{padding:13px 15px;display:grid;grid-template-columns:44px minmax(0,1.4fr) .75fr .7fr .55fr auto;align-items:center;gap:12px}.mv-icon{width:42px;height:42px;border-radius:13px;display:grid;place-items:center;font-weight:900}.mv-in{background:#eaf8f0;color:#157347}.mv-out{background:#fff0f1;color:#b02a37}.mv-title{font-weight:900}.mv-sub{font-size:.76rem;color:var(--jv-muted)}.mv-money{font-weight:950}.mv-progress{height:6px;background:#edf1f5;border-radius:99px;overflow:hidden;margin-top:6px}.mv-progress span{display:block;height:100%;background:#198754}.mv-badge{padding:6px 9px;border-radius:999px;font-size:.68rem;font-weight:900}.st-pagado{background:#e8f7ef;color:#157347}.st-parcial{background:#fff3cd;color:#8a6500}.st-pendiente{background:#e7f1ff;color:#0a58ca}.st-vencido{background:#fde8ea;color:#b02a37}.st-anulado{background:#eceff3;color:#5f6875}.mv-menu{display:flex;gap:5px}.mv-menu a{border-radius:10px}.mv-empty{text-align:center;padding:45px;color:var(--jv-muted)}
+@media(max-width:900px){.mv-filter{grid-template-columns:1fr 1fr}.mv-filter .wide{grid-column:1/-1}.mv-row{grid-template-columns:40px minmax(0,1fr) auto}.mv-hide-mobile{display:none}.mv-menu{grid-column:2/4}.mv-card{border-radius:17px}}
+@media(max-width:560px){.mv-head{padding:14px}.mv-actions{display:grid;grid-template-columns:1fr 1fr;width:100%}.mv-filter{grid-template-columns:1fr 1fr;padding:11px}.mv-row{padding:12px 11px;gap:9px}.mv-money{font-size:.88rem}.mv-menu a{font-size:.72rem}}
+</style>
+<div class="mv-shell">
+  <div class="mv-head"><div><h1>Movimientos financieros</h1><div class="text-muted small">Consulta, filtra y administra ingresos y egresos.</div></div><div class="mv-actions"><a href="{% url 'finanzas_ingreso_nuevo' %}" class="btn btn-success">＋ Ingreso</a><a href="{% url 'finanzas_egreso_nuevo' %}" class="btn btn-danger">− Egreso</a><a href="{% url 'flujo_mensual' %}" class="btn btn-outline-primary">Resumen</a></div></div>
+  <form class="mv-card mv-filter" method="get">
+    <input class="wide" name="q" value="{{ q }}" placeholder="Buscar concepto, cliente, proveedor o ciudad">
+    <select name="tipo"><option value="todos" {% if tipo == 'todos' %}selected{% endif %}>Todos</option><option value="ingresos" {% if tipo == 'ingresos' %}selected{% endif %}>Ingresos</option><option value="egresos" {% if tipo == 'egresos' %}selected{% endif %}>Egresos</option></select>
+    <select name="estado"><option value="">Todos los estados</option>{% for value,label in estados %}<option value="{{ value }}" {% if estado == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+    <input type="date" name="desde" value="{{ desde }}"><input type="date" name="hasta" value="{{ hasta }}"><button class="btn btn-primary" type="submit">Filtrar</button>
+  </form>
+  <div class="mv-list">
+    {% for item in page_obj %}<article class="mv-card mv-row">
+      <div class="mv-icon {% if item.tipo == 'ingreso' %}mv-in{% else %}mv-out{% endif %}">{% if item.tipo == 'ingreso' %}↗{% else %}↘{% endif %}</div>
+      <div><div class="mv-title">{{ item.obj.concepto|default:"Movimiento" }}</div><div class="mv-sub">{{ item.fecha|date:"d/m/Y" }} · {% if item.tipo == 'ingreso' %}{{ item.obj.cliente|default:"Ingreso manual" }}{% else %}{{ item.obj.get_categoria_display }}{% endif %}</div><div class="mv-progress"><span style="width:{{ item.obj.porcentaje_pagado }}%"></span></div></div>
+      <div class="mv-hide-mobile"><div class="mv-sub">Total</div><div class="mv-money">${{ item.obj.total|floatformat:2|intcomma }}</div></div>
+      <div class="mv-hide-mobile"><div class="mv-sub">Pagado</div><div class="mv-money">${{ item.obj.monto_pagado|floatformat:2|intcomma }}</div></div>
+      <div><span class="mv-badge st-{{ item.obj.estado_visual }}">{{ item.obj.get_estado_display }}</span><div class="mv-sub mt-1">Saldo ${{ item.obj.saldo|floatformat:2 }}</div></div>
+      <div class="mv-menu">{% if item.tipo == 'ingreso' %}<a class="btn btn-sm btn-outline-primary" href="{% url 'finanzas_ingreso_editar' item.obj.pk %}">Editar</a>{% else %}<a class="btn btn-sm btn-outline-primary" href="{% url 'finanzas_egreso_editar' item.obj.pk %}">Editar</a>{% endif %}<a class="btn btn-sm btn-outline-danger" href="{% url 'finanzas_movimiento_eliminar' item.tipo item.obj.pk %}">Eliminar</a></div>
+    </article>{% empty %}<div class="mv-card mv-empty">No se encontraron movimientos con estos filtros.</div>{% endfor %}
+  </div>
+  {% if page_obj.paginator.num_pages > 1 %}<nav class="d-flex justify-content-center gap-2">{% if page_obj.has_previous %}<a class="btn btn-outline-primary" href="?{{ querystring }}&page={{ page_obj.previous_page_number }}">Anterior</a>{% endif %}<span class="btn disabled">{{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>{% if page_obj.has_next %}<a class="btn btn-outline-primary" href="?{{ querystring }}&page={{ page_obj.next_page_number }}">Siguiente</a>{% endif %}</nav>{% endif %}
+</div>
+{% endblock %}

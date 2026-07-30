@@ -111,9 +111,15 @@
           <hr class="my-4">
           <div class="row g-3">
             <div class="col-12"><div class="detail-label">Frecuencia</div><div class="detail-value">{{ contrato.frecuencia_completa }}</div></div>
+            <div class="col-12"><div class="detail-label">Días de visita</div><div class="detail-value">{{ contrato.dias_visita_completos }}</div></div>
+            <div class="col-12"><div class="detail-label">Técnico designado</div><div class="detail-value">{% if contrato.tecnico_designado %}{{ contrato.tecnico_designado }}{% else %}<span class="text-muted">Sin asignar</span>{% endif %}</div></div>
             <div class="col-12"><div class="detail-label">Forma de pago</div><div class="detail-value">{{ contrato.forma_pago_completa }}</div></div>
             <div class="col-6"><div class="detail-label">Fecha de inicio</div><div class="detail-value">{{ contrato.fecha_inicio|date:"d/m/Y" }}</div></div>
             <div class="col-6"><div class="detail-label">Estado</div><div class="detail-value">{% if contrato.activo %}<span class="cd-status cd-status-active">Activo</span>{% else %}<span class="cd-status cd-status-inactive">Inactivo</span>{% endif %}</div></div>
+            <div class="col-6"><div class="detail-label">Automatización</div><div class="detail-value">{% if contrato.generacion_automatica %}<span class="text-success">● Activa</span>{% else %}<span class="text-secondary">● Desactivada</span>{% endif %}</div></div>
+            <div class="col-6"><div class="detail-label">Programado hasta</div><div class="detail-value">{% if contrato.programado_hasta %}{{ contrato.programado_hasta|date:"d/m/Y" }}{% else %}<span class="text-muted">Sin programación</span>{% endif %}</div></div>
+            <div class="col-6"><div class="detail-label">Próxima visita</div><div class="detail-value">{% if proximo_mantenimiento %}{{ proximo_mantenimiento.fecha|date:"d/m/Y" }}{% else %}<span class="text-muted">Sin visita futura</span>{% endif %}</div></div>
+            <div class="col-6"><div class="detail-label">Visitas futuras</div><div class="detail-value">{{ mantenimientos_futuros }}</div></div>
           </div>
         </div>
       </div>
@@ -143,6 +149,12 @@
         <a class="btn btn-primary" href="/dashboard/contratos/{{ contrato.id }}/editar/">✏️ Editar contrato</a>
         <a class="btn btn-outline-primary" href="/dashboard/mantenimientos/historial/?q={{ contrato.cliente.nombre|urlencode }}">🛠 Ver mantenimientos</a>
         <a class="btn btn-outline-secondary" href="/dashboard/finanzas/facturas/">🧾 Ver facturas</a>
+        {% if contrato.activo and contrato.generacion_automatica %}
+          <form method="post" action="/dashboard/contratos/{{ contrato.id }}/regenerar-programacion/" class="d-inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline-success" onclick="return confirm('Se sincronizarán únicamente los mantenimientos futuros automáticos pendientes. ¿Continuar?');">🔄 Regenerar programación</button>
+          </form>
+        {% endif %}
         <form method="post" action="/dashboard/contratos/{{ contrato.id }}/toggle/" class="d-inline">
           {% csrf_token %}
           <input type="hidden" name="next" value="/dashboard/contratos/{{ contrato.id }}/">

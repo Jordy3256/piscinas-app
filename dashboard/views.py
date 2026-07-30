@@ -43,6 +43,13 @@ from finanzas.models import (
 )
 from clientes.models import Cliente
 from contratos.models import Contrato
+from contratos.programacion import (
+    DIAS_SEMANA,
+    cancelar_programacion_futura,
+    generar_mantenimientos_contrato,
+    normalizar_dias,
+    validar_programacion,
+)
 
 try:
     from .models import PushSubscription
@@ -3550,6 +3557,8 @@ def factura_list_view(request):
             "total_facturado": total_facturado,
             "total_pagado": total_pagado,
             "total_pendiente": total_pendiente,
+            "mantenimientos_futuros": mantenimientos_futuros,
+            "proximo_mantenimiento": proximo_mantenimiento,
             "es_admin": True,
         },
     )
@@ -5143,6 +5152,9 @@ def _validar_datos_contrato(request):
         request.POST.get("fecha_inicio") or ""
     ).strip()
     activo = request.POST.get("activo") == "on"
+    generacion_automatica = request.POST.get("generacion_automatica") == "on"
+    tecnico_id = (request.POST.get("tecnico_designado") or "").strip()
+    dias_visita = normalizar_dias(request.POST.getlist("dias_visita"))
 
     errores = []
 
@@ -5170,6 +5182,25 @@ def _validar_datos_contrato(request):
             "Debes escribir la forma de pago personalizada."
         )
 
+    tecnico_designado = None
+    if tecnico_id:
+        if tecnico_id.isdigit():
+            tecnico_designado = Trabajador.objects.filter(
+                pk=int(tecnico_id),
+                activo=True,
+            ).select_related("user").first()
+        if tecnico_designado is None:
+            errores.append("El técnico seleccionado no existe o está inactivo.")
+
+    errores.extend(
+        validar_programacion(
+            frecuencia,
+            dias_visita,
+            tecnico_designado,
+            automatica=generacion_automatica and activo,
+        )
+    )
+
     try:
         precio_mensual = Decimal(precio_mensual_str)
         if precio_mensual <= 0:
@@ -5194,6 +5225,10 @@ def _validar_datos_contrato(request):
         "precio_mensual": precio_mensual,
         "fecha_inicio": fecha_inicio,
         "activo": activo,
+        "generacion_automatica": generacion_automatica,
+        "tecnico_designado": tecnico_designado,
+        "tecnico_id": tecnico_id,
+        "dias_visita": dias_visita,
     }
 
 
@@ -5295,6 +5330,12 @@ def contrato_crear_view(request):
         .filter(activo=True)
         .order_by("nombre")
     )
+    trabajadores = (
+        Trabajador.objects
+        .filter(activo=True)
+        .select_related("user")
+        .order_by("user__username")
+    )
 
     datos_formulario = {
         "cliente_id": "",
@@ -5305,6 +5346,9 @@ def contrato_crear_view(request):
         "precio_mensual": "",
         "fecha_inicio": timezone.localdate().isoformat(),
         "activo": True,
+        "generacion_automatica": True,
+        "tecnico_id": "",
+        "dias_visita": [],
     }
 
     if request.method == "POST":
@@ -5329,6 +5373,9 @@ def contrato_crear_view(request):
                 "",
             ),
             "activo": validacion["activo"],
+            "generacion_automatica": validacion["generacion_automatica"],
+            "tecnico_id": validacion["tecnico_id"],
+            "dias_visita": validacion["dias_visita"],
         }
 
         if validacion["errores"]:
@@ -5349,7 +5396,12 @@ def contrato_crear_view(request):
                 precio_mensual=validacion["precio_mensual"],
                 fecha_inicio=validacion["fecha_inicio"],
                 activo=validacion["activo"],
+                tecnico_designado=validacion["tecnico_designado"],
+                dias_visita=validacion["dias_visita"],
+                generacion_automatica=validacion["generacion_automatica"],
             )
+
+            resultado_programacion = generar_mantenimientos_contrato(contrato)
 
             _registrar_actividad(
                 user=request.user,
@@ -5362,9 +5414,10 @@ def contrato_crear_view(request):
                 url=f"/dashboard/contratos/{contrato.pk}/",
             )
 
+            creados = resultado_programacion.get("creados", 0)
             messages.success(
                 request,
-                "Contrato creado correctamente.",
+                f"Contrato creado correctamente. Se programaron {creados} mantenimientos.",
             )
             return redirect(
                 f"/dashboard/contratos/{contrato.pk}/"
@@ -5379,6 +5432,8 @@ def contrato_crear_view(request):
             "clientes": clientes,
             "frecuencias": Contrato.FRECUENCIA_CHOICES,
             "formas_pago": Contrato.FORMA_PAGO_CHOICES,
+            "trabajadores": trabajadores,
+            "dias_semana": DIAS_SEMANA.items(),
             "datos_formulario": datos_formulario,
             "es_admin": True,
         },
@@ -5403,6 +5458,12 @@ def contrato_editar_view(request, pk):
         "-activo",
         "nombre",
     )
+    trabajadores = (
+        Trabajador.objects
+        .filter(activo=True)
+        .select_related("user")
+        .order_by("user__username")
+    )
 
     datos_formulario = {
         "cliente_id": str(contrato.cliente_id),
@@ -5417,6 +5478,9 @@ def contrato_editar_view(request, pk):
         "precio_mensual": contrato.precio_mensual,
         "fecha_inicio": contrato.fecha_inicio.isoformat(),
         "activo": contrato.activo,
+        "generacion_automatica": contrato.generacion_automatica,
+        "tecnico_id": str(contrato.tecnico_designado_id or ""),
+        "dias_visita": normalizar_dias(contrato.dias_visita),
     }
 
     if request.method == "POST":
@@ -5441,6 +5505,9 @@ def contrato_editar_view(request, pk):
                 "",
             ),
             "activo": validacion["activo"],
+            "generacion_automatica": validacion["generacion_automatica"],
+            "tecnico_id": validacion["tecnico_id"],
+            "dias_visita": validacion["dias_visita"],
         }
 
         if validacion["errores"]:
@@ -5461,7 +5528,19 @@ def contrato_editar_view(request, pk):
             )
             contrato.fecha_inicio = validacion["fecha_inicio"]
             contrato.activo = validacion["activo"]
+            contrato.tecnico_designado = validacion["tecnico_designado"]
+            contrato.dias_visita = validacion["dias_visita"]
+            contrato.generacion_automatica = validacion["generacion_automatica"]
             contrato.save()
+
+            if contrato.activo and contrato.generacion_automatica:
+                resultado_programacion = generar_mantenimientos_contrato(
+                    contrato,
+                    reconciliar=True,
+                )
+            else:
+                eliminados = cancelar_programacion_futura(contrato)
+                resultado_programacion = {"creados": 0, "eliminados": eliminados}
 
             _registrar_actividad(
                 user=request.user,
@@ -5475,7 +5554,7 @@ def contrato_editar_view(request, pk):
 
             messages.success(
                 request,
-                "Contrato actualizado correctamente.",
+                "Contrato actualizado correctamente. La programación futura fue sincronizada.",
             )
             return redirect(
                 f"/dashboard/contratos/{contrato.pk}/"
@@ -5490,6 +5569,8 @@ def contrato_editar_view(request, pk):
             "clientes": clientes,
             "frecuencias": Contrato.FRECUENCIA_CHOICES,
             "formas_pago": Contrato.FORMA_PAGO_CHOICES,
+            "trabajadores": trabajadores,
+            "dias_semana": DIAS_SEMANA.items(),
             "datos_formulario": datos_formulario,
             "es_admin": True,
         },
@@ -5506,7 +5587,7 @@ def contrato_detalle_view(request, pk):
         )
 
     contrato = get_object_or_404(
-        Contrato.objects.select_related("cliente"),
+        Contrato.objects.select_related("cliente", "tecnico_designado__user"),
         pk=pk,
     )
 
@@ -5571,6 +5652,15 @@ def contrato_detalle_view(request, pk):
         or Decimal("0.00")
     )
 
+    mantenimientos_futuros = mantenimientos.filter(
+        estado="pendiente",
+        fecha__gte=timezone.localdate(),
+    ).count()
+    proximo_mantenimiento = mantenimientos.filter(
+        estado="pendiente",
+        fecha__gte=timezone.localdate(),
+    ).order_by("fecha").first()
+
     return render(
         request,
         "dashboard/contrato_detalle.html",
@@ -5592,6 +5682,29 @@ def contrato_detalle_view(request, pk):
 
 @login_required
 @require_http_methods(["POST"])
+def contrato_regenerar_programacion_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    contrato = get_object_or_404(
+        Contrato.objects.select_related("cliente", "tecnico_designado"),
+        pk=pk,
+    )
+    resultado = generar_mantenimientos_contrato(contrato, reconciliar=True)
+    errores = resultado.get("errores") or []
+    if errores:
+        for error in errores:
+            messages.error(request, error)
+    else:
+        messages.success(
+            request,
+            f"Programación actualizada: {resultado['creados']} mantenimientos creados.",
+        )
+    return redirect(f"/dashboard/contratos/{contrato.pk}/")
+
+
+@login_required
+@require_http_methods(["POST"])
 def contrato_toggle_view(request, pk):
     if not es_admin(request.user):
         return render(
@@ -5604,6 +5717,11 @@ def contrato_toggle_view(request, pk):
 
     contrato.activo = not contrato.activo
     contrato.save(update_fields=["activo"])
+
+    if contrato.activo and contrato.generacion_automatica:
+        generar_mantenimientos_contrato(contrato, reconciliar=True)
+    elif not contrato.activo:
+        cancelar_programacion_futura(contrato)
 
     estado_texto = (
         "activado"

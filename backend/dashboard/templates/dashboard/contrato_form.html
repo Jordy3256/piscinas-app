@@ -1,0 +1,243 @@
+{% extends "dashboard/base_admin.html" %}
+
+{% block title %}
+  {% if modo == "editar" %}Editar contrato{% else %}Nuevo contrato{% endif %}
+{% endblock %}
+
+{% block top_title %}
+  {% if modo == "editar" %}✏️ Editar contrato{% else %}➕ Nuevo contrato{% endif %}
+{% endblock %}
+
+{% block top_actions %}
+  <a class="btn btn-outline-secondary btn-sm" href="/dashboard/contratos/">Contratos</a>
+  <a class="btn btn-outline-danger btn-sm" href="/logout/">Salir</a>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+  .contract-form-page{
+    --cf-primary:#0f766e;--cf-primary-dark:#115e59;--cf-ink:#0f172a;
+    --cf-muted:#64748b;--cf-line:#e2e8f0;--cf-soft:#f8fafc;
+  }
+  .contract-form-page .cf-hero{
+    border-radius:24px;padding:28px;margin-bottom:22px;color:#fff;position:relative;overflow:hidden;
+    background:linear-gradient(135deg,#0f172a 0%,#0f766e 68%,#14b8a6 100%);
+    box-shadow:0 24px 60px rgba(15,23,42,.18)
+  }
+  .contract-form-page .cf-hero:after{content:"";position:absolute;width:250px;height:250px;border-radius:50%;background:rgba(255,255,255,.08);right:-70px;top:-100px}
+  .contract-form-page .cf-eyebrow{font-size:.78rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;opacity:.8}
+  .contract-form-page .cf-title{font-size:clamp(1.7rem,3vw,2.4rem);font-weight:800;margin:.45rem 0 .35rem}
+  .contract-form-page .cf-subtitle{opacity:.88;margin:0}
+  .contract-form-page .cf-card{
+    border:1px solid var(--cf-line);border-radius:20px;background:#fff;
+    box-shadow:0 14px 40px rgba(15,23,42,.06);overflow:hidden
+  }
+  .contract-form-page .cf-card-header{padding:18px 20px;background:linear-gradient(180deg,#fff,#fbfdff);border-bottom:1px solid #edf2f7}
+  .contract-form-page .cf-card-title{display:flex;align-items:center;gap:10px;font-weight:800;color:#0f172a}
+  .contract-form-page .cf-card-subtitle{font-size:.84rem;color:#64748b;margin-top:4px}
+  .contract-form-page .cf-card-body{padding:20px}
+  .contract-form-page .form-label{font-weight:700;color:#334155;font-size:.88rem}
+  .contract-form-page .form-control,.contract-form-page .form-select{
+    min-height:48px;border-radius:13px;border-color:#dbe3ec;background:#fff
+  }
+  .contract-form-page .form-control:focus,.contract-form-page .form-select:focus{
+    border-color:#2dd4bf;box-shadow:0 0 0 .2rem rgba(20,184,166,.14)
+  }
+  .contract-form-page .input-group-text{border-radius:13px 0 0 13px;background:#f8fafc;border-color:#dbe3ec;font-weight:800;color:#0f766e}
+  .contract-form-page .form-check-input{width:3rem;height:1.55rem}
+  .contract-form-page .form-check-input:checked{background-color:#0f766e;border-color:#0f766e}
+  .contract-form-page .cf-side-card{position:sticky;top:90px}
+  .contract-form-page .cf-submit{
+    min-height:52px;border-radius:14px;font-weight:800;background:linear-gradient(135deg,#0f766e,#14b8a6);border:0;
+    box-shadow:0 12px 26px rgba(15,118,110,.24)
+  }
+  .contract-form-page .btn{border-radius:12px;font-weight:700}
+  .contract-form-page .cf-note{
+    border:1px solid #ccfbf1;background:#f0fdfa;color:#115e59;border-radius:14px;padding:14px;font-size:.88rem
+  }
+  @media(max-width:991.98px){.contract-form-page .cf-side-card{position:static}}
+  @media(max-width:767.98px){.contract-form-page .cf-hero{padding:22px}.contract-form-page .cf-card-body{padding:17px}}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="contract-form-page">
+  <section class="cf-hero">
+    <div class="row align-items-center g-3 position-relative" style="z-index:2">
+      <div class="col">
+        <div class="cf-eyebrow">Gestión comercial</div>
+        <h1 class="cf-title">{% if modo == "editar" %}Editar contrato{% else %}Registrar nuevo contrato{% endif %}</h1>
+        <p class="cf-subtitle">Completa la información comercial y operativa. Los datos podrán modificarse posteriormente.</p>
+      </div>
+      <div class="col-12 col-md-auto">
+        <a class="btn btn-light" href="/dashboard/contratos/">← Volver al listado</a>
+      </div>
+    </div>
+  </section>
+
+  <form method="post" id="contrato-form">
+    {% csrf_token %}
+    <div class="row g-3">
+      <div class="col-12 col-lg-8">
+
+        <div class="cf-card mb-3">
+          <div class="cf-card-header">
+            <div class="cf-card-title">👤 Cliente</div>
+            <div class="cf-card-subtitle">Selecciona el cliente al que pertenece este contrato.</div>
+          </div>
+          <div class="cf-card-body">
+            <label for="cliente" class="form-label">Cliente <span class="text-danger">*</span></label>
+            <select id="cliente" name="cliente" class="form-select" required>
+              <option value="">Selecciona un cliente</option>
+              {% for cliente in clientes %}
+                <option value="{{ cliente.id }}" {% if datos_formulario.cliente_id|stringformat:"s" == cliente.id|stringformat:"s" %}selected{% endif %}>
+                  {{ cliente.nombre }}{% if cliente.telefono %} — {{ cliente.telefono }}{% endif %}{% if not cliente.activo %} — INACTIVO{% endif %}
+                </option>
+              {% endfor %}
+            </select>
+            {% if not clientes %}
+              <div class="alert alert-warning mt-3 mb-0">No existen clientes disponibles para seleccionar.</div>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="cf-card mb-3">
+          <div class="cf-card-header">
+            <div class="cf-card-title">📅 Frecuencia del servicio</div>
+            <div class="cf-card-subtitle">Define cuántas visitas se realizarán durante el contrato.</div>
+          </div>
+          <div class="cf-card-body">
+            <label for="frecuencia" class="form-label">Frecuencia <span class="text-danger">*</span></label>
+            <select id="frecuencia" name="frecuencia" class="form-select" required>
+              <option value="">Selecciona una frecuencia</option>
+              {% for valor, etiqueta in frecuencias %}
+                <option value="{{ valor }}" {% if datos_formulario.frecuencia == valor %}selected{% endif %}>{{ etiqueta }}</option>
+              {% endfor %}
+            </select>
+
+            <div id="frecuencia-personalizada-container" class="mt-3">
+              <label for="frecuencia_personalizada" class="form-label">Detalle de la frecuencia personalizada <span class="text-danger">*</span></label>
+              <input type="text" id="frecuencia_personalizada" name="frecuencia_personalizada" class="form-control" maxlength="150" value="{{ datos_formulario.frecuencia_personalizada }}" placeholder="Ejemplo: dos visitas por semana durante temporada alta">
+              <div class="form-text">Especifica claramente cada cuánto se realizará el servicio.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="cf-card mb-3">
+          <div class="cf-card-header">
+            <div class="cf-card-title">💳 Forma de pago</div>
+            <div class="cf-card-subtitle">Selecciona la modalidad acordada con el cliente.</div>
+          </div>
+          <div class="cf-card-body">
+            <label for="forma_pago" class="form-label">Forma de pago <span class="text-danger">*</span></label>
+            <select id="forma_pago" name="forma_pago" class="form-select" required>
+              <option value="">Selecciona una forma de pago</option>
+              {% for valor, etiqueta in formas_pago %}
+                <option value="{{ valor }}" {% if datos_formulario.forma_pago == valor %}selected{% endif %}>{{ etiqueta }}</option>
+              {% endfor %}
+            </select>
+
+            <div id="forma-pago-personalizada-container" class="mt-3">
+              <label for="forma_pago_personalizada" class="form-label">Detalle de la forma de pago personalizada <span class="text-danger">*</span></label>
+              <input type="text" id="forma_pago_personalizada" name="forma_pago_personalizada" class="form-control" maxlength="150" value="{{ datos_formulario.forma_pago_personalizada }}" placeholder="Ejemplo: pago los días 15 de cada mes">
+              <div class="form-text">Describe claramente el acuerdo de pago.</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="col-12 col-lg-4">
+        <div class="cf-side-card">
+
+          <div class="cf-card mb-3">
+            <div class="cf-card-header"><div class="cf-card-title">💰 Información económica</div></div>
+            <div class="cf-card-body">
+              <label for="precio_mensual" class="form-label">Precio mensual <span class="text-danger">*</span></label>
+              <div class="input-group mb-3">
+                <span class="input-group-text">$</span>
+                <input type="number" id="precio_mensual" name="precio_mensual" class="form-control" min="0.01" step="0.01" value="{{ datos_formulario.precio_mensual }}" placeholder="0.00" required>
+              </div>
+              <label for="fecha_inicio" class="form-label">Fecha de inicio <span class="text-danger">*</span></label>
+              <input type="date" id="fecha_inicio" name="fecha_inicio" class="form-control" value="{{ datos_formulario.fecha_inicio }}" required>
+            </div>
+          </div>
+
+          <div class="cf-card mb-3">
+            <div class="cf-card-header"><div class="cf-card-title">⚙️ Estado del contrato</div></div>
+            <div class="cf-card-body">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" role="switch" id="activo" name="activo" {% if datos_formulario.activo %}checked{% endif %}>
+                <label class="form-check-label fw-semibold ms-2" for="activo">Contrato activo</label>
+              </div>
+              <div class="cf-note mt-3">Los contratos inactivos se conservan en el historial, pero se identifican como suspendidos o finalizados.</div>
+            </div>
+          </div>
+
+          <div class="cf-card">
+            <div class="cf-card-body">
+              <div class="d-grid gap-2">
+                <button type="submit" class="btn btn-primary btn-lg cf-submit" id="guardar-contrato">
+                  {% if modo == "editar" %}💾 Guardar cambios{% else %}✅ Crear contrato{% endif %}
+                </button>
+                {% if modo == "editar" and contrato %}
+                  <a class="btn btn-outline-primary" href="/dashboard/contratos/{{ contrato.id }}/">Ver detalle</a>
+                {% endif %}
+                <a class="btn btn-outline-secondary" href="/dashboard/contratos/">Cancelar</a>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const frecuenciaSelect = document.getElementById("frecuencia");
+    const frecuenciaContainer = document.getElementById("frecuencia-personalizada-container");
+    const frecuenciaInput = document.getElementById("frecuencia_personalizada");
+    const formaPagoSelect = document.getElementById("forma_pago");
+    const formaPagoContainer = document.getElementById("forma-pago-personalizada-container");
+    const formaPagoInput = document.getElementById("forma_pago_personalizada");
+    const formulario = document.getElementById("contrato-form");
+    const botonGuardar = document.getElementById("guardar-contrato");
+
+    function actualizarFrecuenciaPersonalizada() {
+      const esPersonalizada = frecuenciaSelect && frecuenciaSelect.value === "personalizado";
+      if (frecuenciaContainer) frecuenciaContainer.style.display = esPersonalizada ? "block" : "none";
+      if (frecuenciaInput) {
+        frecuenciaInput.required = esPersonalizada;
+        if (!esPersonalizada) frecuenciaInput.value = "";
+      }
+    }
+
+    function actualizarFormaPagoPersonalizada() {
+      const esPersonalizada = formaPagoSelect && formaPagoSelect.value === "personalizado";
+      if (formaPagoContainer) formaPagoContainer.style.display = esPersonalizada ? "block" : "none";
+      if (formaPagoInput) {
+        formaPagoInput.required = esPersonalizada;
+        if (!esPersonalizada) formaPagoInput.value = "";
+      }
+    }
+
+    if (frecuenciaSelect) frecuenciaSelect.addEventListener("change", actualizarFrecuenciaPersonalizada);
+    if (formaPagoSelect) formaPagoSelect.addEventListener("change", actualizarFormaPagoPersonalizada);
+
+    actualizarFrecuenciaPersonalizada();
+    actualizarFormaPagoPersonalizada();
+
+    if (formulario && botonGuardar) {
+      formulario.addEventListener("submit", function () {
+        if (!formulario.checkValidity()) return;
+        botonGuardar.disabled = true;
+        botonGuardar.textContent = "Guardando...";
+      });
+    }
+  });
+</script>
+{% endblock %}

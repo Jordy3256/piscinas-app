@@ -1,0 +1,1336 @@
+{% extends "dashboard/base_trabajador.html" %}
+
+{% block title %}Mis mantenimientos{% endblock %}
+{% block top_title %}Mis mantenimientos{% endblock %}
+
+{% block content %}
+
+<style>
+  .card-tap { cursor: pointer; }
+  .badge-state { font-weight: 600; }
+
+  @media (max-width: 767.98px) {
+    .worker-section-title {
+      font-size: 1rem;
+    }
+
+    .worker-card .card-body {
+      padding: 1rem;
+    }
+
+    .worker-card .btn {
+      width: 100%;
+    }
+
+    .worker-summary .card-body {
+      padding: .9rem;
+    }
+
+    .mini-calendario .dia-box {
+      min-height: 72px;
+      padding: .38rem !important;
+    }
+
+    .agenda-day-column {
+      min-width: 260px;
+    }
+  }
+
+  .worker-subtitle {
+    color: #6c757d;
+    font-size: .88rem;
+  }
+
+  .worker-chip {
+    border-radius: 999px;
+    padding: .35rem .75rem;
+    font-size: .82rem;
+    font-weight: 600;
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+  }
+
+  .mini-calendario th,
+  .mini-calendario td {
+    vertical-align: top;
+    padding: .2rem;
+  }
+
+  .mini-calendario th {
+    font-size: .78rem;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+  }
+
+  .mini-calendario .dia-link {
+    text-decoration: none;
+    color: inherit;
+    display: block;
+  }
+
+  .mini-calendario .dia-box {
+    min-height: 78px;
+    border-radius: .75rem;
+    padding: .42rem;
+    background: #fff;
+    transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+  }
+
+  .mini-calendario .dia-link:hover .dia-box {
+    transform: translateY(-1px);
+    box-shadow: 0 0.25rem 0.6rem rgba(0,0,0,.08);
+    border-color: #0d6efd !important;
+  }
+
+  .mini-calendario .dia-numero {
+    font-size: .84rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .mini-calendario .dia-hoy {
+    border: 2px solid #0d6efd !important;
+    background: #eef5ff;
+  }
+
+  .mini-calendario .dia-seleccionado {
+    border: 2px solid #198754 !important;
+    background: #eefaf3;
+  }
+
+  .mini-calendario .dia-vacio {
+    background: #f8f9fa;
+  }
+
+  .mini-calendario .mini-resumen {
+    font-size: .66rem;
+    line-height: 1.08;
+    margin-top: .25rem;
+  }
+
+  .mini-calendario .mini-resumen div {
+    margin-bottom: 2px;
+  }
+
+  .worker-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem 1rem;
+    margin-top: .75rem;
+  }
+
+  .worker-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: .45rem;
+    font-size: .78rem;
+    color: #6c757d;
+  }
+
+  .worker-legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    display: inline-block;
+  }
+
+  .dot-total { background: #0d6efd; }
+  .dot-pendiente { background: #ffc107; }
+  .dot-realizado { background: #198754; }
+  .dot-seleccionado { background: #198754; }
+
+  .worker-calendar-heading {
+    display: flex;
+    flex-direction: column;
+    gap: .15rem;
+  }
+
+  .worker-calendar-month {
+    font-size: 1.05rem;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  .worker-calendar-year {
+    font-size: .84rem;
+    color: #6c757d;
+  }
+
+  .worker-view-switch .btn {
+    min-width: 130px;
+  }
+
+  .agenda-board {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(220px, 1fr));
+    gap: .75rem;
+    overflow-x: auto;
+    padding-bottom: .25rem;
+  }
+
+  .agenda-day-column {
+    min-width: 220px;
+    background: #fff;
+    border: 1px solid #e9ecef;
+    border-radius: 1rem;
+    padding: .75rem;
+  }
+
+  .agenda-day-column.agenda-hoy {
+    border: 2px solid #0d6efd;
+    background: #eef5ff;
+  }
+
+  .agenda-day-column.agenda-seleccionado {
+    border: 2px solid #198754;
+    background: #eefaf3;
+  }
+
+  .agenda-day-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: start;
+    gap: .5rem;
+    margin-bottom: .75rem;
+  }
+
+  .agenda-day-name {
+    font-size: .82rem;
+    color: #6c757d;
+    text-transform: uppercase;
+    font-weight: 700;
+    letter-spacing: .04em;
+  }
+
+  .agenda-day-number {
+    font-size: 1.2rem;
+    font-weight: 800;
+    line-height: 1;
+  }
+
+  .agenda-day-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem;
+    margin-bottom: .75rem;
+  }
+
+  .agenda-block {
+    margin-bottom: .7rem;
+    border-top: 1px dashed #dee2e6;
+    padding-top: .55rem;
+  }
+
+  .agenda-block:first-of-type {
+    border-top: 0;
+    padding-top: 0;
+  }
+
+  .agenda-block-title {
+    font-size: .8rem;
+    font-weight: 700;
+    margin-bottom: .45rem;
+    color: #495057;
+  }
+
+  .agenda-item {
+    border: 1px solid #e9ecef;
+    border-radius: .8rem;
+    padding: .55rem;
+    background: #fff;
+    margin-bottom: .45rem;
+  }
+
+  .agenda-item:last-child {
+    margin-bottom: 0;
+  }
+
+  .agenda-item.realizado {
+    border-color: #198754;
+    background: #f1fbf4;
+  }
+
+  .agenda-item.pendiente {
+    border-color: #ffc107;
+    background: #fffaf0;
+  }
+
+  .agenda-item.atrasado {
+    border-color: #dc3545;
+    background: #fff5f5;
+  }
+
+  .agenda-item-title {
+    font-weight: 700;
+    line-height: 1.2;
+    margin-bottom: .25rem;
+  }
+
+  .agenda-item-meta {
+    font-size: .78rem;
+    color: #6c757d;
+    margin-bottom: .45rem;
+  }
+
+  .agenda-empty {
+    color: #6c757d;
+    font-size: .82rem;
+  }
+
+  .agenda-week-summary {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(120px, 1fr));
+    gap: .6rem;
+    margin-bottom: 1rem;
+  }
+
+  @media (max-width: 991.98px) {
+    .agenda-week-summary {
+      grid-template-columns: repeat(2, minmax(120px, 1fr));
+    }
+  }
+
+  .agenda-week-box {
+    border: 1px solid #e9ecef;
+    border-radius: .9rem;
+    padding: .75rem;
+    background: #fff;
+  }
+
+  .agenda-week-box .label {
+    font-size: .78rem;
+    color: #6c757d;
+  }
+
+  .agenda-week-box .value {
+    font-size: 1.35rem;
+    font-weight: 800;
+    line-height: 1.1;
+    margin-top: .2rem;
+  }
+
+  /* =========================================================
+     REDISEÑO PREMIUM JVAQUA · MIS MANTENIMIENTOS
+     Solo presentación visual. No modifica la lógica de Django.
+     ========================================================= */
+
+  :root {
+    --worker-blue: #0b5ed7;
+    --worker-blue-dark: #073b82;
+    --worker-cyan: #078fc5;
+    --worker-green: #169c68;
+    --worker-yellow: #f0a900;
+    --worker-red: #df4054;
+    --worker-ink: #10233f;
+    --worker-muted: #718198;
+    --worker-line: rgba(16, 35, 63, .09);
+    --worker-soft: #f5f9ff;
+    --worker-shadow: 0 12px 30px rgba(20, 54, 94, .10);
+    --worker-shadow-lg: 0 20px 48px rgba(20, 54, 94, .15);
+  }
+
+  .worker-subtitle {
+    color: var(--worker-muted);
+    font-size: .86rem;
+    line-height: 1.45;
+  }
+
+  .worker-section-title {
+    color: var(--worker-ink);
+    font-weight: 900 !important;
+    letter-spacing: -.015em;
+  }
+
+  .card-tap {
+    cursor: pointer;
+  }
+
+  /* Encabezado principal */
+  .worker-page-header {
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 1rem;
+    padding: 1.2rem;
+    border-radius: 24px;
+    color: #fff;
+    background:
+      radial-gradient(circle at 93% 8%, rgba(255,255,255,.20), transparent 10rem),
+      linear-gradient(135deg, var(--worker-blue-dark), var(--worker-blue) 58%, var(--worker-cyan));
+    box-shadow: 0 18px 42px rgba(11, 94, 215, .23);
+  }
+
+  .worker-page-header::after {
+    content: "";
+    position: absolute;
+    right: -60px;
+    bottom: -90px;
+    width: 180px;
+    height: 180px;
+    border-radius: 50%;
+    background: rgba(255,255,255,.08);
+  }
+
+  .worker-page-header > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  .worker-page-title {
+    margin: 0;
+    font-size: clamp(1.2rem, 4vw, 1.65rem);
+    font-weight: 900;
+    line-height: 1.15;
+  }
+
+  .worker-page-header .worker-subtitle {
+    color: rgba(255,255,255,.76);
+  }
+
+  .worker-header-actions .btn {
+    min-height: 40px;
+    border-color: rgba(255,255,255,.25);
+    color: #fff;
+    background: rgba(255,255,255,.13);
+  }
+
+  .worker-header-actions .btn:hover {
+    color: #fff;
+    border-color: rgba(255,255,255,.4);
+    background: rgba(255,255,255,.21);
+  }
+
+  /* Selector de vista */
+  .worker-view-card {
+    border: 1px solid var(--worker-line) !important;
+    border-radius: 22px !important;
+    background: rgba(255,255,255,.96);
+    box-shadow: var(--worker-shadow) !important;
+  }
+
+  .worker-view-switch {
+    padding: 4px;
+    border-radius: 16px;
+    background: #edf4fd;
+  }
+
+  .worker-view-switch .btn {
+    min-width: 138px;
+    border: 0;
+    border-radius: 12px !important;
+    font-size: .82rem;
+    font-weight: 800;
+  }
+
+  .worker-view-switch .btn-primary {
+    background: linear-gradient(135deg, var(--worker-blue), var(--worker-cyan));
+    box-shadow: 0 7px 17px rgba(11,94,215,.22);
+  }
+
+  .worker-view-switch .btn-outline-primary {
+    color: #60738d;
+    background: transparent;
+  }
+
+  /* Resúmenes superiores */
+  .worker-summary > [class*="col-"] > .card,
+  .agenda-week-box {
+    overflow: hidden;
+    position: relative;
+    height: 100%;
+    border: 1px solid var(--worker-line) !important;
+    border-radius: 19px !important;
+    background: rgba(255,255,255,.97);
+    box-shadow: 0 9px 22px rgba(20,54,94,.08) !important;
+  }
+
+  .worker-summary > [class*="col-"] > .card::after,
+  .agenda-week-box::after {
+    content: "";
+    position: absolute;
+    right: -25px;
+    bottom: -35px;
+    width: 82px;
+    height: 82px;
+    border-radius: 50%;
+    background: rgba(11,94,215,.06);
+  }
+
+  .worker-summary .card-body,
+  .agenda-week-box {
+    position: relative;
+    z-index: 1;
+  }
+
+  .worker-summary .text-muted,
+  .agenda-week-box .label {
+    color: var(--worker-muted) !important;
+    font-size: .72rem !important;
+    font-weight: 800;
+    letter-spacing: .025em;
+    text-transform: uppercase;
+  }
+
+  .worker-summary .fs-4,
+  .agenda-week-box .value {
+    color: var(--worker-ink);
+    font-weight: 900 !important;
+  }
+
+  /* Calendario y agenda */
+  .worker-calendar-card {
+    border: 1px solid var(--worker-line) !important;
+    border-radius: 24px !important;
+    box-shadow: var(--worker-shadow) !important;
+  }
+
+  .worker-calendar-month {
+    color: var(--worker-ink);
+    font-size: 1.12rem;
+    font-weight: 900;
+    text-transform: capitalize;
+  }
+
+  .worker-calendar-year {
+    color: var(--worker-muted);
+    font-size: .8rem;
+    font-weight: 700;
+  }
+
+  .worker-calendar-nav .btn {
+    min-height: 39px;
+    border-radius: 12px;
+    font-weight: 800;
+  }
+
+  .mini-calendario {
+    border: 1px solid var(--worker-line);
+    border-radius: 18px;
+    background: #fff;
+  }
+
+  .mini-calendario table {
+    min-width: 690px;
+    border-collapse: separate;
+    border-spacing: 5px;
+    padding: 5px;
+  }
+
+  .mini-calendario .table-bordered > :not(caption) > * > * {
+    border: 0;
+  }
+
+  .mini-calendario thead th {
+    padding: .55rem .2rem;
+    color: #72839a;
+    background: transparent;
+    font-size: .69rem;
+    font-weight: 900;
+  }
+
+  .mini-calendario td {
+    background: transparent;
+  }
+
+  .mini-calendario .dia-box {
+    min-height: 90px;
+    border: 1px solid var(--worker-line) !important;
+    border-radius: 15px;
+    padding: .5rem;
+    background: #fbfdff;
+    transition: transform .17s ease, box-shadow .17s ease, border-color .17s ease;
+  }
+
+  .mini-calendario .dia-link:hover .dia-box {
+    transform: translateY(-2px);
+    border-color: rgba(11,94,215,.35) !important;
+    box-shadow: 0 10px 20px rgba(20,54,94,.11);
+  }
+
+  .mini-calendario .dia-numero {
+    color: var(--worker-ink);
+    font-size: .82rem;
+    font-weight: 900;
+  }
+
+  .mini-calendario .dia-hoy {
+    border: 2px solid var(--worker-blue) !important;
+    background: linear-gradient(145deg, #edf5ff, #f8fbff);
+    box-shadow: 0 8px 18px rgba(11,94,215,.10);
+  }
+
+  .mini-calendario .dia-seleccionado {
+    border: 2px solid var(--worker-green) !important;
+    background: linear-gradient(145deg, #edfbf4, #f8fffb);
+  }
+
+  .mini-calendario .dia-vacio {
+    border-radius: 14px;
+    background: #f4f7fb;
+  }
+
+  .mini-calendario .badge {
+    min-width: 22px;
+    padding: .38em .56em;
+    font-size: .65rem;
+  }
+
+  .mini-calendario .mini-resumen {
+    margin-top: .35rem;
+    font-size: .64rem;
+    line-height: 1.15;
+  }
+
+  .worker-legend {
+    padding: .85rem .95rem;
+    border-radius: 15px;
+    background: #f7faff;
+  }
+
+  .worker-legend-item {
+    color: var(--worker-muted);
+    font-size: .74rem;
+    font-weight: 700;
+  }
+
+  .worker-legend-dot {
+    box-shadow: 0 0 0 4px rgba(16,35,63,.035);
+  }
+
+  /* Agenda semanal */
+  .agenda-board {
+    grid-template-columns: repeat(7, minmax(245px, 1fr));
+    gap: .85rem;
+    padding: .25rem .1rem .75rem;
+    scrollbar-width: thin;
+  }
+
+  .agenda-day-column {
+    min-width: 245px;
+    border: 1px solid var(--worker-line);
+    border-radius: 19px;
+    padding: .85rem;
+    background: #f9fbfe;
+    box-shadow: 0 7px 18px rgba(20,54,94,.06);
+  }
+
+  .agenda-day-column.agenda-hoy {
+    border: 2px solid var(--worker-blue);
+    background: linear-gradient(180deg, #eef5ff, #f9fbff);
+  }
+
+  .agenda-day-column.agenda-seleccionado {
+    border: 2px solid var(--worker-green);
+    background: linear-gradient(180deg, #edfbf4, #fbfffd);
+  }
+
+  .agenda-day-header {
+    align-items: center;
+    margin-bottom: .85rem;
+  }
+
+  .agenda-day-name {
+    color: #72839a;
+    font-size: .7rem;
+    font-weight: 900;
+  }
+
+  .agenda-day-number {
+    color: var(--worker-ink);
+    font-size: 1.45rem;
+    font-weight: 900;
+  }
+
+  .agenda-day-header .btn {
+    border-radius: 11px;
+    font-size: .71rem;
+    font-weight: 800;
+  }
+
+  .agenda-block {
+    border-top-color: rgba(16,35,63,.12);
+  }
+
+  .agenda-block-title {
+    color: #5f718a;
+    font-size: .72rem;
+    font-weight: 900;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+
+  .agenda-item {
+    border: 1px solid var(--worker-line);
+    border-radius: 14px;
+    padding: .7rem;
+    background: #fff;
+    box-shadow: 0 5px 13px rgba(20,54,94,.055);
+    transition: transform .16s ease, box-shadow .16s ease;
+  }
+
+  .agenda-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 20px rgba(20,54,94,.11);
+  }
+
+  .agenda-item.realizado {
+    border-color: rgba(22,156,104,.42);
+    background: #f2fcf7;
+  }
+
+  .agenda-item.pendiente {
+    border-color: rgba(240,169,0,.42);
+    background: #fffaf0;
+  }
+
+  .agenda-item.atrasado {
+    border-color: rgba(223,64,84,.42);
+    background: #fff5f6;
+  }
+
+  .agenda-item-title {
+    color: var(--worker-ink);
+    font-weight: 900;
+  }
+
+  .agenda-item-meta {
+    color: var(--worker-muted);
+  }
+
+  /* Tarjetas de mantenimientos */
+  .worker-list-section {
+    margin-top: .2rem;
+  }
+
+  .worker-list-heading {
+    padding: 0 .15rem;
+  }
+
+  .worker-card {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--worker-line) !important;
+    border-radius: 20px !important;
+    background: rgba(255,255,255,.98);
+    box-shadow: var(--worker-shadow) !important;
+    transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+  }
+
+  .worker-card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--worker-shadow-lg) !important;
+  }
+
+  .worker-card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 5px;
+    background: linear-gradient(180deg, var(--worker-blue), var(--worker-cyan));
+  }
+
+  .worker-card.border-danger::before {
+    background: linear-gradient(180deg, #df4054, #ff7a7a);
+  }
+
+  .worker-card .card-body {
+    padding: 1.05rem 1.05rem 1.05rem 1.2rem;
+  }
+
+  .worker-card .fw-bold {
+    color: var(--worker-ink);
+    font-size: 1rem;
+    font-weight: 900 !important;
+  }
+
+  .worker-card .text-muted {
+    color: var(--worker-muted) !important;
+  }
+
+  .worker-card .btn {
+    min-height: 38px;
+    border-radius: 12px;
+    font-weight: 800;
+  }
+
+  .badge-state {
+    padding: .55em .78em;
+    border-radius: 999px;
+    font-size: .72rem;
+    font-weight: 900;
+  }
+
+  .worker-empty {
+    border: 1px dashed rgba(16,35,63,.16) !important;
+    border-radius: 19px !important;
+    background: rgba(255,255,255,.7);
+    box-shadow: none !important;
+  }
+
+  .worker-empty .card-body {
+    padding: 1.2rem;
+    color: var(--worker-muted) !important;
+    text-align: center;
+  }
+
+  /* Botones Ver más / Ver menos */
+  .worker-more-btn {
+    min-height: 40px;
+    border-radius: 12px;
+    font-weight: 800;
+  }
+
+  @media (min-width: 768px) {
+    .worker-page-header {
+      padding: 1.45rem 1.55rem;
+    }
+  }
+
+  @media (max-width: 767.98px) {
+    .worker-page-header {
+      padding: 1.05rem;
+      border-radius: 21px;
+    }
+
+    .worker-header-actions {
+      width: 100%;
+    }
+
+    .worker-header-actions .btn {
+      flex: 1 1 auto;
+    }
+
+    .worker-view-switch {
+      width: 100%;
+    }
+
+    .worker-view-switch .btn {
+      min-width: 0;
+      flex: 1 1 50%;
+      padding: .65rem .4rem;
+      font-size: .73rem;
+    }
+
+    .worker-summary .card-body {
+      padding: .8rem .65rem !important;
+      text-align: center;
+    }
+
+    .worker-summary .fs-4 {
+      font-size: 1.35rem !important;
+    }
+
+    .mini-calendario table {
+      min-width: 650px;
+    }
+
+    .agenda-day-column {
+      min-width: 270px;
+    }
+
+    .worker-card .btn {
+      width: 100%;
+    }
+  }
+
+  @media (max-width: 420px) {
+    .worker-summary .text-muted {
+      font-size: .62rem !important;
+    }
+
+    .worker-page-title {
+      font-size: 1.18rem;
+    }
+  }
+
+</style>
+
+<section class="worker-page-header">
+  <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+    <div>
+      <div class="worker-page-title">
+        {% if fecha_seleccionada %}
+          <i class="bi bi-calendar2-check me-2"></i>Agenda del {{ fecha_seleccionada|date:"d/m/Y" }}
+        {% else %}
+          <i class="bi bi-card-checklist me-2"></i>Mis mantenimientos
+        {% endif %}
+      </div>
+
+      <div class="worker-subtitle mt-2">
+        {% if fecha_seleccionada %}
+          Mantenimientos programados para el día seleccionado.
+        {% else %}
+          Jornada de hoy: {{ hoy|date:"d/m/Y" }}
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="worker-header-actions d-flex gap-2 flex-wrap">
+      <a class="btn btn-sm" href="/dashboard/notificaciones/">
+        <i class="bi bi-bell me-1"></i> Notificaciones
+      </a>
+
+      {% if fecha_seleccionada_str %}
+        <a class="btn btn-sm"
+           href="/dashboard/home/?anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}{% if vista_actual %}&vista={{ vista_actual }}{% endif %}">
+          <i class="bi bi-x-circle me-1"></i> Limpiar selección
+        </a>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+<div class="card shadow-sm mb-3 worker-view-card">
+  <div class="card-body">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <div>
+        <div class="fw-bold worker-section-title">🧭 Vista</div>
+        <div class="worker-subtitle">Cambia entre calendario mensual y agenda semanal.</div>
+      </div>
+
+      <div class="btn-group worker-view-switch" role="group">
+        <a href="/dashboard/home/?vista=calendario&anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}{% if fecha_seleccionada_str %}&fecha_seleccionada={{ fecha_seleccionada_str }}{% endif %}{% if ver_mas_proximos %}&ver_mas_proximos=1{% endif %}"
+           class="btn {% if vista_actual != 'agenda' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+          📅 Calendario
+        </a>
+        <a href="/dashboard/home/?vista=agenda&anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}{% if fecha_seleccionada_str %}&fecha_seleccionada={{ fecha_seleccionada_str }}{% endif %}{% if ver_mas_proximos %}&ver_mas_proximos=1{% endif %}"
+           class="btn {% if vista_actual == 'agenda' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+          🗓 Agenda semanal
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-2 mb-3 worker-summary">
+  <div class="col-4">
+    <div class="card shadow-sm">
+      <div class="card-body py-3">
+        <div class="text-muted small">Hoy</div>
+        <div class="fs-4 fw-bold">{{ mantenimientos_hoy|length }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-4">
+    <div class="card shadow-sm">
+      <div class="card-body py-3">
+        <div class="text-muted small">Atrasados</div>
+        <div class="fs-4 fw-bold text-danger">{{ mantenimientos_atrasados|length }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-4">
+    <div class="card shadow-sm">
+      <div class="card-body py-3">
+        <div class="text-muted small">Próximos</div>
+        <div class="fs-4 fw-bold">{{ total_proximos_reales|default:mantenimientos_proximos|length }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if vista_actual == "agenda" %}
+  <div class="card shadow-sm mb-4 worker-calendar-card">
+    <div class="card-body">
+
+      <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+        <div class="worker-calendar-heading">
+          <div class="fw-bold worker-section-title">🗓 Mi agenda semanal</div>
+          <div class="worker-calendar-month">
+            Semana del {{ agenda_semanal.inicio|date:"d/m/Y" }} al {{ agenda_semanal.fin|date:"d/m/Y" }}
+          </div>
+          <div class="worker-subtitle">Bloques por Mañana, Tarde, Noche y Sin hora.</div>
+        </div>
+
+        <div class="d-grid d-md-flex gap-2 w-100 w-md-auto worker-calendar-nav">
+          <a class="btn btn-outline-secondary btn-sm"
+             href="/dashboard/home/?vista=agenda&fecha_seleccionada={{ agenda_semana_anterior|date:'Y-m-d' }}&anio_cal={{ agenda_semana_anterior.year }}&mes_cal={{ agenda_semana_anterior.month }}">
+            ← Semana anterior
+          </a>
+          <a class="btn btn-outline-primary btn-sm"
+             href="/dashboard/home/?vista=agenda&fecha_seleccionada={{ hoy|date:'Y-m-d' }}&anio_cal={{ hoy.year }}&mes_cal={{ hoy.month }}">
+            Hoy
+          </a>
+          <a class="btn btn-outline-secondary btn-sm"
+             href="/dashboard/home/?vista=agenda&fecha_seleccionada={{ agenda_semana_siguiente|date:'Y-m-d' }}&anio_cal={{ agenda_semana_siguiente.year }}&mes_cal={{ agenda_semana_siguiente.month }}">
+            Semana siguiente →
+          </a>
+        </div>
+      </div>
+
+      <div class="agenda-week-summary">
+        <div class="agenda-week-box">
+          <div class="label">Total semana</div>
+          <div class="value text-primary">{{ agenda_semanal.total_semana }}</div>
+        </div>
+        <div class="agenda-week-box">
+          <div class="label">Pendientes</div>
+          <div class="value text-warning">{{ agenda_semanal.total_pendientes }}</div>
+        </div>
+        <div class="agenda-week-box">
+          <div class="label">Realizados</div>
+          <div class="value text-success">{{ agenda_semanal.total_realizados }}</div>
+        </div>
+        <div class="agenda-week-box">
+          <div class="label">Atrasados</div>
+          <div class="value text-danger">{{ agenda_semanal.total_atrasados }}</div>
+        </div>
+      </div>
+
+      <div class="agenda-board">
+        {% for dia in agenda_semanal.dias %}
+          <div class="agenda-day-column {% if dia.es_hoy %}agenda-hoy{% endif %}{% if fecha_seleccionada and dia.fecha == fecha_seleccionada %} agenda-seleccionado{% endif %}">
+            <div class="agenda-day-header">
+              <div>
+                <div class="agenda-day-name">{{ dia.nombre_corto }}</div>
+                <div class="agenda-day-number">{{ dia.dia_numero }}</div>
+              </div>
+              <a class="btn btn-outline-primary btn-sm"
+                 href="/dashboard/home/?fecha_seleccionada={{ dia.fecha|date:'Y-m-d' }}&vista=agenda&anio_cal={{ dia.fecha.year }}&mes_cal={{ dia.fecha.month }}">
+                Ver día
+              </a>
+            </div>
+
+            <div class="agenda-day-summary">
+              <span class="badge bg-primary">{{ dia.total }} total</span>
+              {% if dia.pendientes > 0 %}<span class="badge text-bg-warning">{{ dia.pendientes }} pendientes</span>{% endif %}
+              {% if dia.realizados > 0 %}<span class="badge text-bg-success">{{ dia.realizados }} realizados</span>{% endif %}
+              {% if dia.atrasados > 0 %}<span class="badge text-bg-danger">{{ dia.atrasados }} atrasados</span>{% endif %}
+            </div>
+
+            {% for bloque in dia.bloques %}
+              <div class="agenda-block">
+                <div class="agenda-block-title">{{ bloque.label }}</div>
+
+                {% if bloque.items %}
+                  {% for m in bloque.items %}
+                    <a href="/dashboard/mantenimientos/{{ m.id }}/" class="text-decoration-none">
+                      <div class="agenda-item {% if m.estado == 'realizado' %}realizado{% elif m.estado == 'pendiente' and m.fecha < hoy %}atrasado{% else %}pendiente{% endif %}">
+                        <div class="agenda-item-title">{{ m.cliente }}</div>
+                        <div class="agenda-item-meta">{{ m.contrato }}</div>
+
+                        <div class="d-flex gap-1 flex-wrap">
+                          {% if m.estado == "realizado" %}
+                            <span class="badge text-bg-success">Realizado</span>
+                          {% else %}
+                            <span class="badge text-bg-warning">Pendiente</span>
+                          {% endif %}
+
+                          {% if m.estado == "pendiente" and m.fecha < hoy %}
+                            <span class="badge text-bg-danger">Atrasado</span>
+                          {% endif %}
+                        </div>
+                      </div>
+                    </a>
+                  {% endfor %}
+                {% else %}
+                  <div class="agenda-empty">Sin registros</div>
+                {% endif %}
+              </div>
+            {% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+
+    </div>
+  </div>
+{% else %}
+  <div class="card shadow-sm mb-4 worker-calendar-card">
+    <div class="card-body">
+      <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+        <div class="worker-calendar-heading">
+          <div class="fw-bold worker-section-title">📅 Mi calendario</div>
+          <div class="worker-calendar-month">
+            {% if mes_cal == 1 %}Enero
+            {% elif mes_cal == 2 %}Febrero
+            {% elif mes_cal == 3 %}Marzo
+            {% elif mes_cal == 4 %}Abril
+            {% elif mes_cal == 5 %}Mayo
+            {% elif mes_cal == 6 %}Junio
+            {% elif mes_cal == 7 %}Julio
+            {% elif mes_cal == 8 %}Agosto
+            {% elif mes_cal == 9 %}Septiembre
+            {% elif mes_cal == 10 %}Octubre
+            {% elif mes_cal == 11 %}Noviembre
+            {% elif mes_cal == 12 %}Diciembre
+            {% endif %}
+          </div>
+          <div class="worker-calendar-year">{{ anio_cal }}</div>
+          <div class="worker-subtitle">Toca un día para ver sus mantenimientos.</div>
+        </div>
+
+        <div class="d-grid d-md-flex gap-2 w-100 w-md-auto worker-calendar-nav">
+          <a class="btn btn-outline-secondary btn-sm worker-more-btn" href="?anio_cal={{ anio_cal_ant }}&mes_cal={{ mes_cal_ant }}&vista=calendario{% if ver_mas_proximos %}&ver_mas_proximos=1{% endif %}">
+            ← Mes anterior
+          </a>
+          <a class="btn btn-outline-primary btn-sm worker-more-btn" href="?anio_cal={{ hoy.year }}&mes_cal={{ hoy.month }}&vista=calendario{% if ver_mas_proximos %}&ver_mas_proximos=1{% endif %}">
+            Hoy
+          </a>
+          <a class="btn btn-outline-secondary btn-sm worker-more-btn" href="?anio_cal={{ anio_cal_sig }}&mes_cal={{ mes_cal_sig }}&vista=calendario{% if ver_mas_proximos %}&ver_mas_proximos=1{% endif %}">
+            Mes siguiente →
+          </a>
+        </div>
+      </div>
+
+      <div class="row g-2 mb-3 worker-summary">
+        <div class="col-12 col-md-4">
+          <div class="card shadow-sm border-primary">
+            <div class="card-body py-3">
+              <div class="text-muted small">Total del mes</div>
+              <div class="fs-4 fw-bold text-primary">{{ calendario_trabajador.total_mes }}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-12 col-md-4">
+          <div class="card shadow-sm border-success">
+            <div class="card-body py-3">
+              <div class="text-muted small">Realizados</div>
+              <div class="fs-4 fw-bold text-success">{{ calendario_trabajador.total_realizados }}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-12 col-md-4">
+          <div class="card shadow-sm border-warning">
+            <div class="card-body py-3">
+              <div class="text-muted small">Pendientes</div>
+              <div class="fs-4 fw-bold text-warning">{{ calendario_trabajador.total_pendientes }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="table-responsive mini-calendario">
+        <table class="table table-bordered align-middle mb-0">
+          <thead class="table-light text-center">
+            <tr>
+              <th>Lun</th>
+              <th>Mar</th>
+              <th>Mié</th>
+              <th>Jue</th>
+              <th>Vie</th>
+              <th>Sáb</th>
+              <th>Dom</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for semana in calendario_trabajador.semanas %}
+            <tr>
+              {% for dia in semana %}
+              <td class="{% if dia.dia == 0 %}dia-vacio{% endif %}">
+                {% if dia.dia > 0 %}
+                  <a
+                    class="dia-link"
+                    href="/dashboard/home/?fecha_seleccionada={{ dia.fecha|date:'Y-m-d' }}&anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}&vista=calendario{% if ver_mas_proximos %}&ver_mas_proximos=1{% endif %}"
+                  >
+                    <div class="border dia-box {% if dia.es_hoy %}dia-hoy{% endif %}{% if fecha_seleccionada and dia.fecha == fecha_seleccionada %} dia-seleccionado{% endif %}">
+                      <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="dia-numero">{{ dia.dia }}</span>
+                        {% if dia.total > 0 %}
+                        <span class="badge bg-primary">{{ dia.total }}</span>
+                        {% endif %}
+                      </div>
+
+                      <div class="mini-resumen">
+                        {% if dia.pendientes > 0 %}
+                        <div class="text-warning fw-semibold">⏳ {{ dia.pendientes }} pendientes</div>
+                        {% endif %}
+
+                        {% if dia.realizados > 0 %}
+                        <div class="text-success fw-semibold">✅ {{ dia.realizados }} realizados</div>
+                        {% endif %}
+
+                        {% if dia.total == 0 %}
+                        <div class="text-muted">Sin mantenimientos</div>
+                        {% endif %}
+                      </div>
+                    </div>
+                  </a>
+                {% endif %}
+              </td>
+              {% endfor %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="worker-legend">
+        <div class="worker-legend-item"><span class="worker-legend-dot dot-total"></span> Total del día</div>
+        <div class="worker-legend-item"><span class="worker-legend-dot dot-pendiente"></span> Pendientes</div>
+        <div class="worker-legend-item"><span class="worker-legend-dot dot-realizado"></span> Realizados</div>
+        <div class="worker-legend-item"><span class="worker-legend-dot dot-seleccionado"></span> Día seleccionado</div>
+      </div>
+    </div>
+  </div>
+{% endif %}
+
+{% if not fecha_seleccionada %}
+  <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
+    <div class="fw-bold worker-section-title text-danger">🕒 Atrasados</div>
+    <span class="text-muted small">Pendientes anteriores</span>
+  </div>
+
+  {% if mantenimientos_atrasados %}
+    <div class="vstack gap-2 mb-4">
+      {% for m in mantenimientos_atrasados %}
+      <a class="text-decoration-none" href="/dashboard/mantenimientos/{{ m.id }}/">
+        <div class="card shadow-sm card-tap worker-card border-danger">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
+              <div class="flex-grow-1">
+                <div class="fw-bold">{{ m.cliente }}</div>
+                <div class="text-muted small">📅 {{ m.fecha|date:"d/m/Y" }}</div>
+              </div>
+
+              <div class="w-100 w-sm-auto">
+                <span class="badge text-bg-danger badge-state">Atrasado</span>
+              </div>
+            </div>
+
+            <div class="mt-2 text-muted small">
+              Contrato: {{ m.contrato }}
+            </div>
+
+            <div class="mt-3 d-grid d-sm-block">
+              <span class="btn btn-outline-danger btn-sm">Abrir detalle</span>
+            </div>
+          </div>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="card shadow-sm mb-4 worker-empty">
+      <div class="card-body text-muted">
+        No tienes mantenimientos atrasados.
+      </div>
+    </div>
+  {% endif %}
+{% endif %}
+
+<div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
+  <div class="fw-bold worker-section-title">
+    {% if fecha_seleccionada %}
+      📅 Agenda del día
+    {% else %}
+      📌 Hoy
+    {% endif %}
+  </div>
+  <span class="text-muted small">Toca para abrir</span>
+</div>
+
+{% if mantenimientos_hoy %}
+  <div class="vstack gap-2 mb-4">
+    {% for m in mantenimientos_hoy %}
+    <a class="text-decoration-none" href="/dashboard/mantenimientos/{{ m.id }}/">
+      <div class="card shadow-sm card-tap worker-card">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
+            <div class="flex-grow-1">
+              <div class="fw-bold">{{ m.cliente }}</div>
+              <div class="text-muted small">📅 {{ m.fecha|date:"d/m/Y" }}</div>
+            </div>
+
+            <div class="w-100 w-sm-auto">
+              {% if m.estado == "realizado" %}
+                <span class="badge text-bg-success badge-state">Realizado</span>
+              {% else %}
+                <span class="badge text-bg-warning badge-state">Pendiente</span>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="mt-2 text-muted small">
+            Contrato: {{ m.contrato }}
+          </div>
+
+          <div class="mt-3 d-grid d-sm-block">
+            <span class="btn btn-primary btn-sm">Abrir detalle</span>
+          </div>
+        </div>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="card shadow-sm mb-4">
+    <div class="card-body text-muted">
+      {% if fecha_seleccionada %}
+        No tienes mantenimientos programados para ese día.
+      {% else %}
+        No tienes mantenimientos programados para hoy.
+      {% endif %}
+    </div>
+  </div>
+{% endif %}
+
+{% if not fecha_seleccionada %}
+  <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
+    <div class="fw-bold worker-section-title">🗓 Próximos</div>
+    {% if ver_mas_proximos %}
+      <span class="text-muted small">Mostrando {{ total_proximos_reales }} en total</span>
+    {% else %}
+      <span class="text-muted small">Máx 10</span>
+    {% endif %}
+  </div>
+
+  {% if mantenimientos_proximos %}
+    <div class="vstack gap-2">
+      {% for m in mantenimientos_proximos %}
+      <a class="text-decoration-none" href="/dashboard/mantenimientos/{{ m.id }}/">
+        <div class="card shadow-sm card-tap worker-card">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
+              <div class="flex-grow-1">
+                <div class="fw-bold">{{ m.cliente }}</div>
+                <div class="text-muted small">📅 {{ m.fecha|date:"d/m/Y" }}</div>
+              </div>
+
+              <div class="w-100 w-sm-auto">
+                {% if m.estado == "realizado" %}
+                  <span class="badge text-bg-success badge-state">Realizado</span>
+                {% else %}
+                  <span class="badge text-bg-warning badge-state">Pendiente</span>
+                {% endif %}
+              </div>
+            </div>
+
+            <div class="mt-2 text-muted small">
+              Contrato: {{ m.contrato }}
+            </div>
+
+            <div class="mt-3 d-grid d-sm-block">
+              <span class="btn btn-outline-primary btn-sm">Ver detalle</span>
+            </div>
+          </div>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+
+    {% if mostrar_boton_ver_mas_proximos or ver_mas_proximos %}
+      <div class="mt-3 d-grid d-md-inline-block">
+        {% if ver_mas_proximos %}
+          <a class="btn btn-outline-secondary btn-sm worker-more-btn" href="?anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}{% if vista_actual %}&vista={{ vista_actual }}{% endif %}">
+            Ver menos
+          </a>
+        {% else %}
+          <a class="btn btn-outline-primary btn-sm worker-more-btn" href="?anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}{% if vista_actual %}&vista={{ vista_actual }}{% endif %}&ver_mas_proximos=1">
+            Ver más
+          </a>
+        {% endif %}
+      </div>
+    {% endif %}
+  {% else %}
+    <div class="card shadow-sm worker-empty">
+      <div class="card-body text-muted">
+        No hay mantenimientos próximos asignados.
+      </div>
+    </div>
+  {% endif %}
+{% endif %}
+
+{% endblock %}

@@ -778,6 +778,8 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
 
+  <link rel="stylesheet" href="{% static 'dashboard/app-responsive-v2.css' %}?v=20260729-1">
+
   {% block extra_head %}{% endblock %}
 </head>
 
@@ -1306,5 +1308,7 @@
   </script>
 
   {% block extra_js %}{% endblock %}
+  <script src="{% static 'dashboard/app-responsive-v2.js' %}?v=20260729-1" defer></script>
+
 </body>
 </html>
