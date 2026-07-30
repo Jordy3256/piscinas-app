@@ -878,8 +878,8 @@
           <a class="btn flex-fill {% if '/dashboard/operativo/' in request.path %}nav-active{% endif %}" href="/dashboard/operativo/">
             <span class="nav-icon">🧑‍💼</span><span>Operativo</span>
           </a>
-          <a class="btn flex-fill {% if '/dashboard/contratos/' in request.path %}nav-active{% endif %}" href="/dashboard/contratos/">
-            <span class="nav-icon">📄</span><span>Contratos</span>
+          <a class="btn flex-fill {% if '/dashboard/contratos/' in request.path or '/dashboard/clientes/' in request.path %}nav-active{% endif %}" href="/dashboard/clientes/">
+            <span class="nav-icon">👥</span><span>Clientes</span>
           </a>
           <a class="btn flex-fill {% if '/dashboard/inventario/' in request.path %}nav-active{% endif %}" href="/dashboard/inventario/">
             <span class="nav-icon">📦</span><span>Inventario</span>

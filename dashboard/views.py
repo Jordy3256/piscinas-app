@@ -5232,6 +5232,226 @@ def _validar_datos_contrato(request):
     }
 
 
+
+def _normalizar_telefono_cliente(valor):
+    return "".join(caracter for caracter in (valor or "") if caracter.isdigit())
+
+
+def _datos_cliente_desde_request(request):
+    return {
+        "nombre": (request.POST.get("nombre") or "").strip(),
+        "telefono": (request.POST.get("telefono") or "").strip(),
+        "email": (request.POST.get("email") or "").strip(),
+        "ciudad": (request.POST.get("ciudad") or "").strip(),
+        "sector_urbanizacion": (request.POST.get("sector_urbanizacion") or "").strip(),
+        "direccion": (request.POST.get("direccion") or "").strip(),
+        "enlace_google_maps": (request.POST.get("enlace_google_maps") or "").strip(),
+    }
+
+
+def _validar_cliente(datos, cliente_actual=None):
+    errores = []
+    for campo, etiqueta in (
+        ("nombre", "El nombre"),
+        ("telefono", "El teléfono principal"),
+        ("ciudad", "La ciudad"),
+        ("sector_urbanizacion", "El sector o urbanización"),
+        ("direccion", "La dirección"),
+    ):
+        if not datos.get(campo):
+            errores.append(f"{etiqueta} es obligatorio.")
+
+    telefono_normalizado = _normalizar_telefono_cliente(datos.get("telefono"))
+    if datos.get("telefono") and len(telefono_normalizado) < 7:
+        errores.append("Ingresa un teléfono principal válido.")
+
+    if telefono_normalizado:
+        candidatos = Cliente.objects.all()
+        if cliente_actual:
+            candidatos = candidatos.exclude(pk=cliente_actual.pk)
+        duplicado = next(
+            (
+                cliente for cliente in candidatos.only("id", "nombre", "telefono")
+                if _normalizar_telefono_cliente(cliente.telefono) == telefono_normalizado
+            ),
+            None,
+        )
+        if duplicado:
+            errores.append(
+                f"Ya existe el cliente {duplicado.nombre} con este teléfono."
+            )
+
+    return errores
+
+
+@login_required
+def cliente_list_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    q = (request.GET.get("q") or "").strip()
+    estado = (request.GET.get("estado") or "").strip().lower()
+    clientes = Cliente.objects.annotate(
+        total_contratos=Count("contratos", distinct=True),
+        contratos_activos=Count(
+            "contratos",
+            filter=models.Q(contratos__activo=True),
+            distinct=True,
+        ),
+    ).order_by("nombre", "id")
+
+    if q:
+        clientes = clientes.filter(
+            models.Q(nombre__icontains=q)
+            | models.Q(telefono__icontains=q)
+            | models.Q(email__icontains=q)
+            | models.Q(ciudad__icontains=q)
+            | models.Q(sector_urbanizacion__icontains=q)
+            | models.Q(direccion__icontains=q)
+        )
+    if estado == "activo":
+        clientes = clientes.filter(activo=True)
+    elif estado == "inactivo":
+        clientes = clientes.filter(activo=False)
+
+    total_clientes = clientes.count()
+    total_activos = clientes.filter(activo=True).count()
+    con_contrato = clientes.filter(contratos_activos__gt=0).count()
+    sin_contrato = clientes.filter(total_contratos=0).count()
+
+    paginator = Paginator(clientes, 20)
+    page_obj = paginator.get_page(request.GET.get("page"))
+    query_params = request.GET.copy()
+    query_params.pop("page", None)
+
+    return render(request, "dashboard/cliente_list.html", {
+        "page_obj": page_obj,
+        "q": q,
+        "estado": estado,
+        "total_clientes": total_clientes,
+        "total_activos": total_activos,
+        "con_contrato": con_contrato,
+        "sin_contrato": sin_contrato,
+        "querystring": query_params.urlencode(),
+        "es_admin": True,
+    })
+
+
+@login_required
+def cliente_crear_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    datos = {
+        "nombre": "", "telefono": "", "email": "", "ciudad": "",
+        "sector_urbanizacion": "", "direccion": "", "enlace_google_maps": "",
+    }
+    if request.method == "POST":
+        datos = _datos_cliente_desde_request(request)
+        errores = _validar_cliente(datos)
+        if errores:
+            for error in errores:
+                messages.error(request, error)
+        else:
+            cliente = Cliente.objects.create(**datos)
+            _registrar_actividad(
+                user=request.user,
+                titulo="Cliente creado",
+                descripcion=f"{request.user.username} registró a {cliente.nombre}.",
+                url=f"/dashboard/clientes/{cliente.pk}/",
+            )
+            messages.success(request, "Cliente creado correctamente.")
+            if request.POST.get("accion") == "guardar_y_contrato":
+                return redirect(f"/dashboard/contratos/nuevo/?cliente={cliente.pk}")
+            return redirect(f"/dashboard/clientes/{cliente.pk}/")
+
+    return render(request, "dashboard/cliente_form.html", {
+        "modo": "crear", "cliente": None, "datos": datos, "es_admin": True,
+    })
+
+
+@login_required
+def cliente_editar_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    cliente = get_object_or_404(Cliente, pk=pk)
+    datos = {
+        "nombre": cliente.nombre,
+        "telefono": cliente.telefono,
+        "email": cliente.email or "",
+        "ciudad": cliente.ciudad,
+        "sector_urbanizacion": cliente.sector_urbanizacion,
+        "direccion": cliente.direccion,
+        "enlace_google_maps": cliente.enlace_google_maps,
+    }
+    if request.method == "POST":
+        datos = _datos_cliente_desde_request(request)
+        errores = _validar_cliente(datos, cliente_actual=cliente)
+        if errores:
+            for error in errores:
+                messages.error(request, error)
+        else:
+            for campo, valor in datos.items():
+                setattr(cliente, campo, valor)
+            cliente.save()
+            _registrar_actividad(
+                user=request.user,
+                titulo="Cliente actualizado",
+                descripcion=f"{request.user.username} actualizó a {cliente.nombre}.",
+                url=f"/dashboard/clientes/{cliente.pk}/",
+            )
+            messages.success(request, "Cliente actualizado correctamente.")
+            return redirect(f"/dashboard/clientes/{cliente.pk}/")
+
+    return render(request, "dashboard/cliente_form.html", {
+        "modo": "editar", "cliente": cliente, "datos": datos, "es_admin": True,
+    })
+
+
+@login_required
+def cliente_detalle_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    cliente = get_object_or_404(Cliente, pk=pk)
+    contratos = cliente.contratos.select_related("tecnico_designado__user").order_by("-activo", "-id")
+    mantenimientos = Mantenimiento.objects.filter(cliente=cliente).order_by("-fecha", "-id")
+    proximo_mantenimiento = mantenimientos.filter(
+        estado="pendiente", fecha__gte=timezone.localdate()
+    ).order_by("fecha").first()
+    return render(request, "dashboard/cliente_detalle.html", {
+        "cliente": cliente,
+        "contratos": contratos,
+        "total_contratos": contratos.count(),
+        "contratos_activos": contratos.filter(activo=True).count(),
+        "total_mantenimientos": mantenimientos.count(),
+        "proximo_mantenimiento": proximo_mantenimiento,
+        "mantenimientos_recientes": mantenimientos[:8],
+        "es_admin": True,
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def cliente_crear_rapido_view(request):
+    if not es_admin(request.user):
+        return JsonResponse({"ok": False, "errores": ["No autorizado."]}, status=403)
+    datos = _datos_cliente_desde_request(request)
+    errores = _validar_cliente(datos)
+    if errores:
+        return JsonResponse({"ok": False, "errores": errores}, status=400)
+    cliente = Cliente.objects.create(**datos)
+    _registrar_actividad(
+        user=request.user,
+        titulo="Cliente creado",
+        descripcion=f"{request.user.username} registró rápidamente a {cliente.nombre}.",
+        url=f"/dashboard/clientes/{cliente.pk}/",
+    )
+    return JsonResponse({
+        "ok": True,
+        "cliente": {"id": cliente.pk, "nombre": cliente.nombre, "telefono": cliente.telefono},
+    })
+
+
 @login_required
 def contrato_list_view(request):
     if not es_admin(request.user):
@@ -5338,7 +5558,7 @@ def contrato_crear_view(request):
     )
 
     datos_formulario = {
-        "cliente_id": "",
+        "cliente_id": (request.GET.get("cliente") or "").strip(),
         "frecuencia": "",
         "frecuencia_personalizada": "",
         "forma_pago": "",

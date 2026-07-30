@@ -32,7 +32,12 @@ from .views import (
     dashboard_view,
     calculadora_quimicos_view,
 
-    # Contratos
+    # Clientes y contratos
+    cliente_list_view,
+    cliente_crear_view,
+    cliente_editar_view,
+    cliente_detalle_view,
+    cliente_crear_rapido_view,
     contrato_list_view,
     contrato_crear_view,
     contrato_editar_view,
@@ -214,6 +219,15 @@ urlpatterns = [
         calculadora_quimicos_view,
         name="calculadora_quimicos",
     ),
+
+    # ======================
+    # Clientes y contratos
+    # ======================
+    path("clientes/", cliente_list_view, name="cliente_list"),
+    path("clientes/nuevo/", cliente_crear_view, name="cliente_crear"),
+    path("clientes/crear-rapido/", cliente_crear_rapido_view, name="cliente_crear_rapido"),
+    path("clientes/<int:pk>/", cliente_detalle_view, name="cliente_detalle"),
+    path("clientes/<int:pk>/editar/", cliente_editar_view, name="cliente_editar"),
 
     # ======================
     # Contratos

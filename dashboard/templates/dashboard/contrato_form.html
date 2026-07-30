@@ -93,7 +93,10 @@
             <div class="cf-card-subtitle">Selecciona el cliente al que pertenece este contrato.</div>
           </div>
           <div class="cf-card-body">
-            <label for="cliente" class="form-label">Cliente <span class="text-danger">*</span></label>
+            <div class="d-flex justify-content-between align-items-center gap-2 mb-1">
+              <label for="cliente" class="form-label mb-0">Cliente <span class="text-danger">*</span></label>
+              <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#nuevoClienteModal">➕ Nuevo cliente</button>
+            </div>
             <select id="cliente" name="cliente" class="form-select" required>
               <option value="">Selecciona un cliente</option>
               {% for cliente in clientes %}
@@ -244,6 +247,32 @@
     </div>
   </form>
 </div>
+
+<div class="modal fade" id="nuevoClienteModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content" style="border:0;border-radius:20px;overflow:hidden">
+      <div class="modal-header" style="background:linear-gradient(135deg,#0f172a,#0f766e);color:#fff">
+        <div><h5 class="modal-title fw-bold">Nuevo cliente</h5><small class="opacity-75">Se guardará y quedará seleccionado en el contrato.</small></div>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form id="cliente-rapido-form">
+        <div class="modal-body p-4">
+          <div id="cliente-rapido-errores" class="alert alert-danger d-none"></div>
+          <div class="row g-3">
+            <div class="col-12 col-md-6"><label class="form-label">Nombre *</label><input class="form-control" name="nombre" required maxlength="150"></div>
+            <div class="col-12 col-md-6"><label class="form-label">Teléfono principal *</label><input class="form-control" name="telefono" required maxlength="50"></div>
+            <div class="col-12 col-md-6"><label class="form-label">Correo <span class="text-muted">(opcional)</span></label><input type="email" class="form-control" name="email"></div>
+            <div class="col-12 col-md-6"><label class="form-label">Ciudad *</label><input class="form-control" name="ciudad" required maxlength="100"></div>
+            <div class="col-12"><label class="form-label">Sector o Urbanización *</label><input class="form-control" name="sector_urbanizacion" required maxlength="150"></div>
+            <div class="col-12"><label class="form-label">Dirección *</label><textarea class="form-control" name="direccion" required rows="3"></textarea></div>
+            <div class="col-12"><label class="form-label">Enlace de Google Maps <span class="text-muted">(opcional)</span></label><input type="url" class="form-control" name="enlace_google_maps" maxlength="500"></div>
+          </div>
+        </div>
+        <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button><button type="submit" class="btn btn-primary" id="guardar-cliente-rapido">Guardar cliente</button></div>
+      </form>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -261,6 +290,38 @@
     const generacionAutomatica = document.getElementById("generacion_automatica");
     const diasChecks = Array.from(document.querySelectorAll('input[name="dias_visita"]'));
     const diasAyuda = document.getElementById("dias-ayuda");
+    const clienteRapidoForm = document.getElementById("cliente-rapido-form");
+    const clienteRapidoErrores = document.getElementById("cliente-rapido-errores");
+    const guardarClienteRapido = document.getElementById("guardar-cliente-rapido");
+    const clienteSelect = document.getElementById("cliente");
+
+    if (clienteRapidoForm) {
+      clienteRapidoForm.addEventListener("submit", async function (event) {
+        event.preventDefault();
+        clienteRapidoErrores.classList.add("d-none");
+        guardarClienteRapido.disabled = true;
+        guardarClienteRapido.textContent = "Guardando...";
+        try {
+          const respuesta = await fetch("/dashboard/clientes/crear-rapido/", {
+            method: "POST",
+            headers: {"X-CSRFToken": document.querySelector('[name="csrfmiddlewaretoken"]').value},
+            body: new FormData(clienteRapidoForm),
+          });
+          const resultado = await respuesta.json();
+          if (!respuesta.ok || !resultado.ok) throw new Error((resultado.errores || ["No fue posible crear el cliente."]).join(" "));
+          const opcion = new Option(`${resultado.cliente.nombre} — ${resultado.cliente.telefono}`, resultado.cliente.id, true, true);
+          clienteSelect.add(opcion);
+          bootstrap.Modal.getOrCreateInstance(document.getElementById("nuevoClienteModal")).hide();
+          clienteRapidoForm.reset();
+        } catch (error) {
+          clienteRapidoErrores.textContent = error.message;
+          clienteRapidoErrores.classList.remove("d-none");
+        } finally {
+          guardarClienteRapido.disabled = false;
+          guardarClienteRapido.textContent = "Guardar cliente";
+        }
+      });
+    }
 
     function actualizarFrecuenciaPersonalizada() {
       const esPersonalizada = frecuenciaSelect && frecuenciaSelect.value === "personalizado";
