@@ -70,3 +70,41 @@ class EgresoForm(BaseMovimientoForm):
         if pagado > total:
             self.add_error("monto_pagado", "El valor pagado no puede superar el total calculado.")
         return cleaned
+
+from .models import Factura, PagoFactura
+
+
+class PagoFacturaForm(forms.ModelForm):
+    class Meta:
+        model = PagoFactura
+        fields = ["monto", "fecha", "metodo_pago", "referencia", "comprobante", "observaciones"]
+        widgets = {
+            "fecha": DateInput(),
+            "observaciones": forms.Textarea(attrs={"rows": 3}),
+        }
+        labels = {
+            "monto": "Valor recibido",
+            "fecha": "Fecha del pago",
+            "metodo_pago": "Forma de pago",
+            "referencia": "Número de referencia",
+        }
+
+    def __init__(self, *args, factura=None, **kwargs):
+        self.factura = factura
+        super().__init__(*args, **kwargs)
+        if factura and not self.is_bound:
+            self.fields["monto"].initial = factura.saldo
+
+    def clean_monto(self):
+        monto = self.cleaned_data["monto"]
+        if self.factura and monto > self.factura.saldo:
+            raise forms.ValidationError(f"El pago no puede superar el saldo pendiente de ${self.factura.saldo:.2f}.")
+        return monto
+
+
+class FacturaFiltroForm(forms.Form):
+    ESTADOS = [("", "Todos los estados")] + Factura.ESTADO_CHOICES
+    q = forms.CharField(required=False)
+    estado = forms.ChoiceField(required=False, choices=ESTADOS)
+    anio = forms.IntegerField(required=False)
+    mes = forms.IntegerField(required=False, min_value=1, max_value=12)

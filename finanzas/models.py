@@ -206,11 +206,13 @@ class MovimientoRecurrente(models.Model):
 
 class Factura(models.Model):
     ESTADO_PENDIENTE = "pendiente"
+    ESTADO_PARCIAL = "parcial"
     ESTADO_PAGADA = "pagada"
     ESTADO_VENCIDA = "vencida"
     ESTADO_ANULADA = "anulada"
     ESTADO_CHOICES = [
         (ESTADO_PENDIENTE, "Pendiente"),
+        (ESTADO_PARCIAL, "Parcial"),
         (ESTADO_PAGADA, "Pagada"),
         (ESTADO_VENCIDA, "Vencida"),
         (ESTADO_ANULADA, "Anulada"),
@@ -255,7 +257,51 @@ class Factura(models.Model):
 
     @property
     def esta_vencida(self):
-        return self.estado == self.ESTADO_PENDIENTE and self.fecha_vencimiento < timezone.localdate()
+        return self.estado in {self.ESTADO_PENDIENTE, self.ESTADO_PARCIAL} and self.fecha_vencimiento < timezone.localdate()
+
+    @property
+    def monto_pagado(self):
+        """Total cobrado, conservando compatibilidad con facturas antiguas."""
+        total_pagos = self.pagos.filter(activo=True).aggregate(valor=models.Sum("monto"))["valor"] or Decimal("0.00")
+        if total_pagos == 0 and self.ingreso_generado_id and self.estado == self.ESTADO_PAGADA:
+            return self.total or Decimal("0.00")
+        return total_pagos
+
+    @property
+    def saldo(self):
+        if self.estado == self.ESTADO_ANULADA:
+            return Decimal("0.00")
+        return max((self.total or Decimal("0.00")) - self.monto_pagado, Decimal("0.00"))
+
+    @property
+    def porcentaje_pagado(self):
+        if not self.total:
+            return 0
+        return min(100, int((self.monto_pagado / self.total) * 100))
+
+    @property
+    def estado_visual(self):
+        if self.estado not in {self.ESTADO_PAGADA, self.ESTADO_ANULADA} and self.fecha_vencimiento < timezone.localdate():
+            return self.ESTADO_VENCIDA
+        return self.estado
+
+    def sincronizar_estado(self, guardar=True):
+        if self.estado == self.ESTADO_ANULADA:
+            return self.estado
+        pagado = self.monto_pagado
+        if self.total > 0 and pagado >= self.total:
+            nuevo = self.ESTADO_PAGADA
+        elif pagado > 0:
+            nuevo = self.ESTADO_PARCIAL
+        elif self.fecha_vencimiento < timezone.localdate():
+            nuevo = self.ESTADO_VENCIDA
+        else:
+            nuevo = self.ESTADO_PENDIENTE
+        self.estado = nuevo
+        self.pagada_en = timezone.localdate() if nuevo == self.ESTADO_PAGADA and not self.pagada_en else (None if nuevo != self.ESTADO_PAGADA else self.pagada_en)
+        if guardar:
+            self.save(update_fields=["estado", "pagada_en", "actualizada_en"])
+        return nuevo
 
     def actualizar_totales(self, guardar=True):
         subtotal = sum((item.subtotal for item in self.items.all()), Decimal("0"))
@@ -265,26 +311,17 @@ class Factura(models.Model):
             self.save(update_fields=["subtotal", "total", "actualizada_en"])
 
     def marcar_como_pagada(self, fecha_pago=None):
-        if self.estado == self.ESTADO_PAGADA:
+        """Compatibilidad: registra un pago por el saldo completo."""
+        if self.estado == self.ESTADO_PAGADA or self.saldo <= 0:
             return self.ingreso_generado
-        fecha_pago = fecha_pago or timezone.localdate()
-        ingreso = self.ingreso_generado
-        if not ingreso:
-            ingreso = Ingreso.objects.create(
-                cliente=self.cliente,
-                contrato=self.contrato,
-                concepto=f"Pago factura {self.numero} - {self.periodo_label}",
-                total=self.total,
-                monto_pagado=self.total,
-                estado=Ingreso.ESTADO_PAGADO,
-                fecha=fecha_pago,
-                fecha_cobro=fecha_pago,
-            )
-        self.estado = self.ESTADO_PAGADA
-        self.pagada_en = fecha_pago
-        self.ingreso_generado = ingreso
-        self.save(update_fields=["estado", "pagada_en", "ingreso_generado", "actualizada_en"])
-        return ingreso
+        pago = PagoFactura.objects.create(
+            factura=self,
+            monto=self.saldo,
+            fecha=fecha_pago or timezone.localdate(),
+            metodo_pago="otro",
+            observaciones="Pago total registrado desde compatibilidad anterior.",
+        )
+        return pago.ingreso
 
     def marcar_como_vencida_si_aplica(self, guardar=True):
         if self.esta_vencida:
@@ -325,3 +362,75 @@ class FacturaItem(models.Model):
 
     def __str__(self):
         return self.descripcion
+
+
+class PagoFactura(models.Model):
+    factura = models.ForeignKey(Factura, on_delete=models.PROTECT, related_name="pagos")
+    monto = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))])
+    fecha = models.DateField(default=date.today, db_index=True)
+    metodo_pago = models.CharField(max_length=20, choices=MovimientoFinancieroMixin.METODO_CHOICES, default="transferencia")
+    referencia = models.CharField(max_length=120, blank=True, default="")
+    comprobante = models.FileField(upload_to="finanzas/pagos_facturas/%Y/%m/", null=True, blank=True)
+    observaciones = models.TextField(blank=True, default="")
+    ingreso = models.OneToOneField(Ingreso, on_delete=models.SET_NULL, null=True, blank=True, related_name="pago_factura")
+    activo = models.BooleanField(default=True, db_index=True)
+    creado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="pagos_factura_creados")
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Pago de factura"
+        verbose_name_plural = "Pagos de facturas"
+        ordering = ["-fecha", "-id"]
+
+    def __str__(self):
+        return f"{self.factura.numero} - {self.monto}"
+
+    def save(self, *args, **kwargs):
+        creando = self._state.adding
+        if self.factura_id and self.activo:
+            saldo_disponible = self.factura.saldo
+            if not creando:
+                anterior = PagoFactura.objects.filter(pk=self.pk).values("monto", "activo").first()
+                if anterior and anterior["activo"]:
+                    saldo_disponible += anterior["monto"]
+            if self.monto > saldo_disponible:
+                from django.core.exceptions import ValidationError
+                raise ValidationError({"monto": f"El pago no puede superar el saldo pendiente de ${saldo_disponible:.2f}."})
+        super().save(*args, **kwargs)
+
+        if self.activo:
+            ingreso = self.ingreso
+            datos = {
+                "cliente": self.factura.cliente,
+                "contrato": self.factura.contrato,
+                "concepto": f"Cobro {self.factura.numero} - {self.factura.periodo_label}",
+                "total": self.monto,
+                "monto_pagado": self.monto,
+                "estado": Ingreso.ESTADO_PAGADO,
+                "fecha": self.fecha,
+                "fecha_cobro": self.fecha,
+                "metodo_pago": self.metodo_pago,
+                "comprobante": self.comprobante,
+                "observaciones": self.observaciones,
+                "creado_por": self.creado_por,
+            }
+            if ingreso:
+                for campo, valor in datos.items():
+                    setattr(ingreso, campo, valor)
+                ingreso.save()
+            else:
+                self.ingreso = Ingreso.objects.create(**datos)
+                super().save(update_fields=["ingreso", "actualizado_en"])
+        elif self.ingreso_id and self.ingreso.estado != Ingreso.ESTADO_ANULADO:
+            self.ingreso.estado = Ingreso.ESTADO_ANULADO
+            self.ingreso.monto_pagado = Decimal("0.00")
+            self.ingreso.save(update_fields=["estado", "monto_pagado", "actualizado_en"])
+
+        self.factura.sincronizar_estado()
+
+    def anular(self):
+        if not self.activo:
+            return
+        self.activo = False
+        self.save(update_fields=["activo", "actualizado_en"])

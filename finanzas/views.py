@@ -10,8 +10,9 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 
-from .forms import EgresoForm, IngresoForm
-from .models import Egreso, Ingreso
+from .forms import EgresoForm, IngresoForm, PagoFacturaForm
+from .models import Egreso, Factura, Ingreso, PagoFactura
+from .cuentas_por_cobrar import generar_facturas_periodo
 
 
 def _es_admin(user):
@@ -241,3 +242,106 @@ def movimiento_eliminar(request, tipo, pk):
         messages.success(request, "Movimiento eliminado correctamente.")
         return redirect("finanzas_movimientos")
     return render(request, "finanzas/eliminar.html", {"obj": obj, "tipo": tipo, "es_admin": True})
+
+
+@login_required
+def facturas_lista(request):
+    if not _es_admin(request.user):
+        return _denegado(request)
+    hoy = timezone.localdate()
+    q = (request.GET.get("q") or "").strip()
+    estado = (request.GET.get("estado") or "").strip()
+    try:
+        anio = int(request.GET.get("anio") or hoy.year)
+        mes_raw = request.GET.get("mes")
+        mes = int(mes_raw) if mes_raw else None
+    except (TypeError, ValueError):
+        anio, mes = hoy.year, None
+
+    facturas = Factura.objects.select_related("cliente", "contrato").prefetch_related("pagos")
+    facturas = facturas.filter(periodo_anio=anio)
+    if mes:
+        facturas = facturas.filter(periodo_mes=mes)
+    if estado:
+        facturas = facturas.filter(estado=estado)
+    if q:
+        facturas = facturas.filter(Q(numero__icontains=q) | Q(cliente__nombre__icontains=q) | Q(cliente__telefono__icontains=q))
+
+    facturas = list(facturas)
+    total_facturado = sum((f.total for f in facturas if f.estado != Factura.ESTADO_ANULADA), Decimal("0.00"))
+    total_cobrado = sum((f.monto_pagado for f in facturas if f.estado != Factura.ESTADO_ANULADA), Decimal("0.00"))
+    total_pendiente = sum((f.saldo for f in facturas if f.estado != Factura.ESTADO_ANULADA), Decimal("0.00"))
+    total_vencido = sum((f.saldo for f in facturas if f.estado_visual == Factura.ESTADO_VENCIDA), Decimal("0.00"))
+
+    paginator = Paginator(facturas, 20)
+    page_obj = paginator.get_page(request.GET.get("page"))
+    params = request.GET.copy(); params.pop("page", None)
+    return render(request, "finanzas/facturas_lista.html", {
+        "page_obj": page_obj, "q": q, "estado": estado, "anio": anio, "mes": mes or "",
+        "estados": Factura.ESTADO_CHOICES, "querystring": params.urlencode(),
+        "total_facturado": total_facturado, "total_cobrado": total_cobrado,
+        "total_pendiente": total_pendiente, "total_vencido": total_vencido, "es_admin": True,
+    })
+
+
+@login_required
+def factura_detalle(request, pk):
+    if not _es_admin(request.user):
+        return _denegado(request)
+    factura = get_object_or_404(
+        Factura.objects.select_related("cliente", "contrato").prefetch_related("items", "pagos__ingreso"), pk=pk
+    )
+    return render(request, "finanzas/factura_detalle.html", {"factura": factura, "es_admin": True})
+
+
+@login_required
+def factura_pago_nuevo(request, pk):
+    if not _es_admin(request.user):
+        return _denegado(request)
+    factura = get_object_or_404(Factura, pk=pk)
+    if factura.estado == Factura.ESTADO_ANULADA or factura.saldo <= 0:
+        messages.warning(request, "Esta cuenta por cobrar no admite nuevos pagos.")
+        return redirect("finanzas_factura_detalle", pk=factura.pk)
+    form = PagoFacturaForm(request.POST or None, request.FILES or None, factura=factura)
+    if request.method == "POST" and form.is_valid():
+        pago = form.save(commit=False)
+        pago.factura = factura
+        pago.creado_por = request.user
+        pago.save()
+        messages.success(request, "Pago registrado. El ingreso real se creó automáticamente.")
+        return redirect("finanzas_factura_detalle", pk=factura.pk)
+    return render(request, "finanzas/pago_factura_form.html", {"form": form, "factura": factura, "es_admin": True})
+
+
+@login_required
+def factura_pago_anular(request, pk, pago_pk):
+    if not _es_admin(request.user):
+        return _denegado(request)
+    factura = get_object_or_404(Factura, pk=pk)
+    pago = get_object_or_404(PagoFactura, pk=pago_pk, factura=factura)
+    if request.method == "POST":
+        pago.anular()
+        messages.success(request, "Pago anulado. El ingreso vinculado también fue anulado.")
+    return redirect("finanzas_factura_detalle", pk=factura.pk)
+
+
+@login_required
+def generar_facturas_desde_contratos(request):
+    if not _es_admin(request.user):
+        return _denegado(request)
+    if request.method != "POST":
+        return redirect("finanzas_facturas")
+    hoy = timezone.localdate()
+    try:
+        anio = int(request.POST.get("anio") or hoy.year)
+        mes = int(request.POST.get("mes") or hoy.month)
+        if not 1 <= mes <= 12:
+            raise ValueError
+    except (TypeError, ValueError):
+        messages.error(request, "Periodo inválido.")
+        return redirect("finanzas_facturas")
+    resultado = generar_facturas_periodo(anio, mes, usuario=request.user)
+    messages.success(request, f"Mensualidades: {resultado['creadas']} creadas y {resultado['existentes']} ya existentes.")
+    if resultado["errores"]:
+        messages.warning(request, f"No se pudieron procesar {len(resultado['errores'])} contratos.")
+    return redirect(f"/finanzas/facturas/?anio={anio}&mes={mes}")
