@@ -603,7 +603,9 @@
 
   <link rel="stylesheet" href="{% static 'dashboard/app-responsive-v2.css' %}?v=20260729-1">
 
-  {% block extra_head %}{% endblock %}
+    <link rel="stylesheet" href="{% static 'dashboard/app-ux-v13.css' %}?v=20260802-1">
+
+{% block extra_head %}{% endblock %}
 </head>
 
 
@@ -1213,6 +1215,8 @@
   </script>
 
   {% block extra_js %}{% endblock %}
+  <script src="{% static 'dashboard/app-ux-v13.js' %}?v=20260802-1" defer></script>
+
   <script src="{% static 'dashboard/app-responsive-v2.js' %}?v=20260729-1" defer></script>
 
 
