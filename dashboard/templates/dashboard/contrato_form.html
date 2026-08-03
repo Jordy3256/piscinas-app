@@ -175,22 +175,63 @@
 
         <div class="cf-card mb-3">
           <div class="cf-card-header">
-            <div class="cf-card-title">💳 Forma de pago</div>
-            <div class="cf-card-subtitle">Selecciona la modalidad acordada con el cliente.</div>
+            <div class="cf-card-title">📅 Periodo y condiciones comerciales</div>
+            <div class="cf-card-subtitle">Separa el periodo del servicio, la condición comercial y las fechas reales de cobro.</div>
           </div>
           <div class="cf-card-body">
-            <label for="forma_pago" class="form-label">Forma de pago <span class="text-danger">*</span></label>
-            <select id="forma_pago" name="forma_pago" class="form-select" required>
-              <option value="">Selecciona una forma de pago</option>
-              {% for valor, etiqueta in formas_pago %}
-                <option value="{{ valor }}" {% if datos_formulario.forma_pago == valor %}selected{% endif %}>{{ etiqueta }}</option>
-              {% endfor %}
-            </select>
+            <div class="row g-3">
+              <div class="col-md-4">
+                <label class="form-label" for="periodo_dia_inicio">Día de inicio del periodo</label>
+                <select class="form-select" id="periodo_dia_inicio" name="periodo_dia_inicio" required>
+                  {% for dia in "12345678910111213141516171819202122232425262728293031"|make_list %}{% endfor %}
+                  {% for dia in dias_mes %}<option value="{{ dia }}" {% if datos_formulario.periodo_dia_inicio|stringformat:"s" == dia|stringformat:"s" %}selected{% endif %}>Día {{ dia }}</option>{% endfor %}
+                </select>
+                <div class="form-text">Ejemplo: día 25 significa un ciclo del 25 de un mes al 25 del siguiente.</div>
+              </div>
+              <div class="col-md-8">
+                <label for="forma_pago" class="form-label">Forma de pago</label>
+                <select id="forma_pago" name="forma_pago" class="form-select" required>
+                  <option value="">Selecciona una condición</option>
+                  {% for valor, etiqueta in formas_pago %}<option value="{{ valor }}" {% if datos_formulario.forma_pago == valor %}selected{% endif %}>{{ etiqueta }}</option>{% endfor %}
+                </select>
+              </div>
+              <div class="col-12" id="forma-pago-personalizada-container">
+                <label for="forma_pago_personalizada" class="form-label">Detalle personalizado</label>
+                <input type="text" id="forma_pago_personalizada" name="forma_pago_personalizada" class="form-control" maxlength="150" value="{{ datos_formulario.forma_pago_personalizada }}">
+              </div>
+            </div>
+          </div>
+        </div>
 
-            <div id="forma-pago-personalizada-container" class="mt-3">
-              <label for="forma_pago_personalizada" class="form-label">Detalle de la forma de pago personalizada <span class="text-danger">*</span></label>
-              <input type="text" id="forma_pago_personalizada" name="forma_pago_personalizada" class="form-control" maxlength="150" value="{{ datos_formulario.forma_pago_personalizada }}" placeholder="Ejemplo: pago los días 15 de cada mes">
-              <div class="form-text">Describe claramente el acuerdo de pago.</div>
+        <div class="cf-card mb-3">
+          <div class="cf-card-header"><div class="cf-card-title">💰 Programación de cobros</div><div class="cf-card-subtitle">Define cuándo se espera el pago, de forma independiente a la forma de pago.</div></div>
+          <div class="cf-card-body">
+            <div class="row g-3">
+              <div class="col-md-8"><label class="form-label" for="programacion_cobro">Regla de cobro</label><select class="form-select" id="programacion_cobro" name="programacion_cobro" required><option value="">Selecciona una regla</option>{% for valor, etiqueta in programaciones_cobro %}<option value="{{ valor }}" {% if datos_formulario.programacion_cobro == valor %}selected{% endif %}>{{ etiqueta }}</option>{% endfor %}</select></div>
+              <div class="col-md-4"><label class="form-label" for="cobro_mes_desfase">Mes del pago</label><select class="form-select" id="cobro_mes_desfase" name="cobro_mes_desfase"><option value="0" {% if datos_formulario.cobro_mes_desfase|stringformat:"s" == "0" %}selected{% endif %}>Mismo mes</option><option value="1" {% if datos_formulario.cobro_mes_desfase|stringformat:"s" == "1" %}selected{% endif %}>Mes siguiente</option><option value="2" {% if datos_formulario.cobro_mes_desfase|stringformat:"s" == "2" %}selected{% endif %}>Dos meses después</option></select></div>
+              <div class="col-md-4 cobro-field" data-show="dia_fijo dos_pagos"><label class="form-label">Primer día de pago</label><select class="form-select" name="cobro_dia_1"><option value="">Selecciona</option>{% for dia in dias_mes %}<option value="{{ dia }}" {% if datos_formulario.cobro_dia_1|stringformat:"s" == dia|stringformat:"s" %}selected{% endif %}>{{ dia }}</option>{% endfor %}</select></div>
+              <div class="col-md-4 cobro-field" data-show="dos_pagos"><label class="form-label">Segundo día de pago</label><select class="form-select" name="cobro_dia_2"><option value="">Selecciona</option>{% for dia in dias_mes %}<option value="{{ dia }}" {% if datos_formulario.cobro_dia_2|stringformat:"s" == dia|stringformat:"s" %}selected{% endif %}>{{ dia }}</option>{% endfor %}</select></div>
+              <div class="col-md-4 cobro-field" data-show="dos_pagos"><label class="form-label">% primer pago</label><input class="form-control" type="number" min="0.01" max="99.99" step="0.01" name="porcentaje_primer_pago" value="{{ datos_formulario.porcentaje_primer_pago }}"></div>
+              <div class="col-md-4 cobro-field" data-show="rango_dias"><label class="form-label">Desde el día</label><select class="form-select" name="cobro_rango_desde"><option value="">Selecciona</option>{% for dia in dias_mes %}<option value="{{ dia }}" {% if datos_formulario.cobro_rango_desde|stringformat:"s" == dia|stringformat:"s" %}selected{% endif %}>{{ dia }}</option>{% endfor %}</select></div>
+              <div class="col-md-4 cobro-field" data-show="rango_dias"><label class="form-label">Hasta el día</label><select class="form-select" name="cobro_rango_hasta"><option value="">Selecciona</option>{% for dia in dias_mes %}<option value="{{ dia }}" {% if datos_formulario.cobro_rango_hasta|stringformat:"s" == dia|stringformat:"s" %}selected{% endif %}>{{ dia }}</option>{% endfor %}</select></div>
+              <div class="col-md-6 cobro-field" data-show="despues_cierre"><label class="form-label">Días después del cierre</label><input class="form-control" type="number" min="0" max="365" name="cobro_dias_despues_cierre" value="{{ datos_formulario.cobro_dias_despues_cierre }}"></div>
+              <div class="col-12 cobro-field" data-show="personalizado"><label class="form-label">Programación personalizada</label><input class="form-control" name="programacion_cobro_personalizada" maxlength="200" value="{{ datos_formulario.programacion_cobro_personalizada }}"></div>
+              <div class="col-12"><div class="cf-note" id="vista-previa-comercial">Completa la regla para visualizar cómo se generarán los próximos cobros.</div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="cf-card mb-3">
+          <div class="cf-card-header"><div class="cf-card-title">🧾 Facturación</div><div class="cf-card-subtitle">Configura si se debe emitir factura y cuándo debe notificarse al administrador.</div></div>
+          <div class="cf-card-body">
+            <div class="form-check form-switch mb-3"><input class="form-check-input" type="checkbox" id="requiere_factura" name="requiere_factura" {% if datos_formulario.requiere_factura %}checked{% endif %}><label class="form-check-label fw-semibold ms-2" for="requiere_factura">Este contrato requiere factura</label></div>
+            <div id="facturacion-fields" class="row g-3">
+              <div class="col-md-6"><label class="form-label">Momento de emisión</label><select class="form-select" id="momento_facturacion" name="momento_facturacion"><option value="">Selecciona</option>{% for valor, etiqueta in momentos_facturacion %}<option value="{{ valor }}" {% if datos_formulario.momento_facturacion == valor %}selected{% endif %}>{{ etiqueta }}</option>{% endfor %}</select></div>
+              <div class="col-md-3"><label class="form-label">Día fijo</label><select class="form-select" name="facturacion_dia"><option value="">No aplica</option>{% for dia in dias_mes %}<option value="{{ dia }}" {% if datos_formulario.facturacion_dia|stringformat:"s" == dia|stringformat:"s" %}selected{% endif %}>{{ dia }}</option>{% endfor %}</select></div>
+              <div class="col-md-3"><label class="form-label">Días antes</label><input class="form-control" type="number" min="0" max="365" name="facturacion_dias_antes" value="{{ datos_formulario.facturacion_dias_antes }}"></div>
+              <div class="col-md-6"><div class="form-check form-switch mt-4"><input class="form-check-input" type="checkbox" id="notificar_facturacion" name="notificar_facturacion" {% if datos_formulario.notificar_facturacion %}checked{% endif %}><label class="form-check-label" for="notificar_facturacion">Generar recordatorio interno</label></div></div>
+              <div class="col-md-6"><label class="form-label">Avisar con días de anticipación</label><input class="form-control" type="number" min="0" max="365" name="notificacion_factura_dias_antes" value="{{ datos_formulario.notificacion_factura_dias_antes }}"></div>
+              <div class="col-12"><label class="form-label">Observaciones de facturación</label><textarea class="form-control" name="observaciones_facturacion" rows="2">{{ datos_formulario.observaciones_facturacion }}</textarea></div>
             </div>
           </div>
         </div>
@@ -288,8 +329,6 @@
     const formaPagoSelect = document.getElementById("forma_pago");
     const formaPagoContainer = document.getElementById("forma-pago-personalizada-container");
     const formaPagoInput = document.getElementById("forma_pago_personalizada");
-    const diaPagoWrap = document.getElementById("dia_pago_wrap");
-    const diaPagoInput = document.getElementById("dia_pago");
     const formulario = document.getElementById("contrato-form");
     const botonGuardar = document.getElementById("guardar-contrato");
     const tecnicoSelect = document.getElementById("tecnico_designado");
@@ -300,6 +339,23 @@
     const clienteRapidoErrores = document.getElementById("cliente-rapido-errores");
     const guardarClienteRapido = document.getElementById("guardar-cliente-rapido");
     const clienteSelect = document.getElementById("cliente");
+
+
+    const programacionCobro = document.getElementById("programacion_cobro");
+    const requiereFactura = document.getElementById("requiere_factura");
+    const facturacionFields = document.getElementById("facturacion-fields");
+    function actualizarCamposComerciales(){
+      const regla = programacionCobro ? programacionCobro.value : "";
+      document.querySelectorAll(".cobro-field").forEach(el => {
+        el.style.display = (el.dataset.show || "").split(" ").includes(regla) ? "block" : "none";
+      });
+      if (facturacionFields) facturacionFields.style.display = requiereFactura && requiereFactura.checked ? "flex" : "none";
+      const preview = document.getElementById("vista-previa-comercial");
+      if (preview && regla) preview.textContent = "La cuenta por cobrar se generará con la regla: " + programacionCobro.options[programacionCobro.selectedIndex].text + ". Los periodos pagados conservarán su historial.";
+    }
+    if (programacionCobro) programacionCobro.addEventListener("change", actualizarCamposComerciales);
+    if (requiereFactura) requiereFactura.addEventListener("change", actualizarCamposComerciales);
+    actualizarCamposComerciales();
 
     if (clienteRapidoForm) {
       clienteRapidoForm.addEventListener("submit", async function (event) {
@@ -340,16 +396,10 @@
 
     function actualizarFormaPagoPersonalizada() {
       const esPersonalizada = formaPagoSelect && formaPagoSelect.value === "personalizado";
-      const esDiaFijo = formaPagoSelect && formaPagoSelect.value === "dia_fijo";
       if (formaPagoContainer) formaPagoContainer.style.display = esPersonalizada ? "block" : "none";
       if (formaPagoInput) {
         formaPagoInput.required = esPersonalizada;
         if (!esPersonalizada) formaPagoInput.value = "";
-      }
-      if (diaPagoWrap) diaPagoWrap.style.display = esDiaFijo ? "block" : "none";
-      if (diaPagoInput) {
-        diaPagoInput.required = esDiaFijo;
-        if (!esDiaFijo) diaPagoInput.value = "";
       }
     }
 

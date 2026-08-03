@@ -1,5 +1,3 @@
-from calendar import monthrange
-from datetime import date
 from decimal import Decimal
 
 from django.db import transaction
@@ -16,21 +14,13 @@ MESES = (
 )
 
 
-def fecha_vencimiento_contrato(contrato, anio, mes):
-    ultimo = monthrange(anio, mes)[1]
-    if contrato.forma_pago == "adelantado":
-        dia = 1
-    elif contrato.forma_pago == "fin_mensualidad":
-        dia = ultimo
-    elif contrato.forma_pago == "dia_fijo" and contrato.dia_pago:
-        dia = min(max(int(contrato.dia_pago), 1), ultimo)
-    else:
-        dia = min(getattr(contrato.fecha_inicio, "day", 5) or 5, ultimo)
-    return date(anio, mes, dia)
+def fecha_vencimiento_contrato(contrato, anio, mes, cuota_numero=1):
+    calendario = contrato.calendario_cobros(anio, mes)
+    indice = min(max(int(cuota_numero or 1), 1), len(calendario)) - 1
+    return calendario[indice]["fecha_vencimiento"]
 
 
 def contratos_facturables():
-    """Contratos activos con cliente y un valor mensual válido."""
     return (
         Contrato.objects.select_related("cliente")
         .filter(activo=True, precio_mensual__gt=0)
@@ -39,57 +29,78 @@ def contratos_facturables():
 
 
 def previsualizar_facturas_periodo(anio, mes):
-    """Calcula lo que ocurriría sin escribir datos en la base."""
     contratos = list(contratos_facturables())
-    ids = [contrato.pk for contrato in contratos]
-    existentes_ids = set(
+    existentes = set(
         Factura.objects.filter(
-            contrato_id__in=ids,
+            contrato_id__in=[c.pk for c in contratos],
             periodo_anio=anio,
             periodo_mes=mes,
-        ).values_list("contrato_id", flat=True)
+        ).values_list("contrato_id", "cuota_numero")
     )
-    nuevos = [contrato for contrato in contratos if contrato.pk not in existentes_ids]
-    valor_nuevo = sum((contrato.precio_mensual or Decimal("0.00") for contrato in nuevos), Decimal("0.00"))
-    valor_total_periodo = sum((contrato.precio_mensual or Decimal("0.00") for contrato in contratos), Decimal("0.00"))
+    nuevas = []
+    valor_nuevo = Decimal("0.00")
+    total_obligaciones = 0
+    for contrato in contratos:
+        for cuota in contrato.calendario_cobros(anio, mes):
+            total_obligaciones += 1
+            clave = (contrato.pk, cuota["cuota_numero"])
+            if clave not in existentes:
+                nuevas.append((contrato, cuota))
+                valor_nuevo += cuota["valor"]
     return {
         "anio": anio,
         "mes": mes,
         "contratos_activos": len(contratos),
-        "nuevas": len(nuevos),
-        "existentes": len(existentes_ids),
+        "obligaciones_previstas": total_obligaciones,
+        "nuevas": len(nuevas),
+        "existentes": len(existentes),
         "valor_nuevo": valor_nuevo,
-        "valor_total_periodo": valor_total_periodo,
-        "contratos_nuevos": nuevos,
+        "valor_total_periodo": sum((c.precio_mensual or Decimal("0.00") for c in contratos), Decimal("0.00")),
+        "contratos_nuevos": nuevas,
     }
 
 
 @transaction.atomic
 def generar_factura_contrato(contrato, anio, mes, usuario=None):
     if not contrato.activo or not contrato.precio_mensual or contrato.precio_mensual <= 0:
-        return None, False
-    factura, creada = Factura.objects.get_or_create(
-        contrato=contrato,
-        periodo_anio=anio,
-        periodo_mes=mes,
-        defaults={
-            "cliente": contrato.cliente,
-            "fecha_emision": timezone.localdate(),
-            "fecha_vencimiento": fecha_vencimiento_contrato(contrato, anio, mes),
-            "subtotal": contrato.precio_mensual,
-            "impuesto": Decimal("0.00"),
-            "total": contrato.precio_mensual,
-            "observaciones": "Mensualidad generada automáticamente desde el contrato.",
-        },
-    )
-    if creada:
-        FacturaItem.objects.create(
-            factura=factura,
-            descripcion=f"Servicio de mantenimiento mensual - {factura.periodo_label}",
-            cantidad=Decimal("1.00"),
-            precio_unitario=contrato.precio_mensual,
+        return [], 0
+
+    creadas = []
+    fecha_facturacion = contrato.fecha_programada_facturacion(anio, mes)
+    for cuota in contrato.calendario_cobros(anio, mes):
+        factura, creada = Factura.objects.get_or_create(
+            contrato=contrato,
+            periodo_anio=anio,
+            periodo_mes=mes,
+            cuota_numero=cuota["cuota_numero"],
+            defaults={
+                "cliente": contrato.cliente,
+                "periodo_inicio": cuota["periodo_inicio"],
+                "periodo_fin": cuota["periodo_fin"],
+                "total_cuotas": cuota["total_cuotas"],
+                "fecha_emision": timezone.localdate(),
+                "fecha_cobro_desde": cuota["fecha_cobro_desde"],
+                "fecha_vencimiento": cuota["fecha_vencimiento"],
+                "fecha_facturacion_programada": fecha_facturacion,
+                "requiere_factura": contrato.requiere_factura,
+                "subtotal": cuota["valor"],
+                "impuesto": Decimal("0.00"),
+                "total": cuota["valor"],
+                "observaciones": "Cuenta por cobrar generada automáticamente desde el calendario comercial del contrato.",
+            },
         )
-    return factura, creada
+        if creada:
+            descripcion = f"Servicio de mantenimiento {cuota['periodo_inicio']:%d/%m/%Y} al {cuota['periodo_fin']:%d/%m/%Y}"
+            if cuota["total_cuotas"] > 1:
+                descripcion += f" · cuota {cuota['cuota_numero']}/{cuota['total_cuotas']}"
+            FacturaItem.objects.create(
+                factura=factura,
+                descripcion=descripcion,
+                cantidad=Decimal("1.00"),
+                precio_unitario=cuota["valor"],
+            )
+            creadas.append(factura)
+    return creadas, len(creadas)
 
 
 def generar_facturas_periodo(anio, mes, usuario=None):
@@ -97,20 +108,13 @@ def generar_facturas_periodo(anio, mes, usuario=None):
     existentes = 0
     errores = []
     valor_generado = Decimal("0.00")
-    contratos = contratos_facturables()
-    for contrato in contratos:
+    for contrato in contratos_facturables():
         try:
-            _, creada = generar_factura_contrato(contrato, anio, mes, usuario=usuario)
-            if creada:
-                creadas += 1
-                valor_generado += contrato.precio_mensual or Decimal("0.00")
-            else:
-                existentes += 1
+            previstas = len(contrato.calendario_cobros(anio, mes))
+            facturas, cantidad = generar_factura_contrato(contrato, anio, mes, usuario=usuario)
+            creadas += cantidad
+            existentes += previstas - cantidad
+            valor_generado += sum((f.total for f in facturas), Decimal("0.00"))
         except Exception as exc:
             errores.append(f"Contrato {contrato.pk}: {exc}")
-    return {
-        "creadas": creadas,
-        "existentes": existentes,
-        "errores": errores,
-        "valor_generado": valor_generado,
-    }
+    return {"creadas": creadas, "existentes": existentes, "errores": errores, "valor_generado": valor_generado}

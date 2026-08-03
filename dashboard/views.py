@@ -5118,138 +5118,111 @@ def calculadora_quimicos_view(request):
 # CONTRATOS
 # ================================
 
-FRECUENCIAS_CONTRATO_VALIDAS = {
-    "1_semanal",
-    "2_semanales",
-    "3_semanales",
-    "quincenal",
-    "personalizado",
-}
+FRECUENCIAS_CONTRATO_VALIDAS = {"1_semanal", "2_semanales", "3_semanales", "quincenal", "personalizado"}
+FORMAS_PAGO_CONTRATO_VALIDAS = {valor for valor, _ in Contrato.FORMA_PAGO_CHOICES}
+PROGRAMACIONES_COBRO_VALIDAS = {valor for valor, _ in Contrato.PROGRAMACION_COBRO_CHOICES}
+MOMENTOS_FACTURACION_VALIDOS = {valor for valor, _ in Contrato.MOMENTO_FACTURACION_CHOICES}
 
-FORMAS_PAGO_CONTRATO_VALIDAS = {
-    "adelantado",
-    "50_50",
-    "por_visita",
-    "fin_mensualidad",
-    "dia_fijo",
-    "personalizado",
-}
+
+def _entero_post(request, nombre, minimo=0, maximo=None, obligatorio=False):
+    valor = (request.POST.get(nombre) or "").strip()
+    if not valor:
+        if obligatorio:
+            raise ValueError
+        return None
+    numero = int(valor)
+    if numero < minimo or (maximo is not None and numero > maximo):
+        raise ValueError
+    return numero
 
 
 def _validar_datos_contrato(request):
     cliente_id = (request.POST.get("cliente") or "").strip()
     frecuencia = (request.POST.get("frecuencia") or "").strip()
-    frecuencia_personalizada = (
-        request.POST.get("frecuencia_personalizada") or ""
-    ).strip()
+    frecuencia_personalizada = (request.POST.get("frecuencia_personalizada") or "").strip()
     forma_pago = (request.POST.get("forma_pago") or "").strip()
-    forma_pago_personalizada = (
-        request.POST.get("forma_pago_personalizada") or ""
-    ).strip()
-    dia_pago_raw = (request.POST.get("dia_pago") or "").strip()
+    forma_pago_personalizada = (request.POST.get("forma_pago_personalizada") or "").strip()
+    programacion_cobro = (request.POST.get("programacion_cobro") or "").strip()
+    programacion_personalizada = (request.POST.get("programacion_cobro_personalizada") or "").strip()
     precio_mensual_str = (request.POST.get("precio_mensual") or "").strip()
     valor_tecnico_str = (request.POST.get("valor_tecnico_mensual") or "0").strip()
-    fecha_inicio_str = (
-        request.POST.get("fecha_inicio") or ""
-    ).strip()
+    fecha_inicio_str = (request.POST.get("fecha_inicio") or "").strip()
     activo = request.POST.get("activo") == "on"
     generacion_automatica = request.POST.get("generacion_automatica") == "on"
     tecnico_id = (request.POST.get("tecnico_designado") or "").strip()
     dias_visita = normalizar_dias(request.POST.getlist("dias_visita"))
-
+    requiere_factura = request.POST.get("requiere_factura") == "on"
+    notificar_facturacion = request.POST.get("notificar_facturacion") == "on"
+    momento_facturacion = (request.POST.get("momento_facturacion") or "").strip()
     errores = []
 
-    cliente = None
-    if not cliente_id.isdigit():
-        errores.append("Debes seleccionar un cliente válido.")
-    else:
-        cliente = Cliente.objects.filter(pk=int(cliente_id)).first()
-        if cliente is None:
-            errores.append("El cliente seleccionado no existe.")
+    cliente = Cliente.objects.filter(pk=int(cliente_id)).first() if cliente_id.isdigit() else None
+    if cliente is None: errores.append("Debes seleccionar un cliente válido.")
+    if frecuencia not in FRECUENCIAS_CONTRATO_VALIDAS: errores.append("Debes seleccionar una frecuencia válida.")
+    if frecuencia == "personalizado" and not frecuencia_personalizada: errores.append("Debes escribir la frecuencia personalizada.")
+    if forma_pago not in FORMAS_PAGO_CONTRATO_VALIDAS: errores.append("Debes seleccionar una forma de pago válida.")
+    if forma_pago == "personalizado" and not forma_pago_personalizada: errores.append("Debes escribir la forma de pago personalizada.")
+    if programacion_cobro not in PROGRAMACIONES_COBRO_VALIDAS: errores.append("Debes seleccionar una programación de cobro válida.")
+    if programacion_cobro == "personalizado" and not programacion_personalizada: errores.append("Describe la programación de cobro personalizada.")
 
-    if frecuencia not in FRECUENCIAS_CONTRATO_VALIDAS:
-        errores.append("Debes seleccionar una frecuencia válida.")
+    campos_enteros = {}
+    configuracion = [
+        ("periodo_dia_inicio", 1, 31, True), ("cobro_mes_desfase", 0, 2, True),
+        ("cobro_dia_1", 1, 31, programacion_cobro in {"dia_fijo", "dos_pagos"}),
+        ("cobro_dia_2", 1, 31, programacion_cobro == "dos_pagos"),
+        ("cobro_rango_desde", 1, 31, programacion_cobro == "rango_dias"),
+        ("cobro_rango_hasta", 1, 31, programacion_cobro == "rango_dias"),
+        ("cobro_dias_despues_cierre", 0, 365, programacion_cobro == "despues_cierre"),
+        ("facturacion_dia", 1, 31, requiere_factura and momento_facturacion in {"dia_fijo", "personalizado"}),
+        ("facturacion_dias_antes", 0, 365, False),
+        ("notificacion_factura_dias_antes", 0, 365, False),
+    ]
+    for nombre, minimo, maximo, obligatorio in configuracion:
+        try: campos_enteros[nombre] = _entero_post(request, nombre, minimo, maximo, obligatorio)
+        except (TypeError, ValueError): errores.append(f"Revisa el valor de {nombre.replace('_', ' ')}.")
+    if programacion_cobro == "rango_dias" and campos_enteros.get("cobro_rango_desde") and campos_enteros.get("cobro_rango_hasta") and campos_enteros["cobro_rango_hasta"] < campos_enteros["cobro_rango_desde"]:
+        errores.append("El último día del rango no puede ser anterior al primero.")
 
-    if frecuencia == "personalizado" and not frecuencia_personalizada:
-        errores.append(
-            "Debes escribir la frecuencia personalizada."
-        )
+    try:
+        porcentaje_primer_pago = Decimal((request.POST.get("porcentaje_primer_pago") or "50").strip())
+        if not Decimal("0.01") <= porcentaje_primer_pago <= Decimal("99.99"): raise ValueError
+    except Exception:
+        porcentaje_primer_pago = Decimal("50.00"); errores.append("El porcentaje del primer pago debe estar entre 0.01 y 99.99.")
 
-    if forma_pago not in FORMAS_PAGO_CONTRATO_VALIDAS:
-        errores.append("Debes seleccionar una forma de pago válida.")
-
-    if forma_pago == "personalizado" and not forma_pago_personalizada:
-        errores.append(
-            "Debes escribir la forma de pago personalizada."
-        )
-
-    dia_pago = None
-    if forma_pago == "dia_fijo":
-        try:
-            dia_pago = int(dia_pago_raw)
-            if not 1 <= dia_pago <= 31:
-                raise ValueError
-        except (TypeError, ValueError):
-            errores.append("Debes seleccionar un día fijo de pago entre 1 y 31.")
+    if requiere_factura and momento_facturacion not in MOMENTOS_FACTURACION_VALIDOS:
+        errores.append("Selecciona cuándo debe emitirse la factura.")
 
     tecnico_designado = None
     if tecnico_id:
-        if tecnico_id.isdigit():
-            tecnico_designado = Trabajador.objects.filter(
-                pk=int(tecnico_id),
-                activo=True,
-            ).select_related("user").first()
-        if tecnico_designado is None:
-            errores.append("El técnico seleccionado no existe o está inactivo.")
-
-    errores.extend(
-        validar_programacion(
-            frecuencia,
-            dias_visita,
-            tecnico_designado,
-            automatica=generacion_automatica and activo,
-        )
-    )
-
+        tecnico_designado = Trabajador.objects.filter(pk=int(tecnico_id), activo=True).select_related("user").first() if tecnico_id.isdigit() else None
+        if tecnico_designado is None: errores.append("El técnico seleccionado no existe o está inactivo.")
+    errores.extend(validar_programacion(frecuencia, dias_visita, tecnico_designado, automatica=generacion_automatica and activo))
     try:
         precio_mensual = Decimal(precio_mensual_str)
-        if precio_mensual <= 0:
-            raise ValueError
+        if precio_mensual <= 0: raise ValueError
     except Exception:
-        precio_mensual = None
-        errores.append(
-            "El precio mensual debe ser un valor mayor que cero."
-        )
-
+        precio_mensual = None; errores.append("El precio mensual debe ser un valor mayor que cero.")
     try:
         valor_tecnico_mensual = Decimal(valor_tecnico_str or "0")
         if valor_tecnico_mensual < 0: raise ValueError
     except Exception:
-        valor_tecnico_mensual = Decimal("0.00")
-        errores.append("El valor mensual del técnico debe ser cero o mayor.")
-    if valor_tecnico_mensual and not tecnico_designado:
-        errores.append("Debes seleccionar un técnico para asignarle un valor mensual.")
-
+        valor_tecnico_mensual = Decimal("0.00"); errores.append("El valor mensual del técnico debe ser cero o mayor.")
+    if valor_tecnico_mensual and not tecnico_designado: errores.append("Debes seleccionar un técnico para asignarle un valor mensual.")
     fecha_inicio = parse_date(fecha_inicio_str)
-    if not fecha_inicio:
-        errores.append("Debes seleccionar una fecha de inicio válida.")
+    if not fecha_inicio: errores.append("Debes seleccionar una fecha de inicio válida.")
 
     return {
-        "errores": errores,
-        "cliente": cliente,
-        "frecuencia": frecuencia,
-        "frecuencia_personalizada": frecuencia_personalizada,
-        "forma_pago": forma_pago,
-        "forma_pago_personalizada": forma_pago_personalizada,
-        "dia_pago": dia_pago,
-        "precio_mensual": precio_mensual,
-        "valor_tecnico_mensual": valor_tecnico_mensual,
-        "fecha_inicio": fecha_inicio,
-        "activo": activo,
-        "generacion_automatica": generacion_automatica,
-        "tecnico_designado": tecnico_designado,
-        "tecnico_id": tecnico_id,
-        "dias_visita": dias_visita,
+        "errores": errores, "cliente": cliente, "frecuencia": frecuencia,
+        "frecuencia_personalizada": frecuencia_personalizada, "forma_pago": forma_pago,
+        "forma_pago_personalizada": forma_pago_personalizada, "precio_mensual": precio_mensual,
+        "valor_tecnico_mensual": valor_tecnico_mensual, "fecha_inicio": fecha_inicio, "activo": activo,
+        "generacion_automatica": generacion_automatica, "tecnico_designado": tecnico_designado,
+        "tecnico_id": tecnico_id, "dias_visita": dias_visita, "programacion_cobro": programacion_cobro,
+        "programacion_cobro_personalizada": programacion_personalizada, "porcentaje_primer_pago": porcentaje_primer_pago,
+        "requiere_factura": requiere_factura, "momento_facturacion": momento_facturacion if requiere_factura else "",
+        "notificar_facturacion": notificar_facturacion if requiere_factura else False,
+        "observaciones_facturacion": (request.POST.get("observaciones_facturacion") or "").strip(),
+        **campos_enteros,
     }
 
 
@@ -5584,7 +5557,16 @@ def contrato_crear_view(request):
         "frecuencia_personalizada": "",
         "forma_pago": "",
         "forma_pago_personalizada": "",
-        "dia_pago": "",
+        "periodo_dia_inicio": timezone.localdate().day,
+        "programacion_cobro": "inicio_periodo",
+        "cobro_mes_desfase": 0,
+        "cobro_dia_1": "", "cobro_dia_2": "",
+        "cobro_rango_desde": "", "cobro_rango_hasta": "",
+        "cobro_dias_despues_cierre": 0, "porcentaje_primer_pago": "50.00",
+        "programacion_cobro_personalizada": "",
+        "requiere_factura": False, "momento_facturacion": "", "facturacion_dia": "",
+        "facturacion_dias_antes": 0, "notificar_facturacion": False,
+        "notificacion_factura_dias_antes": 1, "observaciones_facturacion": "",
         "precio_mensual": "",
         "valor_tecnico_mensual": "",
         "fecha_inicio": timezone.localdate().isoformat(),
@@ -5607,7 +5589,13 @@ def contrato_crear_view(request):
             "forma_pago_personalizada": (
                 validacion["forma_pago_personalizada"]
             ),
-            "dia_pago": validacion["dia_pago"] or "",
+            **{campo: validacion.get(campo) or "" for campo in (
+                "periodo_dia_inicio", "programacion_cobro", "cobro_mes_desfase", "cobro_dia_1", "cobro_dia_2",
+                "cobro_rango_desde", "cobro_rango_hasta", "cobro_dias_despues_cierre", "porcentaje_primer_pago",
+                "programacion_cobro_personalizada", "momento_facturacion", "facturacion_dia", "facturacion_dias_antes",
+                "notificacion_factura_dias_antes", "observaciones_facturacion")},
+            "requiere_factura": validacion["requiere_factura"],
+            "notificar_facturacion": validacion["notificar_facturacion"],
             "precio_mensual": request.POST.get("precio_mensual", ""),
             "valor_tecnico_mensual": request.POST.get("valor_tecnico_mensual", ""),
             "fecha_inicio": request.POST.get(
@@ -5635,7 +5623,19 @@ def contrato_crear_view(request):
                 forma_pago_personalizada=(
                     validacion["forma_pago_personalizada"]
                 ),
-                dia_pago=validacion["dia_pago"],
+                periodo_dia_inicio=validacion["periodo_dia_inicio"],
+                programacion_cobro=validacion["programacion_cobro"],
+                cobro_mes_desfase=validacion["cobro_mes_desfase"] or 0,
+                cobro_dia_1=validacion["cobro_dia_1"], cobro_dia_2=validacion["cobro_dia_2"],
+                cobro_rango_desde=validacion["cobro_rango_desde"], cobro_rango_hasta=validacion["cobro_rango_hasta"],
+                cobro_dias_despues_cierre=validacion["cobro_dias_despues_cierre"] or 0,
+                porcentaje_primer_pago=validacion["porcentaje_primer_pago"],
+                programacion_cobro_personalizada=validacion["programacion_cobro_personalizada"],
+                requiere_factura=validacion["requiere_factura"], momento_facturacion=validacion["momento_facturacion"],
+                facturacion_dia=validacion["facturacion_dia"], facturacion_dias_antes=validacion["facturacion_dias_antes"] or 0,
+                notificar_facturacion=validacion["notificar_facturacion"],
+                notificacion_factura_dias_antes=validacion["notificacion_factura_dias_antes"] or 1,
+                observaciones_facturacion=validacion["observaciones_facturacion"],
                 precio_mensual=validacion["precio_mensual"],
                 valor_tecnico_mensual=validacion["valor_tecnico_mensual"],
                 fecha_inicio=validacion["fecha_inicio"],
@@ -5676,8 +5676,11 @@ def contrato_crear_view(request):
             "clientes": clientes,
             "frecuencias": Contrato.FRECUENCIA_CHOICES,
             "formas_pago": Contrato.FORMA_PAGO_CHOICES,
+            "programaciones_cobro": Contrato.PROGRAMACION_COBRO_CHOICES,
+            "momentos_facturacion": Contrato.MOMENTO_FACTURACION_CHOICES,
             "trabajadores": trabajadores,
             "dias_semana": DIAS_SEMANA.items(),
+            "dias_mes": range(1, 32),
             "datos_formulario": datos_formulario,
             "es_admin": True,
         },
@@ -5719,7 +5722,19 @@ def contrato_editar_view(request, pk):
         "forma_pago_personalizada": (
             contrato.forma_pago_personalizada
         ),
-        "dia_pago": contrato.dia_pago or "",
+        "periodo_dia_inicio": contrato.periodo_dia_inicio,
+        "programacion_cobro": contrato.programacion_cobro,
+        "cobro_mes_desfase": contrato.cobro_mes_desfase,
+        "cobro_dia_1": contrato.cobro_dia_1 or "", "cobro_dia_2": contrato.cobro_dia_2 or "",
+        "cobro_rango_desde": contrato.cobro_rango_desde or "", "cobro_rango_hasta": contrato.cobro_rango_hasta or "",
+        "cobro_dias_despues_cierre": contrato.cobro_dias_despues_cierre,
+        "porcentaje_primer_pago": contrato.porcentaje_primer_pago,
+        "programacion_cobro_personalizada": contrato.programacion_cobro_personalizada,
+        "requiere_factura": contrato.requiere_factura, "momento_facturacion": contrato.momento_facturacion,
+        "facturacion_dia": contrato.facturacion_dia or "", "facturacion_dias_antes": contrato.facturacion_dias_antes,
+        "notificar_facturacion": contrato.notificar_facturacion,
+        "notificacion_factura_dias_antes": contrato.notificacion_factura_dias_antes,
+        "observaciones_facturacion": contrato.observaciones_facturacion,
         "precio_mensual": contrato.precio_mensual,
         "valor_tecnico_mensual": contrato.valor_tecnico_mensual,
         "fecha_inicio": contrato.fecha_inicio.isoformat(),
@@ -5742,7 +5757,13 @@ def contrato_editar_view(request, pk):
             "forma_pago_personalizada": (
                 validacion["forma_pago_personalizada"]
             ),
-            "dia_pago": validacion["dia_pago"] or "",
+            **{campo: validacion.get(campo) or "" for campo in (
+                "periodo_dia_inicio", "programacion_cobro", "cobro_mes_desfase", "cobro_dia_1", "cobro_dia_2",
+                "cobro_rango_desde", "cobro_rango_hasta", "cobro_dias_despues_cierre", "porcentaje_primer_pago",
+                "programacion_cobro_personalizada", "momento_facturacion", "facturacion_dia", "facturacion_dias_antes",
+                "notificacion_factura_dias_antes", "observaciones_facturacion")},
+            "requiere_factura": validacion["requiere_factura"],
+            "notificar_facturacion": validacion["notificar_facturacion"],
             "precio_mensual": request.POST.get("precio_mensual", ""),
             "valor_tecnico_mensual": request.POST.get("valor_tecnico_mensual", ""),
             "fecha_inicio": request.POST.get(
@@ -5768,7 +5789,13 @@ def contrato_editar_view(request, pk):
             contrato.forma_pago_personalizada = (
                 validacion["forma_pago_personalizada"]
             )
-            contrato.dia_pago = validacion["dia_pago"]
+            for campo in (
+                "periodo_dia_inicio", "programacion_cobro", "cobro_mes_desfase", "cobro_dia_1", "cobro_dia_2",
+                "cobro_rango_desde", "cobro_rango_hasta", "cobro_dias_despues_cierre", "porcentaje_primer_pago",
+                "programacion_cobro_personalizada", "requiere_factura", "momento_facturacion", "facturacion_dia",
+                "facturacion_dias_antes", "notificar_facturacion", "notificacion_factura_dias_antes",
+                "observaciones_facturacion"):
+                setattr(contrato, campo, validacion[campo])
             contrato.precio_mensual = validacion["precio_mensual"]
             contrato.valor_tecnico_mensual = validacion["valor_tecnico_mensual"]
             contrato.fecha_inicio = validacion["fecha_inicio"]
@@ -5814,8 +5841,11 @@ def contrato_editar_view(request, pk):
             "clientes": clientes,
             "frecuencias": Contrato.FRECUENCIA_CHOICES,
             "formas_pago": Contrato.FORMA_PAGO_CHOICES,
+            "programaciones_cobro": Contrato.PROGRAMACION_COBRO_CHOICES,
+            "momentos_facturacion": Contrato.MOMENTO_FACTURACION_CHOICES,
             "trabajadores": trabajadores,
             "dias_semana": DIAS_SEMANA.items(),
+            "dias_mes": range(1, 32),
             "datos_formulario": datos_formulario,
             "es_admin": True,
         },
@@ -5906,6 +5936,11 @@ def contrato_detalle_view(request, pk):
         fecha__gte=timezone.localdate(),
     ).order_by("fecha").first()
 
+    hoy = timezone.localdate()
+    calendario_cobros = contrato.calendario_cobros(hoy.year, hoy.month)
+    periodo_inicio, periodo_fin = contrato.periodo_servicio(hoy.year, hoy.month)
+    fecha_facturacion_programada = contrato.fecha_programada_facturacion(hoy.year, hoy.month)
+
     return render(
         request,
         "dashboard/contrato_detalle.html",
@@ -5920,6 +5955,12 @@ def contrato_detalle_view(request, pk):
             "total_facturado": total_facturado,
             "total_pagado": total_pagado,
             "total_pendiente": total_pendiente,
+            "mantenimientos_futuros": mantenimientos_futuros,
+            "proximo_mantenimiento": proximo_mantenimiento,
+            "periodo_inicio_actual": periodo_inicio,
+            "periodo_fin_actual": periodo_fin,
+            "calendario_cobros": calendario_cobros,
+            "fecha_facturacion_programada": fecha_facturacion_programada,
             "es_admin": True,
         },
     )

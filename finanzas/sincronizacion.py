@@ -60,28 +60,49 @@ def _agregar_nota(texto, nota):
 
 @transaction.atomic
 def sincronizar_contrato_activo(contrato):
-    """Actualiza solamente documentos pendientes y sin pagos; preserva el historial."""
+    """Actualiza documentos pendientes y sin pagos con el calendario vigente."""
     if not contrato.activo:
         return sincronizar_contrato_desactivado(contrato)
     resultado = {"facturas_actualizadas": 0, "obligaciones_actualizadas": 0}
     for factura in Factura.objects.filter(contrato=contrato).prefetch_related("pagos"):
         if factura.estado == Factura.ESTADO_ANULADA or factura.pagos.filter(activo=True).exists():
             continue
-        nueva_fecha = fecha_vencimiento_contrato(contrato, factura.periodo_anio, factura.periodo_mes)
+        cuotas = contrato.calendario_cobros(factura.periodo_anio, factura.periodo_mes)
+        cuota = next((item for item in cuotas if item["cuota_numero"] == factura.cuota_numero), None)
+        if not cuota:
+            factura.estado = Factura.ESTADO_ANULADA
+            factura.observaciones = _agregar_nota(factura.observaciones, "Anulada porque la programación del contrato ya no contempla esta cuota.")
+            factura.save(update_fields=["estado", "observaciones", "actualizada_en"])
+            continue
         cambios = []
-        if factura.fecha_vencimiento != nueva_fecha:
-            factura.fecha_vencimiento = nueva_fecha; cambios.append("fecha_vencimiento")
+        valores = {
+            "fecha_cobro_desde": cuota["fecha_cobro_desde"],
+            "fecha_vencimiento": cuota["fecha_vencimiento"],
+            "periodo_inicio": cuota["periodo_inicio"],
+            "periodo_fin": cuota["periodo_fin"],
+            "total_cuotas": cuota["total_cuotas"],
+            "fecha_facturacion_programada": contrato.fecha_programada_facturacion(factura.periodo_anio, factura.periodo_mes),
+            "requiere_factura": contrato.requiere_factura,
+        }
+        for campo, valor in valores.items():
+            if getattr(factura, campo) != valor:
+                setattr(factura, campo, valor); cambios.append(campo)
         if factura.cliente_id != contrato.cliente_id:
             factura.cliente = contrato.cliente; cambios.append("cliente")
-        if factura.total != contrato.precio_mensual:
-            factura.subtotal = contrato.precio_mensual; factura.total = contrato.precio_mensual
-            cambios.extend(["subtotal", "total"]); factura.items.update(precio_unitario=contrato.precio_mensual, subtotal=contrato.precio_mensual)
+        if factura.total != cuota["valor"]:
+            factura.subtotal = cuota["valor"]; factura.total = cuota["valor"]
+            cambios.extend(["subtotal", "total"])
+            factura.items.update(precio_unitario=cuota["valor"], subtotal=cuota["valor"])
         if cambios:
-            cambios.append("actualizada_en"); factura.save(update_fields=list(dict.fromkeys(cambios))); factura.sincronizar_estado(); resultado["facturas_actualizadas"] += 1
+            cambios.append("actualizada_en")
+            factura.save(update_fields=list(dict.fromkeys(cambios)))
+            factura.sincronizar_estado()
+            resultado["facturas_actualizadas"] += 1
     for obligacion in ObligacionTrabajador.objects.filter(contrato=contrato).prefetch_related("pagos"):
         if obligacion.estado == ObligacionTrabajador.ESTADO_ANULADO or obligacion.pagos.filter(activo=True).exists():
             continue
-        nueva_fecha = fecha_vencimiento_contrato(contrato, obligacion.periodo_anio, obligacion.periodo_mes)
+        cuotas = contrato.calendario_cobros(obligacion.periodo_anio, obligacion.periodo_mes)
+        nueva_fecha = max(item["fecha_vencimiento"] for item in cuotas)
         cambios=[]
         if obligacion.fecha_pago_programada != nueva_fecha:
             obligacion.fecha_pago_programada=nueva_fecha; cambios.append("fecha_pago_programada")

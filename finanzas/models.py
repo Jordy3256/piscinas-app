@@ -223,8 +223,17 @@ class Factura(models.Model):
     numero = models.CharField(max_length=30, unique=True, blank=True)
     periodo_anio = models.PositiveIntegerField()
     periodo_mes = models.PositiveIntegerField()
+    periodo_inicio = models.DateField(null=True, blank=True)
+    periodo_fin = models.DateField(null=True, blank=True)
+    cuota_numero = models.PositiveSmallIntegerField(default=1)
+    total_cuotas = models.PositiveSmallIntegerField(default=1)
     fecha_emision = models.DateField(default=date.today)
+    fecha_cobro_desde = models.DateField(null=True, blank=True)
     fecha_vencimiento = models.DateField()
+    fecha_facturacion_programada = models.DateField(null=True, blank=True)
+    requiere_factura = models.BooleanField(default=False)
+    factura_enviada = models.BooleanField(default=False)
+    factura_enviada_en = models.DateField(null=True, blank=True)
     subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     impuesto = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
@@ -243,8 +252,8 @@ class Factura(models.Model):
         ordering = ["-periodo_anio", "-periodo_mes", "-id"]
         constraints = [
             models.UniqueConstraint(
-                fields=["contrato", "periodo_anio", "periodo_mes"],
-                name="unique_factura_por_contrato_y_periodo",
+                fields=["contrato", "periodo_anio", "periodo_mes", "cuota_numero"],
+                name="unique_factura_cuota_por_contrato_periodo",
             )
         ]
 
@@ -253,7 +262,10 @@ class Factura(models.Model):
 
     @property
     def periodo_label(self):
-        return f"{self.periodo_mes:02d}/{self.periodo_anio}"
+        etiqueta = f"{self.periodo_mes:02d}/{self.periodo_anio}"
+        if self.total_cuotas and self.total_cuotas > 1:
+            etiqueta += f" · cuota {self.cuota_numero}/{self.total_cuotas}"
+        return etiqueta
 
     @property
     def esta_vencida(self):
@@ -337,7 +349,7 @@ class Factura(models.Model):
         if self.estado == self.ESTADO_PENDIENTE and self.fecha_vencimiento < timezone.localdate():
             self.estado = self.ESTADO_VENCIDA
         super().save(*args, **kwargs)
-        numero_esperado = f"FAC-{self.periodo_anio}{self.periodo_mes:02d}-{self.pk:05d}"
+        numero_esperado = f"FAC-{self.periodo_anio}{self.periodo_mes:02d}-C{self.cuota_numero}-{self.pk:05d}"
         if self.numero != numero_esperado:
             self.numero = numero_esperado
             super().save(update_fields=["numero", "actualizada_en"] if not es_nueva else ["numero"])
@@ -473,7 +485,10 @@ class ObligacionTrabajador(models.Model):
 
     @property
     def periodo_label(self):
-        return f"{self.periodo_mes:02d}/{self.periodo_anio}"
+        etiqueta = f"{self.periodo_mes:02d}/{self.periodo_anio}"
+        if self.total_cuotas and self.total_cuotas > 1:
+            etiqueta += f" · cuota {self.cuota_numero}/{self.total_cuotas}"
+        return etiqueta
 
     @property
     def monto_pagado(self):
@@ -520,7 +535,10 @@ class LotePagoTrabajador(models.Model):
 
     @property
     def periodo_label(self):
-        return f"{self.periodo_mes:02d}/{self.periodo_anio}"
+        etiqueta = f"{self.periodo_mes:02d}/{self.periodo_anio}"
+        if self.total_cuotas and self.total_cuotas > 1:
+            etiqueta += f" · cuota {self.cuota_numero}/{self.total_cuotas}"
+        return etiqueta
 
     def crear_egreso(self):
         if self.egreso_id or not self.activo:
