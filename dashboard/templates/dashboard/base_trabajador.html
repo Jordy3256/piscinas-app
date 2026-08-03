@@ -596,7 +596,10 @@
         transition-duration: .01ms !important;
       }
     }
-  </style>
+  
+    .jv-backbar{display:flex;align-items:center;gap:.7rem;margin-bottom:1rem}.jv-back-btn{min-width:42px}.jv-breadcrumb{font-size:.84rem;color:#6f7b8a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    @media(max-width:767.98px){.jv-backbar{margin-bottom:.75rem}.jv-breadcrumb{display:none}}
+</style>
 
   <link rel="stylesheet" href="{% static 'dashboard/app-responsive-v2.css' %}?v=20260729-1">
 
@@ -695,6 +698,7 @@
         {% endfor %}
       {% endif %}
 
+      <div class="jv-backbar" id="jv-backbar"><button type="button" class="btn btn-outline-secondary btn-sm jv-back-btn" id="jv-back-button" aria-label="Volver">← <span class="d-none d-sm-inline">Volver</span></button><div class="jv-breadcrumb" id="jv-breadcrumb"></div></div>
       {% block content %}{% endblock %}
       <div class="spacer-bottom"></div>
     </main>
@@ -1211,5 +1215,18 @@
   {% block extra_js %}{% endblock %}
   <script src="{% static 'dashboard/app-responsive-v2.js' %}?v=20260729-1" defer></script>
 
+
+<script>
+(function(){
+  const btn=document.getElementById('jv-back-button'); const crumb=document.getElementById('jv-breadcrumb');
+  if(!btn) return;
+  const current=window.location.href; const ref=document.referrer;
+  const sameApp=ref && new URL(ref, current).origin===window.location.origin;
+  const fallback=location.pathname.startsWith('/dashboard/finanzas/')?'/dashboard/finanzas/flujo/':location.pathname.startsWith('/dashboard/clientes/')||location.pathname.startsWith('/dashboard/contratos/')?'/dashboard/clientes/':'/dashboard/inicio/';
+  btn.addEventListener('click',()=>{ if(sameApp && ref!==current){ history.back(); } else { location.href=fallback; } });
+  if(crumb){ const parts=location.pathname.split('/').filter(Boolean).map(x=>x.replace(/-/g,' ')); crumb.textContent=parts.map(x=>x.charAt(0).toUpperCase()+x.slice(1)).join(' › '); }
+  document.querySelectorAll('form[method="get"]').forEach(form=>{form.addEventListener('submit',()=>sessionStorage.setItem('jv-last-list',location.href));});
+})();
+</script>
 </body>
 </html>

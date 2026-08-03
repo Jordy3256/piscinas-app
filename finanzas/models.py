@@ -495,7 +495,48 @@ class ObligacionTrabajador(models.Model):
             self.save(update_fields=["estado", "actualizada_en"])
 
 
+class LotePagoTrabajador(models.Model):
+    trabajador = models.ForeignKey("trabajadores.Trabajador", on_delete=models.PROTECT, related_name="lotes_pago")
+    periodo_anio = models.PositiveIntegerField(db_index=True)
+    periodo_mes = models.PositiveIntegerField(db_index=True)
+    monto = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))])
+    fecha = models.DateField(default=date.today, db_index=True)
+    metodo_pago = models.CharField(max_length=20, choices=MovimientoFinancieroMixin.METODO_CHOICES, default="transferencia")
+    referencia = models.CharField(max_length=120, blank=True, default="")
+    comprobante = models.FileField(upload_to="finanzas/pagos_trabajadores_consolidados/%Y/%m/", null=True, blank=True)
+    observaciones = models.TextField(blank=True, default="")
+    egreso = models.OneToOneField(Egreso, on_delete=models.SET_NULL, null=True, blank=True, related_name="lote_pago_trabajador")
+    activo = models.BooleanField(default=True, db_index=True)
+    creado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="lotes_pago_trabajador_creados")
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-fecha", "-id"]
+        verbose_name = "Pago consolidado a trabajador"
+        verbose_name_plural = "Pagos consolidados a trabajadores"
+
+    def __str__(self):
+        return f"{self.trabajador} - {self.periodo_mes:02d}/{self.periodo_anio} - ${self.monto}"
+
+    @property
+    def periodo_label(self):
+        return f"{self.periodo_mes:02d}/{self.periodo_anio}"
+
+    def crear_egreso(self):
+        if self.egreso_id or not self.activo:
+            return
+        self.egreso = Egreso.objects.create(
+            concepto=f"Pago consolidado a {self.trabajador} - {self.periodo_label}",
+            categoria="tecnicos", cantidad=1, costo_unitario=self.monto, total=self.monto,
+            monto_pagado=self.monto, estado=Egreso.ESTADO_PAGADO, fecha=self.fecha,
+            metodo_pago=self.metodo_pago, proveedor=str(self.trabajador),
+            comprobante=self.comprobante, observaciones=self.observaciones, creado_por=self.creado_por,
+        )
+        self.save(update_fields=["egreso"])
+
+
 class PagoTrabajador(models.Model):
+    lote = models.ForeignKey(LotePagoTrabajador, on_delete=models.PROTECT, related_name="distribuciones", null=True, blank=True)
     obligacion = models.ForeignKey(ObligacionTrabajador, on_delete=models.PROTECT, related_name="pagos")
     monto = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))])
     fecha = models.DateField(default=date.today, db_index=True)
@@ -529,7 +570,7 @@ class PagoTrabajador(models.Model):
                 from django.core.exceptions import ValidationError
                 raise ValidationError({"monto": f"El pago no puede superar el saldo pendiente de ${saldo:.2f}."})
         super().save(*args, **kwargs)
-        if self.activo:
+        if self.activo and not self.lote_id:
             datos = {
                 "concepto": f"Pago a {self.obligacion.trabajador} - {self.obligacion.periodo_label} - {self.obligacion.contrato.cliente}",
                 "categoria": "tecnicos", "cantidad": 1, "costo_unitario": self.monto,

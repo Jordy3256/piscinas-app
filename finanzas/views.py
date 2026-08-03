@@ -5,6 +5,7 @@ from decimal import Decimal
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Q, Sum
 from django.shortcuts import get_object_or_404, redirect, render
 from django.http import HttpResponse
@@ -13,8 +14,8 @@ from django.utils.dateparse import parse_date
 from django.urls import reverse
 from django.utils.text import slugify
 
-from .forms import EgresoForm, IngresoForm, PagoFacturaForm, PagoTrabajadorForm
-from .models import Egreso, Factura, Ingreso, PagoFactura, ObligacionTrabajador, PagoTrabajador
+from .forms import EgresoForm, IngresoForm, PagoFacturaForm, PagoTrabajadorForm, PagoConsolidadoTrabajadorForm
+from .models import Egreso, Factura, Ingreso, PagoFactura, ObligacionTrabajador, PagoTrabajador, LotePagoTrabajador
 from clientes.models import Cliente
 from contratos.models import Contrato
 
@@ -543,7 +544,8 @@ def nomina_lista(request):
         r=resumen.setdefault(o.trabajador_id,{"trabajador_id":o.trabajador_id,"trabajador":o.trabajador,"contratos":0,"generado":Decimal("0"),"pagado":Decimal("0"),"pendiente":Decimal("0")})
         r["contratos"]+=1; r["generado"]+=o.valor_acordado; r["pagado"]+=o.monto_pagado; r["pendiente"]+=o.saldo
     from trabajadores.models import Trabajador
-    return render(request,"finanzas/nomina_lista.html",{"obligaciones":obligaciones,"resumen":list(resumen.values()),"total":total,"pagado":pagado,"pendiente":pendiente,"anio":anio,"mes":mes,"meses":MESES,"trabajadores":Trabajador.objects.filter(activo=True).select_related("user"),"trabajador_id":trabajador,"estado":estado,"estados":ObligacionTrabajador.ESTADO_CHOICES,"es_admin":True})
+    lotes = LotePagoTrabajador.objects.filter(periodo_anio=anio, periodo_mes=mes, activo=True).select_related("trabajador__user").order_by("-fecha", "-id")[:25]
+    return render(request,"finanzas/nomina_lista.html",{"obligaciones":obligaciones,"resumen":list(resumen.values()),"total":total,"pagado":pagado,"pendiente":pendiente,"anio":anio,"mes":mes,"meses":MESES,"trabajadores":Trabajador.objects.filter(activo=True).select_related("user"),"trabajador_id":trabajador,"estado":estado,"estados":ObligacionTrabajador.ESTADO_CHOICES,"lotes":lotes,"es_admin":True})
 
 def _fecha_pago_programada_contrato(contrato, anio, mes):
     """Usa la misma fecha de vencimiento/cobro de la factura del contrato."""
@@ -606,6 +608,83 @@ def _pie_pagina(canvas, doc):
     canvas.drawString(18 * mm, 12 * mm, "JVAQUA - Resumen de nómina operativa")
     canvas.drawRightString(192 * mm, 12 * mm, f"Página {doc.page}")
     canvas.restoreState()
+
+
+@login_required
+def nomina_pago_consolidado(request, trabajador_pk):
+    if not _es_admin(request.user):
+        return _denegado(request)
+    from trabajadores.models import Trabajador
+    trabajador = get_object_or_404(Trabajador.objects.select_related("user"), pk=trabajador_pk)
+    hoy = timezone.localdate()
+    try:
+        anio = int(request.GET.get("anio") or request.POST.get("anio") or hoy.year)
+        mes = int(request.GET.get("mes") or request.POST.get("mes") or hoy.month)
+        if mes < 1 or mes > 12:
+            raise ValueError
+    except (TypeError, ValueError):
+        anio, mes = hoy.year, hoy.month
+    obligaciones = list(ObligacionTrabajador.objects.filter(
+        trabajador=trabajador, periodo_anio=anio, periodo_mes=mes
+    ).exclude(estado=ObligacionTrabajador.ESTADO_ANULADO).select_related("contrato__cliente").prefetch_related("pagos").order_by("fecha_pago_programada", "id"))
+    saldo_total = sum((o.saldo for o in obligaciones), Decimal("0.00"))
+    if saldo_total <= 0:
+        messages.info(request, "Este trabajador no tiene saldo pendiente en el periodo seleccionado.")
+        return redirect(f"/dashboard/finanzas/nomina/?anio={anio}&mes={mes}")
+    form = PagoConsolidadoTrabajadorForm(request.POST or None, request.FILES or None, saldo_total=saldo_total)
+    if request.method == "POST" and form.is_valid():
+        restante = form.cleaned_data["monto"]
+        with transaction.atomic():
+            lote = LotePagoTrabajador.objects.create(
+                trabajador=trabajador, periodo_anio=anio, periodo_mes=mes, monto=restante,
+                fecha=form.cleaned_data["fecha"], metodo_pago=form.cleaned_data["metodo_pago"],
+                referencia=form.cleaned_data.get("referencia", ""), comprobante=form.cleaned_data.get("comprobante"),
+                observaciones=form.cleaned_data.get("observaciones", ""), creado_por=request.user,
+            )
+            lote.crear_egreso()
+            for obligacion in obligaciones:
+                if restante <= 0:
+                    break
+                aplicado = min(restante, obligacion.saldo)
+                if aplicado <= 0:
+                    continue
+                PagoTrabajador.objects.create(
+                    lote=lote, obligacion=obligacion, monto=aplicado, fecha=lote.fecha,
+                    metodo_pago=lote.metodo_pago, referencia=lote.referencia,
+                    observaciones=f"Distribución del pago consolidado #{lote.pk}", creado_por=request.user,
+                )
+                restante -= aplicado
+        messages.success(request, f"Pago consolidado de ${lote.monto:.2f} registrado para {trabajador}.")
+        return redirect(f"/dashboard/finanzas/nomina/?anio={anio}&mes={mes}")
+    return render(request, "finanzas/pago_trabajador_consolidado_form.html", {
+        "form": form, "trabajador": trabajador, "obligaciones": obligaciones,
+        "saldo_total": saldo_total, "anio": anio, "mes": mes, "es_admin": True,
+    })
+
+
+@login_required
+def nomina_pago_consolidado_pdf(request, lote_pk):
+    if not _es_admin(request.user):
+        return _denegado(request)
+    lote = get_object_or_404(LotePagoTrabajador.objects.select_related("trabajador__user"), pk=lote_pk, activo=True)
+    pagos = lote.distribuciones.filter(activo=True).select_related("obligacion__contrato__cliente")
+    response = HttpResponse(content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename="pago-consolidado-{lote.pk}.pdf"'
+    doc = SimpleDocTemplate(response, pagesize=A4, rightMargin=18*mm, leftMargin=18*mm, topMargin=18*mm, bottomMargin=18*mm)
+    styles = getSampleStyleSheet()
+    story = [Paragraph("JVAQUA - COMPROBANTE DE PAGO CONSOLIDADO", styles["Title"]), Spacer(1, 8),
+             Paragraph(f"Trabajador: <b>{lote.trabajador}</b>", styles["Normal"]),
+             Paragraph(f"Periodo: <b>{lote.periodo_label}</b>", styles["Normal"]),
+             Paragraph(f"Fecha: <b>{lote.fecha.strftime('%d/%m/%Y')}</b>", styles["Normal"]),
+             Paragraph(f"Valor total: <b>${lote.monto:.2f}</b>", styles["Normal"]), Spacer(1, 10)]
+    data=[["Cliente / contrato","Valor aplicado"]]
+    for pago in pagos:
+        data.append([str(pago.obligacion.contrato.cliente), f"${pago.monto:.2f}"])
+    table=Table(data, colWidths=[125*mm,35*mm])
+    table.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#0B5ED7")),("TEXTCOLOR",(0,0),(-1,0),colors.white),("GRID",(0,0),(-1,-1),.4,colors.HexColor("#CBD5E1")),("PADDING",(0,0),(-1,-1),7),("ALIGN",(1,1),(1,-1),"RIGHT")]))
+    story += [table, Spacer(1, 18), Paragraph(f"Forma de pago: {lote.get_metodo_pago_display()}", styles["Normal"]), Paragraph(f"Referencia: {lote.referencia or '—'}", styles["Normal"])]
+    doc.build(story)
+    return response
 
 
 @login_required

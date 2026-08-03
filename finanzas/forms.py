@@ -1,4 +1,5 @@
 from decimal import Decimal
+from datetime import date
 
 from django import forms
 
@@ -71,7 +72,7 @@ class EgresoForm(BaseMovimientoForm):
             self.add_error("monto_pagado", "El valor pagado no puede superar el total calculado.")
         return cleaned
 
-from .models import Factura, PagoFactura, PagoTrabajador
+from .models import Factura, PagoFactura, PagoTrabajador, MovimientoFinancieroMixin
 
 
 class PagoFacturaForm(forms.ModelForm):
@@ -127,4 +128,25 @@ class PagoTrabajadorForm(forms.ModelForm):
         monto = self.cleaned_data["monto"]
         if self.obligacion and monto > self.obligacion.saldo:
             raise forms.ValidationError(f"El pago no puede superar el saldo pendiente de ${self.obligacion.saldo:.2f}.")
+        return monto
+
+
+class PagoConsolidadoTrabajadorForm(forms.Form):
+    monto = forms.DecimalField(min_value=Decimal("0.01"), decimal_places=2, max_digits=12, label="Valor a pagar")
+    fecha = forms.DateField(widget=DateInput(), initial=date.today, label="Fecha del pago")
+    metodo_pago = forms.ChoiceField(choices=MovimientoFinancieroMixin.METODO_CHOICES, initial="transferencia", label="Forma de pago")
+    referencia = forms.CharField(required=False, max_length=120, label="Número de referencia")
+    comprobante = forms.FileField(required=False)
+    observaciones = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows": 3}))
+
+    def __init__(self, *args, saldo_total=None, **kwargs):
+        self.saldo_total = saldo_total or Decimal("0.00")
+        super().__init__(*args, **kwargs)
+        if not self.is_bound:
+            self.fields["monto"].initial = self.saldo_total
+
+    def clean_monto(self):
+        monto = self.cleaned_data["monto"]
+        if monto > self.saldo_total:
+            raise forms.ValidationError(f"El pago no puede superar el saldo total de ${self.saldo_total:.2f}.")
         return monto
