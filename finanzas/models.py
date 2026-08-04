@@ -485,10 +485,7 @@ class ObligacionTrabajador(models.Model):
 
     @property
     def periodo_label(self):
-        etiqueta = f"{self.periodo_mes:02d}/{self.periodo_anio}"
-        if self.total_cuotas and self.total_cuotas > 1:
-            etiqueta += f" · cuota {self.cuota_numero}/{self.total_cuotas}"
-        return etiqueta
+        return f"{self.periodo_mes:02d}/{self.periodo_anio}"
 
     @property
     def monto_pagado(self):
@@ -535,10 +532,7 @@ class LotePagoTrabajador(models.Model):
 
     @property
     def periodo_label(self):
-        etiqueta = f"{self.periodo_mes:02d}/{self.periodo_anio}"
-        if self.total_cuotas and self.total_cuotas > 1:
-            etiqueta += f" · cuota {self.cuota_numero}/{self.total_cuotas}"
-        return etiqueta
+        return f"{self.periodo_mes:02d}/{self.periodo_anio}"
 
     def crear_egreso(self):
         if self.egreso_id or not self.activo:
