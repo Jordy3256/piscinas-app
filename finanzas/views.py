@@ -21,6 +21,9 @@ from contratos.models import Contrato
 
 from .cuentas_por_cobrar import MESES, generar_facturas_periodo, previsualizar_facturas_periodo
 
+from .servicios_financieros import obtener_resumen_financiero
+from .alertas_financieras import generar_alertas_financieras
+
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 from reportlab.lib.pagesizes import A4
@@ -74,44 +77,29 @@ def panel_financiero(request):
     except (TypeError, ValueError):
         anio, mes = hoy.year, hoy.month
 
-    inicio, fin = _rango_mes(anio, mes)
+    # Al abrir Finanzas se actualizan la campana y las alertas push del administrador.
+    generar_alertas_financieras(enviar_push=True)
+    resumen = obtener_resumen_financiero(anio, mes)
+    inicio, fin = resumen["inicio"], resumen["fin"]
+
     ingresos = Ingreso.objects.select_related("cliente", "contrato").filter(fecha__range=(inicio, fin))
     egresos = Egreso.objects.filter(fecha__range=(inicio, fin))
-
     ingresos_validos = ingresos.exclude(estado=Ingreso.ESTADO_ANULADO)
     egresos_validos = egresos.exclude(estado=Egreso.ESTADO_ANULADO)
 
-    ingresos_cobrados = _sum(ingresos_validos, "monto_pagado")
-    egresos_pagados = _sum(egresos_validos.filter(aprobado=True), "monto_pagado")
-    utilidad_real = ingresos_cobrados - egresos_pagados
-
-    ingresos_esperados = _sum(ingresos_validos, "total")
-    egresos_previstos = _sum(egresos_validos.filter(aprobado=True), "total")
-    resultado_proyectado = ingresos_esperados - egresos_previstos
-
-    por_cobrar = sum((m.saldo for m in ingresos_validos), Decimal("0.00"))
-    por_pagar = sum((m.saldo for m in egresos_validos.filter(aprobado=True)), Decimal("0.00"))
-
-    vencidos_ingresos = [m for m in ingresos_validos if m.estado_visual == Ingreso.ESTADO_VENCIDO and m.saldo > 0]
-    vencidos_egresos = [m for m in egresos_validos if m.estado_visual == Egreso.ESTADO_VENCIDO and m.saldo > 0]
-
     ant_anio, ant_mes = _mes_anterior(anio, mes)
-    ant_inicio, ant_fin = _rango_mes(ant_anio, ant_mes)
-    ingresos_ant = Ingreso.objects.filter(fecha__range=(ant_inicio, ant_fin)).exclude(estado=Ingreso.ESTADO_ANULADO)
-    egresos_ant = Egreso.objects.filter(fecha__range=(ant_inicio, ant_fin), aprobado=True).exclude(estado=Egreso.ESTADO_ANULADO)
-    ingresos_cobrados_ant = _sum(ingresos_ant, "monto_pagado")
-    egresos_pagados_ant = _sum(egresos_ant, "monto_pagado")
-    utilidad_ant = ingresos_cobrados_ant - egresos_pagados_ant
+    resumen_anterior = obtener_resumen_financiero(ant_anio, ant_mes)
 
     categorias = list(
-        egresos_validos.values("categoria")
+        egresos_validos.filter(aprobado=True)
+        .values("categoria")
         .annotate(total_categoria=Sum("monto_pagado"))
         .order_by("-total_categoria")[:6]
     )
     labels_categoria = dict(Egreso.CATEGORIA_CHOICES)
     for item in categorias:
         item["label"] = labels_categoria.get(item["categoria"], item["categoria"] or "Sin categoría")
-        item["porcentaje"] = int((item["total_categoria"] / egresos_pagados) * 100) if egresos_pagados else 0
+        item["porcentaje"] = int((item["total_categoria"] / resumen["egresos_pagados"]) * 100) if resumen["egresos_pagados"] else 0
 
     ultimos = []
     for item in ingresos.order_by("-fecha", "-id")[:8]:
@@ -120,31 +108,48 @@ def panel_financiero(request):
         ultimos.append({"tipo": "egreso", "obj": item, "fecha": item.fecha})
     ultimos = sorted(ultimos, key=lambda x: (x["fecha"], x["obj"].pk), reverse=True)[:10]
 
-    return render(request, "finanzas/panel.html", {
+    prioridades = []
+    for factura in resumen["cobros_vencidos"][:4]:
+        prioridades.append({
+            "nivel": "critica", "icono": "🔴", "titulo": "Cobro vencido",
+            "detalle": f"{factura.cliente} · ${factura.saldo:.2f}",
+            "url": reverse("finanzas_factura_detalle", args=[factura.pk]),
+        })
+    for factura in resumen["cobros_hoy"][:4]:
+        prioridades.append({
+            "nivel": "importante", "icono": "🟠", "titulo": "Cobrar hoy",
+            "detalle": f"{factura.cliente} · ${factura.saldo:.2f}",
+            "url": reverse("finanzas_factura_detalle", args=[factura.pk]),
+        })
+    for factura in resumen["facturas_por_emitir"][:4]:
+        prioridades.append({
+            "nivel": "aviso", "icono": "📄", "titulo": "Emitir o enviar factura",
+            "detalle": f"{factura.cliente} · {factura.periodo_label}",
+            "url": reverse("finanzas_factura_detalle", args=[factura.pk]),
+        })
+    for obligacion in resumen["nomina_hoy"][:4]:
+        prioridades.append({
+            "nivel": "info", "icono": "🔵", "titulo": "Pagar nómina",
+            "detalle": f"{obligacion.trabajador} · ${obligacion.saldo:.2f}",
+            "url": f"{reverse('finanzas_nomina')}?anio={obligacion.periodo_anio}&mes={obligacion.periodo_mes}",
+        })
+
+    contexto = {
         "anio": anio,
         "mes": mes,
         "inicio": inicio,
         "fin": fin,
         "hoy": hoy,
-        "ingresos_cobrados": ingresos_cobrados,
-        "egresos_pagados": egresos_pagados,
-        "utilidad_real": utilidad_real,
-        "ingresos_esperados": ingresos_esperados,
-        "egresos_previstos": egresos_previstos,
-        "resultado_proyectado": resultado_proyectado,
-        "por_cobrar": por_cobrar,
-        "por_pagar": por_pagar,
-        "vencidos_ingresos": vencidos_ingresos[:6],
-        "vencidos_egresos": vencidos_egresos[:6],
-        "total_vencidos_ingresos": len(vencidos_ingresos),
-        "total_vencidos_egresos": len(vencidos_egresos),
-        "variacion_ingresos": _variacion(ingresos_cobrados, ingresos_cobrados_ant),
-        "variacion_egresos": _variacion(egresos_pagados, egresos_pagados_ant),
-        "variacion_utilidad": _variacion(utilidad_real, utilidad_ant),
+        **resumen,
+        "variacion_ingresos": _variacion(resumen["ingresos_cobrados"], resumen_anterior["ingresos_cobrados"]),
+        "variacion_egresos": _variacion(resumen["egresos_pagados"], resumen_anterior["egresos_pagados"]),
+        "variacion_utilidad": _variacion(resumen["utilidad_real"], resumen_anterior["utilidad_real"]),
         "categorias": categorias,
         "ultimos": ultimos,
+        "prioridades": prioridades[:12],
         "es_admin": True,
-    })
+    }
+    return render(request, "finanzas/panel.html", contexto)
 
 
 @login_required

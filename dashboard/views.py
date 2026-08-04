@@ -2127,6 +2127,13 @@ def notificaciones_view(request):
 @login_required
 @require_GET
 def notificaciones_json_view(request):
+    if es_admin(request.user):
+        try:
+            from finanzas.alertas_financieras import generar_alertas_financieras
+            generar_alertas_financieras(enviar_push=True)
+        except Exception:
+            logger.exception("No se pudieron actualizar las alertas financieras.")
+
     if Notificacion is None:
         return JsonResponse({
             "ok": True,
@@ -4430,6 +4437,13 @@ def offline_view(request):
 @require_GET
 @login_required
 def unread_count_view(request):
+    if es_admin(request.user):
+        try:
+            from finanzas.alertas_financieras import generar_alertas_financieras
+            generar_alertas_financieras(enviar_push=True)
+        except Exception:
+            logger.exception("No se pudieron actualizar las alertas financieras.")
+
     if Notificacion is None:
         return JsonResponse({"count": 0})
 
