@@ -40,6 +40,7 @@ from finanzas.models import (
     MovimientoRecurrente,
     Factura,
     FacturaItem,
+    ObligacionTrabajador,
 )
 from clientes.models import Cliente
 from contratos.models import Contrato
@@ -1544,6 +1545,155 @@ def push_test_view(request):
 
 
 # -------------------
+# Centro de Acciones del administrador
+# -------------------
+def _centro_acciones_contexto():
+    """Construye prioridades diarias sin duplicar la lógica financiera."""
+    hoy = timezone.localdate()
+    proximos_tres_dias = hoy + timedelta(days=3)
+    limite_programacion = hoy + timedelta(days=7)
+
+    facturas_base = list(
+        Factura.objects
+        .exclude(estado=Factura.ESTADO_ANULADA)
+        .select_related("cliente", "contrato")
+        .prefetch_related("pagos")
+        .order_by("fecha_vencimiento", "id")
+    )
+    facturas_pendientes = [f for f in facturas_base if f.saldo > 0]
+
+    cobros_vencidos = [
+        f for f in facturas_pendientes
+        if f.fecha_vencimiento and f.fecha_vencimiento < hoy
+    ]
+    cobros_hoy = [
+        f for f in facturas_pendientes
+        if (
+            (f.fecha_cobro_desde and f.fecha_cobro_desde <= hoy <= f.fecha_vencimiento)
+            or f.fecha_vencimiento == hoy
+        )
+    ]
+    ids_prioridad = {f.pk for f in cobros_vencidos + cobros_hoy}
+    cobros_proximos = [
+        f for f in facturas_pendientes
+        if f.pk not in ids_prioridad
+        and f.fecha_cobro_desde
+        and hoy < f.fecha_cobro_desde <= proximos_tres_dias
+    ]
+
+    facturas_por_emitir = [
+        f for f in facturas_base
+        if f.requiere_factura
+        and not f.factura_enviada
+        and f.fecha_facturacion_programada
+        and f.fecha_facturacion_programada <= hoy
+    ]
+
+    obligaciones = list(
+        ObligacionTrabajador.objects
+        .exclude(estado=ObligacionTrabajador.ESTADO_ANULADO)
+        .select_related("trabajador", "trabajador__user", "contrato", "contrato__cliente")
+        .prefetch_related("pagos")
+        .filter(fecha_pago_programada__lte=hoy)
+        .order_by("fecha_pago_programada", "trabajador_id", "id")
+    )
+    obligaciones_pendientes = [o for o in obligaciones if o.saldo > 0]
+    nomina_por_trabajador = {}
+    for obligacion in obligaciones_pendientes:
+        clave = obligacion.trabajador_id
+        fila = nomina_por_trabajador.setdefault(
+            clave,
+            {
+                "trabajador": obligacion.trabajador,
+                "saldo": Decimal("0.00"),
+                "cantidad": 0,
+                "fecha_mas_antigua": obligacion.fecha_pago_programada,
+            },
+        )
+        fila["saldo"] += obligacion.saldo
+        fila["cantidad"] += 1
+        if obligacion.fecha_pago_programada < fila["fecha_mas_antigua"]:
+            fila["fecha_mas_antigua"] = obligacion.fecha_pago_programada
+    nomina_pendiente = sorted(
+        nomina_por_trabajador.values(),
+        key=lambda item: (item["fecha_mas_antigua"], str(item["trabajador"])),
+    )
+
+    mantenimientos_hoy_qs = (
+        Mantenimiento.objects
+        .filter(fecha=hoy)
+        .select_related("cliente", "contrato")
+        .prefetch_related("trabajadores")
+        .order_by("estado", "id")
+    )
+    mantenimientos_hoy = list(mantenimientos_hoy_qs)
+    mantenimientos_atrasados = list(
+        Mantenimiento.objects
+        .filter(fecha__lt=hoy, estado="pendiente")
+        .select_related("cliente", "contrato")
+        .prefetch_related("trabajadores")
+        .order_by("fecha", "id")[:10]
+    )
+    mantenimientos_sin_asignar = list(
+        Mantenimiento.objects
+        .filter(fecha__lte=hoy, estado="pendiente", trabajadores__isnull=True)
+        .select_related("cliente", "contrato")
+        .order_by("fecha", "id")
+        .distinct()[:10]
+    )
+
+    contratos_programacion = list(
+        Contrato.objects
+        .filter(activo=True, generacion_automatica=True)
+        .filter(models.Q(programado_hasta__isnull=True) | models.Q(programado_hasta__lte=limite_programacion))
+        .select_related("cliente", "tecnico_designado", "tecnico_designado__user")
+        .order_by("programado_hasta", "id")[:10]
+    )
+
+    actividad_reciente = []
+    if ActividadSistema is not None:
+        actividad_reciente = list(
+            ActividadSistema.objects.select_related("user").all()[:8]
+        )
+
+    total_acciones = (
+        len(cobros_vencidos)
+        + len(cobros_hoy)
+        + len(facturas_por_emitir)
+        + len(nomina_pendiente)
+        + len(mantenimientos_atrasados)
+        + len(mantenimientos_sin_asignar)
+        + len(contratos_programacion)
+    )
+
+    return {
+        "hoy": hoy,
+        "cobros_vencidos": cobros_vencidos[:6],
+        "cobros_hoy": cobros_hoy[:6],
+        "cobros_proximos": cobros_proximos[:5],
+        "cantidad_cobros_vencidos": len(cobros_vencidos),
+        "cantidad_cobros_hoy": len(cobros_hoy),
+        "facturas_por_emitir": facturas_por_emitir[:6],
+        "cantidad_facturas_por_emitir": len(facturas_por_emitir),
+        "nomina_pendiente": nomina_pendiente[:6],
+        "cantidad_trabajadores_pendientes": len(nomina_pendiente),
+        "total_nomina_pendiente": sum((x["saldo"] for x in nomina_pendiente), Decimal("0.00")),
+        "mantenimientos_hoy": mantenimientos_hoy[:8],
+        "cantidad_mantenimientos_hoy": len(mantenimientos_hoy),
+        "cantidad_mantenimientos_pendientes_hoy": sum(1 for m in mantenimientos_hoy if m.estado == "pendiente"),
+        "cantidad_mantenimientos_realizados_hoy": sum(1 for m in mantenimientos_hoy if m.estado == "realizado"),
+        "mantenimientos_atrasados": mantenimientos_atrasados,
+        "cantidad_mantenimientos_atrasados": Mantenimiento.objects.filter(fecha__lt=hoy, estado="pendiente").count(),
+        "mantenimientos_sin_asignar": mantenimientos_sin_asignar,
+        "cantidad_mantenimientos_sin_asignar": Mantenimiento.objects.filter(fecha__lte=hoy, estado="pendiente", trabajadores__isnull=True).distinct().count(),
+        "contratos_programacion": contratos_programacion,
+        "cantidad_contratos_programacion": len(contratos_programacion),
+        "actividad_reciente": actividad_reciente,
+        "total_acciones": total_acciones,
+    }
+
+
+# -------------------
 # INICIO por rol (menú)
 # -------------------
 @login_required
@@ -1554,6 +1704,12 @@ def inicio_view(request):
         ctx["es_admin"] = True
         notificar_movimientos_recurrentes_proximos()
         notificar_trabajadores_mantenimientos_hoy()
+        try:
+            from finanzas.alertas_financieras import generar_alertas_financieras
+            generar_alertas_financieras(enviar_push=True)
+        except Exception:
+            logger.exception("No se pudieron actualizar las alertas financieras al abrir el Centro de Acciones.")
+        ctx.update(_centro_acciones_contexto())
         return render(request, "dashboard/home_admin.html", ctx)
 
     if es_trabajador(request.user):

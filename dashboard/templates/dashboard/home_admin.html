@@ -1,638 +1,161 @@
 {% extends "dashboard/base_admin.html" %}
 
-{% block title %}Centro de Control | JVAQUA{% endblock %}
-{% block top_title %}Centro de Control{% endblock %}
+{% block title %}Centro de Acciones | JVAQUA ERP{% endblock %}
+{% block top_title %}Centro de Acciones{% endblock %}
 
 {% block extra_head %}
 <style>
-  .admin-home {
-    --home-blue: #0b5ed7;
-    --home-blue-dark: #084298;
-    --home-aqua: #00a6c7;
-    --home-green: #198754;
-    --home-orange: #f59e0b;
-    --home-purple: #7c3aed;
-    --home-red: #dc3545;
-    --home-dark: #152238;
-    --home-muted: #6f7b8a;
-    --home-border: #e6ebf2;
-  }
-
-  .home-hero {
-    position: relative;
-    padding: 2rem;
-    border: 1px solid rgba(11, 94, 215, .12);
-    border-radius: 24px;
-    background:
-      radial-gradient(circle at top right, rgba(0, 166, 199, .24), transparent 18rem),
-      linear-gradient(135deg, #ffffff 0%, #f4f8ff 55%, #eefbff 100%);
-    box-shadow: 0 14px 34px rgba(21, 34, 56, .08);
-    overflow: hidden;
-  }
-
-  .home-hero::before {
-    content: "";
-    position: absolute;
-    width: 210px;
-    height: 210px;
-    top: -95px;
-    right: -70px;
-    border-radius: 50%;
-    background: rgba(11, 94, 215, .08);
-  }
-
-  .home-hero::after {
-    content: "";
-    position: absolute;
-    width: 130px;
-    height: 130px;
-    right: 110px;
-    bottom: -85px;
-    border-radius: 50%;
-    background: rgba(0, 166, 199, .09);
-  }
-
-  .home-hero-content {
-    position: relative;
-    z-index: 1;
-  }
-
-  .home-eyebrow {
-    display: inline-flex;
-    align-items: center;
-    gap: .45rem;
-    margin-bottom: .85rem;
-    padding: .48rem .72rem;
-    border: 1px solid rgba(11, 94, 215, .14);
-    border-radius: 999px;
-    color: var(--home-blue);
-    background: rgba(255, 255, 255, .75);
-    font-size: .76rem;
-    font-weight: 800;
-    letter-spacing: .07em;
-    text-transform: uppercase;
-  }
-
-  .home-title {
-    max-width: 720px;
-    margin-bottom: .65rem;
-    color: var(--home-dark);
-    font-size: clamp(1.75rem, 4vw, 2.65rem);
-    font-weight: 850;
-    letter-spacing: -.045em;
-    line-height: 1.05;
-  }
-
-  .home-subtitle {
-    max-width: 680px;
-    margin: 0;
-    color: var(--home-muted);
-    font-size: 1rem;
-    line-height: 1.65;
-  }
-
-  .hero-status {
-    display: inline-flex;
-    align-items: center;
-    gap: .55rem;
-    margin-top: 1.25rem;
-    padding: .65rem .85rem;
-    border-radius: 13px;
-    color: #16643e;
-    background: rgba(25, 135, 84, .09);
-    font-size: .86rem;
-    font-weight: 750;
-  }
-
-  .hero-status-dot {
-    width: 9px;
-    height: 9px;
-    border-radius: 50%;
-    background: var(--home-green);
-    box-shadow: 0 0 0 5px rgba(25, 135, 84, .12);
-  }
-
-  .section-heading {
-    display: flex;
-    align-items: end;
-    justify-content: space-between;
-    gap: 1rem;
-    margin: 2rem 0 1rem;
-  }
-
-  .section-heading h4 {
-    margin: 0;
-    color: var(--home-dark);
-    font-size: 1.08rem;
-    font-weight: 850;
-    letter-spacing: -.02em;
-  }
-
-  .section-heading p {
-    margin: .25rem 0 0;
-    color: var(--home-muted);
-    font-size: .88rem;
-  }
-
-  .module-card {
-    --module-color: var(--home-blue);
-    --module-soft: rgba(11, 94, 215, .10);
-
-    position: relative;
-    min-height: 210px;
-    padding: 1.35rem;
-    border: 1px solid var(--home-border);
-    border-radius: 21px;
-    background: rgba(255, 255, 255, .98);
-    box-shadow: 0 7px 22px rgba(21, 34, 56, .06);
-    transition: all .24s ease;
-    overflow: hidden;
-  }
-
-  .module-card::after {
-    content: "";
-    position: absolute;
-    width: 95px;
-    height: 95px;
-    right: -42px;
-    bottom: -42px;
-    border-radius: 50%;
-    background: var(--module-soft);
-    transition: all .24s ease;
-  }
-
-  .module-link:hover .module-card {
-    transform: translateY(-6px);
-    border-color: color-mix(in srgb, var(--module-color) 28%, white);
-    box-shadow: 0 18px 38px rgba(21, 34, 56, .12);
-  }
-
-  .module-link:hover .module-card::after {
-    transform: scale(1.3);
-  }
-
-  .module-link:active .module-card {
-    transform: translateY(-2px) scale(.992);
-  }
-
-  .module-icon {
-    width: 52px;
-    height: 52px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 1.05rem;
-    border-radius: 16px;
-    color: var(--module-color);
-    background: var(--module-soft);
-    font-size: 1.5rem;
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .7);
-  }
-
-  .module-title {
-    margin-bottom: .45rem;
-    color: var(--home-dark);
-    font-size: 1.08rem;
-    font-weight: 850;
-    letter-spacing: -.02em;
-  }
-
-  .module-description {
-    max-width: 94%;
-    margin: 0;
-    color: var(--home-muted);
-    font-size: .89rem;
-    line-height: 1.55;
-  }
-
-  .module-footer {
-    position: absolute;
-    left: 1.35rem;
-    right: 1.35rem;
-    bottom: 1.2rem;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    color: var(--module-color);
-    font-size: .8rem;
-    font-weight: 800;
-  }
-
-  .module-arrow {
-    width: 31px;
-    height: 31px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 10px;
-    color: var(--module-color);
-    background: var(--module-soft);
-    transition: all .22s ease;
-  }
-
-  .module-link:hover .module-arrow {
-    transform: translateX(4px);
-    color: #fff;
-    background: var(--module-color);
-  }
-
-  .module-dashboard {
-    --module-color: #0b5ed7;
-    --module-soft: rgba(11, 94, 215, .10);
-  }
-
-  .module-operativo {
-    --module-color: #198754;
-    --module-soft: rgba(25, 135, 84, .10);
-  }
-
-  .module-contratos {
-    --module-color: #7c3aed;
-    --module-soft: rgba(124, 58, 237, .10);
-  }
-
-  .module-inventario {
-    --module-color: #00a6c7;
-    --module-soft: rgba(0, 166, 199, .11);
-  }
-
-  .module-finanzas {
-    --module-color: #f59e0b;
-    --module-soft: rgba(245, 158, 11, .12);
-  }
-
-  .module-admin {
-    --module-color: #64748b;
-    --module-soft: rgba(100, 116, 139, .11);
-  }
-
-  .quick-panel {
-    padding: 1.25rem;
-    border: 1px solid var(--home-border);
-    border-radius: 20px;
-    background: #fff;
-    box-shadow: 0 7px 22px rgba(21, 34, 56, .06);
-  }
-
-  .quick-panel-title {
-    margin-bottom: .85rem;
-    color: var(--home-dark);
-    font-size: .92rem;
-    font-weight: 850;
-  }
-
-  .quick-action {
-    display: flex;
-    align-items: center;
-    gap: .8rem;
-    padding: .85rem;
-    border: 1px solid transparent;
-    border-radius: 14px;
-    color: var(--home-dark);
-    background: #f8fafc;
-    text-decoration: none;
-    transition: all .2s ease;
-  }
-
-  .quick-action:hover {
-    transform: translateX(4px);
-    border-color: rgba(11, 94, 215, .14);
-    color: var(--home-blue);
-    background: rgba(11, 94, 215, .055);
-  }
-
-  .quick-action-icon {
-    width: 38px;
-    height: 38px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex: 0 0 auto;
-    border-radius: 12px;
-    background: #fff;
-    box-shadow: 0 4px 12px rgba(21, 34, 56, .07);
-  }
-
-  .quick-action-copy {
-    min-width: 0;
-  }
-
-  .quick-action-copy strong {
-    display: block;
-    font-size: .86rem;
-  }
-
-  .quick-action-copy span {
-    display: block;
-    margin-top: 2px;
-    color: var(--home-muted);
-    font-size: .75rem;
-  }
-
-  .system-card {
-    height: 100%;
-    padding: 1.25rem;
-    border: 1px solid var(--home-border);
-    border-radius: 20px;
-    background:
-      linear-gradient(145deg, rgba(11, 94, 215, .04), rgba(0, 166, 199, .05)),
-      #fff;
-    box-shadow: 0 7px 22px rgba(21, 34, 56, .06);
-  }
-
-  .system-card-label {
-    margin-bottom: .75rem;
-    color: var(--home-muted);
-    font-size: .76rem;
-    font-weight: 800;
-    letter-spacing: .05em;
-    text-transform: uppercase;
-  }
-
-  .system-card-title {
-    margin-bottom: .45rem;
-    color: var(--home-dark);
-    font-size: 1.08rem;
-    font-weight: 850;
-  }
-
-  .system-card-text {
-    margin: 0;
-    color: var(--home-muted);
-    font-size: .86rem;
-    line-height: 1.55;
-  }
-
-  .system-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: .4rem;
-    margin-top: 1rem;
-    padding: .5rem .65rem;
-    border-radius: 999px;
-    color: #16643e;
-    background: rgba(25, 135, 84, .09);
-    font-size: .74rem;
-    font-weight: 800;
-  }
-
-  @media (max-width: 767.98px) {
-    .home-hero {
-      padding: 1.4rem;
-      border-radius: 20px;
-    }
-
-    .home-title {
-      font-size: 1.75rem;
-    }
-
-    .home-subtitle {
-      font-size: .92rem;
-    }
-
-    .section-heading {
-      align-items: start;
-      margin-top: 1.6rem;
-    }
-
-    .module-card {
-      min-height: 195px;
-    }
-  }
+  .action-center{--ac-blue:#0b5ed7;--ac-dark:#152238;--ac-muted:#6f7b8a;--ac-border:#e5eaf1;--ac-red:#dc3545;--ac-orange:#f59e0b;--ac-green:#198754;--ac-purple:#7c3aed;--ac-cyan:#0891b2}
+  .ac-hero{position:relative;padding:1.7rem;border:1px solid rgba(11,94,215,.13);border-radius:24px;background:radial-gradient(circle at 92% 5%,rgba(0,166,199,.2),transparent 15rem),linear-gradient(135deg,#fff 0%,#f4f8ff 60%,#effcff 100%);box-shadow:0 14px 34px rgba(21,34,56,.08);overflow:hidden}
+  .ac-hero-grid{position:relative;z-index:1;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:1rem;align-items:center}
+  .ac-kicker{display:inline-flex;align-items:center;gap:.45rem;padding:.43rem .7rem;border-radius:999px;background:#fff;color:var(--ac-blue);font-weight:850;font-size:.75rem;letter-spacing:.06em;text-transform:uppercase;box-shadow:0 4px 14px rgba(11,94,215,.08)}
+  .ac-title{margin:.85rem 0 .45rem;color:var(--ac-dark);font-size:clamp(1.7rem,4vw,2.5rem);font-weight:900;letter-spacing:-.045em}
+  .ac-subtitle{margin:0;color:var(--ac-muted);line-height:1.55}
+  .ac-total{min-width:155px;padding:1rem 1.2rem;border-radius:19px;color:#fff;background:linear-gradient(135deg,#0b5ed7,#00a6c7);text-align:center;box-shadow:0 12px 28px rgba(11,94,215,.23)}
+  .ac-total strong{display:block;font-size:2rem;line-height:1}
+  .ac-total span{display:block;margin-top:.42rem;font-size:.78rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em}
+  .ac-quick{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:.75rem;margin-top:1rem}
+  .ac-quick a{display:flex;align-items:center;justify-content:center;gap:.45rem;min-height:48px;padding:.65rem .75rem;border:1px solid rgba(11,94,215,.13);border-radius:14px;color:var(--ac-dark);background:rgba(255,255,255,.9);font-size:.83rem;font-weight:800;text-decoration:none;transition:.2s}
+  .ac-quick a:hover{transform:translateY(-2px);border-color:rgba(11,94,215,.35);color:var(--ac-blue);box-shadow:0 8px 20px rgba(21,34,56,.09)}
+  .ac-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.9rem;margin:1.15rem 0}
+  .ac-stat{padding:1rem;border:1px solid var(--ac-border);border-radius:18px;background:#fff;box-shadow:0 6px 18px rgba(21,34,56,.055)}
+  .ac-stat-label{color:var(--ac-muted);font-size:.76rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em}
+  .ac-stat-value{margin-top:.35rem;color:var(--ac-dark);font-size:1.55rem;font-weight:900}
+  .ac-stat-note{margin-top:.25rem;color:var(--ac-muted);font-size:.77rem}
+  .ac-layout{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(290px,.85fr);gap:1rem;align-items:start}
+  .ac-panel{margin-bottom:1rem;border:1px solid var(--ac-border);border-radius:21px;background:#fff;box-shadow:0 7px 22px rgba(21,34,56,.055);overflow:hidden}
+  .ac-panel-head{display:flex;align-items:center;justify-content:space-between;gap:.8rem;padding:1rem 1.05rem;border-bottom:1px solid var(--ac-border)}
+  .ac-panel-title{display:flex;align-items:center;gap:.55rem;margin:0;color:var(--ac-dark);font-size:1rem;font-weight:900}
+  .ac-count{display:inline-flex;align-items:center;justify-content:center;min-width:27px;height:27px;padding:0 .45rem;border-radius:999px;color:#fff;background:var(--panel-color,var(--ac-blue));font-size:.75rem;font-weight:900}
+  .ac-panel-link{color:var(--panel-color,var(--ac-blue));font-size:.78rem;font-weight:850;text-decoration:none}
+  .ac-list{padding:.35rem}
+  .ac-item{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.8rem;align-items:center;padding:.8rem;border-radius:15px}
+  .ac-item+.ac-item{border-top:1px solid #f0f3f7}
+  .ac-item:hover{background:#f8fafc}
+  .ac-item-main{min-width:0}
+  .ac-item-title{margin:0;color:var(--ac-dark);font-size:.9rem;font-weight:850;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ac-item-meta{display:flex;flex-wrap:wrap;gap:.38rem .7rem;margin-top:.28rem;color:var(--ac-muted);font-size:.76rem}
+  .ac-badge{display:inline-flex;align-items:center;padding:.28rem .5rem;border-radius:999px;background:color-mix(in srgb,var(--panel-color,var(--ac-blue)) 10%,white);color:var(--panel-color,var(--ac-blue));font-size:.68rem;font-weight:850}
+  .ac-amount{color:var(--ac-dark);font-weight:900}
+  .ac-action{display:inline-flex;align-items:center;justify-content:center;min-height:37px;padding:.5rem .7rem;border-radius:11px;color:#fff;background:var(--panel-color,var(--ac-blue));font-size:.75rem;font-weight:850;text-decoration:none;white-space:nowrap}
+  .ac-empty{padding:1.15rem;text-align:center;color:var(--ac-muted);font-size:.84rem}
+  .ac-red{--panel-color:var(--ac-red)}.ac-orange{--panel-color:var(--ac-orange)}.ac-purple{--panel-color:var(--ac-purple)}.ac-blue{--panel-color:var(--ac-blue)}.ac-green{--panel-color:var(--ac-green)}.ac-cyan{--panel-color:var(--ac-cyan)}
+  .activity-item{position:relative;padding:.78rem .85rem .78rem 1.45rem}
+  .activity-item:before{content:"";position:absolute;left:.48rem;top:1.05rem;width:8px;height:8px;border-radius:50%;background:var(--ac-blue);box-shadow:0 0 0 4px rgba(11,94,215,.1)}
+  .activity-item+.activity-item{border-top:1px solid #f0f3f7}
+  .activity-time{color:var(--ac-muted);font-size:.7rem;font-weight:800}
+  .activity-title{margin:.18rem 0;color:var(--ac-dark);font-size:.83rem;font-weight:850}
+  .activity-desc{margin:0;color:var(--ac-muted);font-size:.75rem;line-height:1.45}
+  @media(max-width:991px){.ac-layout{grid-template-columns:1fr}.ac-quick{grid-template-columns:repeat(3,minmax(0,1fr))}}
+  @media(max-width:720px){.ac-hero{padding:1.15rem}.ac-hero-grid{grid-template-columns:1fr}.ac-total{min-width:0}.ac-quick{grid-template-columns:repeat(2,minmax(0,1fr))}.ac-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.ac-item{grid-template-columns:1fr}.ac-action{width:100%}}
+  @media(max-width:390px){.ac-quick{grid-template-columns:1fr}.ac-stats{grid-template-columns:1fr}}
 </style>
 {% endblock %}
 
 {% block content %}
-
-<div class="admin-home">
-
-  <section class="home-hero">
-    <div class="home-hero-content">
-      <div class="home-eyebrow">
-        <span>💧</span>
-        JVAQUA Management System
+<div class="action-center">
+  <section class="ac-hero">
+    <div class="ac-hero-grid">
+      <div>
+        <span class="ac-kicker">⚡ Escritorio administrativo</span>
+        <h1 class="ac-title">Buenos días, {{ request.user.first_name|default:request.user.username }}</h1>
+        <p class="ac-subtitle">{{ hoy|date:"l, j \d\e F \d\e Y"|capfirst }} · Revisa las prioridades y entra directamente a resolver cada tarea.</p>
       </div>
-
-      <h1 class="home-title">
-        Todo el control de JVAQUA en un solo lugar
-      </h1>
-
-      <p class="home-subtitle">
-        Gestiona las operaciones, contratos, inventario y finanzas desde un
-        centro administrativo más claro, rápido e intuitivo.
-      </p>
-
-      <div class="hero-status">
-        <span class="hero-status-dot"></span>
-        Sistema operativo y funcionando correctamente
+      <div class="ac-total">
+        <strong>{{ total_acciones }}</strong>
+        <span>acciones pendientes</span>
       </div>
     </div>
+    <nav class="ac-quick" aria-label="Acciones rápidas">
+      <a href="{% url 'cliente_crear' %}">➕ Nuevo cliente</a>
+      <a href="{% url 'contrato_crear' %}">📄 Nuevo contrato</a>
+      <a href="{% url 'finanzas_cartera' %}">💰 Registrar cobro</a>
+      <a href="{% url 'finanzas_nomina' %}">👷 Pagar nómina</a>
+      <a href="{% url 'admin_operativo' %}">🛠️ Ver operativo</a>
+    </nav>
   </section>
 
-  <div class="section-heading">
-    <div>
-      <h4>Módulos principales</h4>
-      <p>Selecciona el área que deseas gestionar.</p>
-    </div>
-  </div>
+  <section class="ac-stats">
+    <div class="ac-stat"><div class="ac-stat-label">Cobros vencidos</div><div class="ac-stat-value">{{ cantidad_cobros_vencidos }}</div><div class="ac-stat-note">Requieren gestión inmediata</div></div>
+    <div class="ac-stat"><div class="ac-stat-label">Facturas por emitir</div><div class="ac-stat-value">{{ cantidad_facturas_por_emitir }}</div><div class="ac-stat-note">Programadas hasta hoy</div></div>
+    <div class="ac-stat"><div class="ac-stat-label">Nómina pendiente</div><div class="ac-stat-value">${{ total_nomina_pendiente|floatformat:2 }}</div><div class="ac-stat-note">{{ cantidad_trabajadores_pendientes }} trabajador{{ cantidad_trabajadores_pendientes|pluralize:"es" }}</div></div>
+    <div class="ac-stat"><div class="ac-stat-label">Mantenimientos hoy</div><div class="ac-stat-value">{{ cantidad_mantenimientos_hoy }}</div><div class="ac-stat-note">{{ cantidad_mantenimientos_realizados_hoy }} realizados · {{ cantidad_mantenimientos_pendientes_hoy }} pendientes</div></div>
+  </section>
 
-  <div class="row g-3">
-
-    <div class="col-md-6 col-xl-4">
-      <a class="module-link text-decoration-none" href="/dashboard/home/">
-        <article class="module-card module-dashboard">
-          <div class="module-icon">📊</div>
-
-          <h2 class="module-title">Dashboard</h2>
-
-          <p class="module-description">
-            Consulta el resumen financiero, operativo y el rendimiento general
-            del sistema.
-          </p>
-
-          <div class="module-footer">
-            <span>Ver resumen general</span>
-            <span class="module-arrow">→</span>
-          </div>
-        </article>
-      </a>
-    </div>
-
-    <div class="col-md-6 col-xl-4">
-      <a class="module-link text-decoration-none" href="/dashboard/operativo/">
-        <article class="module-card module-operativo">
-          <div class="module-icon">🧑‍💼</div>
-
-          <h2 class="module-title">Operativo</h2>
-
-          <p class="module-description">
-            Revisa los mantenimientos de hoy, atrasados, próximos y las
-            asignaciones del personal.
-          </p>
-
-          <div class="module-footer">
-            <span>Gestionar operaciones</span>
-            <span class="module-arrow">→</span>
-          </div>
-        </article>
-      </a>
-    </div>
-
-    <div class="col-md-6 col-xl-4">
-      <a class="module-link text-decoration-none" href="/dashboard/contratos/">
-        <article class="module-card module-contratos">
-          <div class="module-icon">📄</div>
-
-          <h2 class="module-title">Contratos</h2>
-
-          <p class="module-description">
-            Administra clientes, frecuencias, formas de pago y valores
-            mensuales de cada contrato.
-          </p>
-
-          <div class="module-footer">
-            <span>Administrar contratos</span>
-            <span class="module-arrow">→</span>
-          </div>
-        </article>
-      </a>
-    </div>
-
-    <div class="col-md-6 col-xl-4">
-      <a class="module-link text-decoration-none" href="/dashboard/inventario/">
-        <article class="module-card module-inventario">
-          <div class="module-icon">📦</div>
-
-          <h2 class="module-title">Inventario</h2>
-
-          <p class="module-description">
-            Controla el stock, las ventas, la utilidad y los movimientos de
-            productos e insumos.
-          </p>
-
-          <div class="module-footer">
-            <span>Consultar inventario</span>
-            <span class="module-arrow">→</span>
-          </div>
-        </article>
-      </a>
-    </div>
-
-    <div class="col-md-6 col-xl-4">
-      <a class="module-link text-decoration-none" href="/dashboard/finanzas/flujo/">
-        <article class="module-card module-finanzas">
-          <div class="module-icon">💰</div>
-
-          <h2 class="module-title">Flujo mensual</h2>
-
-          <p class="module-description">
-            Consulta ingresos, egresos, balances y gráficos financieros
-            organizados por periodo.
-          </p>
-
-          <div class="module-footer">
-            <span>Revisar finanzas</span>
-            <span class="module-arrow">→</span>
-          </div>
-        </article>
-      </a>
-    </div>
-
-    <div class="col-md-6 col-xl-4">
-      <a class="module-link text-decoration-none" href="/admin/">
-        <article class="module-card module-admin">
-          <div class="module-icon">⚙️</div>
-
-          <h2 class="module-title">Administración avanzada</h2>
-
-          <p class="module-description">
-            Accede al panel técnico de Django para gestionar directamente las
-            tablas y configuraciones internas.
-          </p>
-
-          <div class="module-footer">
-            <span>Abrir Admin Django</span>
-            <span class="module-arrow">→</span>
-          </div>
-        </article>
-      </a>
-    </div>
-
-  </div>
-
-  <div class="section-heading">
-    <div>
-      <h4>Accesos rápidos</h4>
-      <p>Entra directamente a las áreas más utilizadas.</p>
-    </div>
-  </div>
-
-  <div class="row g-3">
-
-    <div class="col-lg-7">
-      <div class="quick-panel h-100">
-        <div class="quick-panel-title">Gestión diaria</div>
-
-        <div class="d-grid gap-2">
-
-          <a class="quick-action" href="/dashboard/operativo/">
-            <span class="quick-action-icon">📅</span>
-            <span class="quick-action-copy">
-              <strong>Revisar mantenimientos</strong>
-              <span>Consulta las actividades operativas programadas.</span>
-            </span>
-          </a>
-
-          <a class="quick-action" href="/dashboard/contratos/">
-            <span class="quick-action-icon">📄</span>
-            <span class="quick-action-copy">
-              <strong>Gestionar contratos</strong>
-              <span>Revisa contratos activos, valores y frecuencias.</span>
-            </span>
-          </a>
-
-          <a class="quick-action" href="/dashboard/inventario/">
-            <span class="quick-action-icon">📦</span>
-            <span class="quick-action-copy">
-              <strong>Consultar existencias</strong>
-              <span>Verifica el stock disponible y sus movimientos.</span>
-            </span>
-          </a>
-
-          <a class="quick-action" href="/dashboard/finanzas/flujo/">
-            <span class="quick-action-icon">💵</span>
-            <span class="quick-action-copy">
-              <strong>Revisar flujo mensual</strong>
-              <span>Consulta ingresos, egresos y balance financiero.</span>
-            </span>
-          </a>
-
+  <div class="ac-layout">
+    <main>
+      <section class="ac-panel ac-red">
+        <header class="ac-panel-head"><h2 class="ac-panel-title">🔴 Cobros prioritarios <span class="ac-count">{{ cantidad_cobros_vencidos|add:cantidad_cobros_hoy }}</span></h2><a class="ac-panel-link" href="{% url 'finanzas_cartera' %}">Ver cartera →</a></header>
+        <div class="ac-list">
+          {% for factura in cobros_vencidos %}
+            <article class="ac-item"><div class="ac-item-main"><h3 class="ac-item-title">{{ factura.cliente }}</h3><div class="ac-item-meta"><span class="ac-badge">Vencido</span><span>{{ factura.numero }}</span><span>Venció {{ factura.fecha_vencimiento|date:"d/m/Y" }}</span><span class="ac-amount">${{ factura.saldo|floatformat:2 }}</span></div></div><a class="ac-action" href="{% url 'finanzas_factura_pago_nuevo' factura.pk %}">Cobrar</a></article>
+          {% endfor %}
+          {% for factura in cobros_hoy %}
+            {% if factura not in cobros_vencidos %}<article class="ac-item"><div class="ac-item-main"><h3 class="ac-item-title">{{ factura.cliente }}</h3><div class="ac-item-meta"><span class="ac-badge">Cobrar hoy</span><span>{{ factura.numero }}</span><span class="ac-amount">${{ factura.saldo|floatformat:2 }}</span></div></div><a class="ac-action" href="{% url 'finanzas_factura_pago_nuevo' factura.pk %}">Cobrar</a></article>{% endif %}
+          {% endfor %}
+          {% if not cobros_vencidos and not cobros_hoy %}<div class="ac-empty">✅ No hay cobros vencidos ni programados para hoy.</div>{% endif %}
         </div>
-      </div>
-    </div>
+      </section>
 
-    <div class="col-lg-5">
-      <div class="system-card">
-        <div class="system-card-label">Centro administrativo</div>
-
-        <h3 class="system-card-title">
-          JVAQUA conectado y organizado
-        </h3>
-
-        <p class="system-card-text">
-          Todos los módulos principales permanecen disponibles desde esta
-          pantalla para reducir pasos y facilitar el trabajo diario.
-        </p>
-
-        <div class="system-badge">
-          <span>✓</span>
-          Accesos principales verificados
+      <section class="ac-panel ac-orange">
+        <header class="ac-panel-head"><h2 class="ac-panel-title">🧾 Facturación <span class="ac-count">{{ cantidad_facturas_por_emitir }}</span></h2><a class="ac-panel-link" href="{% url 'finanzas_facturas' %}">Ver facturas →</a></header>
+        <div class="ac-list">
+          {% for factura in facturas_por_emitir %}<article class="ac-item"><div class="ac-item-main"><h3 class="ac-item-title">{{ factura.cliente }}</h3><div class="ac-item-meta"><span class="ac-badge">Emitir / enviar</span><span>{{ factura.periodo_label }}</span><span>Programada {{ factura.fecha_facturacion_programada|date:"d/m/Y" }}</span></div></div><a class="ac-action" href="{% url 'finanzas_factura_detalle' factura.pk %}">Revisar</a></article>{% empty %}<div class="ac-empty">✅ No hay facturas pendientes de emisión.</div>{% endfor %}
         </div>
-      </div>
-    </div>
+      </section>
 
+      <section class="ac-panel ac-purple">
+        <header class="ac-panel-head"><h2 class="ac-panel-title">👷 Nómina pendiente <span class="ac-count">{{ cantidad_trabajadores_pendientes }}</span></h2><a class="ac-panel-link" href="{% url 'finanzas_nomina' %}">Ver nómina →</a></header>
+        <div class="ac-list">
+          {% for fila in nomina_pendiente %}<article class="ac-item"><div class="ac-item-main"><h3 class="ac-item-title">{{ fila.trabajador }}</h3><div class="ac-item-meta"><span class="ac-badge">{{ fila.cantidad }} contrato{{ fila.cantidad|pluralize:"s" }}</span><span>Desde {{ fila.fecha_mas_antigua|date:"d/m/Y" }}</span><span class="ac-amount">${{ fila.saldo|floatformat:2 }}</span></div></div><a class="ac-action" href="{% url 'finanzas_nomina_pago_consolidado' fila.trabajador.pk %}?anio={{ hoy.year }}&mes={{ hoy.month }}">Pagar</a></article>{% empty %}<div class="ac-empty">✅ No hay pagos de nómina vencidos o programados para hoy.</div>{% endfor %}
+        </div>
+      </section>
+
+      <section class="ac-panel ac-blue">
+        <header class="ac-panel-head"><h2 class="ac-panel-title">🛠️ Operación de hoy <span class="ac-count">{{ cantidad_mantenimientos_hoy }}</span></h2><a class="ac-panel-link" href="{% url 'admin_operativo' %}">Abrir operativo →</a></header>
+        <div class="ac-list">
+          {% for mantenimiento in mantenimientos_atrasados|slice:":4" %}<article class="ac-item"><div class="ac-item-main"><h3 class="ac-item-title">{{ mantenimiento.cliente }}</h3><div class="ac-item-meta"><span class="ac-badge">Atrasado</span><span>{{ mantenimiento.fecha|date:"d/m/Y" }}</span>{% if mantenimiento.trabajadores.all %}<span>{% for t in mantenimiento.trabajadores.all %}{{ t }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}</div></div><a class="ac-action" href="{% url 'mantenimiento_detalle' mantenimiento.pk %}">Ver</a></article>{% endfor %}
+          {% for mantenimiento in mantenimientos_hoy|slice:":5" %}<article class="ac-item"><div class="ac-item-main"><h3 class="ac-item-title">{{ mantenimiento.cliente }}</h3><div class="ac-item-meta"><span class="ac-badge">{{ mantenimiento.get_estado_display }}</span>{% if mantenimiento.trabajadores.all %}<span>{% for t in mantenimiento.trabajadores.all %}{{ t }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% else %}<span>Sin asignar</span>{% endif %}</div></div><a class="ac-action" href="{% url 'mantenimiento_detalle' mantenimiento.pk %}">Abrir</a></article>{% empty %}{% if not mantenimientos_atrasados %}<div class="ac-empty">No hay mantenimientos programados para hoy.</div>{% endif %}{% endfor %}
+        </div>
+      </section>
+
+      {% if contratos_programacion %}
+      <section class="ac-panel ac-green">
+        <header class="ac-panel-head"><h2 class="ac-panel-title">📅 Programación de contratos <span class="ac-count">{{ cantidad_contratos_programacion }}</span></h2><a class="ac-panel-link" href="{% url 'contrato_list' %}">Ver contratos →</a></header>
+        <div class="ac-list">
+          {% for contrato in contratos_programacion %}<article class="ac-item"><div class="ac-item-main"><h3 class="ac-item-title">{{ contrato.cliente }}</h3><div class="ac-item-meta"><span class="ac-badge">Extender programación</span><span>Generado hasta {% if contrato.programado_hasta %}{{ contrato.programado_hasta|date:"d/m/Y" }}{% else %}sin fecha{% endif %}</span></div></div><a class="ac-action" href="{% url 'contrato_detalle' contrato.pk %}">Revisar</a></article>{% endfor %}
+        </div>
+      </section>
+      {% endif %}
+    </main>
+
+    <aside>
+      <section class="ac-panel ac-cyan">
+        <header class="ac-panel-head"><h2 class="ac-panel-title">📌 Resumen del día</h2></header>
+        <div class="ac-list">
+          <div class="ac-item"><div class="ac-item-main"><h3 class="ac-item-title">Cobros para hoy</h3><div class="ac-item-meta"><span>{{ cantidad_cobros_hoy }} pendientes</span></div></div></div>
+          <div class="ac-item"><div class="ac-item-main"><h3 class="ac-item-title">Mantenimientos atrasados</h3><div class="ac-item-meta"><span>{{ cantidad_mantenimientos_atrasados }} pendientes</span></div></div></div>
+          <div class="ac-item"><div class="ac-item-main"><h3 class="ac-item-title">Trabajos sin asignar</h3><div class="ac-item-meta"><span>{{ cantidad_mantenimientos_sin_asignar }} requieren técnico</span></div></div></div>
+          <div class="ac-item"><div class="ac-item-main"><h3 class="ac-item-title">Nómina por pagar</h3><div class="ac-item-meta"><span>${{ total_nomina_pendiente|floatformat:2 }}</span></div></div></div>
+        </div>
+      </section>
+
+      <section class="ac-panel">
+        <header class="ac-panel-head"><h2 class="ac-panel-title">🕘 Actividad reciente</h2><a class="ac-panel-link" href="{% url 'actividad_historial' %}">Ver todo →</a></header>
+        <div>
+          {% for actividad in actividad_reciente %}<article class="activity-item"><div class="activity-time">{{ actividad.creada_en|date:"d/m · H:i" }}</div><h3 class="activity-title">{{ actividad.titulo }}</h3><p class="activity-desc">{{ actividad.descripcion|truncatechars:95 }}</p></article>{% empty %}<div class="ac-empty">La actividad reciente aparecerá aquí.</div>{% endfor %}
+        </div>
+      </section>
+
+      <section class="ac-panel">
+        <header class="ac-panel-head"><h2 class="ac-panel-title">🔗 Accesos del ERP</h2></header>
+        <div class="ac-list">
+          <a class="ac-item" href="{% url 'dashboard' %}" style="text-decoration:none"><div class="ac-item-main"><h3 class="ac-item-title">Dashboard analítico</h3><div class="ac-item-meta"><span>Indicadores generales y comparativos</span></div></div><span>→</span></a>
+          <a class="ac-item" href="{% url 'flujo_mensual' %}" style="text-decoration:none"><div class="ac-item-main"><h3 class="ac-item-title">Centro financiero</h3><div class="ac-item-meta"><span>Real, proyectado y prioridades</span></div></div><span>→</span></a>
+          <a class="ac-item" href="{% url 'cliente_list' %}" style="text-decoration:none"><div class="ac-item-main"><h3 class="ac-item-title">Clientes y contratos</h3><div class="ac-item-meta"><span>Gestión comercial completa</span></div></div><span>→</span></a>
+        </div>
+      </section>
+    </aside>
   </div>
-
 </div>
-
 {% endblock %}
