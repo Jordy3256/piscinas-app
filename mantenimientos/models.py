@@ -73,6 +73,12 @@ class Mantenimiento(models.Model):
 
 
 class UsoInsumo(models.Model):
+    UNIDAD_REGISTRO_CHOICES = [
+        ("g", "Gramos"),
+        ("kg", "Kilogramos"),
+        ("unidad", "Unidades"),
+    ]
+
     mantenimiento = models.ForeignKey(
         "mantenimientos.Mantenimiento",
         on_delete=models.CASCADE,
@@ -80,10 +86,23 @@ class UsoInsumo(models.Model):
     )
     insumo = models.ForeignKey(
         Insumo,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
     )
-    cantidad = models.PositiveIntegerField()
+    trabajador = models.ForeignKey(
+        Trabajador,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="usos_insumos",
+    )
+    cantidad = models.DecimalField(max_digits=12, decimal_places=3, help_text="Cantidad convertida a la unidad base del producto.")
+    cantidad_ingresada = models.DecimalField(max_digits=12, decimal_places=3, null=True, blank=True)
+    unidad_registro = models.CharField(max_length=10, choices=UNIDAD_REGISTRO_CHOICES, default="kg")
+    costo_unitario = models.DecimalField(max_digits=12, decimal_places=4, default=0)
+    costo_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
 
+    # Se conserva para compatibilidad con consumos históricos que generaban un Egreso.
+    # Los consumos nuevos no crean egreso porque el costo ya se reconoce al comprar inventario.
     egreso = models.OneToOneField(
         "finanzas.Egreso",
         on_delete=models.SET_NULL,
@@ -93,10 +112,28 @@ class UsoInsumo(models.Model):
     )
 
     def subtotal(self):
-        return self.insumo.precio * self.cantidad
+        if self.costo_total:
+            return self.costo_total
+        return (self.insumo.costo or 0) * self.cantidad
+
+    @property
+    def cantidad_mostrada(self):
+        if self.cantidad_ingresada is not None:
+            return self.cantidad_ingresada
+        if self.insumo.unidad_base == "kg" and self.cantidad < 1:
+            return self.cantidad * 1000
+        return self.cantidad
+
+    @property
+    def unidad_mostrada(self):
+        if self.cantidad_ingresada is not None:
+            return self.unidad_registro
+        if self.insumo.unidad_base == "kg" and self.cantidad < 1:
+            return "g"
+        return self.insumo.unidad_base
 
     def __str__(self):
-        return f"{self.insumo.nombre} - {self.cantidad}"
+        return f"{self.insumo.nombre} - {self.cantidad_mostrada} {self.unidad_mostrada}"
 
 
 class FotoMantenimiento(models.Model):

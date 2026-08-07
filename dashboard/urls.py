@@ -61,7 +61,17 @@ from .views import (
     inventario_view,
     vender_insumo_view,
     agregar_stock_view,
+    compra_inventario_view,
+    inventario_entrega_trabajador_view,
+    inventario_devolucion_trabajador_view,
     inventario_historial_view,
+    inventario_trabajador_detalle_view,
+    inventario_general_pdf_view,
+    inventario_trabajador_pdf_view,
+    inventario_kardex_pdf_view,
+    inventario_movimientos_pdf_view,
+    inventario_ventas_pdf_view,
+    inventario_compras_pdf_view,
 
     # Finanzas
     flujo_mensual_view,
@@ -331,6 +341,16 @@ urlpatterns = [
         inventario_historial_view,
         name="inventario_historial",
     ),
+    path("inventario/comprar/", compra_inventario_view, name="compra_inventario"),
+    path("inventario/entregar/", inventario_entrega_trabajador_view, name="inventario_entrega_trabajador"),
+    path("inventario/devolver/", inventario_devolucion_trabajador_view, name="inventario_devolucion_trabajador"),
+    path("inventario/trabajador/<int:trabajador_id>/", inventario_trabajador_detalle_view, name="inventario_trabajador_detalle"),
+    path("inventario/pdf/general/", inventario_general_pdf_view, name="inventario_general_pdf"),
+    path("inventario/pdf/trabajador/<int:trabajador_id>/", inventario_trabajador_pdf_view, name="inventario_trabajador_pdf"),
+    path("inventario/pdf/kardex/<int:insumo_id>/", inventario_kardex_pdf_view, name="inventario_kardex_pdf"),
+    path("inventario/pdf/movimientos/", inventario_movimientos_pdf_view, name="inventario_movimientos_pdf"),
+    path("inventario/pdf/ventas/", inventario_ventas_pdf_view, name="inventario_ventas_pdf"),
+    path("inventario/pdf/compras/", inventario_compras_pdf_view, name="inventario_compras_pdf"),
 
     # ======================
     # Finanzas

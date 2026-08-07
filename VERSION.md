@@ -1,6 +1,6 @@
 # JVAQUA ERP
 
-**Versión:** 1.3.4
-**Nombre:** Nómina profesional y periodos de servicio
-**Estado:** Estable
+**Versión:** 1.3.5  
+**Nombre:** Inventario Inteligente  
+**Estado:** Estable  
 **Fecha:** Agosto 2026

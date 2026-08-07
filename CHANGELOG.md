@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.3.5 — Inventario Inteligente
+
+- Nuevo inventario general con stock decimal y unidad base en kg para químicos.
+- Inventario independiente por trabajador.
+- Entregas y devoluciones entre bodega general y técnicos.
+- Compras con actualización de costo promedio y egreso automático.
+- Ventas conservadas e integradas con el nuevo stock decimal e ingreso financiero.
+- Registro de consumos desde cada mantenimiento en gramos, kilogramos o unidades.
+- Conversión automática de gramos a kilogramos.
+- Descuento automático del inventario del técnico y validación de stock insuficiente.
+- Costo químico por mantenimiento usando el costo promedio real del producto.
+- Kardex completo por producto y movimientos por trabajador.
+- Catálogo multicategoría y presentaciones comerciales.
+- PDFs de inventario general, trabajador, Kardex, movimientos, compras y ventas.
+- Nueva pestaña Mi inventario dentro de Mi Cuenta del trabajador.
+
 ## 1.3.4 — Nómina profesional y periodos de servicio
 
 - El trabajador puede descargar su PDF mensual de nómina desde Mi Cuenta.

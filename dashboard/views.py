@@ -27,7 +27,7 @@ from django.views.decorators.http import require_http_methods, require_GET
 from pywebpush import webpush, WebPushException
 
 from trabajadores.models import Trabajador
-from inventario.models import Insumo
+from inventario.models import Insumo, InventarioTrabajador
 from mantenimientos.models import (
     Mantenimiento,
     UsoInsumo,
@@ -2772,7 +2772,28 @@ def mantenimiento_detalle_view(request, pk):
         return render(request, "dashboard/no_autorizado.html", status=403)
 
     es_usuario_admin = es_admin(request.user)
-    insumos = Insumo.objects.all().order_by("nombre")
+    trabajador_actual = None
+    if es_trabajador(request.user):
+        try:
+            trabajador_actual = request.user.trabajador
+        except Exception:
+            trabajador_actual = None
+
+    if trabajador_actual:
+        inventario_mantenimiento = list(
+            InventarioTrabajador.objects.filter(
+                trabajador=trabajador_actual,
+                stock__gt=0,
+                insumo__activo=True,
+                insumo__puede_mantenimiento=True,
+            ).select_related("insumo").order_by("insumo__nombre")
+        )
+        insumos = [x.insumo for x in inventario_mantenimiento]
+    else:
+        inventario_mantenimiento = []
+        insumos = list(Insumo.objects.filter(activo=True, puede_mantenimiento=True).order_by("nombre"))
+
+    trabajadores_mantenimiento = list(mantenimiento.trabajadores.filter(activo=True).select_related("user").order_by("user__username"))
     esta_realizado = mantenimiento.estado == "realizado"
     checklist, _ = ChecklistMantenimiento.objects.get_or_create(mantenimiento=mantenimiento)
 
@@ -2889,67 +2910,59 @@ def mantenimiento_detalle_view(request, pk):
             return redirect(safe_return_url())
 
         if accion == "agregar_insumo":
-            insumo_id = request.POST.get("insumo_id")
-            cantidad_str = request.POST.get("cantidad")
+            insumo = get_object_or_404(Insumo, pk=request.POST.get("insumo_id"), activo=True, puede_mantenimiento=True)
+            unidad = request.POST.get("unidad", "kg")
+            cantidad_ingresada = request.POST.get("cantidad")
+
+            if trabajador_actual:
+                trabajador_consumo = trabajador_actual
+            else:
+                trabajador_consumo = get_object_or_404(Trabajador, pk=request.POST.get("trabajador_id"), activo=True)
+                if not mantenimiento.trabajadores.filter(pk=trabajador_consumo.pk).exists():
+                    messages.error(request, "El trabajador seleccionado no está asignado a este mantenimiento.")
+                    return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
 
             try:
-                cantidad = int(cantidad_str)
-                if cantidad <= 0:
-                    raise ValueError
-            except Exception:
-                messages.error(request, "Cantidad inválida.")
+                cantidad_base = convertir_a_base(insumo, cantidad_ingresada, unidad)
+                movimiento = consumir_trabajador(
+                    insumo=insumo,
+                    trabajador=trabajador_consumo,
+                    cantidad_base=cantidad_base,
+                    mantenimiento=mantenimiento,
+                    usuario=request.user,
+                )
+            except (ValueError, InventarioTrabajador.DoesNotExist) as exc:
+                mensaje = str(exc) if str(exc) else "El trabajador no tiene este producto asignado en su inventario."
+                messages.error(request, mensaje)
                 return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
 
-            insumo = get_object_or_404(Insumo, pk=insumo_id)
-
-            if hasattr(insumo, "stock"):
-                if insumo.stock < cantidad:
-                    messages.error(
-                        request,
-                        f"Stock insuficiente de {insumo.nombre}. Disponible: {insumo.stock}",
-                    )
-                    return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
-                insumo.stock -= cantidad
-                insumo.save()
-
-            if hasattr(insumo, "precio"):
-                costo_unitario = insumo.precio
-            elif hasattr(insumo, "costo"):
-                costo_unitario = insumo.costo
-            else:
-                costo_unitario = 0
-
-            egreso = Egreso.objects.create(
+            uso = UsoInsumo.objects.create(
                 mantenimiento=mantenimiento,
                 insumo=insumo,
-                cantidad=cantidad,
-                costo_unitario=costo_unitario,
-                total=0,
-            )
-
-            UsoInsumo.objects.create(
-                mantenimiento=mantenimiento,
-                insumo=insumo,
-                cantidad=cantidad,
-                egreso=egreso,
+                trabajador=trabajador_consumo,
+                cantidad=cantidad_base,
+                cantidad_ingresada=Decimal(str(cantidad_ingresada).replace(",", ".")),
+                unidad_registro=unidad,
+                costo_unitario=movimiento.costo_unitario,
+                costo_total=movimiento.total_costo,
             )
 
             actor = request.user.username
+            texto_cantidad = f"{uso.cantidad_ingresada} {uso.unidad_registro}"
             _notificar_admins(
-                titulo="🧪 Insumo registrado",
-                mensaje=f"{actor} registró {insumo.nombre} x {cantidad} en {mantenimiento.cliente}.",
+                titulo="🧪 Consumo de inventario registrado",
+                mensaje=f"{actor} registró {insumo.nombre} · {texto_cantidad} en {mantenimiento.cliente}.",
                 url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
                 enviar_push=False,
                 excluir_user_id=request.user.id if es_usuario_admin else None,
             )
             _registrar_actividad(
                 user=request.user,
-                titulo="Insumo registrado",
-                descripcion=f"{actor} registró {insumo.nombre} x {cantidad} en el mantenimiento de {mantenimiento.cliente}.",
+                titulo="Consumo de inventario",
+                descripcion=f"{actor} registró {insumo.nombre} · {texto_cantidad} (${uso.costo_total}) para {mantenimiento.cliente}.",
                 url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
             )
-
-            messages.success(request, f"Insumo registrado: {insumo.nombre} x {cantidad}")
+            messages.success(request, f"Consumo registrado: {insumo.nombre} · {texto_cantidad}. Costo: ${uso.costo_total}")
             return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
 
         if accion == "subir_fotos_requeridas":
@@ -3073,9 +3086,9 @@ def mantenimiento_detalle_view(request, pk):
             messages.success(request, f"Foto subida correctamente: {tipo_foto}.")
             return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
 
-    lista_usos = mantenimiento.usos_insumos.all()
+    lista_usos = mantenimiento.usos_insumos.select_related("insumo", "trabajador__user").all()
     lista_egresos = mantenimiento.egresos.all() if hasattr(mantenimiento, "egresos") else []
-    total_egresos = sum(e.total for e in lista_egresos) if lista_egresos else 0
+    total_egresos = sum((Decimal(u.subtotal()) for u in lista_usos), Decimal("0.00"))
 
     fotos_qs = mantenimiento.fotos.all()
     fotos_por_nombre = {f.descripcion: f for f in fotos_qs if _nombre_foto_valido(f.descripcion)}
@@ -3138,6 +3151,9 @@ def mantenimiento_detalle_view(request, pk):
             "insumos": insumos,
             "lista_usos": lista_usos,
             "lista_egresos": lista_egresos,
+            "inventario_mantenimiento": inventario_mantenimiento,
+            "trabajadores_mantenimiento": trabajadores_mantenimiento,
+            "trabajador_actual": trabajador_actual,
             "total_egresos": total_egresos,
             "es_admin": es_usuario_admin,
             "fotos": fotos,
@@ -3199,6 +3215,15 @@ def mi_cuenta_trabajador_view(request):
     pendientes_mes = mantenimientos_mes.filter(estado="pendiente").count()
     pagos_recientes = list(PagoTrabajador.objects.filter(obligacion__trabajador=trabajador, activo=True).select_related("obligacion__contrato__cliente").order_by("-fecha", "-id")[:30])
     lotes = list(LotePagoTrabajador.objects.filter(trabajador=trabajador, activo=True).order_by("-fecha", "-id")[:20])
+    inventario_personal = list(
+        InventarioTrabajador.objects.filter(trabajador=trabajador, stock__gt=0)
+        .select_related("insumo").order_by("insumo__nombre")
+    )
+    movimientos_inventario_personal = list(
+        MovimientoInventario.objects.filter(trabajador=trabajador)
+        .select_related("insumo", "mantenimiento__cliente")
+        .order_by("-creado_en", "-id")[:30]
+    )
     return render(request, "dashboard/mi_cuenta_trabajador.html", {
         "trabajador": trabajador, "anio": anio, "mes": mes, "obligaciones": obligaciones,
         "generado": generado, "pagado": pagado, "pendiente": pendiente,
@@ -3206,6 +3231,8 @@ def mi_cuenta_trabajador_view(request):
         "proximo_pago": proximo_pago, "contratos": contratos,
         "realizados_mes": realizados_mes, "pendientes_mes": pendientes_mes,
         "pagos_recientes": pagos_recientes, "lotes": lotes,
+        "inventario_personal": inventario_personal,
+        "movimientos_inventario_personal": movimientos_inventario_personal,
         "VAPID_PUBLIC_KEY": getattr(settings, "VAPID_PUBLIC_KEY", ""),
         "meses": [(1,"Enero"),(2,"Febrero"),(3,"Marzo"),(4,"Abril"),(5,"Mayo"),(6,"Junio"),(7,"Julio"),(8,"Agosto"),(9,"Septiembre"),(10,"Octubre"),(11,"Noviembre"),(12,"Diciembre")],
     })
@@ -3296,9 +3323,12 @@ def usoinsumo_eliminar_view(request, pk):
         insumo_nombre = getattr(insumo, "nombre", "Insumo")
         cantidad = uso.cantidad
 
-        if hasattr(insumo, "stock"):
-            insumo.stock += uso.cantidad
-            insumo.save()
+        if uso.trabajador_id:
+            revertir_consumo(uso=uso, usuario=request.user)
+        elif getattr(uso, "egreso_id", None):
+            # Registro histórico anterior al inventario por trabajador.
+            insumo.stock = Decimal(insumo.stock) + Decimal(uso.cantidad)
+            insumo.save(update_fields=["stock"])
 
         if getattr(uso, "egreso_id", None):
             uso.egreso.delete()
@@ -3355,51 +3385,58 @@ def usoinsumo_editar_view(request, pk):
 
     if request.method == "POST":
         nueva_cantidad_str = request.POST.get("cantidad", "").strip()
+        unidad = request.POST.get("unidad", uso.unidad_registro or "kg")
         try:
-            nueva_cantidad = int(nueva_cantidad_str)
-            if nueva_cantidad <= 0:
-                raise ValueError
-        except Exception:
-            messages.error(request, "Cantidad inválida.")
+            nueva_base = convertir_a_base(uso.insumo, nueva_cantidad_str, unidad)
+        except ValueError as exc:
+            messages.error(request, str(exc))
             return redirect(f"/dashboard/usos/{uso.pk}/editar/")
 
-        anterior = uso.cantidad
-        diff = nueva_cantidad - anterior
-
-        insumo = uso.insumo
-        insumo_nombre = getattr(insumo, "nombre", "Insumo")
-
-        if hasattr(insumo, "stock"):
-            if diff > 0 and insumo.stock < diff:
-                messages.error(request, f"Stock insuficiente. Disponible: {insumo.stock}")
+        anterior = Decimal(uso.cantidad)
+        if uso.trabajador_id:
+            try:
+                with transaction.atomic():
+                    revertir_consumo(uso=uso, usuario=request.user)
+                    movimiento = consumir_trabajador(
+                        insumo=uso.insumo,
+                        trabajador=uso.trabajador,
+                        cantidad_base=nueva_base,
+                        mantenimiento=mantenimiento,
+                        usuario=request.user,
+                        observacion=f"Edición consumo #{uso.pk}",
+                    )
+                    uso.cantidad = nueva_base
+                    uso.cantidad_ingresada = Decimal(str(nueva_cantidad_str).replace(",", "."))
+                    uso.unidad_registro = unidad
+                    uso.costo_unitario = movimiento.costo_unitario
+                    uso.costo_total = movimiento.total_costo
+                    uso.save(update_fields=["cantidad", "cantidad_ingresada", "unidad_registro", "costo_unitario", "costo_total"])
+            except (ValueError, InventarioTrabajador.DoesNotExist) as exc:
+                messages.error(request, str(exc) if str(exc) else "Stock insuficiente.")
                 return redirect(f"/dashboard/usos/{uso.pk}/editar/")
-            insumo.stock -= diff
-            insumo.save()
-
-        uso.cantidad = nueva_cantidad
-        uso.save()
-
-        if getattr(uso, "egreso_id", None):
-            eg = uso.egreso
-            eg.cantidad = nueva_cantidad
-            eg.save()
+        else:
+            # Compatibilidad para registros históricos sin trabajador.
+            diff = nueva_base - anterior
+            if diff > 0 and Decimal(uso.insumo.stock) < diff:
+                messages.error(request, f"Stock general insuficiente. Disponible: {uso.insumo.stock}")
+                return redirect(f"/dashboard/usos/{uso.pk}/editar/")
+            uso.insumo.stock = Decimal(uso.insumo.stock) - diff
+            uso.insumo.save(update_fields=["stock"])
+            uso.cantidad = nueva_base
+            uso.cantidad_ingresada = Decimal(str(nueva_cantidad_str).replace(",", "."))
+            uso.unidad_registro = unidad
+            uso.costo_unitario = uso.insumo.costo or 0
+            uso.costo_total = (nueva_base * Decimal(uso.insumo.costo or 0)).quantize(Decimal("0.01"))
+            uso.save()
 
         actor = request.user.username
-        _notificar_admins(
-            titulo="✏️ Insumo actualizado",
-            mensaje=f"{actor} actualizó un uso de insumo en {mantenimiento.cliente}.",
-            url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
-            enviar_push=False,
-            excluir_user_id=request.user.id if es_admin(request.user) else None,
-        )
         _registrar_actividad(
             user=request.user,
             titulo="Insumo actualizado",
-            descripcion=f"{actor} actualizó {insumo_nombre} de {anterior} a {nueva_cantidad} en el mantenimiento de {mantenimiento.cliente}.",
+            descripcion=f"{actor} actualizó {uso.insumo.nombre} de {anterior} a {nueva_base} {uso.insumo.unidad_corta} en {mantenimiento.cliente}.",
             url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
         )
-
-        messages.success(request, "Uso de insumo actualizado correctamente.")
+        messages.success(request, "Consumo actualizado correctamente.")
         return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
 
     return render(
@@ -4667,10 +4704,31 @@ def unread_count_view(request):
     return JsonResponse({"count": count})
 
 #======================
-# INVENTARIO PRO
+# INVENTARIO INTELIGENTE
 #======================
 
-from inventario.models import Insumo, VentaInsumo, EntradaStock, MovimientoInventario
+from inventario.models import (
+    Insumo, VentaInsumo, EntradaStock, MovimientoInventario,
+    InventarioTrabajador, CompraInsumo, PresentacionInsumo,
+)
+from inventario.services import (
+    convertir_a_base, entregar_a_trabajador, devolver_de_trabajador,
+    consumir_trabajador, revertir_consumo, decimal_positivo,
+)
+
+
+def _inventario_valorizado():
+    total = Decimal("0.00")
+    for insumo in Insumo.objects.filter(activo=True):
+        total += Decimal(insumo.stock or 0) * Decimal(insumo.costo or 0)
+    return total
+
+
+def _cantidad_texto(insumo, cantidad):
+    cantidad = Decimal(cantidad or 0)
+    if insumo.unidad_base == "kg":
+        return f"{cantidad:.3f} kg"
+    return f"{cantidad:.0f} unid."
 
 
 @login_required
@@ -4678,283 +4736,335 @@ def inventario_view(request):
     if not es_admin(request.user):
         return render(request, "dashboard/no_autorizado.html", status=403)
 
-    insumos = Insumo.objects.all().order_by("nombre")
+    insumos = list(Insumo.objects.filter(activo=True).prefetch_related("presentaciones").order_by("nombre"))
+    trabajadores = list(Trabajador.objects.filter(activo=True).select_related("user").order_by("user__username"))
+    inventarios_trabajadores = list(
+        InventarioTrabajador.objects.filter(stock__gt=0)
+        .select_related("trabajador__user", "insumo")
+        .order_by("trabajador__user__username", "insumo__nombre")
+    )
 
-    total_insumos = insumos.count()
-    bajo_stock = insumos.filter(stock__lte=F("stock_minimo")).count()
-    stock_total = sum(i.stock for i in insumos)
+    total_insumos = len(insumos)
+    bajo_stock = sum(1 for i in insumos if i.bajo_stock)
+    sin_stock = sum(1 for i in insumos if i.sin_stock)
+    stock_total_kg = sum((Decimal(i.stock) for i in insumos if i.unidad_base == "kg"), Decimal("0.000"))
 
     hoy = timezone.localdate()
     primer_dia_mes = hoy.replace(day=1)
-
     ventas_mes = VentaInsumo.objects.filter(fecha__gte=primer_dia_mes)
-    total_ventas_mes = ventas_mes.aggregate(total=Sum("total")).get("total") or 0
-    ganancia_mes = ventas_mes.aggregate(total=Sum("ganancia")).get("total") or 0
-    unidades_vendidas_mes = ventas_mes.aggregate(total=Sum("cantidad")).get("total") or 0
+    total_ventas_mes = ventas_mes.aggregate(total=Sum("total")).get("total") or Decimal("0")
+    ganancia_mes = ventas_mes.aggregate(total=Sum("ganancia")).get("total") or Decimal("0")
 
     movimientos_recientes = list(
-        MovimientoInventario.objects.select_related("insumo").all().order_by("-creado_en", "-id")[:8]
+        MovimientoInventario.objects.select_related("insumo", "trabajador__user", "mantenimiento__cliente")
+        .all().order_by("-creado_en", "-id")[:12]
     )
 
-    top_vendidos = list(
-        VentaInsumo.objects
-        .filter(fecha__gte=primer_dia_mes)
-        .values("insumo__nombre")
-        .annotate(
-            cantidad_total=Sum("cantidad"),
-            monto_total=Sum("total"),
-            ganancia_total=Sum("ganancia"),
-        )
-        .order_by("-cantidad_total", "-monto_total")[:5]
-    )
+    resumen_trabajadores = []
+    por_trabajador = defaultdict(list)
+    for inv in inventarios_trabajadores:
+        por_trabajador[inv.trabajador].append(inv)
+    for trabajador, stocks in por_trabajador.items():
+        valorizado = sum((Decimal(x.stock) * Decimal(x.insumo.costo or 0) for x in stocks), Decimal("0.00"))
+        resumen_trabajadores.append({"trabajador": trabajador, "stocks": stocks, "valor": valorizado})
 
-    return render(
-        request,
-        "dashboard/inventario.html",
-        {
-            "insumos": insumos,
-            "total_insumos": total_insumos,
-            "bajo_stock": bajo_stock,
-            "stock_total": stock_total,
-            "total_ventas_mes": float(total_ventas_mes),
-            "ganancia_mes": float(ganancia_mes),
-            "unidades_vendidas_mes": int(unidades_vendidas_mes or 0),
-            "movimientos_recientes": movimientos_recientes,
-            "top_vendidos": top_vendidos,
-            "es_admin": True,
-        },
-    )
+    return render(request, "dashboard/inventario.html", {
+        "insumos": insumos,
+        "trabajadores": trabajadores,
+        "inventarios_trabajadores": inventarios_trabajadores,
+        "resumen_trabajadores": resumen_trabajadores,
+        "total_insumos": total_insumos,
+        "bajo_stock": bajo_stock,
+        "sin_stock": sin_stock,
+        "stock_total_kg": stock_total_kg,
+        "valor_inventario": _inventario_valorizado(),
+        "total_ventas_mes": total_ventas_mes,
+        "ganancia_mes": ganancia_mes,
+        "movimientos_recientes": movimientos_recientes,
+        "es_admin": True,
+    })
 
-
-#======================
-# VENDER INSUMO
-#======================
 
 @login_required
-def vender_insumo_view(request):
+def compra_inventario_view(request):
     if not es_admin(request.user):
         return render(request, "dashboard/no_autorizado.html", status=403)
-
     if request.method != "POST":
-        return redirect("/dashboard/inventario/")
+        return redirect("inventario")
 
-    insumo_id = (request.POST.get("insumo_id") or "").strip()
-    cantidad_str = (request.POST.get("cantidad") or "").strip()
-
+    insumo = get_object_or_404(Insumo, pk=request.POST.get("insumo_id"))
     try:
-        cantidad = int(cantidad_str)
-        if cantidad <= 0:
-            raise ValueError
-    except Exception:
-        messages.error(request, "Cantidad inválida")
-        return redirect("/dashboard/inventario/")
+        cantidad_base = convertir_a_base(insumo, request.POST.get("cantidad"), request.POST.get("unidad", "base"), request.POST.get("presentacion_id") or None)
+        costo_unitario = decimal_positivo(request.POST.get("costo_unitario"), "Costo unitario")
+    except (ValueError, PresentacionInsumo.DoesNotExist) as exc:
+        messages.error(request, str(exc))
+        return redirect("inventario")
 
-    insumo = get_object_or_404(Insumo, pk=insumo_id)
+    proveedor = (request.POST.get("proveedor") or "").strip()
+    observacion = (request.POST.get("observacion") or "").strip()
+    total = (cantidad_base * costo_unitario).quantize(Decimal("0.01"))
 
-    if insumo.stock < cantidad:
-        messages.error(
-            request,
-            f"Stock insuficiente de {insumo.nombre}. Disponible: {insumo.stock}"
+    with transaction.atomic():
+        insumo = Insumo.objects.select_for_update().get(pk=insumo.pk)
+        stock_anterior = Decimal(insumo.stock)
+        stock_nuevo = stock_anterior + cantidad_base
+        valor_anterior = stock_anterior * Decimal(insumo.costo or 0)
+        valor_compra = cantidad_base * costo_unitario
+        nuevo_costo = ((valor_anterior + valor_compra) / stock_nuevo) if stock_nuevo > 0 else costo_unitario
+        insumo.stock = stock_nuevo
+        insumo.costo = nuevo_costo.quantize(Decimal("0.0001"))
+        insumo.save(update_fields=["stock", "costo"])
+
+        egreso = Egreso.objects.create(
+            concepto=f"Compra inventario: {insumo.nombre}", categoria="quimicos" if insumo.categoria == "quimicos" else "materiales",
+            cantidad=1, costo_unitario=total, total=total, fecha=timezone.localdate(), proveedor=proveedor,
         )
-        return redirect("/dashboard/inventario/")
+        compra = CompraInsumo.objects.create(
+            insumo=insumo, cantidad=cantidad_base, costo_unitario=costo_unitario,
+            total=total, proveedor=proveedor, observacion=observacion, egreso=egreso,
+        )
+        MovimientoInventario.objects.create(
+            insumo=insumo, tipo="compra", cantidad=cantidad_base,
+            stock_anterior=stock_anterior, stock_resultante=insumo.stock,
+            costo_unitario=costo_unitario, total_costo=total, usuario=request.user,
+            observacion=observacion or f"Compra #{compra.pk} · {proveedor or 'sin proveedor'}",
+        )
 
-    stock_anterior = insumo.stock
-    precio_unitario = Decimal(insumo.precio)
-    costo_unitario = Decimal(getattr(insumo, "costo", 0) or 0)
-    total = Decimal(cantidad) * precio_unitario
-    ganancia = Decimal(cantidad) * (precio_unitario - costo_unitario)
-
-    insumo.stock -= cantidad
-    insumo.save()
-
-    VentaInsumo.objects.create(
-        insumo=insumo,
-        cantidad=cantidad,
-        precio_unitario=precio_unitario,
-        costo_unitario=costo_unitario,
-        total=total,
-        ganancia=ganancia,
-    )
-
-    MovimientoInventario.objects.create(
-        insumo=insumo,
-        tipo="venta",
-        cantidad=cantidad,
-        stock_anterior=stock_anterior,
-        stock_resultante=insumo.stock,
-        observacion=f"Venta de insumo · utilidad ${ganancia}",
-    )
-
-    Ingreso.objects.create(
-        concepto=f"Venta de insumo: {insumo.nombre}",
-        total=total,
-        fecha=timezone.localdate(),
-    )
-
-    _registrar_actividad(
-        user=request.user,
-        titulo="Venta de insumo registrada",
-        descripcion=f"{request.user.username} registró la venta de {insumo.nombre} x {cantidad} por ${total}. Ganancia: ${ganancia}.",
-        url="/dashboard/inventario/",
-    )
-
-    messages.success(request, f"Venta registrada correctamente. Ganancia: ${ganancia}")
+    _registrar_actividad(request.user, "Compra de inventario", f"Se ingresaron {_cantidad_texto(insumo, cantidad_base)} de {insumo.nombre} por ${total}.", "/dashboard/inventario/")
+    messages.success(request, f"Compra registrada. Stock actual: {_cantidad_texto(insumo, insumo.stock)}")
     return redirect("inventario")
 
-
-#======================
-# ENTRADA DE STOCK
-#======================
 
 @login_required
 def agregar_stock_view(request):
     if not es_admin(request.user):
         return render(request, "dashboard/no_autorizado.html", status=403)
-
     if request.method != "POST":
-        return redirect("/dashboard/inventario/")
-
-    insumo_id = (request.POST.get("insumo_id") or "").strip()
-    cantidad_str = (request.POST.get("cantidad") or "").strip()
-    observacion = (request.POST.get("observacion") or "").strip()
-
+        return redirect("inventario")
+    insumo = get_object_or_404(Insumo, pk=request.POST.get("insumo_id"))
     try:
-        cantidad = int(cantidad_str)
-        if cantidad <= 0:
-            raise ValueError
-    except Exception:
-        messages.error(request, "Cantidad inválida.")
-        return redirect("/dashboard/inventario/")
-
-    insumo = get_object_or_404(Insumo, pk=insumo_id)
-    stock_anterior = insumo.stock
-
-    insumo.stock += cantidad
-    insumo.save()
-
-    EntradaStock.objects.create(
-        insumo=insumo,
-        cantidad=cantidad,
-        observacion=observacion,
-    )
-
-    MovimientoInventario.objects.create(
-        insumo=insumo,
-        tipo="entrada",
-        cantidad=cantidad,
-        stock_anterior=stock_anterior,
-        stock_resultante=insumo.stock,
-        observacion=observacion or "Entrada manual",
-    )
-
-    _registrar_actividad(
-        user=request.user,
-        titulo="Entrada de stock registrada",
-        descripcion=f"{request.user.username} agregó {cantidad} unidades de {insumo.nombre}.",
-        url="/dashboard/inventario/",
-    )
-
+        cantidad_base = convertir_a_base(insumo, request.POST.get("cantidad"), request.POST.get("unidad", "base"))
+    except ValueError as exc:
+        messages.error(request, str(exc))
+        return redirect("inventario")
+    observacion = (request.POST.get("observacion") or "").strip()
+    with transaction.atomic():
+        insumo = Insumo.objects.select_for_update().get(pk=insumo.pk)
+        anterior = Decimal(insumo.stock)
+        insumo.stock = anterior + cantidad_base
+        insumo.save(update_fields=["stock"])
+        EntradaStock.objects.create(insumo=insumo, cantidad=cantidad_base, observacion=observacion)
+        MovimientoInventario.objects.create(
+            insumo=insumo, tipo="entrada", cantidad=cantidad_base, stock_anterior=anterior,
+            stock_resultante=insumo.stock, costo_unitario=insumo.costo or 0,
+            total_costo=(cantidad_base * Decimal(insumo.costo or 0)).quantize(Decimal("0.01")),
+            usuario=request.user, observacion=observacion or "Ajuste de entrada manual",
+        )
     messages.success(request, "Stock agregado correctamente.")
-    return redirect("/dashboard/inventario/")
+    return redirect("inventario")
 
 
-#======================
-# HISTORIAL INVENTARIO PRO
-#======================
+@login_required
+def vender_insumo_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    if request.method != "POST":
+        return redirect("inventario")
+
+    insumo = get_object_or_404(Insumo, pk=request.POST.get("insumo_id"), puede_venderse=True)
+    try:
+        cantidad_base = convertir_a_base(insumo, request.POST.get("cantidad"), request.POST.get("unidad", "base"), request.POST.get("presentacion_id") or None)
+    except (ValueError, PresentacionInsumo.DoesNotExist) as exc:
+        messages.error(request, str(exc))
+        return redirect("inventario")
+
+    precio_unitario_raw = request.POST.get("precio_unitario")
+    precio_unitario = Decimal(str(precio_unitario_raw).replace(",", ".")) if precio_unitario_raw else Decimal(insumo.precio)
+
+    with transaction.atomic():
+        insumo = Insumo.objects.select_for_update().get(pk=insumo.pk)
+        if Decimal(insumo.stock) < cantidad_base:
+            messages.error(request, f"Stock insuficiente. Disponible: {_cantidad_texto(insumo, insumo.stock)}")
+            return redirect("inventario")
+        anterior = Decimal(insumo.stock)
+        costo_unitario = Decimal(insumo.costo or 0)
+        total = (cantidad_base * precio_unitario).quantize(Decimal("0.01"))
+        ganancia = (cantidad_base * (precio_unitario - costo_unitario)).quantize(Decimal("0.01"))
+        insumo.stock = anterior - cantidad_base
+        insumo.save(update_fields=["stock"])
+        venta = VentaInsumo.objects.create(
+            insumo=insumo, cantidad=cantidad_base, unidad_registro=request.POST.get("unidad", "base"),
+            precio_unitario=precio_unitario, costo_unitario=costo_unitario, total=total, ganancia=ganancia,
+        )
+        MovimientoInventario.objects.create(
+            insumo=insumo, tipo="venta", cantidad=cantidad_base,
+            stock_anterior=anterior, stock_resultante=insumo.stock,
+            costo_unitario=costo_unitario, total_costo=(cantidad_base * costo_unitario).quantize(Decimal("0.01")),
+            usuario=request.user, observacion=f"Venta #{venta.pk} · ingreso ${total}",
+        )
+        Ingreso.objects.create(concepto=f"Venta de insumo: {insumo.nombre}", total=total, fecha=timezone.localdate())
+
+    _registrar_actividad(request.user, "Venta de insumo registrada", f"Venta de {insumo.nombre} por ${total}. Ganancia estimada ${ganancia}.", "/dashboard/inventario/")
+    messages.success(request, f"Venta registrada correctamente. Ganancia estimada: ${ganancia}")
+    return redirect("inventario")
+
+
+@login_required
+def inventario_entrega_trabajador_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    if request.method != "POST":
+        return redirect("inventario")
+    insumo = get_object_or_404(Insumo, pk=request.POST.get("insumo_id"), puede_asignarse_trabajador=True)
+    trabajador = get_object_or_404(Trabajador, pk=request.POST.get("trabajador_id"), activo=True)
+    try:
+        cantidad = convertir_a_base(insumo, request.POST.get("cantidad"), request.POST.get("unidad", "base"))
+        entregar_a_trabajador(insumo=insumo, trabajador=trabajador, cantidad_base=cantidad, usuario=request.user, observacion=request.POST.get("observacion", ""))
+    except ValueError as exc:
+        messages.error(request, str(exc))
+        return redirect("inventario")
+    messages.success(request, f"Entrega registrada a {trabajador}: {_cantidad_texto(insumo, cantidad)} de {insumo.nombre}.")
+    return redirect("inventario")
+
+
+@login_required
+def inventario_devolucion_trabajador_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    if request.method != "POST":
+        return redirect("inventario")
+    insumo = get_object_or_404(Insumo, pk=request.POST.get("insumo_id"))
+    trabajador = get_object_or_404(Trabajador, pk=request.POST.get("trabajador_id"))
+    try:
+        cantidad = convertir_a_base(insumo, request.POST.get("cantidad"), request.POST.get("unidad", "base"))
+        devolver_de_trabajador(insumo=insumo, trabajador=trabajador, cantidad_base=cantidad, usuario=request.user, observacion=request.POST.get("observacion", ""))
+    except (ValueError, InventarioTrabajador.DoesNotExist) as exc:
+        messages.error(request, str(exc) if str(exc) else "El trabajador no tiene stock de ese producto.")
+        return redirect("inventario")
+    messages.success(request, "Devolución registrada correctamente.")
+    return redirect("inventario")
+
 
 @login_required
 def inventario_historial_view(request):
     if not es_admin(request.user):
         return render(request, "dashboard/no_autorizado.html", status=403)
+    q = (request.GET.get("q") or "").strip()
+    tipo = (request.GET.get("tipo") or "").strip()
+    trabajador_id = (request.GET.get("trabajador") or "").strip()
+    insumo_id = (request.GET.get("insumo") or "").strip()
+    fecha_desde_str = (request.GET.get("fecha_desde") or "").strip()
+    fecha_hasta_str = (request.GET.get("fecha_hasta") or "").strip()
+    qs = MovimientoInventario.objects.select_related("insumo", "trabajador__user", "mantenimiento__cliente", "usuario").all()
+    if tipo in dict(MovimientoInventario.TIPO_CHOICES): qs = qs.filter(tipo=tipo)
+    if trabajador_id.isdigit(): qs = qs.filter(trabajador_id=int(trabajador_id))
+    if insumo_id.isdigit(): qs = qs.filter(insumo_id=int(insumo_id))
+    if fecha_desde_str and parse_date(fecha_desde_str): qs = qs.filter(fecha__gte=parse_date(fecha_desde_str))
+    if fecha_hasta_str and parse_date(fecha_hasta_str): qs = qs.filter(fecha__lte=parse_date(fecha_hasta_str))
+    if q: qs = qs.filter(models.Q(insumo__nombre__icontains=q) | models.Q(observacion__icontains=q) | models.Q(trabajador__user__username__icontains=q))
+    qs = qs.order_by("-creado_en", "-id")
+    paginator = Paginator(qs, 40)
+    page_obj = paginator.get_page(request.GET.get("page"))
+    qp = request.GET.copy(); qp.pop("page", None)
+    return render(request, "dashboard/inventario_historial.html", {
+        "page_obj": page_obj, "q": q, "tipo": tipo, "trabajador_id": trabajador_id, "insumo_id": insumo_id,
+        "fecha_desde": fecha_desde_str, "fecha_hasta": fecha_hasta_str,
+        "insumos_filtro": Insumo.objects.filter(activo=True).order_by("nombre"),
+        "trabajadores": Trabajador.objects.filter(activo=True).select_related("user").order_by("user__username"),
+        "tipos_movimiento": MovimientoInventario.TIPO_CHOICES,
+        "querystring": qp.urlencode(), "total_movimientos": qs.count(), "es_admin": True,
+    })
 
-    q = (request.GET.get("q", "") or "").strip()
-    tipo = (request.GET.get("tipo", "") or "").strip().lower()
-    fecha_desde_str = (request.GET.get("fecha_desde", "") or "").strip()
-    fecha_hasta_str = (request.GET.get("fecha_hasta", "") or "").strip()
-    insumo_id = (request.GET.get("insumo", "") or "").strip()
 
-    fecha_desde = parse_date(fecha_desde_str) if fecha_desde_str else None
-    fecha_hasta = parse_date(fecha_hasta_str) if fecha_hasta_str else None
+@login_required
+def inventario_trabajador_detalle_view(request, trabajador_id):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    trabajador = get_object_or_404(Trabajador.objects.select_related("user"), pk=trabajador_id)
+    stocks = list(InventarioTrabajador.objects.filter(trabajador=trabajador).select_related("insumo").order_by("insumo__nombre"))
+    movimientos = MovimientoInventario.objects.filter(trabajador=trabajador).select_related("insumo", "mantenimiento__cliente").order_by("-creado_en")[:100]
+    valor = sum((Decimal(x.stock) * Decimal(x.insumo.costo or 0) for x in stocks), Decimal("0.00"))
+    return render(request, "dashboard/inventario_trabajador.html", {"trabajador": trabajador, "stocks": stocks, "movimientos": movimientos, "valor": valor, "es_admin": True})
 
-    qs = MovimientoInventario.objects.select_related("insumo").all().order_by("-creado_en", "-id")
 
-    if tipo in ["entrada", "venta", "mantenimiento", "ajuste"]:
-        qs = qs.filter(tipo=tipo)
+def _pdf_inventario_response(titulo, filas, nombre_archivo, resumen=None):
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=1.1*cm, leftMargin=1.1*cm, topMargin=1.1*cm, bottomMargin=1.1*cm)
+    styles = getSampleStyleSheet(); story = [Paragraph(titulo, styles["Title"]), Spacer(1, 8)]
+    story.append(Paragraph(f"Generado: {timezone.localdate().strftime('%d/%m/%Y')}", styles["Normal"]))
+    if resumen:
+        story.append(Spacer(1, 6)); story.append(Paragraph(resumen, styles["Normal"]))
+    story.append(Spacer(1, 10))
+    tabla = Table(filas, repeatRows=1)
+    tabla.setStyle(TableStyle([
+        ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#D9EAF7")), ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+        ("GRID", (0,0), (-1,-1), .45, colors.lightgrey), ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+        ("FONTSIZE", (0,0), (-1,-1), 8.5), ("PADDING", (0,0), (-1,-1), 4),
+    ]))
+    story.append(tabla); doc.build(story); buffer.seek(0)
+    response = HttpResponse(buffer.getvalue(), content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename="{nombre_archivo}"'
+    return response
 
-    if fecha_desde:
-        qs = qs.filter(fecha__gte=fecha_desde)
 
-    if fecha_hasta:
-        qs = qs.filter(fecha__lte=fecha_hasta)
+@login_required
+def inventario_general_pdf_view(request):
+    if not es_admin(request.user): return render(request, "dashboard/no_autorizado.html", status=403)
+    filas = [["Producto", "Categoría", "Stock", "Mínimo", "Costo/base", "Valor"]]
+    for i in Insumo.objects.filter(activo=True).order_by("nombre"):
+        filas.append([i.nombre, i.get_categoria_display(), _cantidad_texto(i, i.stock), _cantidad_texto(i, i.stock_minimo), f"${i.costo:,.4f}", f"${(Decimal(i.stock)*Decimal(i.costo or 0)):,.2f}"])
+    return _pdf_inventario_response("Inventario General JVAQUA", filas, "inventario_general.pdf", f"Valor estimado del inventario: ${_inventario_valorizado():,.2f}")
 
-    if insumo_id.isdigit():
-        qs = qs.filter(insumo_id=int(insumo_id))
 
-    if q:
-        qs = qs.filter(insumo__nombre__icontains=q)
+@login_required
+def inventario_trabajador_pdf_view(request, trabajador_id):
+    if not es_admin(request.user): return render(request, "dashboard/no_autorizado.html", status=403)
+    trabajador = get_object_or_404(Trabajador, pk=trabajador_id)
+    filas = [["Producto", "Stock asignado", "Costo/base", "Valor"]]
+    for x in InventarioTrabajador.objects.filter(trabajador=trabajador).select_related("insumo").order_by("insumo__nombre"):
+        filas.append([x.insumo.nombre, _cantidad_texto(x.insumo, x.stock), f"${x.insumo.costo:,.4f}", f"${(Decimal(x.stock)*Decimal(x.insumo.costo or 0)):,.2f}"])
+    return _pdf_inventario_response(f"Inventario de {trabajador}", filas, f"inventario_trabajador_{trabajador_id}.pdf")
 
-    total_movimientos = qs.count()
-    total_entradas = qs.filter(tipo="entrada").count()
-    total_ventas = qs.filter(tipo="venta").count()
-    total_mantenimiento = qs.filter(tipo="mantenimiento").count()
 
-    unidades_entrada = qs.filter(tipo="entrada").aggregate(total=Sum("cantidad")).get("total") or 0
-    unidades_venta = qs.filter(tipo="venta").aggregate(total=Sum("cantidad")).get("total") or 0
-    unidades_mantenimiento = qs.filter(tipo="mantenimiento").aggregate(total=Sum("cantidad")).get("total") or 0
+@login_required
+def inventario_kardex_pdf_view(request, insumo_id):
+    if not es_admin(request.user): return render(request, "dashboard/no_autorizado.html", status=403)
+    insumo = get_object_or_404(Insumo, pk=insumo_id)
+    filas = [["Fecha", "Movimiento", "Cantidad", "Trabajador", "Mantenimiento", "Observación"]]
+    for m in MovimientoInventario.objects.filter(insumo=insumo).select_related("trabajador__user", "mantenimiento__cliente").order_by("-creado_en"):
+        filas.append([m.fecha.strftime("%d/%m/%Y"), m.get_tipo_display(), _cantidad_texto(insumo, m.cantidad), str(m.trabajador or "—"), str(m.mantenimiento or "—"), m.observacion or "—"])
+    return _pdf_inventario_response(f"Kardex · {insumo.nombre}", filas, f"kardex_{insumo_id}.pdf", f"Stock general actual: {_cantidad_texto(insumo, insumo.stock)}")
 
-    paginator = Paginator(qs, 25)
-    page_number = request.GET.get("page")
-    page_obj = paginator.get_page(page_number)
 
-    insumos_filtro = Insumo.objects.all().order_by("nombre")
+@login_required
+def inventario_movimientos_pdf_view(request):
+    if not es_admin(request.user): return render(request, "dashboard/no_autorizado.html", status=403)
+    filas = [["Fecha", "Producto", "Tipo", "Cantidad", "Trabajador", "Costo"]]
+    for m in MovimientoInventario.objects.select_related("insumo", "trabajador__user").order_by("-creado_en")[:1000]:
+        filas.append([m.fecha.strftime("%d/%m/%Y"), m.insumo.nombre, m.get_tipo_display(), _cantidad_texto(m.insumo, m.cantidad), str(m.trabajador or "—"), f"${m.total_costo:,.2f}"])
+    return _pdf_inventario_response("Movimientos de Inventario JVAQUA", filas, "movimientos_inventario.pdf")
 
-    top_vendidos = list(
-        VentaInsumo.objects
-        .values("insumo__nombre")
-        .annotate(
-            cantidad_total=Sum("cantidad"),
-            monto_total=Sum("total"),
-            ganancia_total=Sum("ganancia"),
-        )
-        .order_by("-cantidad_total", "-monto_total")[:10]
-    )
 
-    top_movidos = list(
-        MovimientoInventario.objects
-        .values("insumo__nombre")
-        .annotate(cantidad_total=Sum("cantidad"))
-        .order_by("-cantidad_total")[:10]
-    )
+@login_required
+def inventario_ventas_pdf_view(request):
+    if not es_admin(request.user): return render(request, "dashboard/no_autorizado.html", status=403)
+    filas = [["Fecha", "Producto", "Cantidad", "Venta", "Costo", "Ganancia"]]
+    total = Decimal("0.00"); ganancia = Decimal("0.00")
+    for v in VentaInsumo.objects.select_related("insumo").order_by("-creado_en")[:1000]:
+        total += Decimal(v.total or 0); ganancia += Decimal(v.ganancia or 0)
+        filas.append([v.fecha.strftime("%d/%m/%Y"), v.insumo.nombre, _cantidad_texto(v.insumo, v.cantidad), f"${v.total:,.2f}", f"${(Decimal(v.cantidad)*Decimal(v.costo_unitario or 0)):,.2f}", f"${v.ganancia:,.2f}"])
+    return _pdf_inventario_response("Ventas de Insumos JVAQUA", filas, "ventas_inventario.pdf", f"Ventas: ${total:,.2f} · Ganancia estimada: ${ganancia:,.2f}")
 
-    query_params = request.GET.copy()
-    if "page" in query_params:
-        query_params.pop("page")
-    querystring = query_params.urlencode()
 
-    return render(
-        request,
-        "dashboard/inventario_historial.html",
-        {
-            "page_obj": page_obj,
-            "q": q,
-            "tipo": tipo,
-            "fecha_desde": fecha_desde_str,
-            "fecha_hasta": fecha_hasta_str,
-            "insumo_id": insumo_id,
-            "insumos_filtro": insumos_filtro,
-            "total_movimientos": total_movimientos,
-            "total_entradas": total_entradas,
-            "total_ventas": total_ventas,
-            "total_mantenimiento": total_mantenimiento,
-            "unidades_entrada": int(unidades_entrada or 0),
-            "unidades_venta": int(unidades_venta or 0),
-            "unidades_mantenimiento": int(unidades_mantenimiento or 0),
-            "top_vendidos": top_vendidos,
-            "top_movidos": top_movidos,
-            "querystring": querystring,
-            "es_admin": True,
-        },
-    )
+@login_required
+def inventario_compras_pdf_view(request):
+    if not es_admin(request.user): return render(request, "dashboard/no_autorizado.html", status=403)
+    filas = [["Fecha", "Producto", "Cantidad", "Costo/base", "Total", "Proveedor"]]
+    total = Decimal("0.00")
+    for c in CompraInsumo.objects.select_related("insumo").order_by("-creado_en")[:1000]:
+        total += Decimal(c.total or 0)
+        filas.append([c.fecha.strftime("%d/%m/%Y"), c.insumo.nombre, _cantidad_texto(c.insumo, c.cantidad), f"${c.costo_unitario:,.4f}", f"${c.total:,.2f}", c.proveedor or "—"])
+    return _pdf_inventario_response("Compras de Inventario JVAQUA", filas, "compras_inventario.pdf", f"Total compras registradas: ${total:,.2f}")
 
 
 # ================================
