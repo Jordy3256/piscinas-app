@@ -5,6 +5,7 @@ from collections import defaultdict
 from decimal import Decimal
 from datetime import date, timedelta
 from calendar import monthrange, monthcalendar
+from urllib.parse import quote
 
 from django.conf import settings
 from django.contrib import messages
@@ -111,6 +112,18 @@ FOTOS_REQUERIDAS = [
 
 def _nombre_foto_valido(nombre: str) -> bool:
     return nombre in FOTOS_REQUERIDAS
+
+
+def _telefono_whatsapp_ecuador(telefono):
+    """Normaliza teléfonos ecuatorianos para wa.me sin alterar el dato guardado."""
+    digitos = "".join(ch for ch in str(telefono or "") if ch.isdigit())
+    if digitos.startswith("00"):
+        digitos = digitos[2:]
+    if digitos.startswith("593"):
+        return digitos
+    if digitos.startswith("0") and len(digitos) >= 9:
+        return "593" + digitos[1:]
+    return digitos
 
 
 # -------------------
@@ -2809,6 +2822,16 @@ def mantenimiento_detalle_view(request, pk):
     esta_realizado = mantenimiento.estado == "realizado"
     checklist, _ = ChecklistMantenimiento.objects.get_or_create(mantenimiento=mantenimiento)
 
+    cliente_operativo = mantenimiento.cliente
+    direccion_operativa = (cliente_operativo.direccion or "").strip()
+    maps_url = (cliente_operativo.enlace_google_maps or "").strip()
+    if not maps_url and direccion_operativa:
+        maps_url = "https://www.google.com/maps/search/?api=1&query=" + quote(direccion_operativa)
+    whatsapp_disponible = bool(
+        trabajador_actual
+        and _telefono_whatsapp_ecuador(cliente_operativo.telefono)
+    )
+
     if request.method == "POST":
         accion = (request.POST.get("accion") or "").strip()
         next_url = (request.POST.get("next", "") or "").strip()
@@ -3161,8 +3184,55 @@ def mantenimiento_detalle_view(request, pk):
             "checklist_completados": checklist_completados,
             "checklist_total": checklist_total,
             "checklist_porcentaje": checklist_porcentaje,
+            "cliente_operativo": cliente_operativo,
+            "maps_url": maps_url,
+            "whatsapp_disponible": whatsapp_disponible,
         },
     )
+
+
+@login_required
+@require_GET
+def mantenimiento_whatsapp_cliente_view(request, pk):
+    """Abre WhatsApp para un técnico asignado y registra el intento de contacto."""
+    mantenimiento = get_object_or_404(
+        Mantenimiento.objects.select_related("cliente"),
+        pk=pk,
+    )
+
+    if not es_trabajador(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    try:
+        trabajador = request.user.trabajador
+    except Exception:
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    if not mantenimiento.trabajadores.filter(pk=trabajador.pk).exists():
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    telefono = _telefono_whatsapp_ecuador(mantenimiento.cliente.telefono)
+    if not telefono:
+        messages.error(request, "El cliente no tiene un número de WhatsApp registrado.")
+        return redirect("mantenimiento_detalle", pk=mantenimiento.pk)
+
+    nombre_trabajador = (request.user.get_full_name() or "").strip() or request.user.username
+    mensaje = (
+        f"Hola, buenos días. Soy {nombre_trabajador}, técnico de JVAQUA. "
+        "Me encuentro aquí en su domicilio para realizar el mantenimiento de su piscina."
+    )
+
+    _registrar_actividad(
+        user=request.user,
+        titulo="Acceso rápido de WhatsApp utilizado",
+        descripcion=(
+            f"{nombre_trabajador} abrió WhatsApp para contactar a "
+            f"{mantenimiento.cliente} desde el mantenimiento #{mantenimiento.pk}."
+        ),
+        url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
+    )
+
+    return redirect(f"https://wa.me/{telefono}?text={quote(mensaje)}")
 
 
 @login_required

@@ -13,6 +13,8 @@
   .detail-hero{position:relative;overflow:hidden;margin-bottom:1rem;padding:1.25rem;border-radius:24px;color:#fff;background:linear-gradient(135deg,var(--jv-blue-dark),var(--jv-blue) 58%,var(--jv-cyan));box-shadow:0 18px 44px rgba(11,94,215,.22)}
   .detail-client-name{margin:0;font-size:clamp(1.3rem,4vw,1.8rem);font-weight:900}.detail-meta{margin-top:.45rem;color:rgba(255,255,255,.8);font-size:.86rem}
   .detail-status{display:inline-flex;align-items:center;gap:.4rem;padding:.55rem .8rem;border:1px solid rgba(255,255,255,.24);border-radius:999px;background:rgba(255,255,255,.14);font-weight:850;font-size:.8rem}
+  .client-operational-card{border:1px solid rgba(11,94,215,.13);border-radius:21px;background:linear-gradient(180deg,#fff,#f8fbff);box-shadow:0 12px 30px rgba(20,54,94,.08);overflow:hidden}
+  .client-operational-card .card-body{padding:1.05rem}.client-op-name{font-size:1.05rem;font-weight:900;color:var(--jv-ink)}.client-op-label{font-size:.7rem;text-transform:uppercase;letter-spacing:.055em;color:var(--jv-muted);font-weight:850}.client-op-value{color:var(--jv-ink);font-weight:750}.client-op-actions{display:flex;gap:.6rem;flex-wrap:wrap}.client-op-actions .btn{min-height:44px;border-radius:13px;font-weight:850}.btn-whatsapp{background:#16a565;color:#fff;border-color:#16a565}.btn-whatsapp:hover,.btn-whatsapp:focus{background:#118953;color:#fff;border-color:#118953}
   .premium-card{border:1px solid var(--jv-line)!important;border-radius:21px!important;background:#fff;box-shadow:0 12px 30px rgba(20,54,94,.09)!important;overflow:hidden}.premium-card .card-body{padding:1.1rem}
   .premium-title{display:flex;align-items:center;gap:.6rem;margin-bottom:.85rem;color:var(--jv-ink);font-weight:900}.premium-title i{display:grid;place-items:center;width:34px;height:34px;border-radius:11px;background:#edf5ff;color:var(--jv-blue)}
   .section-box{border:1px solid var(--jv-line);border-radius:17px;padding:1rem;background:#fbfdff}.section-title{display:flex;align-items:center;gap:.5rem;margin-bottom:.8rem;color:var(--jv-ink);font-weight:900}
@@ -33,6 +35,51 @@
     {% if m.estado == "realizado" %}<span class="detail-status"><i class="bi bi-check-circle-fill"></i> Realizado</span>{% else %}<span class="detail-status"><i class="bi bi-hourglass-split"></i> Pendiente{% if m.borrador_guardado %} · Borrador{% endif %}</span>{% endif %}
   </div>
 </section>
+
+<div class="client-operational-card mb-3">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-3">
+      <div>
+        <div class="client-op-label mb-1">Información para la visita</div>
+        <div class="client-op-name"><i class="bi bi-person-circle me-1"></i>{{ cliente_operativo.nombre }}</div>
+      </div>
+      <div class="client-op-actions">
+        {% if whatsapp_disponible %}
+          <a class="btn btn-whatsapp" href="{% url 'mantenimiento_whatsapp_cliente' m.pk %}" target="_blank" rel="noopener">
+            <i class="bi bi-whatsapp me-1"></i> WhatsApp
+          </a>
+        {% endif %}
+        {% if maps_url %}
+          <a class="btn btn-outline-primary" href="{{ maps_url }}" target="_blank" rel="noopener">
+            <i class="bi bi-geo-alt-fill me-1"></i> Navegar
+          </a>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="row g-3">
+      <div class="col-12 col-lg-7">
+        <div class="client-op-label">Dirección</div>
+        <div class="client-op-value">
+          {% if cliente_operativo.sector_urbanizacion %}{{ cliente_operativo.sector_urbanizacion }}{% if cliente_operativo.direccion %} · {% endif %}{% endif %}{{ cliente_operativo.direccion|default:"No registrada" }}
+        </div>
+        {% if cliente_operativo.ciudad %}<div class="text-muted small mt-1">{{ cliente_operativo.ciudad }}</div>{% endif %}
+      </div>
+      <div class="col-12 col-sm-6 col-lg-3">
+        <div class="client-op-label">Frecuencia</div>
+        <div class="client-op-value">{{ m.contrato.frecuencia_completa }}</div>
+      </div>
+      <div class="col-12 col-sm-6 col-lg-2">
+        <div class="client-op-label">Visita</div>
+        <div class="client-op-value">{{ m.fecha|date:"d/m/Y" }}</div>
+      </div>
+    </div>
+
+    {% if not whatsapp_disponible and not es_admin %}
+      <div class="text-muted small mt-3"><i class="bi bi-info-circle me-1"></i>No hay un número de WhatsApp disponible para este cliente.</div>
+    {% endif %}
+  </div>
+</div>
 
 {% if esta_realizado %}
 <div class="alert alert-secondary shadow-sm border-0 rounded-4">

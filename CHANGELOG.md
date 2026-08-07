@@ -71,3 +71,9 @@
 ### Compatibilidad
 - No cambia modelos, migraciones, URLs ni reglas de negocio.
 - Mantiene Contratos, Cartera, Nómina, Mantenimientos, Inventario y notificaciones.
+
+## v1.3.8 — Información operativa del cliente
+- Tarjeta de cliente en detalle de mantenimiento.
+- Acceso rápido a WhatsApp con nombre dinámico del técnico.
+- Navegación por Google Maps/dirección.
+- Registro interno del uso del acceso de WhatsApp.
