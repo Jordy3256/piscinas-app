@@ -3177,7 +3177,11 @@ def mi_cuenta_trabajador_view(request):
         anio, mes = hoy.year, hoy.month
 
     obligaciones = list(
-        ObligacionTrabajador.objects.filter(trabajador=trabajador, periodo_anio=anio, periodo_mes=mes)
+        ObligacionTrabajador.objects.filter(
+            trabajador=trabajador,
+            fecha_pago_programada__year=anio,
+            fecha_pago_programada__month=mes,
+        )
         .exclude(estado=ObligacionTrabajador.ESTADO_ANULADO)
         .select_related("contrato__cliente").prefetch_related("pagos")
         .order_by("fecha_pago_programada", "id")

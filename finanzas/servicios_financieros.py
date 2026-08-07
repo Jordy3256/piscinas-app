@@ -53,7 +53,7 @@ def obtener_resumen_financiero(anio: int, mes: int) -> dict:
 
     Proyectado:
       - Ingresos: facturas del periodo + ingresos manuales del mes.
-      - Egresos: obligaciones de nómina del periodo + egresos no vinculados a nómina.
+      - Egresos: obligaciones cuya fecha programada de pago cae en el mes + egresos no vinculados a nómina.
     """
     inicio, fin = _rango_mes(anio, mes)
 
@@ -74,7 +74,10 @@ def obtener_resumen_financiero(anio: int, mes: int) -> dict:
         .prefetch_related("pagos")
     )
     obligaciones = (
-        ObligacionTrabajador.objects.filter(periodo_anio=anio, periodo_mes=mes)
+        ObligacionTrabajador.objects.filter(
+            fecha_pago_programada__year=anio,
+            fecha_pago_programada__month=mes,
+        )
         .exclude(estado=ObligacionTrabajador.ESTADO_ANULADO)
         .select_related("trabajador", "contrato", "contrato__cliente")
         .prefetch_related("pagos")

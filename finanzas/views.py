@@ -50,6 +50,22 @@ def _rango_mes(anio, mes):
     return date(anio, mes, 1), date(anio, mes, monthrange(anio, mes)[1])
 
 
+def _desplazar_mes(anio, mes, desplazamiento):
+    indice = (anio * 12 + (mes - 1)) + desplazamiento
+    return indice // 12, indice % 12 + 1
+
+
+def _meses_servicio_candidatos_para_pago(anio_pago, mes_pago, meses_atras=12):
+    """Meses de inicio de servicio que podrían producir un pago en el mes elegido.
+
+    La nómina se consulta y genera por fecha programada de pago. Como el pago puede
+    ocurrir después del cierre del servicio o después del cobro del cliente, revisamos
+    el mes seleccionado y meses anteriores.
+    """
+    for desplazamiento in range(-meses_atras, 1):
+        yield _desplazar_mes(anio_pago, mes_pago, desplazamiento)
+
+
 def _sum(qs, field):
     return qs.aggregate(valor=Sum(field))["valor"] or Decimal("0.00")
 
@@ -540,7 +556,7 @@ def nomina_lista(request):
             raise ValueError
     except (TypeError, ValueError):
         anio, mes = hoy.year, hoy.month
-    qs=ObligacionTrabajador.objects.select_related("trabajador__user","contrato__cliente").prefetch_related("pagos").filter(periodo_anio=anio,periodo_mes=mes)
+    qs=ObligacionTrabajador.objects.select_related("trabajador__user","contrato__cliente").prefetch_related("pagos").filter(fecha_pago_programada__year=anio, fecha_pago_programada__month=mes)
     trabajador=request.GET.get("trabajador"); estado=request.GET.get("estado")
     if trabajador: qs=qs.filter(trabajador_id=trabajador)
     if estado: qs=qs.filter(estado=estado)
@@ -566,60 +582,115 @@ def _fecha_pago_programada_contrato(contrato, anio, mes):
     factura = (
         Factura.objects
         .filter(contrato=contrato, periodo_anio=anio, periodo_mes=mes)
+        .exclude(estado=Factura.ESTADO_ANULADA)
         .only("fecha_vencimiento")
+        .order_by("-fecha_vencimiento", "-id")
         .first()
     )
     if factura and factura.fecha_vencimiento:
         return factura.fecha_vencimiento
-    # Mantiene la regla actual de cobro: emisión el día 1 y vencimiento 5 días después.
+
+    # Si todavía no se generaron las cuentas por cobrar, usamos directamente
+    # la programación comercial del contrato. En contratos con dos cuotas se
+    # toma el último vencimiento, porque la nómina es consolidada.
+    calendario = contrato.calendario_cobros(anio, mes)
+    fechas = [item.get("fecha_vencimiento") for item in calendario if item.get("fecha_vencimiento")]
+    if fechas:
+        return max(fechas)
+
     return date(anio, mes, 1) + timedelta(days=5)
 
 
 @login_required
 def nomina_generar(request):
-    if not _es_admin(request.user): return _denegado(request)
-    if request.method!="POST": return redirect("finanzas_nomina")
-    hoy=timezone.localdate()
+    if not _es_admin(request.user):
+        return _denegado(request)
+    if request.method != "POST":
+        return redirect("finanzas_nomina")
+
+    hoy = timezone.localdate()
     try:
         anio = int(request.POST.get("anio") or hoy.year)
         mes = int(request.POST.get("mes") or hoy.month)
         if mes < 1 or mes > 12 or anio < 2020 or anio > 2100:
             raise ValueError
     except (TypeError, ValueError):
-        messages.error(request, "Periodo inválido. Selecciona correctamente el mes y el año.")
+        messages.error(request, "Mes de pago inválido. Selecciona correctamente el mes y el año.")
         return redirect("finanzas_nomina")
-    creadas=0; omitidas=0; sin_configurar=0
-    for c in Contrato.objects.filter(activo=True).select_related("tecnico_designado"):
-        if not c.tecnico_designado_id or not c.valor_tecnico_mensual or c.valor_tecnico_mensual<=0:
-            sin_configurar+=1; continue
-        fecha_programada = _fecha_pago_programada_contrato(c, anio, mes)
-        periodo_inicio, periodo_fin = c.periodo_servicio(anio, mes)
-        obligacion, created = ObligacionTrabajador.objects.get_or_create(
-            contrato=c,
-            periodo_anio=anio,
-            periodo_mes=mes,
-            defaults={
-                "trabajador": c.tecnico_designado,
-                "valor_acordado": c.valor_tecnico_mensual,
-                "periodo_servicio_inicio": periodo_inicio,
-                "periodo_servicio_fin": periodo_fin,
-                "fecha_pago_programada": fecha_programada,
-            },
-        )
-        campos_actualizados = []
-        if not created and obligacion.fecha_pago_programada != fecha_programada:
-            obligacion.fecha_pago_programada = fecha_programada
-            campos_actualizados.append("fecha_pago_programada")
-        # Solo se completan fechas históricas faltantes. Nunca se reescribe un periodo ya guardado.
-        if not obligacion.periodo_servicio_inicio:
-            obligacion.periodo_servicio_inicio = periodo_inicio
-            campos_actualizados.append("periodo_servicio_inicio")
-        if not obligacion.periodo_servicio_fin:
-            obligacion.periodo_servicio_fin = periodo_fin
-            campos_actualizados.append("periodo_servicio_fin")
-        if campos_actualizados:
-            obligacion.save(update_fields=campos_actualizados + ["actualizada_en"])
-        creadas += int(created); omitidas += int(not created)
+
+    creadas = 0
+    omitidas = 0
+    sin_configurar = 0
+    contratos = list(Contrato.objects.filter(activo=True).select_related("tecnico_designado"))
+
+    for contrato in contratos:
+        if (
+            not contrato.tecnico_designado_id
+            or not contrato.valor_tecnico_mensual
+            or contrato.valor_tecnico_mensual <= 0
+        ):
+            sin_configurar += 1
+            continue
+
+        coincidencias = []
+        for periodo_anio, periodo_mes in _meses_servicio_candidatos_para_pago(anio, mes):
+            fecha_programada = _fecha_pago_programada_contrato(contrato, periodo_anio, periodo_mes)
+            if fecha_programada.year == anio and fecha_programada.month == mes:
+                periodo_inicio, periodo_fin = contrato.periodo_servicio(periodo_anio, periodo_mes)
+                if contrato.fecha_inicio and periodo_fin <= contrato.fecha_inicio:
+                    continue
+                coincidencias.append((
+                    periodo_anio,
+                    periodo_mes,
+                    periodo_inicio,
+                    periodo_fin,
+                    fecha_programada,
+                ))
+
+        if not coincidencias:
+            # El contrato está configurado, pero no tiene ningún pago programado
+            # dentro del mes seleccionado. No se considera un error.
+            continue
+
+        for periodo_anio, periodo_mes, periodo_inicio, periodo_fin, fecha_programada in coincidencias:
+            obligacion, created = ObligacionTrabajador.objects.get_or_create(
+                contrato=contrato,
+                periodo_anio=periodo_anio,
+                periodo_mes=periodo_mes,
+                defaults={
+                    "trabajador": contrato.tecnico_designado,
+                    "valor_acordado": contrato.valor_tecnico_mensual,
+                    "periodo_servicio_inicio": periodo_inicio,
+                    "periodo_servicio_fin": periodo_fin,
+                    "fecha_pago_programada": fecha_programada,
+                },
+            )
+
+            campos_actualizados = []
+            if not created and not obligacion.pagos.filter(activo=True).exists():
+                if obligacion.trabajador_id != contrato.tecnico_designado_id:
+                    obligacion.trabajador = contrato.tecnico_designado
+                    campos_actualizados.append("trabajador")
+                if obligacion.valor_acordado != contrato.valor_tecnico_mensual:
+                    obligacion.valor_acordado = contrato.valor_tecnico_mensual
+                    campos_actualizados.append("valor_acordado")
+                if obligacion.fecha_pago_programada != fecha_programada:
+                    obligacion.fecha_pago_programada = fecha_programada
+                    campos_actualizados.append("fecha_pago_programada")
+
+            # Las fechas históricas se completan si faltan, pero nunca se reemplazan.
+            if not obligacion.periodo_servicio_inicio:
+                obligacion.periodo_servicio_inicio = periodo_inicio
+                campos_actualizados.append("periodo_servicio_inicio")
+            if not obligacion.periodo_servicio_fin:
+                obligacion.periodo_servicio_fin = periodo_fin
+                campos_actualizados.append("periodo_servicio_fin")
+
+            if campos_actualizados:
+                obligacion.save(update_fields=list(dict.fromkeys(campos_actualizados)) + ["actualizada_en"])
+
+            creadas += int(created)
+            omitidas += int(not created)
 
     # Los anticipos pendientes del periodo se descuentan automáticamente de la nómina
     # sin crear un segundo egreso: se reutiliza el egreso generado al registrar el anticipo.
@@ -630,8 +701,8 @@ def nomina_generar(request):
         obligaciones_trabajador = list(
             ObligacionTrabajador.objects.filter(
                 trabajador=anticipo.trabajador,
-                periodo_anio=anio,
-                periodo_mes=mes,
+                fecha_pago_programada__year=anio,
+                fecha_pago_programada__month=mes,
             )
             .exclude(estado=ObligacionTrabajador.ESTADO_ANULADO)
             .prefetch_related("pagos")
@@ -680,7 +751,7 @@ def nomina_generar(request):
                 anticipo.fecha_descuento = timezone.localdate() if anticipo.descontado else None
                 anticipo.save(update_fields=["monto_descontado", "descontado", "fecha_descuento"])
                 anticipos_aplicados += 1
-    messages.success(request,f"Nómina generada: {creadas} obligaciones nuevas, {omitidas} ya existentes, {sin_configurar} contratos sin técnico o valor configurado y {anticipos_aplicados} anticipos descontados.")
+    messages.success(request,f"Nómina por fecha de pago generada: {creadas} obligaciones nuevas, {omitidas} ya existentes, {sin_configurar} contratos sin técnico o valor configurado y {anticipos_aplicados} anticipos descontados.")
     return redirect(f"/dashboard/finanzas/nomina/?anio={anio}&mes={mes}")
 
 def _nombre_trabajador(trabajador):
@@ -797,11 +868,13 @@ def nomina_pago_consolidado(request, trabajador_pk):
     except (TypeError, ValueError):
         anio, mes = hoy.year, hoy.month
     obligaciones = list(ObligacionTrabajador.objects.filter(
-        trabajador=trabajador, periodo_anio=anio, periodo_mes=mes
+        trabajador=trabajador,
+        fecha_pago_programada__year=anio,
+        fecha_pago_programada__month=mes,
     ).exclude(estado=ObligacionTrabajador.ESTADO_ANULADO).select_related("contrato__cliente").prefetch_related("pagos").order_by("fecha_pago_programada", "id"))
     saldo_total = sum((o.saldo for o in obligaciones), Decimal("0.00"))
     if saldo_total <= 0:
-        messages.info(request, "Este trabajador no tiene saldo pendiente en el periodo seleccionado.")
+        messages.info(request, "Este trabajador no tiene saldo pendiente en el mes de pago seleccionado.")
         return redirect(f"/dashboard/finanzas/nomina/?anio={anio}&mes={mes}")
     form = PagoConsolidadoTrabajadorForm(request.POST or None, request.FILES or None, saldo_total=saldo_total)
     if request.method == "POST" and form.is_valid():
@@ -885,8 +958,12 @@ def nomina_trabajador_pdf(request, trabajador_pk):
         ObligacionTrabajador.objects
         .select_related("contrato__cliente", "trabajador__user")
         .prefetch_related("pagos")
-        .filter(trabajador=trabajador, periodo_anio=anio, periodo_mes=mes)
-        .order_by("contrato__cliente__nombre", "id")
+        .filter(
+            trabajador=trabajador,
+            fecha_pago_programada__year=anio,
+            fecha_pago_programada__month=mes,
+        )
+        .order_by("fecha_pago_programada", "contrato__cliente__nombre", "id")
     )
 
     generado = sum((o.valor_acordado for o in obligaciones if o.estado != o.ESTADO_ANULADO), Decimal("0.00"))
@@ -918,7 +995,7 @@ def nomina_trabajador_pdf(request, trabajador_pk):
     story = [
         Paragraph("JVAQUA", styles["TituloJVA"]),
         Paragraph("RESUMEN INDIVIDUAL DE NÓMINA OPERATIVA", styles["Heading2"]),
-        Paragraph(f"Trabajador: <b>{nombre}</b><br/>Nómina generada: <b>{nombre_mes} {anio}</b><br/>Fecha de emisión: {hoy.strftime('%d/%m/%Y')}", styles["SubtituloJVA"]),
+        Paragraph(f"Trabajador: <b>{nombre}</b><br/>Mes de pago: <b>{nombre_mes} {anio}</b><br/>Fecha de emisión: {hoy.strftime('%d/%m/%Y')}", styles["SubtituloJVA"]),
     ]
 
     resumen_data = [
@@ -955,7 +1032,7 @@ def nomina_trabajador_pdf(request, trabajador_pk):
             o.get_estado_display(),
         ])
     if not obligaciones:
-        detalle.append(["", Paragraph("No existen obligaciones generadas para este trabajador en el periodo seleccionado.", styles["Celda"]), "", "", "", "", "", ""])
+        detalle.append(["", Paragraph("No existen obligaciones generadas para este trabajador en el mes de pago seleccionado.", styles["Celda"]), "", "", "", "", "", ""])
 
     tabla = Table(detalle, repeatRows=1, colWidths=[6 * mm, 42 * mm, 39 * mm, 23 * mm, 18 * mm, 18 * mm, 18 * mm, 22 * mm])
     tabla.setStyle(TableStyle([

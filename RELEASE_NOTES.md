@@ -1,18 +1,15 @@
-# JVAQUA ERP — Programación de nómina por período de servicio
+# JVAQUA ERP — Nómina por fecha programada de pago
 
-## Nueva función
+## Corrección principal
+La generación y consulta de nómina ya no se basan en el mes de inicio del contrato ni en el mes inicial del servicio. Se basan en `fecha_pago_programada`.
 
-Se agregó la opción **Al finalizar el período de servicio** dentro de la programación de pago del trabajador.
+## Cambios
+- El selector de Nómina ahora representa el mes en que corresponde pagar.
+- Se buscan ciclos de servicio anteriores que tengan pago programado en el mes seleccionado.
+- El listado administrativo, pago consolidado, PDF y Mi Cuenta usan la misma regla.
+- El Centro Financiero proyecta la nómina en el mes real de pago.
+- Si aún no existe una factura del cliente, la fecha se calcula desde el calendario comercial del contrato.
+- En contratos con dos cuotas de cliente, la nómina consolidada toma el último vencimiento cuando la modalidad depende del cobro del contrato.
 
-La fecha de pago se calcula usando la fecha histórica de finalización del servicio de cada obligación. También puede configurarse un número de días adicionales después del cierre.
-
-## Compatibilidad
-
-- Nómina administrativa.
-- Mi Cuenta del trabajador.
-- Alertas y Centro de Acciones que utilizan la fecha programada de nómina.
-- PDFs y comprobantes que muestran la fecha de pago de la obligación.
-
-## Protección del historial
-
-Solo se reprograman obligaciones pendientes sin pagos. Los registros pagados, parciales e históricos conservan sus fechas originales.
+## Historial
+Las obligaciones con pagos conservan sus valores y fechas históricas. Solo las obligaciones pendientes y sin pagos pueden sincronizarse con cambios de configuración.
