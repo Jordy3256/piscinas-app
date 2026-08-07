@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.4 — Nómina profesional y periodos de servicio
+
+- El trabajador puede descargar su PDF mensual de nómina desde Mi Cuenta.
+- Cada obligación de nómina conserva las fechas históricas de inicio y fin del servicio.
+- Los periodos de servicio aparecen en la nómina administrativa, el detalle, Mi Cuenta y los PDFs.
+- Los comprobantes consolidados incluyen el periodo real de cada contrato.
+- Los contratos modificados posteriormente no alteran los periodos históricos ya guardados.
+
 ## 1.3.2 — Centro de Acciones Inteligente
 
 - Nuevo escritorio operativo para administradores.

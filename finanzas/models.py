@@ -508,6 +508,18 @@ class ObligacionTrabajador(models.Model):
     periodo_anio = models.PositiveIntegerField(db_index=True)
     periodo_mes = models.PositiveIntegerField(db_index=True)
     valor_acordado = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))])
+    periodo_servicio_inicio = models.DateField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="Fecha inicial del servicio que origina esta obligación. Se conserva históricamente.",
+    )
+    periodo_servicio_fin = models.DateField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="Fecha final del servicio que origina esta obligación. Se conserva históricamente.",
+    )
     fecha_pago_programada = models.DateField(
         db_index=True,
         help_text="Fecha prevista para pagar al trabajador; coincide con la fecha de cobro del contrato en este periodo.",
@@ -529,6 +541,12 @@ class ObligacionTrabajador(models.Model):
     @property
     def periodo_label(self):
         return f"{self.periodo_mes:02d}/{self.periodo_anio}"
+
+    @property
+    def periodo_servicio_label(self):
+        if self.periodo_servicio_inicio and self.periodo_servicio_fin:
+            return f"{self.periodo_servicio_inicio.strftime('%d/%m/%Y')} al {self.periodo_servicio_fin.strftime('%d/%m/%Y')}"
+        return self.periodo_label
 
     @property
     def monto_pagado(self):

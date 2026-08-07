@@ -13,6 +13,6 @@
       <div class="d-flex gap-2 flex-wrap"><button class="btn btn-primary" type="submit">Confirmar pago</button><a class="btn btn-outline-secondary" href="{% url 'finanzas_nomina' %}?anio={{ anio }}&mes={{ mes }}">Cancelar</a></div>
     </form>
   </div></div></div>
-  <div class="col-lg-5"><div class="card"><div class="card-header">Distribución prevista</div><div class="list-group list-group-flush">{% for o in obligaciones %}{% if o.saldo > 0 %}<div class="list-group-item d-flex justify-content-between gap-3"><span>{{ o.contrato.cliente }}<br><small class="text-muted">{{ o.fecha_pago_programada|date:'d/m/Y' }}</small></span><strong>${{ o.saldo|floatformat:2 }}</strong></div>{% endif %}{% endfor %}</div></div></div>
+  <div class="col-lg-5"><div class="card"><div class="card-header">Distribución prevista</div><div class="list-group list-group-flush">{% for o in obligaciones %}{% if o.saldo > 0 %}<div class="list-group-item d-flex justify-content-between gap-3"><span>{{ o.contrato.cliente }}<br><small class="text-muted">Servicio {{ o.periodo_servicio_inicio|date:'d/m/Y' }} al {{ o.periodo_servicio_fin|date:'d/m/Y' }}<br>Pago {{ o.fecha_pago_programada|date:'d/m/Y' }}</small></span><strong>${{ o.saldo|floatformat:2 }}</strong></div>{% endif %}{% endfor %}</div></div></div>
 </div>
 {% endblock %}

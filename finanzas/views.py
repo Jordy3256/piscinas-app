@@ -590,6 +590,7 @@ def nomina_generar(request):
         if not c.tecnico_designado_id or not c.valor_tecnico_mensual or c.valor_tecnico_mensual<=0:
             sin_configurar+=1; continue
         fecha_programada = _fecha_pago_programada_contrato(c, anio, mes)
+        periodo_inicio, periodo_fin = c.periodo_servicio(anio, mes)
         obligacion, created = ObligacionTrabajador.objects.get_or_create(
             contrato=c,
             periodo_anio=anio,
@@ -597,12 +598,24 @@ def nomina_generar(request):
             defaults={
                 "trabajador": c.tecnico_designado,
                 "valor_acordado": c.valor_tecnico_mensual,
+                "periodo_servicio_inicio": periodo_inicio,
+                "periodo_servicio_fin": periodo_fin,
                 "fecha_pago_programada": fecha_programada,
             },
         )
+        campos_actualizados = []
         if not created and obligacion.fecha_pago_programada != fecha_programada:
             obligacion.fecha_pago_programada = fecha_programada
-            obligacion.save(update_fields=["fecha_pago_programada", "actualizada_en"])
+            campos_actualizados.append("fecha_pago_programada")
+        # Solo se completan fechas históricas faltantes. Nunca se reescribe un periodo ya guardado.
+        if not obligacion.periodo_servicio_inicio:
+            obligacion.periodo_servicio_inicio = periodo_inicio
+            campos_actualizados.append("periodo_servicio_inicio")
+        if not obligacion.periodo_servicio_fin:
+            obligacion.periodo_servicio_fin = periodo_fin
+            campos_actualizados.append("periodo_servicio_fin")
+        if campos_actualizados:
+            obligacion.save(update_fields=campos_actualizados + ["actualizada_en"])
         creadas += int(created); omitidas += int(not created)
 
     # Los anticipos pendientes del periodo se descuentan automáticamente de la nómina
@@ -806,11 +819,15 @@ def nomina_pago_consolidado_pdf(request, lote_pk):
              Paragraph(f"Periodo: <b>{lote.periodo_label}</b>", styles["Normal"]),
              Paragraph(f"Fecha: <b>{lote.fecha.strftime('%d/%m/%Y')}</b>", styles["Normal"]),
              Paragraph(f"Valor total: <b>${lote.monto:.2f}</b>", styles["Normal"]), Spacer(1, 10)]
-    data=[["Cliente / contrato","Valor aplicado"]]
+    data=[["Cliente / contrato", "Periodo de servicio", "Valor aplicado"]]
     for pago in pagos:
-        data.append([str(pago.obligacion.contrato.cliente), f"${pago.monto:.2f}"])
-    table=Table(data, colWidths=[125*mm,35*mm])
-    table.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#0B5ED7")),("TEXTCOLOR",(0,0),(-1,0),colors.white),("GRID",(0,0),(-1,-1),.4,colors.HexColor("#CBD5E1")),("PADDING",(0,0),(-1,-1),7),("ALIGN",(1,1),(1,-1),"RIGHT")]))
+        data.append([
+            str(pago.obligacion.contrato.cliente),
+            pago.obligacion.periodo_servicio_label,
+            f"${pago.monto:.2f}",
+        ])
+    table=Table(data, colWidths=[72*mm,58*mm,30*mm])
+    table.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#0B5ED7")),("TEXTCOLOR",(0,0),(-1,0),colors.white),("GRID",(0,0),(-1,-1),.4,colors.HexColor("#CBD5E1")),("PADDING",(0,0),(-1,-1),7),("ALIGN",(2,1),(2,-1),"RIGHT")]))
     story += [table, Spacer(1, 18), Paragraph(f"Forma de pago: {lote.get_metodo_pago_display()}", styles["Normal"]), Paragraph(f"Referencia: {lote.referencia or '—'}", styles["Normal"])]
     doc.build(story)
     return response
@@ -818,7 +835,8 @@ def nomina_pago_consolidado_pdf(request, lote_pk):
 
 @login_required
 def nomina_trabajador_pdf(request, trabajador_pk):
-    if not _es_admin(request.user):
+    es_propietario = hasattr(request.user, "trabajador") and request.user.trabajador.pk == trabajador_pk
+    if not _es_admin(request.user) and not es_propietario:
         return _denegado(request)
 
     hoy = timezone.localdate()
@@ -869,7 +887,7 @@ def nomina_trabajador_pdf(request, trabajador_pk):
     story = [
         Paragraph("JVAQUA", styles["TituloJVA"]),
         Paragraph("RESUMEN INDIVIDUAL DE NÓMINA OPERATIVA", styles["Heading2"]),
-        Paragraph(f"Trabajador: <b>{nombre}</b><br/>Periodo: <b>{nombre_mes} {anio}</b><br/>Fecha de emisión: {hoy.strftime('%d/%m/%Y')}", styles["SubtituloJVA"]),
+        Paragraph(f"Trabajador: <b>{nombre}</b><br/>Nómina generada: <b>{nombre_mes} {anio}</b><br/>Fecha de emisión: {hoy.strftime('%d/%m/%Y')}", styles["SubtituloJVA"]),
     ]
 
     resumen_data = [
@@ -892,12 +910,13 @@ def nomina_trabajador_pdf(request, trabajador_pk):
     ]))
     story.extend([resumen_tabla, Spacer(1, 7 * mm), Paragraph("Detalle por contrato", styles["Heading2"]), Spacer(1, 2 * mm)])
 
-    detalle = [["#", "Cliente / Contrato", "Fecha de pago", "Valor", "Pagado", "Saldo", "Estado"]]
+    detalle = [["#", "Cliente / Contrato", "Periodo de servicio", "Fecha de pago", "Valor", "Pagado", "Saldo", "Estado"]]
     for i, o in enumerate(obligaciones, 1):
         cliente = str(o.contrato.cliente)
         detalle.append([
             str(i),
             Paragraph(cliente, styles["Celda"]),
+            Paragraph(o.periodo_servicio_label, styles["Celda"]),
             o.fecha_pago_programada.strftime("%d/%m/%Y"),
             Paragraph(f"${o.valor_acordado:.2f}", styles["CeldaDerecha"]),
             Paragraph(f"${o.monto_pagado:.2f}", styles["CeldaDerecha"]),
@@ -905,18 +924,18 @@ def nomina_trabajador_pdf(request, trabajador_pk):
             o.get_estado_display(),
         ])
     if not obligaciones:
-        detalle.append(["", Paragraph("No existen obligaciones generadas para este trabajador en el periodo seleccionado.", styles["Celda"]), "", "", "", "", ""])
+        detalle.append(["", Paragraph("No existen obligaciones generadas para este trabajador en el periodo seleccionado.", styles["Celda"]), "", "", "", "", "", ""])
 
-    tabla = Table(detalle, repeatRows=1, colWidths=[7 * mm, 55 * mm, 25 * mm, 23 * mm, 23 * mm, 23 * mm, 25 * mm])
+    tabla = Table(detalle, repeatRows=1, colWidths=[6 * mm, 42 * mm, 39 * mm, 23 * mm, 18 * mm, 18 * mm, 18 * mm, 22 * mm])
     tabla.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#163A5F")),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
         ("FONTSIZE", (0, 0), (-1, -1), 8.5),
         ("ALIGN", (0, 0), (0, -1), "CENTER"),
-        ("ALIGN", (2, 1), (2, -1), "CENTER"),
-        ("ALIGN", (3, 1), (5, -1), "RIGHT"),
-        ("ALIGN", (6, 1), (6, -1), "CENTER"),
+        ("ALIGN", (3, 1), (3, -1), "CENTER"),
+        ("ALIGN", (4, 1), (6, -1), "RIGHT"),
+        ("ALIGN", (7, 1), (7, -1), "CENTER"),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F8FAFC")]),
         ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#CBD5E1")),
