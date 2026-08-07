@@ -230,6 +230,7 @@ class ChecklistMantenimiento(models.Model):
     recoleccion_basura = models.BooleanField(default=False)
     limpieza_filtros = models.BooleanField(default=False)
     retrolavado_arena = models.BooleanField(default=False)
+    limpieza_filos = models.BooleanField(default=False)
 
     cloro_granulado = models.BooleanField(default=False)
     tricloro = models.BooleanField(default=False)

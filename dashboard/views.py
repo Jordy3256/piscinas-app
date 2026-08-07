@@ -2755,6 +2755,12 @@ def admin_operativo_view(request):
 # -------------------
 @login_required
 def mantenimiento_detalle_view(request, pk):
+    """Detalle unificado del mantenimiento.
+
+    Inspección, limpieza, consumos, fotografías y cierre se procesan en un
+    único POST. Las actividades son opcionales; únicamente las tres fotos
+    requeridas son obligatorias para finalizar.
+    """
     mantenimiento = get_object_or_404(Mantenimiento, pk=pk)
 
     if es_admin(request.user):
@@ -2791,14 +2797,20 @@ def mantenimiento_detalle_view(request, pk):
         insumos = [x.insumo for x in inventario_mantenimiento]
     else:
         inventario_mantenimiento = []
-        insumos = list(Insumo.objects.filter(activo=True, puede_mantenimiento=True).order_by("nombre"))
+        insumos = list(
+            Insumo.objects.filter(activo=True, puede_mantenimiento=True).order_by("nombre")
+        )
 
-    trabajadores_mantenimiento = list(mantenimiento.trabajadores.filter(activo=True).select_related("user").order_by("user__username"))
+    trabajadores_mantenimiento = list(
+        mantenimiento.trabajadores.filter(activo=True)
+        .select_related("user")
+        .order_by("user__username")
+    )
     esta_realizado = mantenimiento.estado == "realizado"
     checklist, _ = ChecklistMantenimiento.objects.get_or_create(mantenimiento=mantenimiento)
 
     if request.method == "POST":
-        accion = request.POST.get("accion")
+        accion = (request.POST.get("accion") or "").strip()
         next_url = (request.POST.get("next", "") or "").strip()
 
         def safe_return_url():
@@ -2810,82 +2822,10 @@ def mantenimiento_detalle_view(request, pk):
                 return next_url
             return f"/dashboard/mantenimientos/{mantenimiento.pk}/"
 
-        if accion == "guardar_checklist":
-            if esta_realizado:
-                messages.error(
-                    request,
-                    "Este mantenimiento está realizado y bloqueado para cambios. Debes volverlo a pendiente para editarlo.",
-                )
-                return redirect(safe_return_url())
-
-            campos_bool = [
-                "aspirado",
-                "cepillado",
-                "recoleccion_basura",
-                "limpieza_filtros",
-                "retrolavado_arena",
-                "cloro_granulado",
-                "tricloro",
-                "alguicida",
-                "metasilicato",
-                "floculante",
-            ]
-            for campo in campos_bool:
-                setattr(checklist, campo, request.POST.get(campo) == "on")
-            checklist.bomba_estado = request.POST.get("bomba_estado", "")
-            checklist.bomba_novedad = request.POST.get("bomba_novedad", "").strip()
-            checklist.filtro_estado = request.POST.get("filtro_estado", "")
-            checklist.filtro_novedad = request.POST.get("filtro_novedad", "").strip()
-            checklist.nivel_agua = request.POST.get("nivel_agua", "")
-            checklist.save()
-            mantenimiento.estado_agua_rapido = request.POST.get("estado_agua_rapido", "")
-            mantenimiento.equipo_rapido = request.POST.get("equipo_rapido", "")
-            mantenimiento.recomendaciones_rapidas = request.POST.getlist("recomendaciones_rapidas")
-            mantenimiento.observaciones = request.POST.get("observaciones", mantenimiento.observaciones).strip()
-            mantenimiento.borrador_guardado = True
-            mantenimiento.save(update_fields=["estado_agua_rapido", "equipo_rapido", "recomendaciones_rapidas", "observaciones", "borrador_guardado"])
-            messages.success(request, "Registro guardado como borrador. Puedes completarlo más tarde.")
-            return redirect(safe_return_url())
-
-        if accion == "marcar_realizado":
-            fotos_qs_validacion = mantenimiento.fotos.all()
-            fotos_por_nombre_validacion = {
-                f.descripcion: f for f in fotos_qs_validacion if _nombre_foto_valido(f.descripcion)
-            }
-            cantidad_fotos_requeridas = len(fotos_por_nombre_validacion)
-
-            if cantidad_fotos_requeridas < 3:
-                messages.error(
-                    request,
-                    "Debes subir las 3 fotos requeridas antes de marcar como realizado."
-                )
-                return redirect(safe_return_url())
-
-            mantenimiento.estado = "realizado"
-            mantenimiento.borrador_guardado = False
-            mantenimiento.save(update_fields=["estado", "borrador_guardado"])
-
-            actor = request.user.username
-            _notificar_admins(
-                titulo="✅ Mantenimiento realizado",
-                mensaje=f"El mantenimiento de {mantenimiento.cliente} fue marcado como realizado por {actor}.",
-                url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
-                enviar_push=True,
-                excluir_user_id=request.user.id if es_usuario_admin else None,
-            )
-            _registrar_actividad(
-                user=request.user,
-                titulo="Mantenimiento realizado",
-                descripcion=f"{actor} marcó como realizado el mantenimiento de {mantenimiento.cliente}.",
-                url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
-            )
-
-            messages.success(request, f"Mantenimiento de {mantenimiento.cliente} marcado como realizado.")
-            return redirect(safe_return_url())
-
         if accion == "marcar_pendiente":
             mantenimiento.estado = "pendiente"
-            mantenimiento.save()
+            mantenimiento.borrador_guardado = True
+            mantenimiento.save(update_fields=["estado", "borrador_guardado"])
 
             actor = request.user.username
             _notificar_admins(
@@ -2901,197 +2841,254 @@ def mantenimiento_detalle_view(request, pk):
                 descripcion=f"{actor} marcó como pendiente el mantenimiento de {mantenimiento.cliente}.",
                 url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
             )
-
             messages.success(request, f"Mantenimiento de {mantenimiento.cliente} marcado como pendiente.")
             return redirect(safe_return_url())
 
-        if esta_realizado:
-            messages.error(request, "Este mantenimiento está realizado y bloqueado para cambios. Debes volverlo a pendiente para editarlo.")
+        if accion not in {"guardar_borrador_unificado", "finalizar_unificado"}:
+            messages.error(request, "Acción de mantenimiento no válida.")
             return redirect(safe_return_url())
 
-        if accion == "agregar_insumo":
-            insumo = get_object_or_404(Insumo, pk=request.POST.get("insumo_id"), activo=True, puede_mantenimiento=True)
-            unidad = request.POST.get("unidad", "kg")
-            cantidad_ingresada = request.POST.get("cantidad")
-
-            if trabajador_actual:
-                trabajador_consumo = trabajador_actual
-            else:
-                trabajador_consumo = get_object_or_404(Trabajador, pk=request.POST.get("trabajador_id"), activo=True)
-                if not mantenimiento.trabajadores.filter(pk=trabajador_consumo.pk).exists():
-                    messages.error(request, "El trabajador seleccionado no está asignado a este mantenimiento.")
-                    return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
-
-            try:
-                cantidad_base = convertir_a_base(insumo, cantidad_ingresada, unidad)
-                movimiento = consumir_trabajador(
-                    insumo=insumo,
-                    trabajador=trabajador_consumo,
-                    cantidad_base=cantidad_base,
-                    mantenimiento=mantenimiento,
-                    usuario=request.user,
-                )
-            except (ValueError, InventarioTrabajador.DoesNotExist) as exc:
-                mensaje = str(exc) if str(exc) else "El trabajador no tiene este producto asignado en su inventario."
-                messages.error(request, mensaje)
-                return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
-
-            uso = UsoInsumo.objects.create(
-                mantenimiento=mantenimiento,
-                insumo=insumo,
-                trabajador=trabajador_consumo,
-                cantidad=cantidad_base,
-                cantidad_ingresada=Decimal(str(cantidad_ingresada).replace(",", ".")),
-                unidad_registro=unidad,
-                costo_unitario=movimiento.costo_unitario,
-                costo_total=movimiento.total_costo,
+        if esta_realizado:
+            messages.error(
+                request,
+                "Este mantenimiento está realizado y bloqueado para cambios. Debes volverlo a pendiente para editarlo.",
             )
+            return redirect(safe_return_url())
 
-            actor = request.user.username
-            texto_cantidad = f"{uso.cantidad_ingresada} {uso.unidad_registro}"
-            _notificar_admins(
-                titulo="🧪 Consumo de inventario registrado",
-                mensaje=f"{actor} registró {insumo.nombre} · {texto_cantidad} en {mantenimiento.cliente}.",
-                url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
-                enviar_push=False,
-                excluir_user_id=request.user.id if es_usuario_admin else None,
-            )
-            _registrar_actividad(
-                user=request.user,
-                titulo="Consumo de inventario",
-                descripcion=f"{actor} registró {insumo.nombre} · {texto_cantidad} (${uso.costo_total}) para {mantenimiento.cliente}.",
-                url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
-            )
-            messages.success(request, f"Consumo registrado: {insumo.nombre} · {texto_cantidad}. Costo: ${uso.costo_total}")
-            return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
+        finalizar = accion == "finalizar_unificado"
+        consumos_creados = []
+        fotos_subidas = []
 
-        if accion == "subir_fotos_requeridas":
-            if esta_realizado:
-                messages.error(request, "Este mantenimiento está realizado y bloqueado para cambios. Debes volverlo a pendiente para editarlo.")
-                return redirect(safe_return_url())
-
-            mapa_fotos = [
-                ("Inicio de Mantenimiento", request.FILES.get("foto_inicio")),
-                ("Fin de Mantenimiento", request.FILES.get("foto_fin")),
-                ("Nivel PH y Cl", request.FILES.get("foto_nivel")),
-            ]
-
-            existentes = {
-                f.descripcion: f
+        # Validación previa: al finalizar comprobamos las evidencias antes de
+        # descontar inventario o escribir archivos. Así evitamos cualquier
+        # efecto parcial incluso fuera de la transacción de base de datos.
+        if finalizar:
+            nombres_existentes = {
+                f.descripcion
                 for f in mantenimiento.fotos.all()
                 if _nombre_foto_valido(f.descripcion)
             }
-
-            subidas = []
-            omitidas = []
-
-            for tipo_foto, imagen in mapa_fotos:
-                if not imagen:
-                    continue
-
-                if tipo_foto in existentes:
-                    omitidas.append(tipo_foto)
-                    continue
-
-                FotoMantenimiento.objects.create(
-                    mantenimiento=mantenimiento,
-                    imagen=imagen,
-                    descripcion=tipo_foto,
-                )
-                subidas.append(tipo_foto)
-
-            if subidas:
-                actor = request.user.username
-                detalle = ", ".join(subidas)
-                _notificar_admins(
-                    titulo="📸 Fotos requeridas subidas",
-                    mensaje=f"{actor} subió fotos en el mantenimiento de {mantenimiento.cliente}: {detalle}.",
-                    url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
-                    enviar_push=False,
-                    excluir_user_id=request.user.id if es_usuario_admin else None,
-                )
-                _registrar_actividad(
-                    user=request.user,
-                    titulo="Fotos requeridas subidas",
-                    descripcion=f"{actor} subió fotos en el mantenimiento de {mantenimiento.cliente}: {detalle}.",
-                    url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
-                )
-
-            if subidas and omitidas:
-                messages.success(
-                    request,
-                    f"Se subieron {len(subidas)} foto(s). Ya existían: {', '.join(omitidas)}."
-                )
-            elif subidas:
-                messages.success(
-                    request,
-                    f"Se subieron correctamente {len(subidas)} foto(s)."
-                )
-            elif omitidas:
-                messages.warning(
-                    request,
-                    f"No se subieron nuevas fotos porque ya existían: {', '.join(omitidas)}."
-                )
-            else:
+            nombres_nuevos = set()
+            if request.FILES.get("foto_inicio"):
+                nombres_nuevos.add("Inicio de Mantenimiento")
+            if request.FILES.get("foto_fin"):
+                nombres_nuevos.add("Fin de Mantenimiento")
+            if request.FILES.get("foto_nivel"):
+                nombres_nuevos.add("Nivel PH y Cl")
+            faltantes_previos = [
+                nombre for nombre in FOTOS_REQUERIDAS
+                if nombre not in nombres_existentes | nombres_nuevos
+            ]
+            if faltantes_previos:
                 messages.error(
                     request,
-                    "Debes seleccionar al menos una foto para subir."
+                    "Para finalizar debes cargar las 3 fotografías obligatorias. "
+                    f"Faltan: {', '.join(faltantes_previos)}.",
+                )
+                return redirect(safe_return_url())
+
+        try:
+            with transaction.atomic():
+                # ---------------------------------------------------------
+                # 1) Inspección y limpieza (opcionales)
+                # ---------------------------------------------------------
+                campos_bool = [
+                    "aspirado",
+                    "cepillado",
+                    "recoleccion_basura",
+                    "limpieza_filtros",
+                    "retrolavado_arena",
+                    "limpieza_filos",
+                ]
+                for campo in campos_bool:
+                    setattr(checklist, campo, request.POST.get(campo) == "on")
+
+                checklist.bomba_estado = request.POST.get("bomba_estado", "")
+                checklist.bomba_novedad = request.POST.get("bomba_novedad", "").strip()
+                checklist.filtro_estado = request.POST.get("filtro_estado", "")
+                checklist.filtro_novedad = request.POST.get("filtro_novedad", "").strip()
+                checklist.nivel_agua = request.POST.get("nivel_agua", "")
+
+                # Los campos químicos del checklist quedan obsoletos desde
+                # Inventario Inteligente. Se limpian al volver a guardar un
+                # mantenimiento pendiente para no duplicar información.
+                checklist.cloro_granulado = False
+                checklist.tricloro = False
+                checklist.alguicida = False
+                checklist.metasilicato = False
+                checklist.floculante = False
+                checklist.save()
+
+                # Estado del agua se conserva en el campo compatible ya
+                # existente, pero ahora forma parte de Inspección Inicial.
+                mantenimiento.estado_agua_rapido = request.POST.get("estado_agua", "")
+                mantenimiento.equipo_rapido = ""
+                mantenimiento.recomendaciones_rapidas = []
+                mantenimiento.observaciones = request.POST.get(
+                    "observaciones", mantenimiento.observaciones
+                ).strip()
+                mantenimiento.borrador_guardado = not finalizar
+                mantenimiento.save(
+                    update_fields=[
+                        "estado_agua_rapido",
+                        "equipo_rapido",
+                        "recomendaciones_rapidas",
+                        "observaciones",
+                        "borrador_guardado",
+                    ]
                 )
 
-            return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
+                # ---------------------------------------------------------
+                # 2) Productos utilizados. Se pueden agregar varias filas
+                #    dentro del mismo formulario.
+                # ---------------------------------------------------------
+                ids_insumo = request.POST.getlist("producto_insumo_id")
+                cantidades = request.POST.getlist("producto_cantidad")
+                unidades = request.POST.getlist("producto_unidad")
 
-        if accion == "subir_foto":
-            imagen = request.FILES.get("imagen")
-            tipo_foto = (request.POST.get("tipo_foto", "") or "").strip()
+                if trabajador_actual:
+                    trabajador_consumo = trabajador_actual
+                else:
+                    trabajador_consumo_id = (request.POST.get("trabajador_consumo_id") or "").strip()
+                    trabajador_consumo = None
+                    if any(x.strip() for x in ids_insumo):
+                        if not trabajador_consumo_id:
+                            raise ValueError("Selecciona el trabajador que utilizó los productos.")
+                        trabajador_consumo = get_object_or_404(
+                            Trabajador, pk=trabajador_consumo_id, activo=True
+                        )
+                        if not mantenimiento.trabajadores.filter(pk=trabajador_consumo.pk).exists():
+                            raise ValueError(
+                                "El trabajador seleccionado no está asignado a este mantenimiento."
+                            )
 
-            if not imagen:
-                messages.error(request, "Debes seleccionar una imagen.")
-                return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
+                for index, insumo_id in enumerate(ids_insumo):
+                    insumo_id = (insumo_id or "").strip()
+                    if not insumo_id:
+                        continue
 
-            if not _nombre_foto_valido(tipo_foto):
-                messages.error(request, "Tipo de foto inválido.")
-                return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
+                    cantidad_ingresada = cantidades[index] if index < len(cantidades) else ""
+                    unidad = unidades[index] if index < len(unidades) else "kg"
+                    insumo = get_object_or_404(
+                        Insumo,
+                        pk=insumo_id,
+                        activo=True,
+                        puede_mantenimiento=True,
+                    )
 
-            cantidad_fotos_actual = mantenimiento.fotos.count()
-            if cantidad_fotos_actual >= 3 and not mantenimiento.fotos.filter(descripcion=tipo_foto).exists():
-                messages.error(request, "Solo se permiten máximo 3 fotos por mantenimiento.")
-                return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
+                    cantidad_base = convertir_a_base(insumo, cantidad_ingresada, unidad)
+                    movimiento = consumir_trabajador(
+                        insumo=insumo,
+                        trabajador=trabajador_consumo,
+                        cantidad_base=cantidad_base,
+                        mantenimiento=mantenimiento,
+                        usuario=request.user,
+                    )
+                    uso = UsoInsumo.objects.create(
+                        mantenimiento=mantenimiento,
+                        insumo=insumo,
+                        trabajador=trabajador_consumo,
+                        cantidad=cantidad_base,
+                        cantidad_ingresada=Decimal(str(cantidad_ingresada).replace(",", ".")),
+                        unidad_registro=unidad,
+                        costo_unitario=movimiento.costo_unitario,
+                        costo_total=movimiento.total_costo,
+                    )
+                    consumos_creados.append(uso)
 
-            foto_existente = mantenimiento.fotos.filter(descripcion=tipo_foto).first()
-            if foto_existente:
-                messages.error(request, f"La foto '{tipo_foto}' ya fue subida. Si deseas cambiarla, elimínala primero.")
-                return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
+                # ---------------------------------------------------------
+                # 3) Fotografías requeridas. Las nuevas se guardan junto a
+                #    todo el formulario; las ya existentes se respetan.
+                # ---------------------------------------------------------
+                mapa_fotos = [
+                    ("Inicio de Mantenimiento", request.FILES.get("foto_inicio")),
+                    ("Fin de Mantenimiento", request.FILES.get("foto_fin")),
+                    ("Nivel PH y Cl", request.FILES.get("foto_nivel")),
+                ]
+                existentes = {
+                    f.descripcion: f
+                    for f in mantenimiento.fotos.all()
+                    if _nombre_foto_valido(f.descripcion)
+                }
+                for tipo_foto, imagen in mapa_fotos:
+                    if not imagen or tipo_foto in existentes:
+                        continue
+                    FotoMantenimiento.objects.create(
+                        mantenimiento=mantenimiento,
+                        imagen=imagen,
+                        descripcion=tipo_foto,
+                    )
+                    fotos_subidas.append(tipo_foto)
+                    existentes[tipo_foto] = True
 
-            FotoMantenimiento.objects.create(
-                mantenimiento=mantenimiento,
-                imagen=imagen,
-                descripcion=tipo_foto,
+                # ---------------------------------------------------------
+                # 4) Finalización. Solo las 3 fotografías son obligatorias.
+                #    Si falta alguna, toda la transacción se revierte,
+                #    incluyendo consumos de inventario añadidos en este POST.
+                # ---------------------------------------------------------
+                if finalizar:
+                    faltantes = [nombre for nombre in FOTOS_REQUERIDAS if nombre not in existentes]
+                    if faltantes:
+                        raise ValueError(
+                            "Para finalizar debes cargar las 3 fotografías obligatorias. "
+                            f"Faltan: {', '.join(faltantes)}."
+                        )
+                    mantenimiento.estado = "realizado"
+                    mantenimiento.borrador_guardado = False
+                    mantenimiento.save(update_fields=["estado", "borrador_guardado"])
+
+        except (ValueError, InventarioTrabajador.DoesNotExist) as exc:
+            messages.error(request, str(exc) or "No se pudo guardar el mantenimiento.")
+            return redirect(safe_return_url())
+        except Exception:
+            logger.exception("Error guardando mantenimiento unificado id=%s", mantenimiento.pk)
+            messages.error(
+                request,
+                "Ocurrió un error al guardar. No se aplicaron cambios parciales; inténtalo nuevamente.",
             )
+            return redirect(safe_return_url())
 
-            actor = request.user.username
+        actor = request.user.username
+        if finalizar:
             _notificar_admins(
-                titulo="📸 Nueva foto subida",
-                mensaje=f"{actor} subió la foto '{tipo_foto}' en el mantenimiento de {mantenimiento.cliente}.",
+                titulo="✅ Mantenimiento realizado",
+                mensaje=f"El mantenimiento de {mantenimiento.cliente} fue finalizado por {actor}.",
                 url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
-                enviar_push=False,
+                enviar_push=True,
                 excluir_user_id=request.user.id if es_usuario_admin else None,
             )
             _registrar_actividad(
                 user=request.user,
-                titulo="Foto subida",
-                descripcion=f"{actor} subió la foto '{tipo_foto}' al mantenimiento de {mantenimiento.cliente}.",
+                titulo="Mantenimiento realizado",
+                descripcion=(
+                    f"{actor} finalizó el mantenimiento de {mantenimiento.cliente}. "
+                    f"Nuevos consumos: {len(consumos_creados)}; fotos nuevas: {len(fotos_subidas)}."
+                ),
                 url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
             )
+            messages.success(request, f"Mantenimiento de {mantenimiento.cliente} finalizado correctamente.")
+        else:
+            _registrar_actividad(
+                user=request.user,
+                titulo="Borrador de mantenimiento guardado",
+                descripcion=(
+                    f"{actor} guardó el borrador de {mantenimiento.cliente}. "
+                    f"Nuevos consumos: {len(consumos_creados)}; fotos nuevas: {len(fotos_subidas)}."
+                ),
+                url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
+            )
+            messages.success(request, "Borrador guardado. Todo lo registrado quedó conservado.")
 
-            messages.success(request, f"Foto subida correctamente: {tipo_foto}.")
-            return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
+        return redirect(safe_return_url())
 
     lista_usos = mantenimiento.usos_insumos.select_related("insumo", "trabajador__user").all()
     lista_egresos = mantenimiento.egresos.all() if hasattr(mantenimiento, "egresos") else []
     total_egresos = sum((Decimal(u.subtotal()) for u in lista_usos), Decimal("0.00"))
 
     fotos_qs = mantenimiento.fotos.all()
-    fotos_por_nombre = {f.descripcion: f for f in fotos_qs if _nombre_foto_valido(f.descripcion)}
+    fotos_por_nombre = {
+        f.descripcion: f for f in fotos_qs if _nombre_foto_valido(f.descripcion)
+    }
     fotos = [fotos_por_nombre[nombre] for nombre in FOTOS_REQUERIDAS if nombre in fotos_por_nombre]
 
     historial_cliente_reciente = []
@@ -3107,8 +3104,6 @@ def mantenimiento_detalle_view(request, pk):
 
     cantidad_fotos = len(fotos)
     cantidad_usos = lista_usos.count()
-    checklist_completo = checklist.completo()
-
     checklist_limpieza_completados = sum(
         bool(valor)
         for valor in [
@@ -3117,6 +3112,7 @@ def mantenimiento_detalle_view(request, pk):
             checklist.recoleccion_basura,
             checklist.limpieza_filtros,
             checklist.retrolavado_arena,
+            checklist.limpieza_filos,
         ]
     )
     checklist_inspeccion_completados = sum(
@@ -3125,20 +3121,14 @@ def mantenimiento_detalle_view(request, pk):
             checklist.bomba_estado,
             checklist.filtro_estado,
             checklist.nivel_agua,
+            mantenimiento.estado_agua_rapido,
         ]
     )
-    checklist_completados = (
-        checklist_limpieza_completados
-        + checklist_inspeccion_completados
-    )
-    checklist_total = 8
-    checklist_porcentaje = round(
-        (checklist_completados / checklist_total) * 100
-    )
+    checklist_completados = checklist_limpieza_completados + checklist_inspeccion_completados
+    checklist_total = 10
+    checklist_porcentaje = round((checklist_completados / checklist_total) * 100)
 
     puede_cerrar = cantidad_fotos == 3
-    puede_subir_fotos = cantidad_fotos < 3 and not esta_realizado
-
     foto_inicio = fotos_por_nombre.get("Inicio de Mantenimiento")
     foto_fin = fotos_por_nombre.get("Fin de Mantenimiento")
     foto_nivel = fotos_por_nombre.get("Nivel PH y Cl")
@@ -3160,20 +3150,17 @@ def mantenimiento_detalle_view(request, pk):
             "cantidad_fotos": cantidad_fotos,
             "cantidad_usos": cantidad_usos,
             "puede_cerrar": puede_cerrar,
-            "puede_subir_fotos": puede_subir_fotos,
             "esta_realizado": esta_realizado,
             "foto_inicio": foto_inicio,
             "foto_fin": foto_fin,
             "foto_nivel": foto_nivel,
             "historial_cliente_reciente": historial_cliente_reciente,
             "checklist": checklist,
-            "checklist_completo": checklist_completo,
             "checklist_limpieza_completados": checklist_limpieza_completados,
             "checklist_inspeccion_completados": checklist_inspeccion_completados,
             "checklist_completados": checklist_completados,
             "checklist_total": checklist_total,
             "checklist_porcentaje": checklist_porcentaje,
-            "recomendaciones_opciones": [("cambio_arena", "Cambio de arena recomendado"), ("mantenimiento_bomba", "Mantenimiento de bomba recomendado"), ("nivel_agua", "Revisar nivel de agua"), ("dosificador", "Revisar dosificador")],
         },
     )
 
