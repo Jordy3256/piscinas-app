@@ -23,6 +23,9 @@ class Insumo(models.Model):
 
     nombre = models.CharField(max_length=100)
     codigo = models.CharField(max_length=40, blank=True, default="", db_index=True)
+    marca = models.CharField(max_length=80, blank=True, default="")
+    modelo = models.CharField(max_length=80, blank=True, default="")
+    descripcion = models.TextField(blank=True, default="")
     categoria = models.CharField(max_length=20, choices=CATEGORIA_CHOICES, default="quimicos", db_index=True)
     unidad_base = models.CharField(max_length=10, choices=UNIDAD_CHOICES, default="kg")
     stock = models.DecimalField(max_digits=12, decimal_places=3, default=Decimal("0.000"))
@@ -35,6 +38,7 @@ class Insumo(models.Model):
     puede_mantenimiento = models.BooleanField(default=True)
     puede_asignarse_trabajador = models.BooleanField(default=True)
     puede_construccion = models.BooleanField(default=False)
+    controla_inventario = models.BooleanField(default=True)
 
     def __str__(self):
         return self.nombre
@@ -122,6 +126,9 @@ class CompraInsumo(models.Model):
     costo_unitario = models.DecimalField(max_digits=12, decimal_places=4)
     total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     proveedor = models.CharField(max_length=150, blank=True, default="")
+    lote = models.CharField(max_length=80, blank=True, default="", db_index=True)
+    fecha_fabricacion = models.DateField(null=True, blank=True)
+    fecha_vencimiento = models.DateField(null=True, blank=True, db_index=True)
     observacion = models.CharField(max_length=255, blank=True, default="")
     fecha = models.DateField(auto_now_add=True)
     creado_en = models.DateTimeField(auto_now_add=True)
@@ -186,3 +193,29 @@ class MovimientoInventario(models.Model):
         verbose_name = "Movimiento de inventario"
         verbose_name_plural = "Movimientos de inventario"
         ordering = ["-creado_en", "-id"]
+
+
+class SolicitudReposicion(models.Model):
+    ESTADO_CHOICES = [
+        ("pendiente", "Pendiente"),
+        ("atendida", "Atendida"),
+        ("cancelada", "Cancelada"),
+    ]
+
+    trabajador = models.ForeignKey("trabajadores.Trabajador", on_delete=models.CASCADE, related_name="solicitudes_reposicion")
+    insumo = models.ForeignKey(Insumo, on_delete=models.PROTECT, related_name="solicitudes_reposicion")
+    stock_al_solicitar = models.DecimalField(max_digits=12, decimal_places=3, default=Decimal("0.000"))
+    cantidad_sugerida = models.DecimalField(max_digits=12, decimal_places=3, null=True, blank=True)
+    observacion = models.CharField(max_length=255, blank=True, default="")
+    estado = models.CharField(max_length=15, choices=ESTADO_CHOICES, default="pendiente", db_index=True)
+    creada_en = models.DateTimeField(auto_now_add=True)
+    atendida_en = models.DateTimeField(null=True, blank=True)
+    atendida_por = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="solicitudes_reposicion_atendidas")
+
+    def __str__(self):
+        return f"{self.trabajador} · {self.insumo} · {self.get_estado_display()}"
+
+    class Meta:
+        verbose_name = "Solicitud de reposición"
+        verbose_name_plural = "Solicitudes de reposición"
+        ordering = ["-creada_en", "-id"]

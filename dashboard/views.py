@@ -4696,7 +4696,7 @@ def unread_count_view(request):
 
 from inventario.models import (
     Insumo, VentaInsumo, EntradaStock, MovimientoInventario,
-    InventarioTrabajador, CompraInsumo, PresentacionInsumo,
+    InventarioTrabajador, CompraInsumo, PresentacionInsumo, SolicitudReposicion,
 )
 from inventario.services import (
     convertir_a_base, entregar_a_trabajador, devolver_de_trabajador,
@@ -4741,6 +4741,11 @@ def inventario_view(request):
     ventas_mes = VentaInsumo.objects.filter(fecha__gte=primer_dia_mes)
     total_ventas_mes = ventas_mes.aggregate(total=Sum("total")).get("total") or Decimal("0")
     ganancia_mes = ventas_mes.aggregate(total=Sum("ganancia")).get("total") or Decimal("0")
+    total_compras_mes = CompraInsumo.objects.filter(fecha__gte=primer_dia_mes).aggregate(total=Sum("total")).get("total") or Decimal("0")
+    consumo_mes = MovimientoInventario.objects.filter(tipo="mantenimiento", fecha__gte=primer_dia_mes)
+    costo_consumo_mes = consumo_mes.aggregate(total=Sum("total_costo")).get("total") or Decimal("0")
+    cantidad_consumo_mes = consumo_mes.aggregate(total=Sum("cantidad")).get("total") or Decimal("0")
+    solicitudes_pendientes = SolicitudReposicion.objects.filter(estado="pendiente").select_related("trabajador__user", "insumo").order_by("-creada_en")
 
     movimientos_recientes = list(
         MovimientoInventario.objects.select_related("insumo", "trabajador__user", "mantenimiento__cliente")
@@ -4767,6 +4772,11 @@ def inventario_view(request):
         "valor_inventario": _inventario_valorizado(),
         "total_ventas_mes": total_ventas_mes,
         "ganancia_mes": ganancia_mes,
+        "total_compras_mes": total_compras_mes,
+        "costo_consumo_mes": costo_consumo_mes,
+        "cantidad_consumo_mes": cantidad_consumo_mes,
+        "solicitudes_pendientes": solicitudes_pendientes[:8],
+        "solicitudes_pendientes_count": solicitudes_pendientes.count(),
         "movimientos_recientes": movimientos_recientes,
         "es_admin": True,
     })
@@ -4788,6 +4798,9 @@ def compra_inventario_view(request):
         return redirect("inventario")
 
     proveedor = (request.POST.get("proveedor") or "").strip()
+    lote = (request.POST.get("lote") or "").strip()
+    fecha_fabricacion = parse_date((request.POST.get("fecha_fabricacion") or "").strip()) or None
+    fecha_vencimiento = parse_date((request.POST.get("fecha_vencimiento") or "").strip()) or None
     observacion = (request.POST.get("observacion") or "").strip()
     total = (cantidad_base * costo_unitario).quantize(Decimal("0.01"))
 
@@ -4808,7 +4821,8 @@ def compra_inventario_view(request):
         )
         compra = CompraInsumo.objects.create(
             insumo=insumo, cantidad=cantidad_base, costo_unitario=costo_unitario,
-            total=total, proveedor=proveedor, observacion=observacion, egreso=egreso,
+            total=total, proveedor=proveedor, lote=lote, fecha_fabricacion=fecha_fabricacion,
+            fecha_vencimiento=fecha_vencimiento, observacion=observacion, egreso=egreso,
         )
         MovimientoInventario.objects.create(
             insumo=insumo, tipo="compra", cantidad=cantidad_base,
@@ -4932,6 +4946,311 @@ def inventario_devolucion_trabajador_view(request):
     return redirect("inventario")
 
 
+def _codigo_producto_siguiente(categoria):
+    prefijos = {
+        "quimicos": "QUI", "repuestos": "REP", "herramientas": "HER",
+        "equipos": "EQU", "construccion": "MAT", "otros": "OTR",
+    }
+    prefijo = prefijos.get(categoria, "PRO")
+    existentes = Insumo.objects.filter(codigo__startswith=f"JVQ-{prefijo}-").values_list("codigo", flat=True)
+    mayor = 0
+    for codigo in existentes:
+        try:
+            mayor = max(mayor, int(str(codigo).rsplit("-", 1)[-1]))
+        except (TypeError, ValueError):
+            continue
+    return f"JVQ-{prefijo}-{mayor + 1:04d}"
+
+
+def _guardar_producto_desde_post(insumo, post):
+    nombre = (post.get("nombre") or "").strip()
+    if not nombre:
+        raise ValueError("El nombre del producto es obligatorio.")
+    categoria = (post.get("categoria") or "quimicos").strip()
+    if categoria not in dict(Insumo.CATEGORIA_CHOICES):
+        raise ValueError("Categoría inválida.")
+    unidad = (post.get("unidad_base") or "kg").strip()
+    if unidad not in dict(Insumo.UNIDAD_CHOICES):
+        raise ValueError("Unidad base inválida.")
+
+    def dec(nombre_campo, defecto="0"):
+        raw = (post.get(nombre_campo) or defecto).strip().replace(",", ".")
+        try:
+            return Decimal(raw)
+        except Exception:
+            raise ValueError(f"Valor inválido en {nombre_campo.replace('_', ' ')}.")
+
+    insumo.nombre = nombre
+    insumo.categoria = categoria
+    insumo.unidad_base = unidad
+    insumo.codigo = (post.get("codigo") or "").strip() or insumo.codigo or _codigo_producto_siguiente(categoria)
+    if Insumo.objects.filter(codigo=insumo.codigo).exclude(pk=insumo.pk).exists():
+        raise ValueError("Ya existe otro producto con ese código.")
+    insumo.marca = (post.get("marca") or "").strip()
+    insumo.modelo = (post.get("modelo") or "").strip()
+    insumo.descripcion = (post.get("descripcion") or "").strip()
+    insumo.stock_minimo = dec("stock_minimo", "0")
+    if insumo.stock_minimo < 0:
+        raise ValueError("El stock mínimo no puede ser negativo.")
+    maximo_raw = (post.get("stock_maximo") or "").strip().replace(",", ".")
+    insumo.stock_maximo = Decimal(maximo_raw) if maximo_raw else None
+    insumo.precio = dec("precio", "0")
+    # El costo promedio no se altera al editar salvo que sea un producto nuevo sin movimientos.
+    if not insumo.pk:
+        insumo.costo = dec("costo", "0")
+    insumo.activo = post.get("activo") == "on"
+    insumo.puede_venderse = post.get("puede_venderse") == "on"
+    insumo.puede_mantenimiento = post.get("puede_mantenimiento") == "on"
+    insumo.puede_asignarse_trabajador = post.get("puede_asignarse_trabajador") == "on"
+    insumo.puede_construccion = post.get("puede_construccion") == "on"
+    insumo.controla_inventario = post.get("controla_inventario") == "on"
+    insumo.save()
+    return insumo
+
+
+@login_required
+def inventario_productos_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    q = (request.GET.get("q") or "").strip()
+    categoria = (request.GET.get("categoria") or "").strip()
+    estado = (request.GET.get("estado") or "activos").strip()
+    qs = Insumo.objects.prefetch_related("presentaciones").order_by("nombre")
+    if q:
+        qs = qs.filter(models.Q(nombre__icontains=q) | models.Q(codigo__icontains=q) | models.Q(marca__icontains=q) | models.Q(modelo__icontains=q))
+    if categoria in dict(Insumo.CATEGORIA_CHOICES):
+        qs = qs.filter(categoria=categoria)
+    if estado == "activos": qs = qs.filter(activo=True)
+    elif estado == "inactivos": qs = qs.filter(activo=False)
+    return render(request, "dashboard/inventario_productos.html", {
+        "productos": qs, "q": q, "categoria": categoria, "estado": estado,
+        "categorias": Insumo.CATEGORIA_CHOICES, "es_admin": True,
+    })
+
+
+@login_required
+def inventario_producto_crear_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    insumo = Insumo(activo=True, puede_venderse=True, puede_mantenimiento=True, puede_asignarse_trabajador=True, controla_inventario=True)
+    if request.method == "POST":
+        try:
+            _guardar_producto_desde_post(insumo, request.POST)
+            _registrar_actividad(request.user, "Producto creado", f"Se creó {insumo.nombre} ({insumo.codigo}).", f"/dashboard/inventario/productos/{insumo.pk}/")
+            messages.success(request, "Producto creado correctamente.")
+            return redirect("inventario_producto_detalle", pk=insumo.pk)
+        except (ValueError, Exception) as exc:
+            # Los errores de integridad/campo se muestran sin perder el formulario.
+            messages.error(request, str(exc))
+    return render(request, "dashboard/inventario_producto_form.html", {
+        "producto": insumo, "modo": "crear", "categorias": Insumo.CATEGORIA_CHOICES,
+        "unidades": Insumo.UNIDAD_CHOICES, "es_admin": True,
+    })
+
+
+@login_required
+def inventario_producto_editar_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    insumo = get_object_or_404(Insumo, pk=pk)
+    if request.method == "POST":
+        try:
+            _guardar_producto_desde_post(insumo, request.POST)
+            _registrar_actividad(request.user, "Producto actualizado", f"Se actualizó {insumo.nombre} ({insumo.codigo}).", f"/dashboard/inventario/productos/{insumo.pk}/")
+            messages.success(request, "Producto actualizado correctamente.")
+            return redirect("inventario_producto_detalle", pk=insumo.pk)
+        except Exception as exc:
+            messages.error(request, str(exc))
+    return render(request, "dashboard/inventario_producto_form.html", {
+        "producto": insumo, "modo": "editar", "categorias": Insumo.CATEGORIA_CHOICES,
+        "unidades": Insumo.UNIDAD_CHOICES, "es_admin": True,
+    })
+
+
+@login_required
+def inventario_producto_detalle_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    insumo = get_object_or_404(Insumo.objects.prefetch_related("presentaciones"), pk=pk)
+    movimientos = list(MovimientoInventario.objects.filter(insumo=insumo).select_related("trabajador__user", "mantenimiento__cliente", "usuario").order_by("-creado_en")[:100])
+    stocks = list(InventarioTrabajador.objects.filter(insumo=insumo, stock__gt=0).select_related("trabajador__user").order_by("trabajador__user__username"))
+    hoy = timezone.localdate(); inicio = hoy.replace(day=1)
+    consumo = MovimientoInventario.objects.filter(insumo=insumo, tipo="mantenimiento", fecha__gte=inicio).aggregate(c=Sum("cantidad"), costo=Sum("total_costo"))
+    ventas = VentaInsumo.objects.filter(insumo=insumo, fecha__gte=inicio).aggregate(c=Sum("cantidad"), total=Sum("total"))
+    ultima_compra = CompraInsumo.objects.filter(insumo=insumo).order_by("-creado_en").first()
+    return render(request, "dashboard/inventario_producto_detalle.html", {
+        "producto": insumo, "movimientos": movimientos, "stocks_trabajadores": stocks,
+        "consumo_mes": consumo.get("c") or Decimal("0"), "costo_consumo_mes": consumo.get("costo") or Decimal("0"),
+        "ventas_mes": ventas.get("c") or Decimal("0"), "ventas_total_mes": ventas.get("total") or Decimal("0"),
+        "ultima_compra": ultima_compra, "valor_stock": Decimal(insumo.stock or 0) * Decimal(insumo.costo or 0), "es_admin": True,
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def inventario_producto_toggle_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    insumo = get_object_or_404(Insumo, pk=pk)
+    insumo.activo = not insumo.activo
+    insumo.save(update_fields=["activo"])
+    messages.success(request, f"Producto {'activado' if insumo.activo else 'desactivado'} correctamente.")
+    return redirect("inventario_producto_detalle", pk=pk)
+
+
+@login_required
+@require_http_methods(["POST"])
+def inventario_producto_eliminar_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    insumo = get_object_or_404(Insumo, pk=pk)
+    tiene_historial = (
+        MovimientoInventario.objects.filter(insumo=insumo).exists()
+        or VentaInsumo.objects.filter(insumo=insumo).exists()
+        or CompraInsumo.objects.filter(insumo=insumo).exists()
+        or InventarioTrabajador.objects.filter(insumo=insumo, stock__gt=0).exists()
+        or Decimal(insumo.stock or 0) != 0
+    )
+    if tiene_historial:
+        insumo.activo = False
+        insumo.save(update_fields=["activo"])
+        messages.warning(request, "El producto tiene historial o existencias; se desactivó para conservar la trazabilidad.")
+        return redirect("inventario_producto_detalle", pk=pk)
+    nombre = insumo.nombre
+    insumo.delete()
+    messages.success(request, f"Producto {nombre} eliminado definitivamente.")
+    return redirect("inventario_productos")
+
+
+@login_required
+@require_http_methods(["POST"])
+def inventario_presentacion_agregar_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    insumo = get_object_or_404(Insumo, pk=pk)
+    nombre = (request.POST.get("nombre") or "").strip()
+    try:
+        cantidad = decimal_positivo(request.POST.get("cantidad_base"), "Cantidad de la presentación")
+        precio_raw = (request.POST.get("precio_venta") or "").strip().replace(",", ".")
+        precio = Decimal(precio_raw) if precio_raw else None
+        if not nombre: raise ValueError("Escribe el nombre de la presentación.")
+        PresentacionInsumo.objects.create(insumo=insumo, nombre=nombre, cantidad_base=cantidad, precio_venta=precio, activa=True)
+        messages.success(request, "Presentación agregada.")
+    except Exception as exc:
+        messages.error(request, str(exc))
+    return redirect("inventario_producto_detalle", pk=pk)
+
+
+@login_required
+@require_http_methods(["POST"])
+def inventario_presentacion_eliminar_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    presentacion = get_object_or_404(PresentacionInsumo, pk=pk)
+    insumo_id = presentacion.insumo_id
+    if presentacion.ventas.exists():
+        presentacion.activa = False; presentacion.save(update_fields=["activa"])
+        messages.warning(request, "La presentación tiene ventas históricas y fue desactivada.")
+    else:
+        presentacion.delete(); messages.success(request, "Presentación eliminada.")
+    return redirect("inventario_producto_detalle", pk=insumo_id)
+
+
+@login_required
+def mi_inventario_trabajador_view(request):
+    if not es_trabajador(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    trabajador = get_object_or_404(Trabajador.objects.select_related("user"), user=request.user)
+    stocks = list(InventarioTrabajador.objects.filter(trabajador=trabajador, stock__gt=0).select_related("insumo").order_by("insumo__nombre"))
+    movimientos = list(MovimientoInventario.objects.filter(trabajador=trabajador).select_related("insumo", "mantenimiento__cliente").order_by("-creado_en")[:100])
+    hoy = timezone.localdate(); inicio = hoy.replace(day=1)
+    consumos = {x["insumo_id"]: x["total"] or Decimal("0") for x in MovimientoInventario.objects.filter(trabajador=trabajador, tipo="mantenimiento", fecha__gte=inicio).values("insumo_id").annotate(total=Sum("cantidad"))}
+    ultimas_entregas = {}
+    for mov in MovimientoInventario.objects.filter(trabajador=trabajador, tipo="entrega").select_related("insumo").order_by("-creado_en"):
+        ultimas_entregas.setdefault(mov.insumo_id, mov)
+    items = []
+    for stock in stocks:
+        items.append({"stock": stock, "consumo_mes": consumos.get(stock.insumo_id, Decimal("0")), "ultima_entrega": ultimas_entregas.get(stock.insumo_id)})
+    return render(request, "dashboard/mi_inventario_trabajador.html", {
+        "trabajador": trabajador, "items": items, "movimientos": movimientos,
+        "valor_estimado": sum((Decimal(x.stock) * Decimal(x.insumo.costo or 0) for x in stocks), Decimal("0")),
+        "es_admin": False,
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def solicitud_reposicion_crear_view(request, insumo_id):
+    if not es_trabajador(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    trabajador = get_object_or_404(Trabajador, user=request.user)
+    insumo = get_object_or_404(Insumo, pk=insumo_id, activo=True)
+    stock = InventarioTrabajador.objects.filter(trabajador=trabajador, insumo=insumo).first()
+    if SolicitudReposicion.objects.filter(trabajador=trabajador, insumo=insumo, estado="pendiente").exists():
+        messages.info(request, "Ya existe una solicitud pendiente para este producto.")
+        return redirect("mi_inventario_trabajador")
+    cantidad = None
+    raw = (request.POST.get("cantidad_sugerida") or "").strip()
+    if raw:
+        try: cantidad = convertir_a_base(insumo, raw, request.POST.get("unidad", "base"))
+        except ValueError as exc:
+            messages.error(request, str(exc)); return redirect("mi_inventario_trabajador")
+    solicitud = SolicitudReposicion.objects.create(
+        trabajador=trabajador, insumo=insumo, stock_al_solicitar=Decimal(stock.stock if stock else 0),
+        cantidad_sugerida=cantidad, observacion=(request.POST.get("observacion") or "").strip(),
+    )
+    _notificar_admins("📦 Solicitud de reposición", f"{trabajador} solicitó reposición de {insumo.nombre}. Stock actual: {_cantidad_texto(insumo, solicitud.stock_al_solicitar)}.", "/dashboard/inventario/", enviar_push=True)
+    messages.success(request, "Solicitud enviada a administración.")
+    return redirect("mi_inventario_trabajador")
+
+
+@login_required
+@require_http_methods(["POST"])
+def solicitud_reposicion_atender_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    solicitud = get_object_or_404(SolicitudReposicion, pk=pk)
+    solicitud.estado = "atendida"
+    solicitud.atendida_en = timezone.now()
+    solicitud.atendida_por = request.user
+    solicitud.save(update_fields=["estado", "atendida_en", "atendida_por"])
+    messages.success(request, "Solicitud marcada como atendida.")
+    return redirect("inventario")
+
+
+@login_required
+def inventario_productos_criticos_pdf_view(request):
+    if not es_admin(request.user): return render(request, "dashboard/no_autorizado.html", status=403)
+    filas = [["Producto", "Categoría", "Stock", "Mínimo", "Estado"]]
+    for i in Insumo.objects.filter(activo=True).order_by("nombre"):
+        if i.stock <= i.stock_minimo:
+            filas.append([i.nombre, i.get_categoria_display(), _cantidad_texto(i, i.stock), _cantidad_texto(i, i.stock_minimo), "SIN STOCK" if i.sin_stock else "STOCK BAJO"])
+    return _pdf_inventario_response("Productos críticos JVAQUA", filas, "productos_criticos.pdf")
+
+
+@login_required
+def inventario_consumo_trabajadores_pdf_view(request):
+    if not es_admin(request.user): return render(request, "dashboard/no_autorizado.html", status=403)
+    filas = [["Trabajador", "Producto", "Consumo", "Costo"]]
+    qs = MovimientoInventario.objects.filter(tipo="mantenimiento").values("trabajador__user__first_name", "trabajador__user__last_name", "trabajador__user__username", "insumo__nombre", "insumo__unidad_base").annotate(cantidad=Sum("cantidad"), costo=Sum("total_costo")).order_by("trabajador__user__username", "insumo__nombre")
+    for x in qs:
+        nombre = (f"{x['trabajador__user__first_name']} {x['trabajador__user__last_name']}").strip() or x["trabajador__user__username"] or "—"
+        unidad = "kg" if x["insumo__unidad_base"] == "kg" else "unid."
+        filas.append([nombre, x["insumo__nombre"], f"{Decimal(x['cantidad'] or 0):.3f} {unidad}", f"${Decimal(x['costo'] or 0):,.2f}"])
+    return _pdf_inventario_response("Consumo por trabajador JVAQUA", filas, "consumo_por_trabajador.pdf")
+
+
+@login_required
+def inventario_consumo_contratos_pdf_view(request):
+    if not es_admin(request.user): return render(request, "dashboard/no_autorizado.html", status=403)
+    filas = [["Cliente / contrato", "Producto", "Consumo", "Costo"]]
+    qs = MovimientoInventario.objects.filter(tipo="mantenimiento", mantenimiento__isnull=False).values("mantenimiento__cliente__nombre", "insumo__nombre", "insumo__unidad_base").annotate(cantidad=Sum("cantidad"), costo=Sum("total_costo")).order_by("mantenimiento__cliente__nombre", "insumo__nombre")
+    for x in qs:
+        unidad = "kg" if x["insumo__unidad_base"] == "kg" else "unid."
+        filas.append([x["mantenimiento__cliente__nombre"] or "—", x["insumo__nombre"], f"{Decimal(x['cantidad'] or 0):.3f} {unidad}", f"${Decimal(x['costo'] or 0):,.2f}"])
+    return _pdf_inventario_response("Consumo por contrato JVAQUA", filas, "consumo_por_contrato.pdf")
+
+
 @login_required
 def inventario_historial_view(request):
     if not es_admin(request.user):
@@ -5046,11 +5365,14 @@ def inventario_ventas_pdf_view(request):
 @login_required
 def inventario_compras_pdf_view(request):
     if not es_admin(request.user): return render(request, "dashboard/no_autorizado.html", status=403)
-    filas = [["Fecha", "Producto", "Cantidad", "Costo/base", "Total", "Proveedor"]]
+    filas = [["Fecha", "Producto", "Cantidad", "Costo/base", "Total", "Proveedor", "Lote / vencimiento"]]
     total = Decimal("0.00")
     for c in CompraInsumo.objects.select_related("insumo").order_by("-creado_en")[:1000]:
         total += Decimal(c.total or 0)
-        filas.append([c.fecha.strftime("%d/%m/%Y"), c.insumo.nombre, _cantidad_texto(c.insumo, c.cantidad), f"${c.costo_unitario:,.4f}", f"${c.total:,.2f}", c.proveedor or "—"])
+        lote_txt = c.lote or "—"
+        if c.fecha_vencimiento:
+            lote_txt += f" · {c.fecha_vencimiento.strftime('%d/%m/%Y')}"
+        filas.append([c.fecha.strftime("%d/%m/%Y"), c.insumo.nombre, _cantidad_texto(c.insumo, c.cantidad), f"${c.costo_unitario:,.4f}", f"${c.total:,.2f}", c.proveedor or "—", lote_txt])
     return _pdf_inventario_response("Compras de Inventario JVAQUA", filas, "compras_inventario.pdf", f"Total compras registradas: ${total:,.2f}")
 
 

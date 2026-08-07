@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.3.7 — Centro Logístico
+
+- Catálogo maestro de productos administrable directamente desde el ERP.
+- Crear, editar, activar, desactivar y eliminar productos con protección del historial.
+- Ficha completa por producto con código, categoría, marca, modelo, descripción, stock, costos y usos permitidos.
+- Códigos internos automáticos para productos existentes y nuevos.
+- Gestión de presentaciones comerciales desde la ficha del producto.
+- Bitácora/Kardex visual por producto con compras, entregas, consumos, devoluciones, ventas y ajustes.
+- Centro Logístico con indicadores de valor de inventario, compras, ventas, consumo y stock crítico.
+- Registro opcional de lote, fabricación y vencimiento en compras.
+- Página independiente Mi Inventario para trabajadores, optimizada para móvil y en modo consulta.
+- Visualización de stock disponible, consumo del mes, última entrega y movimientos personales.
+- Solicitudes de reposición sin modificar existencias y alertas al administrador.
+- Reportes PDF de productos críticos, consumo por trabajador y consumo por contrato.
+- Ventas de insumos conservadas e integradas con el nuevo Centro Logístico.
+
+## 1.3.6 — Mantenimiento Unificado
+
+- Inspección, limpieza, productos utilizados, fotografías y validación se registran desde un solo flujo.
+- Eliminado el bloque duplicado de tratamiento químico; el consumo se registra desde Inventario.
+- Se mantienen las tres fotografías obligatorias y el guardado como borrador.
+
 ## 1.3.5 — Inventario Inteligente
 
 - Nuevo inventario general con stock decimal y unidad base en kg para químicos.

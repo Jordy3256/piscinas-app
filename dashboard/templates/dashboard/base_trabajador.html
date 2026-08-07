@@ -455,7 +455,7 @@
 
     .bottom-nav-links {
       display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
+      grid-template-columns: repeat(6, minmax(0, 1fr));
       gap: 5px;
     }
 
@@ -724,6 +724,12 @@
              href="{% url 'calculadora_quimicos' %}">
             <i class="bi bi-calculator-fill"></i>
             <span>Calculadora</span>
+          </a>
+
+          <a class="nav-item-app {% if '/dashboard/mi-inventario/' in request.path %}active{% endif %}"
+             href="{% url 'mi_inventario_trabajador' %}">
+            <i class="bi bi-box-seam-fill"></i>
+            <span>Inventario</span>
           </a>
 
           <a class="nav-item-app {% if '/dashboard/mi-cuenta/' in request.path %}active{% endif %}"

@@ -8,6 +8,7 @@ from .models import (
     MovimientoInventario,
     PresentacionInsumo,
     VentaInsumo,
+    SolicitudReposicion,
 )
 
 
@@ -50,3 +51,5 @@ class MovimientoInventarioAdmin(admin.ModelAdmin):
 admin.site.register(CompraInsumo)
 admin.site.register(VentaInsumo)
 admin.site.register(EntradaStock)
+
+admin.site.register(SolicitudReposicion)
