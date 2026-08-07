@@ -21,6 +21,7 @@ class Trabajador(models.Model):
         ("personalizado", "Personalizado"),
     ]
     PROGRAMACION_PAGO_CHOICES = [
+        ("fin_periodo", "Al finalizar el período de servicio"),
         ("fecha_contratos", "Mismas fechas de cobro de los contratos"),
         ("dia_fijo", "Día fijo mensual"),
         ("rango", "Rango de días"),
@@ -39,6 +40,10 @@ class Trabajador(models.Model):
     dia_pago_desde = models.PositiveSmallIntegerField(null=True, blank=True)
     dia_pago_hasta = models.PositiveSmallIntegerField(null=True, blank=True)
     segundo_dia_pago = models.PositiveSmallIntegerField(null=True, blank=True)
+    dias_despues_fin_periodo = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Días adicionales después del cierre del período de servicio para programar el pago.",
+    )
     observaciones_pago = models.TextField(blank=True, default="")
     fecha_ingreso = models.DateField(null=True, blank=True)
 

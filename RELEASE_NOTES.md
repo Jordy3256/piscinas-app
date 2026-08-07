@@ -1,28 +1,18 @@
-# JVAQUA ERP — Sprint 2.2.1
+# JVAQUA ERP — Programación de nómina por período de servicio
 
-## Operativo
-- El cierre del mantenimiento exige únicamente las tres fotografías obligatorias.
-- Checklist, inspección y tratamiento químico quedan opcionales.
-- Registro parcial como borrador.
-- Observaciones rápidas para estado del agua, equipos y recomendaciones.
+## Nueva función
 
-## Nómina y trabajadores
-- Configuración de pago individual por trabajador.
-- Modalidades: fin de mes, adelantado, semanal, quincenal, por visita, por contrato y personalizado.
-- Programación por fechas de contratos, día fijo o rango de días.
-- Pago único, dos pagos, parciales o personalizado.
-- Registro de anticipos con egreso automático.
-- Descuento automático y progresivo de anticipos al generar la nómina.
+Se agregó la opción **Al finalizar el período de servicio** dentro de la programación de pago del trabajador.
 
-## App del trabajador
-- Nueva sección **Mi Cuenta**.
-- Resumen generado, pagado, pendiente y próximo pago.
-- Desglose por contrato.
-- Historial de pagos consolidados y anticipos.
-- Contratos asignados y estadísticas mensuales.
-- Descarga de comprobantes propios con control de acceso.
+La fecha de pago se calcula usando la fecha histórica de finalización del servicio de cada obligación. También puede configurarse un número de días adicionales después del cierre.
 
-## Migraciones
-- `mantenimientos/0008_mantenimiento_observaciones_rapidas.py`
-- `trabajadores/0003_configuracion_pago_trabajador.py`
-- `finanzas/0012_anticipotrabajador.py`
+## Compatibilidad
+
+- Nómina administrativa.
+- Mi Cuenta del trabajador.
+- Alertas y Centro de Acciones que utilizan la fecha programada de nómina.
+- PDFs y comprobantes que muestran la fecha de pago de la obligación.
+
+## Protección del historial
+
+Solo se reprograman obligaciones pendientes sin pagos. Los registros pagados, parciales e históricos conservan sus fechas originales.

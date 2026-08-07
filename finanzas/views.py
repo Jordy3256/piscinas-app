@@ -554,8 +554,11 @@ def nomina_lista(request):
     return render(request,"finanzas/nomina_lista.html",{"obligaciones":obligaciones,"resumen":list(resumen.values()),"total":total,"pagado":pagado,"pendiente":pendiente,"anio":anio,"mes":mes,"meses":MESES,"trabajadores":Trabajador.objects.filter(activo=True).select_related("user"),"trabajador_id":trabajador,"estado":estado,"estados":ObligacionTrabajador.ESTADO_CHOICES,"lotes":lotes,"es_admin":True})
 
 def _fecha_pago_programada_contrato(contrato, anio, mes):
-    """Respeta primero la configuración del trabajador; si no existe, usa el cobro del contrato."""
+    """Calcula la fecha de nómina según la regla configurada para el trabajador."""
     trabajador = contrato.tecnico_designado
+    periodo_inicio, periodo_fin = contrato.periodo_servicio(anio, mes)
+    if trabajador and trabajador.programacion_pago_nomina == "fin_periodo":
+        return periodo_fin + timedelta(days=trabajador.dias_despues_fin_periodo or 0)
     if trabajador and trabajador.programacion_pago_nomina == "dia_fijo" and trabajador.dia_pago_nomina:
         return date(anio, mes, min(trabajador.dia_pago_nomina, monthrange(anio, mes)[1]))
     if trabajador and trabajador.programacion_pago_nomina == "rango" and trabajador.dia_pago_hasta:
@@ -738,8 +741,36 @@ def trabajador_configuracion_pago(request, trabajador_pk):
             trabajador.dia_pago_desde = entero_dia("dia_pago_desde")
             trabajador.dia_pago_hasta = entero_dia("dia_pago_hasta")
             trabajador.segundo_dia_pago = entero_dia("segundo_dia_pago")
+            try:
+                trabajador.dias_despues_fin_periodo = max(
+                    0,
+                    min(90, int(request.POST.get("dias_despues_fin_periodo") or 0)),
+                )
+            except (TypeError, ValueError):
+                trabajador.dias_despues_fin_periodo = 0
             trabajador.observaciones_pago = request.POST.get("observaciones_pago", "").strip()
             trabajador.save()
+
+            # Reprograma solamente obligaciones pendientes y sin pagos, conservando el historial pagado.
+            obligaciones_pendientes = trabajador.obligaciones_pago.filter(
+                estado=ObligacionTrabajador.ESTADO_PENDIENTE,
+                pagos__isnull=True,
+            ).select_related("contrato").distinct()
+            for obligacion in obligaciones_pendientes:
+                if trabajador.programacion_pago_nomina == "fin_periodo" and obligacion.periodo_servicio_fin:
+                    nueva_fecha = obligacion.periodo_servicio_fin + timedelta(
+                        days=trabajador.dias_despues_fin_periodo or 0
+                    )
+                else:
+                    nueva_fecha = _fecha_pago_programada_contrato(
+                        obligacion.contrato,
+                        obligacion.periodo_anio,
+                        obligacion.periodo_mes,
+                    )
+                if obligacion.fecha_pago_programada != nueva_fecha:
+                    obligacion.fecha_pago_programada = nueva_fecha
+                    obligacion.save(update_fields=["fecha_pago_programada", "actualizada_en"])
+
             messages.success(request, "Configuración de pago actualizada correctamente.")
         return redirect("finanzas_trabajador_configuracion_pago", trabajador_pk=trabajador.pk)
     anticipos = trabajador.anticipos.select_related("egreso").all()[:30]
