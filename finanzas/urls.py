@@ -8,6 +8,7 @@ urlpatterns = [
     path("clientes/<int:cliente_pk>/estado-cuenta.pdf", views.cliente_estado_cuenta_pdf, name="finanzas_cliente_estado_cuenta_pdf"),
     path("nomina/", views.nomina_lista, name="finanzas_nomina"),
     path("nomina/generar/", views.nomina_generar, name="finanzas_nomina_generar"),
+    path("nomina/trabajador/<int:trabajador_pk>/configuracion/", views.trabajador_configuracion_pago, name="finanzas_trabajador_configuracion_pago"),
     path("nomina/trabajador/<int:trabajador_pk>/pagar/", views.nomina_pago_consolidado, name="finanzas_nomina_pago_consolidado"),
     path("nomina/pagos-consolidados/<int:lote_pk>/comprobante.pdf", views.nomina_pago_consolidado_pdf, name="finanzas_nomina_pago_consolidado_pdf"),
     path("nomina/trabajador/<int:trabajador_pk>/pdf/", views.nomina_trabajador_pdf, name="finanzas_nomina_trabajador_pdf"),

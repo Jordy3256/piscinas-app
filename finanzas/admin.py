@@ -46,7 +46,7 @@ class PagoFacturaAdmin(admin.ModelAdmin):
     search_fields = ("factura__numero", "factura__cliente__nombre", "referencia")
     readonly_fields = ("ingreso", "creado_en", "actualizado_en")
 
-from .models import ObligacionTrabajador, PagoTrabajador, LotePagoTrabajador
+from .models import ObligacionTrabajador, PagoTrabajador, LotePagoTrabajador, AnticipoTrabajador
 
 
 @admin.register(ObligacionTrabajador)
@@ -69,4 +69,12 @@ class LotePagoTrabajadorAdmin(admin.ModelAdmin):
     list_display = ("fecha", "trabajador", "periodo_label", "monto", "metodo_pago", "activo")
     list_filter = ("activo", "metodo_pago", "periodo_anio", "periodo_mes", "fecha")
     search_fields = ("trabajador__user__username", "trabajador__user__first_name", "trabajador__user__last_name", "referencia")
+    readonly_fields = ("egreso", "creado_en")
+
+
+@admin.register(AnticipoTrabajador)
+class AnticipoTrabajadorAdmin(admin.ModelAdmin):
+    list_display = ("fecha", "trabajador", "periodo_label", "monto", "descontado")
+    list_filter = ("descontado", "periodo_anio", "periodo_mes", "fecha")
+    search_fields = ("trabajador__user__username", "trabajador__user__first_name", "trabajador__user__last_name")
     readonly_fields = ("egreso", "creado_en")

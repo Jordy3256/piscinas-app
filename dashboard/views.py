@@ -41,6 +41,9 @@ from finanzas.models import (
     Factura,
     FacturaItem,
     ObligacionTrabajador,
+    PagoTrabajador,
+    LotePagoTrabajador,
+    AnticipoTrabajador,
 )
 from clientes.models import Cliente
 from contratos.models import Contrato
@@ -2814,7 +2817,13 @@ def mantenimiento_detalle_view(request, pk):
             checklist.filtro_novedad = request.POST.get("filtro_novedad", "").strip()
             checklist.nivel_agua = request.POST.get("nivel_agua", "")
             checklist.save()
-            messages.success(request, "Checklist guardado correctamente.")
+            mantenimiento.estado_agua_rapido = request.POST.get("estado_agua_rapido", "")
+            mantenimiento.equipo_rapido = request.POST.get("equipo_rapido", "")
+            mantenimiento.recomendaciones_rapidas = request.POST.getlist("recomendaciones_rapidas")
+            mantenimiento.observaciones = request.POST.get("observaciones", mantenimiento.observaciones).strip()
+            mantenimiento.borrador_guardado = True
+            mantenimiento.save(update_fields=["estado_agua_rapido", "equipo_rapido", "recomendaciones_rapidas", "observaciones", "borrador_guardado"])
+            messages.success(request, "Registro guardado como borrador. Puedes completarlo más tarde.")
             return redirect(safe_return_url())
 
         if accion == "marcar_realizado":
@@ -2824,10 +2833,6 @@ def mantenimiento_detalle_view(request, pk):
             }
             cantidad_fotos_requeridas = len(fotos_por_nombre_validacion)
 
-            if not checklist.completo():
-                messages.error(request, "Debes completar la limpieza y la inspección antes de cerrar el mantenimiento.")
-                return redirect(safe_return_url())
-
             if cantidad_fotos_requeridas < 3:
                 messages.error(
                     request,
@@ -2836,7 +2841,8 @@ def mantenimiento_detalle_view(request, pk):
                 return redirect(safe_return_url())
 
             mantenimiento.estado = "realizado"
-            mantenimiento.save(update_fields=["estado"])
+            mantenimiento.borrador_guardado = False
+            mantenimiento.save(update_fields=["estado", "borrador_guardado"])
 
             actor = request.user.username
             _notificar_admins(
@@ -3117,7 +3123,7 @@ def mantenimiento_detalle_view(request, pk):
         (checklist_completados / checklist_total) * 100
     )
 
-    puede_cerrar = cantidad_fotos == 3 and checklist_completo
+    puede_cerrar = cantidad_fotos == 3
     puede_subir_fotos = cantidad_fotos < 3 and not esta_realizado
 
     foto_inicio = fotos_por_nombre.get("Inicio de Mantenimiento")
@@ -3151,8 +3157,54 @@ def mantenimiento_detalle_view(request, pk):
             "checklist_completados": checklist_completados,
             "checklist_total": checklist_total,
             "checklist_porcentaje": checklist_porcentaje,
+            "recomendaciones_opciones": [("cambio_arena", "Cambio de arena recomendado"), ("mantenimiento_bomba", "Mantenimiento de bomba recomendado"), ("nivel_agua", "Revisar nivel de agua"), ("dosificador", "Revisar dosificador")],
         },
     )
+
+
+@login_required
+def mi_cuenta_trabajador_view(request):
+    if not es_trabajador(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    trabajador = get_object_or_404(Trabajador.objects.select_related("user"), user=request.user)
+    hoy = timezone.localdate()
+    try:
+        anio = int(request.GET.get("anio") or hoy.year)
+        mes = int(request.GET.get("mes") or hoy.month)
+        if mes < 1 or mes > 12:
+            raise ValueError
+    except (TypeError, ValueError):
+        anio, mes = hoy.year, hoy.month
+
+    obligaciones = list(
+        ObligacionTrabajador.objects.filter(trabajador=trabajador, periodo_anio=anio, periodo_mes=mes)
+        .exclude(estado=ObligacionTrabajador.ESTADO_ANULADO)
+        .select_related("contrato__cliente").prefetch_related("pagos")
+        .order_by("fecha_pago_programada", "id")
+    )
+    generado = sum((o.valor_acordado for o in obligaciones), Decimal("0.00"))
+    pagado = sum((o.monto_pagado for o in obligaciones), Decimal("0.00"))
+    pendiente = sum((o.saldo for o in obligaciones), Decimal("0.00"))
+    anticipos = list(AnticipoTrabajador.objects.filter(trabajador=trabajador).order_by("-fecha", "-id")[:30])
+    anticipos_pendientes = sum((a.monto for a in anticipos if not a.descontado), Decimal("0.00"))
+    proximas = [o.fecha_pago_programada for o in obligaciones if o.saldo > 0 and o.fecha_pago_programada]
+    proximo_pago = min(proximas) if proximas else None
+    contratos = list(Contrato.objects.filter(tecnico_designado=trabajador, activo=True).select_related("cliente").order_by("cliente__nombre"))
+    mantenimientos_mes = Mantenimiento.objects.filter(trabajadores=trabajador, fecha__year=anio, fecha__month=mes)
+    realizados_mes = mantenimientos_mes.filter(estado="realizado").count()
+    pendientes_mes = mantenimientos_mes.filter(estado="pendiente").count()
+    pagos_recientes = list(PagoTrabajador.objects.filter(obligacion__trabajador=trabajador, activo=True).select_related("obligacion__contrato__cliente").order_by("-fecha", "-id")[:30])
+    lotes = list(LotePagoTrabajador.objects.filter(trabajador=trabajador, activo=True).order_by("-fecha", "-id")[:20])
+    return render(request, "dashboard/mi_cuenta_trabajador.html", {
+        "trabajador": trabajador, "anio": anio, "mes": mes, "obligaciones": obligaciones,
+        "generado": generado, "pagado": pagado, "pendiente": pendiente,
+        "anticipos": anticipos, "anticipos_pendientes": anticipos_pendientes,
+        "proximo_pago": proximo_pago, "contratos": contratos,
+        "realizados_mes": realizados_mes, "pendientes_mes": pendientes_mes,
+        "pagos_recientes": pagos_recientes, "lotes": lotes,
+        "VAPID_PUBLIC_KEY": getattr(settings, "VAPID_PUBLIC_KEY", ""),
+        "meses": [(1,"Enero"),(2,"Febrero"),(3,"Marzo"),(4,"Abril"),(5,"Mayo"),(6,"Junio"),(7,"Julio"),(8,"Agosto"),(9,"Septiembre"),(10,"Octubre"),(11,"Noviembre"),(12,"Diciembre")],
+    })
 
 
 @login_required

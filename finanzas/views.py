@@ -1,4 +1,5 @@
 from calendar import monthrange
+from calendar import monthrange
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -15,7 +16,7 @@ from django.urls import reverse
 from django.utils.text import slugify
 
 from .forms import EgresoForm, IngresoForm, PagoFacturaForm, PagoTrabajadorForm, PagoConsolidadoTrabajadorForm
-from .models import Egreso, Factura, Ingreso, PagoFactura, ObligacionTrabajador, PagoTrabajador, LotePagoTrabajador
+from .models import Egreso, Factura, Ingreso, PagoFactura, ObligacionTrabajador, PagoTrabajador, LotePagoTrabajador, AnticipoTrabajador
 from clientes.models import Cliente
 from contratos.models import Contrato
 
@@ -553,7 +554,12 @@ def nomina_lista(request):
     return render(request,"finanzas/nomina_lista.html",{"obligaciones":obligaciones,"resumen":list(resumen.values()),"total":total,"pagado":pagado,"pendiente":pendiente,"anio":anio,"mes":mes,"meses":MESES,"trabajadores":Trabajador.objects.filter(activo=True).select_related("user"),"trabajador_id":trabajador,"estado":estado,"estados":ObligacionTrabajador.ESTADO_CHOICES,"lotes":lotes,"es_admin":True})
 
 def _fecha_pago_programada_contrato(contrato, anio, mes):
-    """Usa la misma fecha de vencimiento/cobro de la factura del contrato."""
+    """Respeta primero la configuración del trabajador; si no existe, usa el cobro del contrato."""
+    trabajador = contrato.tecnico_designado
+    if trabajador and trabajador.programacion_pago_nomina == "dia_fijo" and trabajador.dia_pago_nomina:
+        return date(anio, mes, min(trabajador.dia_pago_nomina, monthrange(anio, mes)[1]))
+    if trabajador and trabajador.programacion_pago_nomina == "rango" and trabajador.dia_pago_hasta:
+        return date(anio, mes, min(trabajador.dia_pago_hasta, monthrange(anio, mes)[1]))
     factura = (
         Factura.objects
         .filter(contrato=contrato, periodo_anio=anio, periodo_mes=mes)
@@ -598,7 +604,67 @@ def nomina_generar(request):
             obligacion.fecha_pago_programada = fecha_programada
             obligacion.save(update_fields=["fecha_pago_programada", "actualizada_en"])
         creadas += int(created); omitidas += int(not created)
-    messages.success(request,f"Nómina generada: {creadas} obligaciones nuevas, {omitidas} ya existentes y {sin_configurar} contratos sin técnico o valor configurado.")
+
+    # Los anticipos pendientes del periodo se descuentan automáticamente de la nómina
+    # sin crear un segundo egreso: se reutiliza el egreso generado al registrar el anticipo.
+    anticipos_aplicados = 0
+    for anticipo in AnticipoTrabajador.objects.filter(
+        periodo_anio=anio, periodo_mes=mes, descontado=False
+    ).select_related("trabajador", "egreso"):
+        obligaciones_trabajador = list(
+            ObligacionTrabajador.objects.filter(
+                trabajador=anticipo.trabajador,
+                periodo_anio=anio,
+                periodo_mes=mes,
+            )
+            .exclude(estado=ObligacionTrabajador.ESTADO_ANULADO)
+            .prefetch_related("pagos")
+            .order_by("fecha_pago_programada", "id")
+        )
+        restante = anticipo.saldo_pendiente
+        if not obligaciones_trabajador or restante <= 0:
+            continue
+        monto_aplicar = min(restante, sum((o.saldo for o in obligaciones_trabajador), Decimal("0.00")))
+        if monto_aplicar <= 0:
+            continue
+        with transaction.atomic():
+            lote = LotePagoTrabajador.objects.create(
+                trabajador=anticipo.trabajador,
+                periodo_anio=anio,
+                periodo_mes=mes,
+                monto=monto_aplicar,
+                fecha=anticipo.fecha,
+                metodo_pago="transferencia",
+                referencia=f"ANT-{anticipo.pk}",
+                observaciones=f"Descuento automático del anticipo #{anticipo.pk}",
+                egreso=anticipo.egreso,
+                creado_por=anticipo.creado_por,
+            )
+            for obligacion in obligaciones_trabajador:
+                if restante <= 0:
+                    break
+                aplicado = min(restante, obligacion.saldo)
+                if aplicado <= 0:
+                    continue
+                PagoTrabajador.objects.create(
+                    lote=lote,
+                    obligacion=obligacion,
+                    monto=aplicado,
+                    fecha=anticipo.fecha,
+                    metodo_pago="transferencia",
+                    referencia=f"ANT-{anticipo.pk}",
+                    observaciones=f"Anticipo #{anticipo.pk} descontado de la nómina",
+                    creado_por=anticipo.creado_por,
+                )
+                restante -= aplicado
+            aplicado_total = monto_aplicar - restante
+            if aplicado_total > 0:
+                anticipo.monto_descontado += aplicado_total
+                anticipo.descontado = anticipo.monto_descontado >= anticipo.monto
+                anticipo.fecha_descuento = timezone.localdate() if anticipo.descontado else None
+                anticipo.save(update_fields=["monto_descontado", "descontado", "fecha_descuento"])
+                anticipos_aplicados += 1
+    messages.success(request,f"Nómina generada: {creadas} obligaciones nuevas, {omitidas} ya existentes, {sin_configurar} contratos sin técnico o valor configurado y {anticipos_aplicados} anticipos descontados.")
     return redirect(f"/dashboard/finanzas/nomina/?anio={anio}&mes={mes}")
 
 def _nombre_trabajador(trabajador):
@@ -613,6 +679,63 @@ def _pie_pagina(canvas, doc):
     canvas.drawString(18 * mm, 12 * mm, "JVAQUA - Resumen de nómina operativa")
     canvas.drawRightString(192 * mm, 12 * mm, f"Página {doc.page}")
     canvas.restoreState()
+
+
+
+@login_required
+def trabajador_configuracion_pago(request, trabajador_pk):
+    if not _es_admin(request.user):
+        return _denegado(request)
+    from trabajadores.models import Trabajador
+    trabajador = get_object_or_404(Trabajador.objects.select_related("user"), pk=trabajador_pk)
+    hoy = timezone.localdate()
+    if request.method == "POST":
+        accion = request.POST.get("accion", "guardar")
+        if accion == "anticipo":
+            try:
+                monto = Decimal(request.POST.get("monto_anticipo", "0"))
+                if monto <= 0:
+                    raise ValueError
+                anticipo = AnticipoTrabajador.objects.create(
+                    trabajador=trabajador,
+                    monto=monto,
+                    fecha=request.POST.get("fecha_anticipo") or hoy,
+                    periodo_anio=int(request.POST.get("periodo_anio") or hoy.year),
+                    periodo_mes=int(request.POST.get("periodo_mes") or hoy.month),
+                    observaciones=request.POST.get("observaciones_anticipo", "").strip(),
+                    creado_por=request.user,
+                )
+                anticipo.crear_egreso()
+                messages.success(request, f"Anticipo de ${monto:.2f} registrado para {trabajador}.")
+            except (ValueError, TypeError):
+                messages.error(request, "El valor del anticipo no es válido.")
+        else:
+            trabajador.forma_pago_nomina = request.POST.get("forma_pago_nomina", "fin_mes")
+            trabajador.programacion_pago_nomina = request.POST.get("programacion_pago_nomina", "fecha_contratos")
+            trabajador.modalidad_pago_nomina = request.POST.get("modalidad_pago_nomina", "unico")
+            def entero_dia(nombre):
+                valor = request.POST.get(nombre, "").strip()
+                if not valor:
+                    return None
+                try:
+                    return max(1, min(31, int(valor)))
+                except ValueError:
+                    return None
+            trabajador.dia_pago_nomina = entero_dia("dia_pago_nomina")
+            trabajador.dia_pago_desde = entero_dia("dia_pago_desde")
+            trabajador.dia_pago_hasta = entero_dia("dia_pago_hasta")
+            trabajador.segundo_dia_pago = entero_dia("segundo_dia_pago")
+            trabajador.observaciones_pago = request.POST.get("observaciones_pago", "").strip()
+            trabajador.save()
+            messages.success(request, "Configuración de pago actualizada correctamente.")
+        return redirect("finanzas_trabajador_configuracion_pago", trabajador_pk=trabajador.pk)
+    anticipos = trabajador.anticipos.select_related("egreso").all()[:30]
+    return render(request, "finanzas/trabajador_configuracion_pago.html", {
+        "trabajador": trabajador,
+        "anticipos": anticipos,
+        "hoy": hoy,
+        "es_admin": True,
+    })
 
 
 @login_required
@@ -669,9 +792,10 @@ def nomina_pago_consolidado(request, trabajador_pk):
 
 @login_required
 def nomina_pago_consolidado_pdf(request, lote_pk):
-    if not _es_admin(request.user):
-        return _denegado(request)
     lote = get_object_or_404(LotePagoTrabajador.objects.select_related("trabajador__user"), pk=lote_pk, activo=True)
+    es_propietario = hasattr(request.user, "trabajador") and request.user.trabajador.pk == lote.trabajador_id
+    if not _es_admin(request.user) and not es_propietario:
+        return _denegado(request)
     pagos = lote.distribuciones.filter(activo=True).select_related("obligacion__contrato__cliente")
     response = HttpResponse(content_type="application/pdf")
     response["Content-Disposition"] = f'attachment; filename="pago-consolidado-{lote.pk}.pdf"'

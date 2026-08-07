@@ -448,6 +448,49 @@ class PagoFactura(models.Model):
         self.save(update_fields=["activo", "actualizado_en"])
 
 
+class AnticipoTrabajador(models.Model):
+    trabajador = models.ForeignKey("trabajadores.Trabajador", on_delete=models.PROTECT, related_name="anticipos")
+    monto = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))])
+    fecha = models.DateField(default=date.today, db_index=True)
+    periodo_anio = models.PositiveIntegerField(db_index=True)
+    periodo_mes = models.PositiveIntegerField(db_index=True)
+    descontado = models.BooleanField(default=False, db_index=True)
+    monto_descontado = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    fecha_descuento = models.DateField(null=True, blank=True)
+    observaciones = models.TextField(blank=True, default="")
+    egreso = models.OneToOneField(Egreso, on_delete=models.SET_NULL, null=True, blank=True, related_name="anticipo_trabajador")
+    creado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="anticipos_trabajador_creados")
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-fecha", "-id"]
+        verbose_name = "Anticipo a trabajador"
+        verbose_name_plural = "Anticipos a trabajadores"
+
+    def __str__(self):
+        return f"Anticipo {self.trabajador} - ${self.monto}"
+
+    @property
+    def periodo_label(self):
+        return f"{self.periodo_mes:02d}/{self.periodo_anio}"
+
+    @property
+    def saldo_pendiente(self):
+        return max(self.monto - self.monto_descontado, Decimal("0.00"))
+
+    def crear_egreso(self):
+        if self.egreso_id:
+            return
+        self.egreso = Egreso.objects.create(
+            concepto=f"Anticipo a {self.trabajador} - {self.periodo_label}",
+            categoria="tecnicos", cantidad=1, costo_unitario=self.monto, total=self.monto,
+            monto_pagado=self.monto, estado=Egreso.ESTADO_PAGADO, fecha=self.fecha,
+            metodo_pago="transferencia", proveedor=str(self.trabajador),
+            observaciones=self.observaciones, creado_por=self.creado_por,
+        )
+        self.save(update_fields=["egreso"])
+
+
 class ObligacionTrabajador(models.Model):
     ESTADO_PENDIENTE = "pendiente"
     ESTADO_PARCIAL = "parcial"

@@ -37,6 +37,23 @@ class Mantenimiento(models.Model):
     )
     observaciones = models.TextField(blank=True)
 
+    ESTADO_AGUA_RAPIDO = [
+        ("", "Sin seleccionar"),
+        ("cristalina", "Agua cristalina"),
+        ("turbidez", "Ligera turbidez"),
+        ("verde", "Agua verde"),
+    ]
+    EQUIPO_RAPIDO = [
+        ("", "Sin seleccionar"),
+        ("correcto", "Todo funcionando correctamente"),
+        ("bomba_ruido", "Bomba con ruido"),
+        ("filtro_revision", "Filtro requiere revisión"),
+    ]
+    estado_agua_rapido = models.CharField(max_length=20, choices=ESTADO_AGUA_RAPIDO, blank=True, default="")
+    equipo_rapido = models.CharField(max_length=30, choices=EQUIPO_RAPIDO, blank=True, default="")
+    recomendaciones_rapidas = models.JSONField(default=list, blank=True)
+    borrador_guardado = models.BooleanField(default=False)
+
     def total_egresos(self):
         total = 0
 

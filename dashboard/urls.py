@@ -31,6 +31,7 @@ from .views import (
     home_view,
     dashboard_view,
     calculadora_quimicos_view,
+    mi_cuenta_trabajador_view,
 
     # Clientes y contratos
     cliente_list_view,
@@ -219,6 +220,7 @@ urlpatterns = [
         calculadora_quimicos_view,
         name="calculadora_quimicos",
     ),
+    path("mi-cuenta/", mi_cuenta_trabajador_view, name="mi_cuenta_trabajador"),
 
     # ======================
     # Clientes y contratos

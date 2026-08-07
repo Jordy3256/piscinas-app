@@ -668,7 +668,7 @@
   <div class="card-body">
     <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap mb-3">
       <div class="premium-card-title mb-0">
-        <i class="bi bi-ui-checks-grid"></i><span>Checklist del mantenimiento</span>
+        <i class="bi bi-ui-checks-grid"></i><span>Actividades realizadas (opcional)</span>
       </div>
       {% if checklist_completo %}
         <span class="badge bg-success">Completo</span>
@@ -677,14 +677,14 @@
       {% endif %}
     </div>
 
-    <div class="small text-muted mb-2">Progreso de limpieza e inspección</div>
+    <div class="small text-muted mb-2">Actividades registradas en esta visita</div>
     <div class="checklist-progress mb-4">
       <span style="width: {{ checklist_porcentaje }}%;"></span>
     </div>
 
     {% if esta_realizado %}
       <div class="alert alert-secondary mb-3">
-        El checklist está bloqueado porque el mantenimiento ya fue realizado.
+        Las actividades están bloqueadas porque el mantenimiento ya fue realizado.
       </div>
     {% endif %}
 
@@ -774,8 +774,18 @@
       </div>
 
       {% if not esta_realizado %}
-        <button class="btn btn-primary btn-lg w-100 mt-3" type="submit">
-          <i class="bi bi-save me-1"></i> Guardar checklist
+        
+<div class="mt-4 pt-3 border-top">
+  <h6 class="fw-bold mb-3">Observaciones rápidas <span class="badge bg-light text-secondary">Opcional</span></h6>
+  <div class="row g-3">
+    <div class="col-md-6"><label class="form-label">Estado del agua</label><select class="form-select" name="estado_agua_rapido"><option value="">Sin seleccionar</option><option value="cristalina" {% if m.estado_agua_rapido == 'cristalina' %}selected{% endif %}>Agua cristalina</option><option value="turbidez" {% if m.estado_agua_rapido == 'turbidez' %}selected{% endif %}>Ligera turbidez</option><option value="verde" {% if m.estado_agua_rapido == 'verde' %}selected{% endif %}>Agua verde</option></select></div>
+    <div class="col-md-6"><label class="form-label">Equipos</label><select class="form-select" name="equipo_rapido"><option value="">Sin seleccionar</option><option value="correcto" {% if m.equipo_rapido == 'correcto' %}selected{% endif %}>Todo funcionando correctamente</option><option value="bomba_ruido" {% if m.equipo_rapido == 'bomba_ruido' %}selected{% endif %}>Bomba con ruido</option><option value="filtro_revision" {% if m.equipo_rapido == 'filtro_revision' %}selected{% endif %}>Filtro requiere revisión</option></select></div>
+    <div class="col-12"><label class="form-label">Recomendaciones</label><div class="d-flex flex-wrap gap-2">{% for valor,texto in recomendaciones_opciones %}<label class="btn btn-outline-warning btn-sm"><input class="form-check-input me-1" type="checkbox" name="recomendaciones_rapidas" value="{{ valor }}" {% if valor in m.recomendaciones_rapidas %}checked{% endif %}>{{ texto }}</label>{% endfor %}</div></div>
+    <div class="col-12"><label class="form-label">Observaciones adicionales</label><textarea class="form-control" name="observaciones" rows="3" placeholder="Escribe una novedad o recomendación, si aplica.">{{ m.observaciones }}</textarea></div>
+  </div>
+</div>
+<button class="btn btn-primary btn-lg w-100 mt-3" type="submit">
+          <i class="bi bi-save me-1"></i> Guardar borrador
         </button>
       {% endif %}
     </form>
@@ -791,7 +801,7 @@
           <i class="bi bi-clipboard2-check"></i>
           <span>Validación de cierre y fotografías</span>
         </div>
-        <div class="small text-muted">Completa el checklist y carga las tres evidencias obligatorias desde este único panel.</div>
+        <div class="small text-muted">Para cerrar el mantenimiento solo debes cargar las tres evidencias fotográficas obligatorias.</div>
       </div>
       {% if puede_cerrar %}
         <span class="badge bg-success fs-6">Listo para cerrar</span>
