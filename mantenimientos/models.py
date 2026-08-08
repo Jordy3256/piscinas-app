@@ -76,7 +76,8 @@ class UsoInsumo(models.Model):
     UNIDAD_REGISTRO_CHOICES = [
         ("g", "Gramos"),
         ("kg", "Kilogramos"),
-        ("unidad", "Unidades"),
+        ("ml", "Mililitros"),
+        ("l", "Litros"),
     ]
 
     mantenimiento = models.ForeignKey(
@@ -122,6 +123,8 @@ class UsoInsumo(models.Model):
             return self.cantidad_ingresada
         if self.insumo.unidad_base == "kg" and self.cantidad < 1:
             return self.cantidad * 1000
+        if self.insumo.unidad_base == "l" and self.cantidad < 1:
+            return self.cantidad * 1000
         return self.cantidad
 
     @property
@@ -130,6 +133,8 @@ class UsoInsumo(models.Model):
             return self.unidad_registro
         if self.insumo.unidad_base == "kg" and self.cantidad < 1:
             return "g"
+        if self.insumo.unidad_base == "l" and self.cantidad < 1:
+            return "ml"
         return self.insumo.unidad_base
 
     def __str__(self):

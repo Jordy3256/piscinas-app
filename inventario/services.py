@@ -34,9 +34,14 @@ def convertir_a_base(insumo, cantidad, unidad="base", presentacion=None):
             return cantidad.quantize(Q3, rounding=ROUND_HALF_UP)
         raise ValueError("Para este producto utiliza gramos o kilogramos.")
 
-    if unidad not in ("unidad", "unidades", "base"):
-        raise ValueError("Este producto se controla por unidades.")
-    return cantidad.quantize(Q3, rounding=ROUND_HALF_UP)
+    if insumo.unidad_base == "l":
+        if unidad in ("ml", "mililitro", "mililitros"):
+            return (cantidad / Decimal("1000")).quantize(Q3, rounding=ROUND_HALF_UP)
+        if unidad in ("l", "lt", "litro", "litros", "base"):
+            return cantidad.quantize(Q3, rounding=ROUND_HALF_UP)
+        raise ValueError("Para este producto utiliza mililitros o litros.")
+
+    raise ValueError("La unidad base del producto no es válida. Usa kg o L.")
 
 
 def _costo_total(insumo, cantidad_base):

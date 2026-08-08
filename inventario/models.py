@@ -17,8 +17,8 @@ class Insumo(models.Model):
         ("otros", "Otros"),
     ]
     UNIDAD_CHOICES = [
-        ("kg", "Kilogramos"),
-        ("unidad", "Unidades"),
+        ("kg", "Kilogramos (kg)"),
+        ("l", "Litros (L)"),
     ]
 
     nombre = models.CharField(max_length=100)
@@ -57,7 +57,7 @@ class Insumo(models.Model):
 
     @property
     def unidad_corta(self):
-        return "kg" if self.unidad_base == "kg" else "unid."
+        return "kg" if self.unidad_base == "kg" else "L"
 
     class Meta:
         verbose_name = "Insumo"

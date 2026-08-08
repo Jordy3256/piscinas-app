@@ -4937,9 +4937,8 @@ def _inventario_valorizado():
 
 def _cantidad_texto(insumo, cantidad):
     cantidad = Decimal(cantidad or 0)
-    if insumo.unidad_base == "kg":
-        return f"{cantidad:.3f} kg"
-    return f"{cantidad:.0f} unid."
+    unidad = "kg" if insumo.unidad_base == "kg" else "L"
+    return f"{cantidad:.3f} {unidad}"
 
 
 @login_required
@@ -4980,8 +4979,12 @@ def inventario_view(request):
     por_trabajador = defaultdict(list)
     for inv in inventarios_trabajadores:
         por_trabajador[inv.trabajador].append(inv)
+    valor_asignado = Decimal("0.00")
+    productos_asignados = 0
     for trabajador, stocks in por_trabajador.items():
         valorizado = sum((Decimal(x.stock) * Decimal(x.insumo.costo or 0) for x in stocks), Decimal("0.00"))
+        valor_asignado += valorizado
+        productos_asignados += len(stocks)
         resumen_trabajadores.append({"trabajador": trabajador, "stocks": stocks, "valor": valorizado})
 
     return render(request, "dashboard/inventario.html", {
@@ -4994,6 +4997,8 @@ def inventario_view(request):
         "sin_stock": sin_stock,
         "stock_total_kg": stock_total_kg,
         "valor_inventario": _inventario_valorizado(),
+        "valor_asignado": valor_asignado,
+        "productos_asignados": productos_asignados,
         "total_ventas_mes": total_ventas_mes,
         "ganancia_mes": ganancia_mes,
         "total_compras_mes": total_compras_mes,
@@ -5248,9 +5253,16 @@ def inventario_productos_view(request):
         qs = qs.filter(categoria=categoria)
     if estado == "activos": qs = qs.filter(activo=True)
     elif estado == "inactivos": qs = qs.filter(activo=False)
+
+    productos = list(qs)
+    valor_total = Decimal("0.00")
+    for producto in productos:
+        producto.valor_inventario = (Decimal(producto.stock or 0) * Decimal(producto.costo or 0)).quantize(Decimal("0.01"))
+        valor_total += producto.valor_inventario
+
     return render(request, "dashboard/inventario_productos.html", {
-        "productos": qs, "q": q, "categoria": categoria, "estado": estado,
-        "categorias": Insumo.CATEGORIA_CHOICES, "es_admin": True,
+        "productos": productos, "q": q, "categoria": categoria, "estado": estado,
+        "categorias": Insumo.CATEGORIA_CHOICES, "valor_total_inventario": valor_total, "es_admin": True,
     })
 
 
@@ -5281,15 +5293,35 @@ def inventario_producto_editar_view(request, pk):
     insumo = get_object_or_404(Insumo, pk=pk)
     if request.method == "POST":
         try:
+            costo_anterior = Decimal(insumo.costo or 0)
+            unidad_anterior = insumo.unidad_base
             _guardar_producto_desde_post(insumo, request.POST)
+            if Decimal(insumo.costo or 0) != costo_anterior:
+                MovimientoInventario.objects.create(
+                    insumo=insumo, tipo="ajuste", cantidad=Decimal("0.000"),
+                    stock_anterior=insumo.stock, stock_resultante=insumo.stock,
+                    costo_unitario=insumo.costo or 0, total_costo=Decimal("0.00"), usuario=request.user,
+                    observacion=f"Ajuste de costo: ${costo_anterior:.4f} → ${Decimal(insumo.costo or 0):.4f} por {insumo.unidad_corta}.",
+                )
+            if unidad_anterior != insumo.unidad_base:
+                MovimientoInventario.objects.create(
+                    insumo=insumo, tipo="ajuste", cantidad=Decimal("0.000"),
+                    stock_anterior=insumo.stock, stock_resultante=insumo.stock,
+                    costo_unitario=insumo.costo or 0, total_costo=Decimal("0.00"), usuario=request.user,
+                    observacion=f"Unidad base actualizada: {unidad_anterior} → {insumo.unidad_base}.",
+                )
             _registrar_actividad(request.user, "Producto actualizado", f"Se actualizó {insumo.nombre} ({insumo.codigo}).", f"/dashboard/inventario/productos/{insumo.pk}/")
             messages.success(request, "Producto actualizado correctamente.")
             return redirect("inventario_producto_detalle", pk=insumo.pk)
         except Exception as exc:
             messages.error(request, str(exc))
+    ultimo_movimiento = MovimientoInventario.objects.filter(insumo=insumo).order_by("-creado_en").first()
+    ultimo_ajuste = MovimientoInventario.objects.filter(insumo=insumo, tipo="ajuste").order_by("-creado_en").first()
+    valor_stock = (Decimal(insumo.stock or 0) * Decimal(insumo.costo or 0)).quantize(Decimal("0.01"))
     return render(request, "dashboard/inventario_producto_form.html", {
         "producto": insumo, "modo": "editar", "categorias": Insumo.CATEGORIA_CHOICES,
-        "unidades": Insumo.UNIDAD_CHOICES, "es_admin": True,
+        "unidades": Insumo.UNIDAD_CHOICES, "valor_stock": valor_stock,
+        "ultimo_movimiento": ultimo_movimiento, "ultimo_ajuste": ultimo_ajuste, "es_admin": True,
     })
 
 
@@ -5304,11 +5336,26 @@ def inventario_producto_detalle_view(request, pk):
     consumo = MovimientoInventario.objects.filter(insumo=insumo, tipo="mantenimiento", fecha__gte=inicio).aggregate(c=Sum("cantidad"), costo=Sum("total_costo"))
     ventas = VentaInsumo.objects.filter(insumo=insumo, fecha__gte=inicio).aggregate(c=Sum("cantidad"), total=Sum("total"))
     ultima_compra = CompraInsumo.objects.filter(insumo=insumo).order_by("-creado_en").first()
+    ultima_venta = VentaInsumo.objects.filter(insumo=insumo).order_by("-creado_en").first()
+    ultimo_ajuste = MovimientoInventario.objects.filter(insumo=insumo, tipo="ajuste").order_by("-creado_en").first()
+    ultima_asignacion = MovimientoInventario.objects.filter(insumo=insumo, tipo="entrega").order_by("-creado_en").first()
+    ultimo_consumo = MovimientoInventario.objects.filter(insumo=insumo, tipo="mantenimiento").order_by("-creado_en").first()
+    asignado_total = sum((Decimal(x.stock or 0) for x in stocks), Decimal("0.000"))
+    disponible_bodega = Decimal(insumo.stock or 0)
+    stock_empresa = disponible_bodega + asignado_total
+    valor_bodega = (disponible_bodega * Decimal(insumo.costo or 0)).quantize(Decimal("0.01"))
+    valor_empresa = (stock_empresa * Decimal(insumo.costo or 0)).quantize(Decimal("0.01"))
+    margen_unitario = Decimal(insumo.precio or 0) - Decimal(insumo.costo or 0)
+    margen_porcentaje = ((margen_unitario / Decimal(insumo.precio)) * 100) if Decimal(insumo.precio or 0) > 0 else Decimal("0")
     return render(request, "dashboard/inventario_producto_detalle.html", {
         "producto": insumo, "movimientos": movimientos, "stocks_trabajadores": stocks,
         "consumo_mes": consumo.get("c") or Decimal("0"), "costo_consumo_mes": consumo.get("costo") or Decimal("0"),
         "ventas_mes": ventas.get("c") or Decimal("0"), "ventas_total_mes": ventas.get("total") or Decimal("0"),
-        "ultima_compra": ultima_compra, "valor_stock": Decimal(insumo.stock or 0) * Decimal(insumo.costo or 0), "es_admin": True,
+        "ultima_compra": ultima_compra, "ultima_venta": ultima_venta, "ultimo_ajuste": ultimo_ajuste,
+        "ultima_asignacion": ultima_asignacion, "ultimo_consumo": ultimo_consumo,
+        "asignado_total": asignado_total, "disponible_bodega": disponible_bodega, "stock_empresa": stock_empresa,
+        "valor_stock": valor_bodega, "valor_empresa": valor_empresa,
+        "margen_unitario": margen_unitario, "margen_porcentaje": margen_porcentaje, "es_admin": True,
     })
 
 
@@ -5373,6 +5420,41 @@ def inventario_producto_ajustar_stock_view(request, pk):
         f"/dashboard/inventario/productos/{insumo.pk}/",
     )
     messages.success(request, f"Existencia actualizada a {stock_real:.3f} {insumo.unidad_corta}. El ajuste quedó registrado en el Kardex.")
+    return redirect("inventario_producto_detalle", pk=pk)
+
+
+@login_required
+@require_http_methods(["POST"])
+def inventario_producto_ajustar_costo_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    raw = (request.POST.get("costo_nuevo") or "").strip().replace(",", ".")
+    motivo = (request.POST.get("motivo_costo") or "").strip() or "Actualización de costo"
+    try:
+        costo_nuevo = Decimal(raw).quantize(Decimal("0.0001"))
+    except Exception:
+        messages.error(request, "El costo ingresado no es válido.")
+        return redirect("inventario_producto_detalle", pk=pk)
+    if costo_nuevo < 0:
+        messages.error(request, "El costo no puede ser negativo.")
+        return redirect("inventario_producto_detalle", pk=pk)
+
+    with transaction.atomic():
+        insumo = Insumo.objects.select_for_update().get(pk=pk)
+        costo_anterior = Decimal(insumo.costo or 0).quantize(Decimal("0.0001"))
+        if costo_nuevo == costo_anterior:
+            messages.info(request, "El costo ingresado coincide con el costo actual.")
+            return redirect("inventario_producto_detalle", pk=pk)
+        insumo.costo = costo_nuevo
+        insumo.save(update_fields=["costo"])
+        MovimientoInventario.objects.create(
+            insumo=insumo, tipo="ajuste", cantidad=Decimal("0.000"),
+            stock_anterior=insumo.stock, stock_resultante=insumo.stock,
+            costo_unitario=costo_nuevo, total_costo=Decimal("0.00"), usuario=request.user,
+            observacion=f"{motivo}. Costo: ${costo_anterior:.4f} → ${costo_nuevo:.4f} por {insumo.unidad_corta}.",
+        )
+    _registrar_actividad(request.user, "Ajuste de costo", f"{insumo.nombre}: ${costo_anterior:.4f} → ${costo_nuevo:.4f}/{insumo.unidad_corta}.", f"/dashboard/inventario/productos/{insumo.pk}/")
+    messages.success(request, f"Costo actualizado a ${costo_nuevo:.4f} por {insumo.unidad_corta}.")
     return redirect("inventario_producto_detalle", pk=pk)
 
 
@@ -5525,7 +5607,7 @@ def inventario_consumo_trabajadores_pdf_view(request):
     qs = MovimientoInventario.objects.filter(tipo="mantenimiento").values("trabajador__user__first_name", "trabajador__user__last_name", "trabajador__user__username", "insumo__nombre", "insumo__unidad_base").annotate(cantidad=Sum("cantidad"), costo=Sum("total_costo")).order_by("trabajador__user__username", "insumo__nombre")
     for x in qs:
         nombre = (f"{x['trabajador__user__first_name']} {x['trabajador__user__last_name']}").strip() or x["trabajador__user__username"] or "—"
-        unidad = "kg" if x["insumo__unidad_base"] == "kg" else "unid."
+        unidad = "kg" if x["insumo__unidad_base"] == "kg" else "L"
         filas.append([nombre, x["insumo__nombre"], f"{Decimal(x['cantidad'] or 0):.3f} {unidad}", f"${Decimal(x['costo'] or 0):,.2f}"])
     return _pdf_inventario_response("Consumo por trabajador JVAQUA", filas, "consumo_por_trabajador.pdf")
 
@@ -5536,7 +5618,7 @@ def inventario_consumo_contratos_pdf_view(request):
     filas = [["Cliente / contrato", "Producto", "Consumo", "Costo"]]
     qs = MovimientoInventario.objects.filter(tipo="mantenimiento", mantenimiento__isnull=False).values("mantenimiento__cliente__nombre", "insumo__nombre", "insumo__unidad_base").annotate(cantidad=Sum("cantidad"), costo=Sum("total_costo")).order_by("mantenimiento__cliente__nombre", "insumo__nombre")
     for x in qs:
-        unidad = "kg" if x["insumo__unidad_base"] == "kg" else "unid."
+        unidad = "kg" if x["insumo__unidad_base"] == "kg" else "L"
         filas.append([x["mantenimiento__cliente__nombre"] or "—", x["insumo__nombre"], f"{Decimal(x['cantidad'] or 0):.3f} {unidad}", f"${Decimal(x['costo'] or 0):,.2f}"])
     return _pdf_inventario_response("Consumo por contrato JVAQUA", filas, "consumo_por_contrato.pdf")
 
