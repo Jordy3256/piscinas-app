@@ -1,3 +1,13 @@
+# JVAQUA ERP v1.4.0 — Sprint 2.5
+
+- Navegación del trabajador unificada en el detalle de mantenimiento y edición de consumos.
+- Mi Inventario reemplaza cualquier acceso administrativo en vistas del trabajador.
+- Base visual Mobile First compartida por administración y trabajadores.
+- Mejoras globales de formularios, tablas, tarjetas, filtros, modales, cabeceras y acciones táctiles.
+- Prevención de zoom involuntario en iOS mediante controles de 16px.
+- Mejor manejo de áreas seguras y navegación inferior en dispositivos móviles.
+- Acciones principales adaptadas para pantallas pequeñas sin modificar lógica de negocio.
+
 # Changelog
 
 ## 1.3.9 — Asistente Técnico Inteligente JVAQUA v1.0

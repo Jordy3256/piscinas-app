@@ -3182,6 +3182,7 @@ def mantenimiento_detalle_view(request, pk):
             "trabajador_actual": trabajador_actual,
             "total_egresos": total_egresos,
             "es_admin": es_usuario_admin,
+            "base_template": "dashboard/base_admin.html" if es_usuario_admin else "dashboard/base_trabajador.html",
             "fotos": fotos,
             "cantidad_fotos": cantidad_fotos,
             "cantidad_usos": cantidad_usos,
@@ -3426,7 +3427,11 @@ def usoinsumo_eliminar_view(request, pk):
     return render(
         request,
         "dashboard/usoinsumo_confirmar_eliminar.html",
-        {"uso": uso, "es_admin": es_admin(request.user)},
+        {
+            "uso": uso,
+            "es_admin": es_admin(request.user),
+            "base_template": "dashboard/base_admin.html" if es_admin(request.user) else "dashboard/base_trabajador.html",
+        },
     )
 
 

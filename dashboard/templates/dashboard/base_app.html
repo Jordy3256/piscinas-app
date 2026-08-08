@@ -60,6 +60,8 @@
 
     <link rel="stylesheet" href="{% static 'dashboard/app-ux-v13.css' %}?v=20260802-1">
 
+  <link rel="stylesheet" href="{% static 'dashboard/app-mobile-v25.css' %}?v=20260808-1">
+
 {% block extra_head %}{% endblock %}
 </head>
 
@@ -151,5 +153,7 @@
   document.querySelectorAll('form[method="get"]').forEach(form=>{form.addEventListener('submit',()=>sessionStorage.setItem('jv-last-list',location.href));});
 })();
 </script>
+  <script src="{% static 'dashboard/app-mobile-v25.js' %}?v=20260808-1" defer></script>
+
 </body>
 </html>
