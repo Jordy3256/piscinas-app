@@ -124,3 +124,136 @@ class CasoAsistenteTecnico(models.Model):
 
     def __str__(self):
         return f"Caso #{self.pk} · {self.get_estado_agua_display()} · {self.volumen_m3} m³"
+
+
+class CategoriaAcademia(models.Model):
+    nombre = models.CharField(max_length=100, unique=True)
+    slug = models.SlugField(max_length=120, unique=True)
+    descripcion = models.CharField(max_length=240, blank=True, default="")
+    icono = models.CharField(max_length=20, blank=True, default="📘")
+    orden = models.PositiveSmallIntegerField(default=0)
+    activa = models.BooleanField(default=True, db_index=True)
+
+    class Meta:
+        ordering = ["orden", "nombre"]
+        verbose_name = "Categoría de academia"
+        verbose_name_plural = "Categorías de academia"
+
+    def __str__(self):
+        return self.nombre
+
+
+class LeccionAcademia(models.Model):
+    categoria = models.ForeignKey(CategoriaAcademia, on_delete=models.PROTECT, related_name="lecciones")
+    titulo = models.CharField(max_length=160)
+    resumen = models.CharField(max_length=280, blank=True, default="")
+    contenido = models.TextField()
+    errores_evitar = models.TextField(blank=True, default="")
+    consejo_jvaqua = models.TextField(blank=True, default="")
+    duracion_minutos = models.PositiveSmallIntegerField(default=5)
+    orden = models.PositiveSmallIntegerField(default=0)
+    publicada = models.BooleanField(default=True, db_index=True)
+    creado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="lecciones_academia_creadas")
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["categoria__orden", "categoria__nombre", "orden", "titulo"]
+        constraints = [models.UniqueConstraint(fields=["categoria", "titulo"], name="ati_unique_lesson_category_title")]
+        verbose_name = "Lección de academia"
+        verbose_name_plural = "Lecciones de academia"
+
+    def __str__(self):
+        return f"{self.categoria}: {self.titulo}"
+
+
+class ProgresoLeccion(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="progreso_academia")
+    leccion = models.ForeignKey(LeccionAcademia, on_delete=models.CASCADE, related_name="progresos")
+    completada = models.BooleanField(default=True)
+    completada_en = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["user", "leccion"], name="ati_unique_user_lesson_progress")]
+        ordering = ["-completada_en"]
+
+    def __str__(self):
+        return f"{self.user} · {self.leccion}"
+
+
+class ArticuloBiblioteca(models.Model):
+    CATEGORIAS = [
+        ("quimica", "Química"),
+        ("equipos", "Equipos"),
+        ("filtracion", "Filtración"),
+        ("mantenimiento", "Mantenimiento"),
+        ("diagnostico", "Diagnóstico"),
+        ("seguridad", "Seguridad"),
+        ("procedimientos", "Procedimientos JVAQUA"),
+    ]
+    titulo = models.CharField(max_length=160, unique=True)
+    categoria = models.CharField(max_length=30, choices=CATEGORIAS, default="equipos", db_index=True)
+    resumen = models.CharField(max_length=280, blank=True, default="")
+    funcionamiento = models.TextField(blank=True, default="")
+    componentes = models.TextField(blank=True, default="")
+    mantenimiento = models.TextField(blank=True, default="")
+    fallas_comunes = models.TextField(blank=True, default="")
+    recomendaciones = models.TextField(blank=True, default="")
+    palabras_clave = models.CharField(max_length=300, blank=True, default="")
+    publicada = models.BooleanField(default=True, db_index=True)
+    orden = models.PositiveSmallIntegerField(default=0)
+    creado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="articulos_biblioteca_creados")
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["categoria", "orden", "titulo"]
+        verbose_name = "Artículo de biblioteca"
+        verbose_name_plural = "Artículos de biblioteca"
+
+    def __str__(self):
+        return self.titulo
+
+
+class ConsejoJVAQUA(models.Model):
+    CATEGORIAS = ArticuloBiblioteca.CATEGORIAS
+    titulo = models.CharField(max_length=140, blank=True, default="Consejo JVAQUA")
+    texto = models.TextField()
+    categoria = models.CharField(max_length=30, choices=CATEGORIAS, default="mantenimiento", db_index=True)
+    activo = models.BooleanField(default=True, db_index=True)
+    orden = models.PositiveSmallIntegerField(default=0)
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["orden", "id"]
+        verbose_name = "Consejo JVAQUA"
+        verbose_name_plural = "Consejos JVAQUA"
+
+    def __str__(self):
+        return self.titulo
+
+
+class PropuestaConocimiento(models.Model):
+    ESTADOS = [
+        ("evaluacion", "En evaluación"),
+        ("aprobada", "Aprobada"),
+        ("descartada", "Descartada"),
+    ]
+    titulo = models.CharField(max_length=180)
+    descripcion = models.TextField()
+    fuente_clave = models.CharField(max_length=160, unique=True)
+    evidencia = models.JSONField(default=dict, blank=True)
+    estado = models.CharField(max_length=20, choices=ESTADOS, default="evaluacion", db_index=True)
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+    revisado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="propuestas_conocimiento_revisadas")
+    revisado_en = models.DateTimeField(null=True, blank=True)
+    nota_revision = models.TextField(blank=True, default="")
+
+    class Meta:
+        ordering = ["estado", "-actualizado_en"]
+        verbose_name = "Propuesta de conocimiento"
+        verbose_name_plural = "Propuestas de conocimiento"
+
+    def __str__(self):
+        return self.titulo

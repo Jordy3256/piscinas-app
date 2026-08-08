@@ -385,3 +385,283 @@ def asistente_destacar_view(request, pk):
     caso.save(update_fields=["destacado", "nota_destacado", "actualizado_en"])
     messages.success(request, "Caso destacado actualizado.")
     return redirect("asistente_tecnico:caso_detalle", pk=caso.pk)
+
+# =========================
+# Centro de Conocimiento JVAQUA
+# =========================
+from django.db.models import Case, When, IntegerField
+from .forms import CategoriaAcademiaForm, LeccionAcademiaForm, ArticuloBibliotecaForm, ConsejoJVAQUAForm
+from .models import (
+    CategoriaAcademia, LeccionAcademia, ProgresoLeccion,
+    ArticuloBiblioteca, ConsejoJVAQUA, PropuestaConocimiento,
+)
+
+
+def _consejo_del_dia():
+    qs = ConsejoJVAQUA.objects.filter(activo=True).order_by("orden", "id")
+    total = qs.count()
+    if not total:
+        return None
+    idx = timezone.localdate().toordinal() % total
+    return qs[idx]
+
+
+def _progreso_usuario(user):
+    total = LeccionAcademia.objects.filter(publicada=True, categoria__activa=True).count()
+    completadas = ProgresoLeccion.objects.filter(user=user, completada=True, leccion__publicada=True, leccion__categoria__activa=True).count()
+    porcentaje = round((completadas / total) * 100) if total else 0
+    return total, completadas, porcentaje
+
+
+@login_required
+def centro_conocimiento_view(request):
+    if not (_es_trabajador(request.user) or _es_admin(request.user)):
+        return HttpResponseForbidden("No autorizado")
+    total, completadas, porcentaje = _progreso_usuario(request.user)
+    categorias = CategoriaAcademia.objects.filter(activa=True).prefetch_related("lecciones")
+    articulos = ArticuloBiblioteca.objects.filter(publicada=True)
+    casos_destacados = CasoAsistenteTecnico.objects.filter(destacado=True).select_related("user", "motor")[:6]
+    return render(request, "asistente_tecnico/centro_conocimiento.html", {
+        "base_template": _base_template(request.user),
+        "motor": _motor_activo(),
+        "consejo": _consejo_del_dia(),
+        "categorias_count": categorias.count(),
+        "lecciones_count": LeccionAcademia.objects.filter(publicada=True, categoria__activa=True).count(),
+        "articulos_count": articulos.count(),
+        "casos_count": casos_destacados.count(),
+        "total_lecciones": total,
+        "completadas": completadas,
+        "porcentaje": porcentaje,
+        "es_admin": _es_admin(request.user),
+    })
+
+
+@login_required
+def academia_view(request):
+    if not (_es_trabajador(request.user) or _es_admin(request.user)):
+        return HttpResponseForbidden("No autorizado")
+    completadas_ids = set(ProgresoLeccion.objects.filter(user=request.user, completada=True).values_list("leccion_id", flat=True))
+    categorias = list(CategoriaAcademia.objects.filter(activa=True).prefetch_related("lecciones"))
+    for cat in categorias:
+        publicadas = [x for x in cat.lecciones.all() if x.publicada]
+        cat.lecciones_publicadas = publicadas
+        cat.total_publicadas = len(publicadas)
+        cat.total_completadas = sum(1 for x in publicadas if x.pk in completadas_ids)
+        cat.porcentaje = round((cat.total_completadas / cat.total_publicadas) * 100) if cat.total_publicadas else 0
+    total, completadas, porcentaje = _progreso_usuario(request.user)
+    return render(request, "asistente_tecnico/academia.html", {
+        "base_template": _base_template(request.user), "categorias": categorias,
+        "completadas_ids": completadas_ids, "total_lecciones": total,
+        "completadas": completadas, "porcentaje": porcentaje, "es_admin": _es_admin(request.user),
+    })
+
+
+@login_required
+def leccion_detalle_view(request, pk):
+    if not (_es_trabajador(request.user) or _es_admin(request.user)):
+        return HttpResponseForbidden("No autorizado")
+    qs = LeccionAcademia.objects.select_related("categoria")
+    if not _es_admin(request.user):
+        qs = qs.filter(publicada=True, categoria__activa=True)
+    leccion = get_object_or_404(qs, pk=pk)
+    completada = ProgresoLeccion.objects.filter(user=request.user, leccion=leccion, completada=True).exists()
+    return render(request, "asistente_tecnico/leccion_detalle.html", {
+        "base_template": _base_template(request.user), "leccion": leccion,
+        "completada": completada, "es_admin": _es_admin(request.user),
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def leccion_completar_view(request, pk):
+    if not (_es_trabajador(request.user) or _es_admin(request.user)):
+        return HttpResponseForbidden("No autorizado")
+    leccion = get_object_or_404(LeccionAcademia, pk=pk, publicada=True, categoria__activa=True)
+    ProgresoLeccion.objects.update_or_create(user=request.user, leccion=leccion, defaults={"completada": True, "completada_en": timezone.now()})
+    messages.success(request, "Lección marcada como completada.")
+    return redirect("asistente_tecnico:leccion_detalle", pk=pk)
+
+
+@login_required
+def biblioteca_tecnica_view(request):
+    if not (_es_trabajador(request.user) or _es_admin(request.user)):
+        return HttpResponseForbidden("No autorizado")
+    q = (request.GET.get("q") or "").strip()
+    categoria = (request.GET.get("categoria") or "").strip()
+    qs = ArticuloBiblioteca.objects.filter(publicada=True)
+    if q:
+        qs = qs.filter(Q(titulo__icontains=q) | Q(resumen__icontains=q) | Q(palabras_clave__icontains=q) | Q(fallas_comunes__icontains=q))
+    if categoria:
+        qs = qs.filter(categoria=categoria)
+    return render(request, "asistente_tecnico/biblioteca_tecnica.html", {
+        "base_template": _base_template(request.user), "articulos": qs,
+        "q": q, "categoria": categoria, "categorias": ArticuloBiblioteca.CATEGORIAS,
+        "es_admin": _es_admin(request.user),
+    })
+
+
+@login_required
+def articulo_biblioteca_detalle_view(request, pk):
+    if not (_es_trabajador(request.user) or _es_admin(request.user)):
+        return HttpResponseForbidden("No autorizado")
+    qs = ArticuloBiblioteca.objects.all() if _es_admin(request.user) else ArticuloBiblioteca.objects.filter(publicada=True)
+    articulo = get_object_or_404(qs, pk=pk)
+    return render(request, "asistente_tecnico/biblioteca_detalle.html", {
+        "base_template": _base_template(request.user), "articulo": articulo, "es_admin": _es_admin(request.user),
+    })
+
+
+@login_required
+def casos_reales_view(request):
+    if not (_es_trabajador(request.user) or _es_admin(request.user)):
+        return HttpResponseForbidden("No autorizado")
+    qs = CasoAsistenteTecnico.objects.filter(destacado=True).select_related("user", "trabajador", "motor")
+    return render(request, "asistente_tecnico/casos_reales.html", {
+        "base_template": _base_template(request.user), "casos": qs, "es_admin": _es_admin(request.user),
+    })
+
+
+@login_required
+def certificacion_view(request):
+    if not (_es_trabajador(request.user) or _es_admin(request.user)):
+        return HttpResponseForbidden("No autorizado")
+    completadas_ids = set(ProgresoLeccion.objects.filter(user=request.user, completada=True).values_list("leccion_id", flat=True))
+    categorias = list(CategoriaAcademia.objects.filter(activa=True).prefetch_related("lecciones"))
+    filas = []
+    for cat in categorias:
+        lecciones = [x for x in cat.lecciones.all() if x.publicada]
+        total = len(lecciones)
+        hechas = sum(1 for x in lecciones if x.pk in completadas_ids)
+        porcentaje = round((hechas / total) * 100) if total else 0
+        filas.append({"categoria": cat, "total": total, "completadas": hechas, "porcentaje": porcentaje, "insignia": bool(total and hechas == total)})
+    total, completadas, porcentaje = _progreso_usuario(request.user)
+    return render(request, "asistente_tecnico/certificacion.html", {
+        "base_template": _base_template(request.user), "filas": filas,
+        "total": total, "completadas": completadas, "porcentaje": porcentaje, "es_admin": _es_admin(request.user),
+    })
+
+
+def _analizar_motor_conocimiento():
+    propuestas = []
+    qs = CasoAsistenteTecnico.objects.exclude(resultado="pendiente")
+    tipos = qs.values("tipo_tratamiento").annotate(total=Count("id"), exitosos=Count("id", filter=Q(resultado="exitoso")), parciales=Count("id", filter=Q(resultado="parcial")), fallidos=Count("id", filter=Q(resultado="fallido")))
+    for fila in tipos:
+        total = fila["total"]
+        if total < 5:
+            continue
+        tasa = round((fila["exitosos"] / total) * 100, 1) if total else 0
+        tipo = fila["tipo_tratamiento"] or "sin_tipo"
+        if tasa >= 90:
+            titulo = f"Protocolo {tipo}: patrón de alta efectividad"
+            descripcion = f"En {total} seguimientos respondidos, el protocolo obtuvo {tasa}% de éxito. Conviene conservar esta referencia y revisar qué condiciones se repiten en los casos exitosos."
+        elif tasa < 70:
+            titulo = f"Revisar protocolo {tipo}"
+            descripcion = f"En {total} seguimientos respondidos, el protocolo obtuvo {tasa}% de éxito. Conviene revisar los casos parciales y fallidos antes de modificar el protocolo oficial."
+        else:
+            titulo = f"Protocolo {tipo}: evidencia en evaluación"
+            descripcion = f"Hay {total} casos respondidos con {tasa}% de éxito. Aún conviene acumular y revisar más evidencia antes de cambiar reglas oficiales."
+        fuente = f"protocolo:{tipo}"
+        evidencia = {"tipo_tratamiento": tipo, "total": total, "exitosos": fila["exitosos"], "parciales": fila["parciales"], "fallidos": fila["fallidos"], "tasa_exito": tasa}
+        obj, _ = PropuestaConocimiento.objects.get_or_create(fuente_clave=fuente, defaults={"titulo": titulo, "descripcion": descripcion, "evidencia": evidencia})
+        if obj.estado == "evaluacion":
+            obj.titulo = titulo; obj.descripcion = descripcion; obj.evidencia = evidencia; obj.save(update_fields=["titulo", "descripcion", "evidencia", "actualizado_en"])
+        propuestas.append(obj)
+    return propuestas
+
+
+@login_required
+def motor_conocimiento_view(request):
+    if not _es_admin(request.user):
+        return HttpResponseForbidden("No autorizado")
+    propuestas = PropuestaConocimiento.objects.all()
+    return render(request, "asistente_tecnico/motor_conocimiento.html", {
+        "base_template": "dashboard/base_admin.html", "propuestas": propuestas, "es_admin": True,
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def motor_conocimiento_analizar_view(request):
+    if not _es_admin(request.user):
+        return HttpResponseForbidden("No autorizado")
+    propuestas = _analizar_motor_conocimiento()
+    messages.success(request, f"Análisis completado. Se actualizaron {len(propuestas)} patrones con evidencia suficiente.")
+    return redirect("asistente_tecnico:motor_conocimiento")
+
+
+@login_required
+@require_http_methods(["POST"])
+def propuesta_conocimiento_estado_view(request, pk):
+    if not _es_admin(request.user):
+        return HttpResponseForbidden("No autorizado")
+    propuesta = get_object_or_404(PropuestaConocimiento, pk=pk)
+    estado = request.POST.get("estado")
+    if estado not in {x[0] for x in PropuestaConocimiento.ESTADOS}:
+        messages.error(request, "Estado inválido.")
+    else:
+        propuesta.estado = estado
+        propuesta.revisado_por = request.user
+        propuesta.revisado_en = timezone.now()
+        propuesta.nota_revision = (request.POST.get("nota_revision") or "").strip()
+        propuesta.save(update_fields=["estado", "revisado_por", "revisado_en", "nota_revision", "actualizado_en"])
+        messages.success(request, "Propuesta actualizada. Esta acción no modifica automáticamente el motor de recomendaciones.")
+    return redirect("asistente_tecnico:motor_conocimiento")
+
+
+@login_required
+def conocimiento_admin_view(request):
+    if not _es_admin(request.user):
+        return HttpResponseForbidden("No autorizado")
+    return render(request, "asistente_tecnico/conocimiento_admin.html", {
+        "base_template": "dashboard/base_admin.html",
+        "categorias": CategoriaAcademia.objects.all(),
+        "lecciones": LeccionAcademia.objects.select_related("categoria")[:50],
+        "articulos": ArticuloBiblioteca.objects.all()[:50],
+        "consejos": ConsejoJVAQUA.objects.all()[:50],
+        "propuestas_pendientes": PropuestaConocimiento.objects.filter(estado="evaluacion").count(),
+        "es_admin": True,
+    })
+
+
+def _crud_conocimiento(request, modelo, form_class, template_title, pk=None):
+    if not _es_admin(request.user):
+        return HttpResponseForbidden("No autorizado")
+    obj = get_object_or_404(modelo, pk=pk) if pk else None
+    if request.method == "POST":
+        form = form_class(request.POST, instance=obj)
+        if form.is_valid():
+            nuevo = form.save(commit=False)
+            if hasattr(nuevo, "creado_por") and not getattr(nuevo, "creado_por_id", None):
+                nuevo.creado_por = request.user
+            nuevo.save()
+            messages.success(request, "Contenido guardado correctamente.")
+            return redirect("asistente_tecnico:conocimiento_admin")
+    else:
+        form = form_class(instance=obj)
+    return render(request, "asistente_tecnico/contenido_form.html", {
+        "base_template": "dashboard/base_admin.html", "form": form, "titulo": template_title, "obj": obj, "es_admin": True,
+    })
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def categoria_form_view(request, pk=None):
+    return _crud_conocimiento(request, CategoriaAcademia, CategoriaAcademiaForm, "Categoría de Academia", pk)
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def leccion_form_view(request, pk=None):
+    return _crud_conocimiento(request, LeccionAcademia, LeccionAcademiaForm, "Lección de Academia", pk)
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def articulo_form_view(request, pk=None):
+    return _crud_conocimiento(request, ArticuloBiblioteca, ArticuloBibliotecaForm, "Artículo de Biblioteca", pk)
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def consejo_form_view(request, pk=None):
+    return _crud_conocimiento(request, ConsejoJVAQUA, ConsejoJVAQUAForm, "Consejo JVAQUA", pk)

@@ -5543,9 +5543,10 @@ def mi_inventario_trabajador_view(request):
     items = []
     for stock in stocks:
         items.append({"stock": stock, "consumo_mes": consumos.get(stock.insumo_id, Decimal("0")), "ultima_entrega": ultimas_entregas.get(stock.insumo_id)})
+    stock_bajo = sum(1 for x in stocks if x.stock <= x.insumo.stock_minimo)
     return render(request, "dashboard/mi_inventario_trabajador.html", {
         "trabajador": trabajador, "items": items, "movimientos": movimientos,
-        "valor_estimado": sum((Decimal(x.stock) * Decimal(x.insumo.costo or 0) for x in stocks), Decimal("0")),
+        "stock_bajo": stock_bajo,
         "es_admin": False,
     })
 

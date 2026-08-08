@@ -9,7 +9,7 @@
   <div class="ati-hero">
     <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
       <div><div class="small opacity-75 mb-1">Motor {{ motor.version }}</div><h2 class="fw-bold mb-2">Asistente Técnico Inteligente JVAQUA</h2><p class="mb-0 opacity-90">Diagnostica, recomienda un protocolo y aprende del resultado de cada caso. Esta herramienta es independiente de mantenimientos e inventario.</p></div>
-      <div class="ati-nav"><a class="btn btn-light btn-sm" href="{% url 'asistente_tecnico:historial' %}">Historial</a><a class="btn btn-outline-light btn-sm" href="{% url 'asistente_tecnico:biblioteca' %}">Biblioteca</a>{% if es_admin %}<a class="btn btn-warning btn-sm" href="{% url 'asistente_tecnico:admin' %}">Administración</a>{% endif %}</div>
+      <div class="ati-nav"><a class="btn btn-light btn-sm" href="{% url 'asistente_tecnico:historial' %}">Historial</a><a class="btn btn-outline-light btn-sm" href="{% url 'asistente_tecnico:centro_conocimiento' %}">Centro de Conocimiento</a>{% if es_admin %}<a class="btn btn-warning btn-sm" href="{% url 'asistente_tecnico:admin' %}">Administración</a>{% endif %}</div>
     </div>
   </div>
 
