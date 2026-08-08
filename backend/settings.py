@@ -148,6 +148,7 @@ INSTALLED_APPS = [
     "finanzas.apps.FinanzasConfig",
 
     "asistente_tecnico.apps.AsistenteTecnicoConfig",
+    "ordenes_trabajo.apps.OrdenesTrabajoConfig",
     "dashboard.apps.DashboardConfig",
 ]
 

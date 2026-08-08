@@ -1,0 +1,52 @@
+{% extends "dashboard/base_admin.html" %}
+{% block title %}Órdenes de Trabajo{% endblock %}
+{% block top_title %}🛠 Órdenes de Trabajo{% endblock %}
+{% block content %}
+<style>
+.ot-hero{border-radius:24px;padding:24px;background:linear-gradient(135deg,#0f172a,#0b5ed7 68%,#14b8a6);color:#fff;box-shadow:0 20px 48px rgba(15,23,42,.16)}
+.ot-kpi,.ot-card{border:1px solid #e2e8f0;border-radius:18px;background:#fff;box-shadow:0 10px 28px rgba(15,23,42,.06)}
+.ot-kpi{padding:16px}.ot-kpi .v{font-size:1.55rem;font-weight:900}.ot-kpi .l{font-size:.76rem;text-transform:uppercase;font-weight:800;color:#64748b}
+.ot-card{padding:16px}.ot-code{font-size:.75rem;font-weight:900;color:#0b5ed7}.ot-title{font-weight:900;color:#0f172a}.ot-meta{font-size:.82rem;color:#64748b}
+@media(max-width:767px){.ot-hero{padding:19px;border-radius:20px}.ot-card{padding:14px}}
+</style>
+<div class="d-grid gap-3">
+  <section class="ot-hero">
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+      <div><div class="small text-uppercase fw-bold opacity-75">Centro operativo</div><h1 class="h3 fw-bold mb-1">Órdenes de Trabajo</h1><p class="mb-0 opacity-75">Visitas adicionales y trabajos puntuales sin alterar la programación automática de contratos.</p></div>
+      <a href="{% url 'ordenes_trabajo:crear' %}" class="btn btn-light fw-bold">＋ Nueva orden</a>
+    </div>
+  </section>
+
+  <div class="row g-3">
+    <div class="col-4"><div class="ot-kpi"><div class="l">Pendientes</div><div class="v text-warning">{{ pendientes }}</div></div></div>
+    <div class="col-4"><div class="ot-kpi"><div class="l">Hoy</div><div class="v text-primary">{{ hoy_count }}</div></div></div>
+    <div class="col-4"><div class="ot-kpi"><div class="l">Completadas mes</div><div class="v text-success">{{ completadas_mes }}</div></div></div>
+  </div>
+
+  <form method="get" class="card border-0 shadow-sm rounded-4"><div class="card-body"><div class="row g-2">
+    <div class="col-12 col-md"><input class="form-control" name="q" value="{{ q }}" placeholder="Buscar cliente, trabajo, teléfono o dirección"></div>
+    <div class="col-12 col-md-3"><select class="form-select" name="estado"><option value="">Todos los estados</option><option value="pendiente" {% if estado == 'pendiente' %}selected{% endif %}>Pendiente</option><option value="en_proceso" {% if estado == 'en_proceso' %}selected{% endif %}>En proceso</option><option value="completada" {% if estado == 'completada' %}selected{% endif %}>Completada</option><option value="cancelada" {% if estado == 'cancelada' %}selected{% endif %}>Cancelada</option></select></div>
+    <div class="col-12 col-md-auto"><button class="btn btn-primary w-100">Filtrar</button></div>
+  </div></div></form>
+
+  <div class="d-grid gap-2">
+    {% for o in ordenes %}
+      <a href="{% url 'ordenes_trabajo:detalle' o.pk %}" class="text-decoration-none text-reset">
+        <article class="ot-card">
+          <div class="d-flex justify-content-between gap-3 flex-wrap">
+            <div class="flex-grow-1">
+              <div class="ot-code">{{ o.codigo }} · {{ o.tipo.icono }} {{ o.tipo.nombre }}</div>
+              <div class="ot-title">{{ o.nombre_contacto }}</div>
+              <div class="ot-meta">{{ o.fecha|date:"d/m/Y" }}{% if o.hora %} · {{ o.hora|time:"H:i" }}{% endif %} · Técnico: {{ o.trabajador.user.get_full_name|default:o.trabajador.user.username }}</div>
+              {% if o.titulo %}<div class="mt-1 small">{{ o.titulo }}</div>{% endif %}
+            </div>
+            <div><span class="badge {% if o.estado == 'completada' %}text-bg-success{% elif o.estado == 'en_proceso' %}text-bg-primary{% elif o.estado == 'cancelada' %}text-bg-secondary{% else %}text-bg-warning{% endif %}">{{ o.get_estado_display }}</span></div>
+          </div>
+        </article>
+      </a>
+    {% empty %}
+      <div class="text-center py-5 text-muted card border-0 shadow-sm rounded-4">No hay órdenes que coincidan con el filtro.</div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

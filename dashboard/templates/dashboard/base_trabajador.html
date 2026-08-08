@@ -723,6 +723,11 @@
             <i class="bi bi-card-checklist"></i>
             <span>Mantenimientos</span>
           </a>
+          <a class="nav-item-app {% if '/dashboard/ordenes/' in request.path %}active{% endif %}"
+             href="{% url 'ordenes_trabajo:mis_ordenes' %}">
+            <i class="bi bi-tools"></i>
+            <span>Órdenes</span>
+          </a>
 
           <a class="nav-item-app {% if '/dashboard/asistente/' in request.path or 'calculadora' in request.path %}active{% endif %}"
              href="{% url 'asistente_tecnico:inicio' %}">

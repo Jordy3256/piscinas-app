@@ -1173,7 +1173,45 @@
     <span class="text-muted small">Pendientes anteriores</span>
   </div>
 
-  {% if mantenimientos_atrasados %}
+  {% if ordenes_hoy or ordenes_atrasadas or ordenes_proximas %}
+<section class="card worker-card border-0 shadow-sm rounded-4 mb-3" style="border-left:4px solid #7c3aed !important;">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap mb-3">
+      <div>
+        <div class="small text-uppercase fw-bold" style="color:#7c3aed;letter-spacing:.06em">Trabajos adicionales</div>
+        <h2 class="worker-section-title mb-1">Órdenes de trabajo</h2>
+        <div class="worker-subtitle">Visitas extraordinarias, reparaciones y trabajos puntuales asignados por administración.</div>
+      </div>
+      <a href="{% url 'ordenes_trabajo:mis_ordenes' %}" class="btn btn-outline-primary btn-sm">Ver todas</a>
+    </div>
+    <div class="d-grid gap-2">
+      {% for o in ordenes_atrasadas %}
+        <a href="{% url 'ordenes_trabajo:detalle' o.pk %}" class="text-decoration-none text-reset">
+          <div class="p-3 rounded-4 border border-danger bg-danger-subtle">
+            <div class="d-flex justify-content-between gap-2"><div><div class="fw-bold">{{ o.tipo.icono }} {{ o.nombre_contacto }}</div><div class="small text-muted">{{ o.tipo.nombre }} · {{ o.fecha|date:"d/m/Y" }}</div></div><span class="badge text-bg-danger">Atrasada</span></div>
+          </div>
+        </a>
+      {% endfor %}
+      {% for o in ordenes_hoy %}
+        <a href="{% url 'ordenes_trabajo:detalle' o.pk %}" class="text-decoration-none text-reset">
+          <div class="p-3 rounded-4 border" style="background:#f8f5ff;border-color:#ddd1ff !important;">
+            <div class="d-flex justify-content-between gap-2"><div><div class="fw-bold">{{ o.tipo.icono }} {{ o.nombre_contacto }}</div><div class="small text-muted">{{ o.tipo.nombre }}{% if o.hora %} · {{ o.hora|time:"H:i" }}{% endif %}</div></div><span class="badge {% if o.estado == 'completada' %}text-bg-success{% elif o.estado == 'en_proceso' %}text-bg-info{% else %}text-bg-warning{% endif %}">{{ o.get_estado_display }}</span></div>
+          </div>
+        </a>
+      {% endfor %}
+      {% if not ordenes_hoy and not ordenes_atrasadas %}
+        {% for o in ordenes_proximas|slice:":3" %}
+          <a href="{% url 'ordenes_trabajo:detalle' o.pk %}" class="text-decoration-none text-reset">
+            <div class="p-3 rounded-4 border bg-light"><div class="fw-bold">{{ o.tipo.icono }} {{ o.nombre_contacto }}</div><div class="small text-muted">{{ o.fecha|date:"d/m/Y" }} · {{ o.tipo.nombre }}</div></div>
+          </a>
+        {% endfor %}
+      {% endif %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
+{% if mantenimientos_atrasados %}
     <div class="vstack gap-2 mb-4">
       {% for m in mantenimientos_atrasados %}
       <a class="text-decoration-none" href="/dashboard/mantenimientos/{{ m.id }}/">

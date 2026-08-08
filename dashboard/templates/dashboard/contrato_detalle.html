@@ -164,6 +164,7 @@
       <div class="cd-actions">
         <a class="btn btn-primary" href="/dashboard/contratos/{{ contrato.id }}/editar/">✏️ Editar contrato</a>
         <a class="btn btn-outline-primary" href="/dashboard/mantenimientos/historial/?q={{ contrato.cliente.nombre|urlencode }}">🛠 Ver mantenimientos</a>
+        <a class="btn btn-outline-warning" href="{% url 'ordenes_trabajo:crear_desde_contrato' contrato.id %}">➕ Visita adicional</a>
         <a class="btn btn-outline-secondary" href="/dashboard/finanzas/facturas/">🧾 Ver facturas</a>
         {% if contrato.activo and contrato.generacion_automatica %}
           <form method="post" action="/dashboard/contratos/{{ contrato.id }}/regenerar-programacion/" class="d-inline">

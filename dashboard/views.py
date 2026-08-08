@@ -48,6 +48,7 @@ from finanzas.models import (
 )
 from clientes.models import Cliente
 from contratos.models import Contrato
+from ordenes_trabajo.models import OrdenTrabajo
 from contratos.programacion import (
     DIAS_SEMANA,
     cancelar_programacion_futura,
@@ -2359,6 +2360,34 @@ def dashboard_view(request):
         semana_anterior = inicio_agenda - timedelta(days=7)
         semana_siguiente = inicio_agenda + timedelta(days=7)
 
+        ordenes_hoy = list(
+            OrdenTrabajo.objects.filter(
+                fecha=fecha_seleccionada or hoy,
+                trabajador=trabajador,
+            )
+            .exclude(estado="cancelada")
+            .select_related("tipo", "cliente", "contrato")
+            .order_by("hora", "id")
+        )
+        ordenes_atrasadas = list(
+            OrdenTrabajo.objects.filter(
+                fecha__lt=hoy,
+                trabajador=trabajador,
+                estado__in=["pendiente", "en_proceso"],
+            )
+            .select_related("tipo", "cliente", "contrato")
+            .order_by("fecha", "hora", "id")[:12]
+        )
+        ordenes_proximas = list(
+            OrdenTrabajo.objects.filter(
+                fecha__gt=hoy,
+                trabajador=trabajador,
+                estado__in=["pendiente", "en_proceso"],
+            )
+            .select_related("tipo", "cliente", "contrato")
+            .order_by("fecha", "hora", "id")[:12]
+        )
+
         ctx = {
             **base_ctx,
             "modo": "trabajador",
@@ -2382,6 +2411,9 @@ def dashboard_view(request):
             "agenda_semanal": agenda_semanal,
             "agenda_semana_anterior": semana_anterior,
             "agenda_semana_siguiente": semana_siguiente,
+            "ordenes_hoy": ordenes_hoy,
+            "ordenes_atrasadas": ordenes_atrasadas,
+            "ordenes_proximas": ordenes_proximas,
             "es_admin": False,
         }
         return render(request, "dashboard/dashboard_trabajador.html", ctx)

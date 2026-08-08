@@ -28,6 +28,7 @@ urlpatterns = [
 
     path("dashboard/finanzas/", include("finanzas.urls")),
     path("dashboard/asistente/", include("asistente_tecnico.urls")),
+    path("dashboard/ordenes/", include("ordenes_trabajo.urls")),
     path("dashboard/", include("dashboard.urls")),
 
     path("", root_redirect),
