@@ -5219,9 +5219,11 @@ def _guardar_producto_desde_post(insumo, post):
     maximo_raw = (post.get("stock_maximo") or "").strip().replace(",", ".")
     insumo.stock_maximo = Decimal(maximo_raw) if maximo_raw else None
     insumo.precio = dec("precio", "0")
-    # El costo promedio no se altera al editar salvo que sea un producto nuevo sin movimientos.
-    if not insumo.pk:
-        insumo.costo = dec("costo", "0")
+    insumo.costo = dec("costo", str(insumo.costo or "0"))
+    if insumo.costo < 0:
+        raise ValueError("El costo unitario no puede ser negativo.")
+    if insumo.precio < 0:
+        raise ValueError("El precio de venta no puede ser negativo.")
     insumo.activo = post.get("activo") == "on"
     insumo.puede_venderse = post.get("puede_venderse") == "on"
     insumo.puede_mantenimiento = post.get("puede_mantenimiento") == "on"
@@ -5308,6 +5310,70 @@ def inventario_producto_detalle_view(request, pk):
         "ventas_mes": ventas.get("c") or Decimal("0"), "ventas_total_mes": ventas.get("total") or Decimal("0"),
         "ultima_compra": ultima_compra, "valor_stock": Decimal(insumo.stock or 0) * Decimal(insumo.costo or 0), "es_admin": True,
     })
+
+
+@login_required
+@require_http_methods(["POST"])
+def inventario_producto_ajustar_stock_view(request, pk):
+    """Ajusta el stock físico sin registrar una compra ficticia.
+
+    El cambio siempre deja trazabilidad en MovimientoInventario y no crea
+    ingresos ni egresos financieros. Solo administración puede utilizarlo.
+    """
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    motivo = (request.POST.get("motivo") or "").strip()
+    if not motivo:
+        messages.error(request, "Indica el motivo del ajuste de inventario.")
+        return redirect("inventario_producto_detalle", pk=pk)
+
+    raw = (request.POST.get("stock_real") or "").strip().replace(",", ".")
+    try:
+        stock_real = Decimal(raw).quantize(Decimal("0.001"))
+    except Exception:
+        messages.error(request, "La existencia real ingresada no es válida.")
+        return redirect("inventario_producto_detalle", pk=pk)
+    if stock_real < 0:
+        messages.error(request, "La existencia real no puede ser negativa.")
+        return redirect("inventario_producto_detalle", pk=pk)
+
+    with transaction.atomic():
+        insumo = Insumo.objects.select_for_update().get(pk=pk)
+        stock_anterior = Decimal(insumo.stock or 0).quantize(Decimal("0.001"))
+        diferencia = (stock_real - stock_anterior).quantize(Decimal("0.001"))
+        if diferencia == 0:
+            messages.info(request, "La existencia ingresada coincide con el stock actual. No se realizó ningún ajuste.")
+            return redirect("inventario_producto_detalle", pk=pk)
+
+        insumo.stock = stock_real
+        insumo.save(update_fields=["stock"])
+        costo = Decimal(insumo.costo or 0)
+        total_costo = (diferencia * costo).quantize(Decimal("0.01"))
+        signo = "+" if diferencia > 0 else ""
+        MovimientoInventario.objects.create(
+            insumo=insumo,
+            tipo="ajuste",
+            cantidad=diferencia,
+            stock_anterior=stock_anterior,
+            stock_resultante=stock_real,
+            costo_unitario=costo,
+            total_costo=total_costo,
+            usuario=request.user,
+            observacion=(
+                f"{motivo}. Conteo físico: {stock_anterior:.3f} → {stock_real:.3f} "
+                f"{insumo.unidad_corta} ({signo}{diferencia:.3f})."
+            ),
+        )
+
+    _registrar_actividad(
+        request.user,
+        "Ajuste de inventario",
+        f"{insumo.nombre}: {stock_anterior:.3f} → {stock_real:.3f} {insumo.unidad_corta}. Motivo: {motivo}",
+        f"/dashboard/inventario/productos/{insumo.pk}/",
+    )
+    messages.success(request, f"Existencia actualizada a {stock_real:.3f} {insumo.unidad_corta}. El ajuste quedó registrado en el Kardex.")
+    return redirect("inventario_producto_detalle", pk=pk)
 
 
 @login_required
