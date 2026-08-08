@@ -1,2 +1,7 @@
-JVAQUA ERP v1.4.0
-Sprint 2.5 — Optimización Integral UX/UI Mobile First
+# JVAQUA ERP
+
+**Versión estable:** 2.0.0
+
+**Sprint visual:** 2.6 — Identidad Visual JVAQUA ERP
+
+Fecha: 2026-08-08

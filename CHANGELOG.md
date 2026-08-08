@@ -103,3 +103,12 @@
 - Acceso rápido a WhatsApp con nombre dinámico del técnico.
 - Navegación por Google Maps/dirección.
 - Registro interno del uso del acceso de WhatsApp.
+
+## 2.0.0 — Identidad Visual JVAQUA ERP
+- Nuevo login corporativo JVAQUA, responsive para escritorio y móvil.
+- Design System global mediante `jvaqua-theme.css`.
+- Paleta, superficies, formularios, botones, tarjetas y estados visuales unificados.
+- Branding PWA actualizado a JVAQUA ERP.
+- Nuevas páginas corporativas 403, 404 y 500.
+- Microtransiciones respetando `prefers-reduced-motion`.
+- Sin cambios en modelos ni lógica de negocio.

@@ -1,13 +1,13 @@
 {
-  "name": "Piscinas App",
-  "short_name": "Piscinas",
-  "description": "Gestión de mantenimientos, operativo y finanzas.",
+  "name": "JVAQUA ERP",
+  "short_name": "JVAQUA",
+  "description": "Sistema Integral de Gestión JVAQUA para operación de piscinas.",
   "id": "/dashboard/",
   "start_url": "/dashboard/home/",
   "scope": "/dashboard/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#0d6efd",
+  "background_color": "#0757b8",
+  "theme_color": "#0757b8",
   "orientation": "portrait",
   "icons": [
     {
