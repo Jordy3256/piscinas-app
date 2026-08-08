@@ -720,10 +720,10 @@
             <span>Mantenimientos</span>
           </a>
 
-          <a class="nav-item-app {% if 'calculadora' in request.path %}active{% endif %}"
-             href="{% url 'calculadora_quimicos' %}">
-            <i class="bi bi-calculator-fill"></i>
-            <span>Calculadora</span>
+          <a class="nav-item-app {% if '/dashboard/asistente/' in request.path or 'calculadora' in request.path %}active{% endif %}"
+             href="{% url 'asistente_tecnico:inicio' %}">
+            <i class="bi bi-stars"></i>
+            <span>Asistente</span>
           </a>
 
           <a class="nav-item-app {% if '/dashboard/mi-inventario/' in request.path %}active{% endif %}"

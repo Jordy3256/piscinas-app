@@ -27,6 +27,7 @@ urlpatterns = [
     path("logout/", logout_view, name="logout"),
 
     path("dashboard/finanzas/", include("finanzas.urls")),
+    path("dashboard/asistente/", include("asistente_tecnico.urls")),
     path("dashboard/", include("dashboard.urls")),
 
     path("", root_redirect),

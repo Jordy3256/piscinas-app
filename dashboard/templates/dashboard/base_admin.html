@@ -893,6 +893,9 @@
           <a class="btn flex-fill {% if '/dashboard/finanzas/' in request.path %}nav-active{% endif %}" href="/dashboard/finanzas/flujo/">
             <span class="nav-icon">💰</span><span>Finanzas</span>
           </a>
+          <a class="btn flex-fill {% if '/dashboard/asistente/' in request.path %}nav-active{% endif %}" href="{% url 'asistente_tecnico:admin' %}">
+            <span class="nav-icon">🧠</span><span>Asistente</span>
+          </a>
 
           <button id="btn-install" class="btn flex-fill btn-install" type="button">
             <span class="nav-icon">📲</span><span>Instalar</span>

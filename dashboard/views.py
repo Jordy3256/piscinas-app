@@ -1271,6 +1271,16 @@ def _crear_notificacion(user, titulo, mensaje, url="/dashboard/notificaciones/",
     return notif
 
 
+def _actualizar_seguimientos_asistente(user):
+    """Genera recordatorios de seguimiento vencidos del Asistente Técnico."""
+    try:
+        from asistente_tecnico.services import generar_recordatorios_seguimiento
+        return generar_recordatorios_seguimiento(user=user, crear_notificacion=_crear_notificacion)
+    except Exception:
+        logger.exception("No se pudieron actualizar los seguimientos del Asistente Técnico.")
+        return 0
+
+
 def _registrar_actividad(user, titulo, descripcion, url=""):
     if ActividadSistema is None:
         return None
@@ -1731,6 +1741,7 @@ def inicio_view(request):
     if es_trabajador(request.user):
         ctx["es_admin"] = False
         notificar_trabajadores_mantenimientos_hoy()
+        _actualizar_seguimientos_asistente(request.user)
         return render(request, "dashboard/home_trabajador.html", ctx)
 
     return render(request, "dashboard/no_autorizado.html", status=403)
@@ -2299,6 +2310,8 @@ def notificaciones_view(request):
 @login_required
 @require_GET
 def notificaciones_json_view(request):
+    if es_trabajador(request.user):
+        _actualizar_seguimientos_asistente(request.user)
     if es_admin(request.user):
         try:
             from finanzas.alertas_financieras import generar_alertas_financieras
@@ -4743,6 +4756,8 @@ def offline_view(request):
 @require_GET
 @login_required
 def unread_count_view(request):
+    if es_trabajador(request.user):
+        _actualizar_seguimientos_asistente(request.user)
     if es_admin(request.user):
         try:
             from finanzas.alertas_financieras import generar_alertas_financieras
@@ -5820,13 +5835,10 @@ def exportar_ganancias_pdf(request):
 
 @login_required
 def calculadora_quimicos_view(request):
+    # Compatibilidad con accesos antiguos: la calculadora evolucionó al Asistente Técnico.
     if not es_trabajador(request.user) and not es_admin(request.user):
         return render(request, "dashboard/no_autorizado.html", status=403)
-
-    return render(
-        request,
-        "dashboard/calculadora_quimicos.html",
-    )
+    return redirect("asistente_tecnico:inicio")
 
 
 # ================================

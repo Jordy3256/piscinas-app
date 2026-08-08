@@ -1,8 +1,8 @@
 # JVAQUA ERP
 
-**Versión actual:** 1.3.8  
+**Versión actual:** 1.3.9  
 **Fecha:** Agosto 2026  
 **Estado:** Estable / Validación en producción
 
 ## Entrega actual
-Información operativa del cliente en el detalle del mantenimiento.
+Asistente Técnico Inteligente JVAQUA v1.0: diagnóstico, protocolos, historial independiente, seguimiento y aprendizaje controlado.

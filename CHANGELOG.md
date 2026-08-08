@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.3.9 — Asistente Técnico Inteligente JVAQUA v1.0
+
+- La antigua Calculadora Inteligente evoluciona a un Asistente Técnico independiente.
+- Diagnóstico automático a partir de volumen, pH, cloro, estado del agua y tipo de piscina.
+- Protocolos diferenciados para mantenimiento normal, turbidez ligera y choque/floculación.
+- Incorporadas reglas operativas JVAQUA para sulfato de aluminio, cloro granulado, alguicida, metasilicato, Cal P24, tricloro y reductor de pH.
+- Floculación recomendada por 24 horas para agua muy turbia o verde.
+- Historial propio del asistente, sin modificar Inventario, Mantenimientos, Finanzas ni Contratos.
+- Seguimiento automático desde 24 horas después del cálculo, con hasta tres recordatorios separados por 24 horas mientras siga pendiente.
+- Registro de resultado exitoso, parcial o fallido, fallos detectados, mediciones finales, acciones posteriores y foto opcional.
+- Biblioteca Técnica JVAQUA y casos destacados para capacitación.
+- Panel administrativo con tasa de éxito, rendimiento por protocolo, tipo de piscina, estado inicial y rango de volumen.
+- Detección de patrones que sugiere revisar protocolos con baja tasa de éxito, sin cambiar reglas automáticamente.
+- Motor de recomendaciones versionado; administración puede publicar una nueva versión o reactivar una anterior.
+- Compatibilidad: la URL de la Calculadora anterior redirige al nuevo Asistente Técnico.
+
 ## 1.3.7 — Centro Logístico
 
 - Catálogo maestro de productos administrable directamente desde el ERP.
