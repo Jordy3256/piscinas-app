@@ -28,7 +28,7 @@ from django.views.decorators.http import require_http_methods, require_GET
 from pywebpush import webpush, WebPushException
 
 from trabajadores.models import Trabajador
-from inventario.models import Insumo, InventarioTrabajador
+from inventario.models import Insumo, InventarioTrabajador, SolicitudReposicion
 from mantenimientos.models import (
     Mantenimiento,
     UsoInsumo,
@@ -72,6 +72,11 @@ except Exception:
     ActividadSistema = None
 
 logger = logging.getLogger(__name__)
+
+try:
+    from asistente_tecnico.models import CasoAsistenteTecnico
+except Exception:
+    CasoAsistenteTecnico = None
 
 
 # -------------------
@@ -2048,6 +2053,113 @@ def dashboard_view(request):
             ],
         }
 
+        # ================= Dashboard Ejecutivo v2.1 =================
+        acciones = _centro_acciones_contexto()
+
+        productos_criticos_qs = (
+            Insumo.objects
+            .filter(activo=True, controla_inventario=True, stock__lte=F("stock_minimo"))
+            .order_by("stock", "nombre")
+        )
+        productos_criticos = list(productos_criticos_qs[:6])
+        total_productos_criticos = productos_criticos_qs.count()
+        total_productos_agotados = productos_criticos_qs.filter(stock__lte=0).count()
+        solicitudes_reposicion_pendientes = SolicitudReposicion.objects.filter(estado="pendiente").count()
+
+        contratos_activos_qs = Contrato.objects.filter(activo=True).select_related("cliente")
+        total_contratos_activos = contratos_activos_qs.count()
+        contratos_por_revisar_qs = (
+            contratos_activos_qs
+            .filter(models.Q(programado_hasta__isnull=True) | models.Q(programado_hasta__lte=hoy + timedelta(days=7)))
+            .order_by("programado_hasta", "id")
+        )
+        contratos_por_revisar = list(contratos_por_revisar_qs[:6])
+        total_contratos_por_revisar = contratos_por_revisar_qs.count()
+
+        clientes_nuevos_mes = Cliente.objects.filter(
+            fecha_registro__date__gte=primer_dia_mes_actual,
+            fecha_registro__date__lte=ultimo_dia_mes_actual,
+        ).count()
+
+        total_trabajadores_activos = Trabajador.objects.filter(activo=True).count()
+
+        # Rentabilidad operativa base por contrato: ingreso mensual - técnico - químicos del mes.
+        consumos_contrato = {
+            fila["mantenimiento__contrato_id"]: (fila["total"] or Decimal("0.00"))
+            for fila in UsoInsumo.objects.filter(
+                mantenimiento__contrato_id__isnull=False,
+                mantenimiento__fecha__gte=primer_dia_mes_actual,
+                mantenimiento__fecha__lte=ultimo_dia_mes_actual,
+            ).values("mantenimiento__contrato_id").annotate(total=Sum("costo_total"))
+        }
+        rentabilidad_contratos = []
+        ingreso_contratos_proyectado = Decimal("0.00")
+        nomina_contratos_proyectada = Decimal("0.00")
+        quimicos_mes_total = Decimal("0.00")
+        for contrato in contratos_activos_qs:
+            ingreso = Decimal(contrato.precio_mensual or 0)
+            tecnico = Decimal(contrato.valor_tecnico_mensual or 0)
+            quimicos = Decimal(consumos_contrato.get(contrato.id, Decimal("0.00")) or 0)
+            margen = ingreso - tecnico - quimicos
+            ingreso_contratos_proyectado += ingreso
+            nomina_contratos_proyectada += tecnico
+            quimicos_mes_total += quimicos
+            rentabilidad_contratos.append({
+                "contrato": contrato,
+                "ingreso": ingreso,
+                "tecnico": tecnico,
+                "quimicos": quimicos,
+                "margen": margen,
+                "margen_pct": round((margen / ingreso) * 100, 1) if ingreso else 0,
+            })
+        rentabilidad_contratos.sort(key=lambda x: x["margen"], reverse=True)
+        top_rentabilidad_contratos = rentabilidad_contratos[:5]
+        margen_operativo_base = ingreso_contratos_proyectado - nomina_contratos_proyectada - quimicos_mes_total
+
+        # Asistente Técnico: seguimiento independiente del resto de módulos.
+        asistente_total_mes = 0
+        asistente_exitosos_mes = 0
+        asistente_pendientes = 0
+        asistente_fallidos_mes = 0
+        asistente_tasa_exito = 0
+        if CasoAsistenteTecnico is not None:
+            casos_mes = CasoAsistenteTecnico.objects.filter(
+                creado_en__date__gte=primer_dia_mes_actual,
+                creado_en__date__lte=ultimo_dia_mes_actual,
+            )
+            asistente_total_mes = casos_mes.count()
+            asistente_exitosos_mes = casos_mes.filter(resultado="exitoso").count()
+            asistente_fallidos_mes = casos_mes.filter(resultado="fallido").count()
+            asistente_pendientes = CasoAsistenteTecnico.objects.filter(resultado="pendiente").count()
+            respondidos = casos_mes.exclude(resultado="pendiente").count()
+            if respondidos:
+                asistente_tasa_exito = round((asistente_exitosos_mes / respondidos) * 100, 1)
+
+        # Salud general: un resumen accionable, no un sustituto de los datos.
+        senales_criticas = 0
+        senales_atencion = 0
+        if acciones.get("cantidad_cobros_vencidos", 0):
+            senales_criticas += 1
+        if total_atrasados:
+            senales_criticas += 1
+        if total_productos_agotados:
+            senales_criticas += 1
+        if acciones.get("cantidad_trabajadores_pendientes", 0):
+            senales_atencion += 1
+        if total_productos_criticos:
+            senales_atencion += 1
+        if total_contratos_por_revisar:
+            senales_atencion += 1
+        if asistente_pendientes:
+            senales_atencion += 1
+
+        if senales_criticas >= 2:
+            salud_empresa = {"nivel": "danger", "titulo": "Acción inmediata", "texto": "Hay varios puntos críticos que requieren atención hoy."}
+        elif senales_criticas or senales_atencion:
+            salud_empresa = {"nivel": "warning", "titulo": "Requiere atención", "texto": "La operación está activa, pero hay pendientes importantes por gestionar."}
+        else:
+            salud_empresa = {"nivel": "success", "titulo": "Operación estable", "texto": "Los indicadores principales están bajo control."}
+
         ctx = {
             **base_ctx,
             "modo": "admin",
@@ -2124,6 +2236,28 @@ def dashboard_view(request):
             "serie_financiera_6m": analitica_pro["serie_financiera_6m"],
             "serie_operativa_6m": analitica_pro["serie_operativa_6m"],
 
+            # Dashboard Ejecutivo v2.1
+            "acciones": acciones,
+            "productos_criticos": productos_criticos,
+            "total_productos_criticos": total_productos_criticos,
+            "total_productos_agotados": total_productos_agotados,
+            "solicitudes_reposicion_pendientes": solicitudes_reposicion_pendientes,
+            "total_contratos_activos": total_contratos_activos,
+            "contratos_por_revisar": contratos_por_revisar,
+            "total_contratos_por_revisar": total_contratos_por_revisar,
+            "clientes_nuevos_mes": clientes_nuevos_mes,
+            "total_trabajadores_activos": total_trabajadores_activos,
+            "ingreso_contratos_proyectado": ingreso_contratos_proyectado,
+            "nomina_contratos_proyectada": nomina_contratos_proyectada,
+            "quimicos_mes_total": quimicos_mes_total,
+            "margen_operativo_base": margen_operativo_base,
+            "top_rentabilidad_contratos": top_rentabilidad_contratos,
+            "asistente_total_mes": asistente_total_mes,
+            "asistente_exitosos_mes": asistente_exitosos_mes,
+            "asistente_fallidos_mes": asistente_fallidos_mes,
+            "asistente_pendientes": asistente_pendientes,
+            "asistente_tasa_exito": asistente_tasa_exito,
+            "salud_empresa": salud_empresa,
             "es_admin": True,
         }
         return render(request, "dashboard/dashboard.html", ctx)

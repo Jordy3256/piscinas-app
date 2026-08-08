@@ -1,971 +1,194 @@
 {% extends "dashboard/base_admin.html" %}
 
-{% block title %}Dashboard Admin{% endblock %}
-{% block top_title %}📊 Dashboard (Admin){% endblock %}
+{% block title %}Dashboard Ejecutivo | JVAQUA ERP{% endblock %}
+{% block top_title %}Dashboard Ejecutivo{% endblock %}
 
 {% block content %}
-
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
 <style>
-  .dashboard-page {
-    --dash-primary: #0b5ed7;
-    --dash-aqua: #00a6c7;
-    --dash-success: #198754;
-    --dash-danger: #dc3545;
-    --dash-warning: #f59e0b;
-    --dash-dark: #152238;
-    --dash-muted: #6f7b8a;
-    --dash-border: #e6ebf2;
-  }
-
-  .dashboard-hero {
-    position: relative;
-    margin-bottom: 1rem;
-    padding: 1.55rem;
-    border: 1px solid rgba(11, 94, 215, .13);
-    border-radius: 23px;
-    background:
-      radial-gradient(circle at 90% 15%, rgba(0, 166, 199, .18), transparent 16rem),
-      linear-gradient(135deg, #ffffff, #f3f8ff 58%, #eefbff);
-    box-shadow: 0 14px 34px rgba(21, 34, 56, .08);
-    overflow: hidden;
-  }
-
-  .dashboard-hero::after {
-    content: "";
-    position: absolute;
-    width: 150px;
-    height: 150px;
-    right: -55px;
-    bottom: -75px;
-    border-radius: 50%;
-    background: rgba(11, 94, 215, .07);
-  }
-
-  .dashboard-hero-content { position: relative; z-index: 1; }
-
-  .dashboard-eyebrow {
-    display: inline-flex;
-    align-items: center;
-    gap: .45rem;
-    margin-bottom: .65rem;
-    padding: .4rem .68rem;
-    border-radius: 999px;
-    background: rgba(11, 94, 215, .08);
-    color: var(--dash-primary);
-    font-size: .73rem;
-    font-weight: 850;
-    letter-spacing: .06em;
-    text-transform: uppercase;
-  }
-
-  .dashboard-title {
-    margin: 0;
-    color: var(--dash-dark);
-    font-size: clamp(1.55rem, 3vw, 2.15rem);
-    font-weight: 850;
-    letter-spacing: -.04em;
-  }
-
-  .dashboard-subtitle {
-    max-width: 760px;
-    margin: .45rem 0 0;
-    color: var(--dash-muted);
-    font-size: .92rem;
-    line-height: 1.6;
-  }
-
-  .dashboard-kpi-card {
-    position: relative;
-    min-height: 152px;
-    border: 1px solid var(--dash-border) !important;
-    border-radius: 19px !important;
-    background: #fff;
-    box-shadow: 0 8px 24px rgba(21, 34, 56, .07);
-    overflow: hidden;
-    transition: all .22s ease;
-  }
-
-  .dashboard-kpi-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 16px 34px rgba(21, 34, 56, .12);
-  }
-
-  .dashboard-kpi-card::after {
-    content: "";
-    position: absolute;
-    width: 86px;
-    height: 86px;
-    right: -34px;
-    bottom: -34px;
-    border-radius: 50%;
-    background: currentColor;
-    opacity: .07;
-  }
-
-  .dashboard-kpi-card .card-body {
-    position: relative;
-    z-index: 1;
-    padding: 1.15rem;
-  }
-
-  .dashboard-kpi-label {
-    margin-bottom: .35rem;
-    color: var(--dash-muted);
-    font-size: .78rem;
-    font-weight: 750;
-    letter-spacing: .025em;
-    text-transform: uppercase;
-  }
-
-  .dashboard-kpi-value {
-    color: var(--dash-dark);
-    font-size: clamp(1.35rem, 3vw, 1.85rem);
-    font-weight: 850;
-    letter-spacing: -.035em;
-    line-height: 1.05;
-  }
-
-  .dashboard-section-card {
-    border: 1px solid var(--dash-border) !important;
-    border-radius: 20px !important;
-    background: rgba(255,255,255,.98);
-    box-shadow: 0 8px 24px rgba(21, 34, 56, .065);
-  }
-
-  .dashboard-section-card .card-body { padding: 1.2rem; }
-
-  .dashboard-mini-stat {
-    height: 100%;
-    padding: .95rem;
-    border: 1px solid var(--dash-border);
-    border-radius: 15px;
-    background: linear-gradient(145deg, #fff, #fafcff);
-    transition: all .2s ease;
-  }
-
-  .dashboard-mini-stat:hover {
-    transform: translateY(-2px);
-    border-color: rgba(11, 94, 215, .18);
-    box-shadow: 0 8px 20px rgba(21, 34, 56, .07);
-  }
-
-  .dashboard-mini-stat .label {
-    margin-bottom: .22rem;
-    color: var(--dash-muted);
-    font-size: .76rem;
-    font-weight: 700;
-  }
-
-  .dashboard-mini-stat .value {
-    color: var(--dash-dark);
-    font-size: 1.2rem;
-    font-weight: 850;
-    letter-spacing: -.025em;
-  }
-
-  .dashboard-list-item,
-  .dashboard-activity-item {
-    padding: .88rem .95rem;
-    border: 1px solid var(--dash-border);
-    border-radius: 14px;
-    background: #fff;
-    transition: all .18s ease;
-  }
-
-  .dashboard-list-item:hover,
-  .dashboard-activity-item:hover {
-    transform: translateX(3px);
-    border-color: rgba(11, 94, 215, .17);
-    background: rgba(11, 94, 215, .025);
-  }
-
-  .dashboard-ranking-badge {
-    min-width: 36px;
-    height: 36px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid rgba(11, 94, 215, .12);
-    border-radius: 12px;
-    color: var(--dash-primary);
-    background: rgba(11, 94, 215, .08);
-    font-weight: 850;
-  }
-
-  .dashboard-chart-wrap {
-    position: relative;
-    min-height: 320px;
-    padding: .45rem;
-    border: 1px solid var(--dash-border);
-    border-radius: 16px;
-    background: linear-gradient(145deg, #fff, #fbfcfe);
-  }
-
-  .dashboard-chart-wrap canvas {
-    width: 100% !important;
-    height: 305px !important;
-  }
-
-  .dashboard-soft-success { color: var(--dash-success); background: linear-gradient(145deg, rgba(25,135,84,.10), rgba(255,255,255,.96)); }
-  .dashboard-soft-danger { color: var(--dash-danger); background: linear-gradient(145deg, rgba(220,53,69,.09), rgba(255,255,255,.96)); }
-  .dashboard-soft-warning { color: var(--dash-warning); background: linear-gradient(145deg, rgba(245,158,11,.11), rgba(255,255,255,.96)); }
-  .dashboard-soft-primary { color: var(--dash-primary); background: linear-gradient(145deg, rgba(11,94,215,.09), rgba(255,255,255,.96)); }
-  .dashboard-soft-info { color: var(--dash-aqua); background: linear-gradient(145deg, rgba(0,166,199,.10), rgba(255,255,255,.96)); }
-
-  .dashboard-section-card .badge { padding: .55em .75em; border-radius: 999px; }
-
-  @media (max-width: 767.98px) {
-    .dashboard-hero { padding: 1.25rem; border-radius: 19px; }
-    .dashboard-title { font-size: 1.6rem; }
-    .dashboard-subtitle { font-size: .86rem; }
-    .dashboard-section-card .card-body { padding: 1rem; }
-    .dashboard-kpi-card { min-height: 142px; }
-    .dashboard-kpi-value { font-size: 1.35rem; }
-    .dashboard-chart-wrap,
-    .dashboard-chart-wrap canvas {
-      min-height: 265px;
-      height: 265px !important;
-    }
-  }
+  .exec-dashboard{--ed-blue:#0865d9;--ed-navy:#17324d;--ed-aqua:#0aa6c7;--ed-green:#14845f;--ed-yellow:#d99508;--ed-red:#d94b55;--ed-muted:#68788b;--ed-line:#e7edf5;--ed-soft:#f6f9fc;}
+  .exec-hero{position:relative;overflow:hidden;padding:1.35rem 1.4rem;border:1px solid rgba(8,101,217,.12);border-radius:24px;background:linear-gradient(135deg,#fff 0%,#f3f8ff 56%,#eafcff 100%);box-shadow:0 14px 35px rgba(18,46,77,.07);}
+  .exec-hero:after{content:"";position:absolute;width:250px;height:250px;right:-90px;top:-130px;border-radius:50%;background:rgba(10,166,199,.10)}
+  .exec-hero-main{position:relative;z-index:1;display:flex;gap:1rem;justify-content:space-between;align-items:flex-start}
+  .exec-kicker{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;font-weight:800;color:var(--ed-blue);margin-bottom:.35rem}
+  .exec-title{font-size:clamp(1.55rem,3vw,2.2rem);line-height:1.08;font-weight:850;color:var(--ed-navy);margin:0}
+  .exec-sub{color:var(--ed-muted);margin:.45rem 0 0;font-size:.93rem}
+  .health-card{min-width:245px;border-radius:18px;padding:.9rem 1rem;background:#fff;border:1px solid var(--ed-line);box-shadow:0 7px 20px rgba(18,46,77,.05)}
+  .health-dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:.4rem}.health-dot.success{background:var(--ed-green)}.health-dot.warning{background:var(--ed-yellow)}.health-dot.danger{background:var(--ed-red)}
+  .health-title{font-weight:800;color:var(--ed-navy)}.health-text{font-size:.78rem;color:var(--ed-muted);margin-top:.25rem}
+  .exec-grid{display:grid;gap:.85rem}.exec-grid.kpis{grid-template-columns:repeat(4,minmax(0,1fr))}.exec-grid.two{grid-template-columns:1.2fr .8fr}.exec-grid.equal{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .exec-card{background:#fff;border:1px solid var(--ed-line);border-radius:20px;box-shadow:0 9px 24px rgba(18,46,77,.05);overflow:hidden}
+  .exec-card-body{padding:1rem 1.05rem}.exec-card-head{display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:1rem 1.05rem .45rem}.exec-card-title{font-weight:800;color:var(--ed-navy);font-size:.98rem}.exec-link{font-size:.76rem;font-weight:750;color:var(--ed-blue);text-decoration:none}.exec-link:hover{text-decoration:underline}
+  .kpi{position:relative;min-height:132px}.kpi .label{font-size:.76rem;font-weight:750;color:var(--ed-muted)}.kpi .value{font-size:1.65rem;font-weight:850;color:var(--ed-navy);margin:.3rem 0}.kpi .foot{font-size:.73rem;color:var(--ed-muted)}.kpi .icon{position:absolute;right:1rem;top:1rem;width:38px;height:38px;display:grid;place-items:center;border-radius:12px;background:var(--ed-soft);font-size:1.05rem}
+  .priority-list{display:flex;flex-direction:column;gap:.55rem}.priority-item{display:flex;align-items:flex-start;gap:.75rem;border:1px solid var(--ed-line);border-radius:14px;padding:.72rem .78rem;background:#fff}.priority-marker{width:10px;height:10px;border-radius:50%;margin-top:.3rem;flex:0 0 auto}.priority-marker.red{background:var(--ed-red)}.priority-marker.yellow{background:var(--ed-yellow)}.priority-marker.blue{background:var(--ed-blue)}.priority-marker.green{background:var(--ed-green)}.priority-main{min-width:0;flex:1}.priority-title{font-size:.82rem;font-weight:800;color:var(--ed-navy)}.priority-meta{font-size:.72rem;color:var(--ed-muted);margin-top:.12rem}
+  .mini-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.55rem}.mini-stat{border-radius:14px;background:var(--ed-soft);padding:.72rem}.mini-stat strong{display:block;color:var(--ed-navy);font-size:1.05rem}.mini-stat span{font-size:.68rem;color:var(--ed-muted)}
+  .section-space{margin-top:.85rem}.chart-wrap{height:255px;padding:.35rem .7rem .85rem}.chart-wrap canvas{width:100%!important;height:100%!important}
+  .simple-list{display:flex;flex-direction:column}.simple-row{display:flex;align-items:center;gap:.75rem;padding:.72rem 0;border-bottom:1px solid var(--ed-line)}.simple-row:last-child{border-bottom:0}.simple-main{flex:1;min-width:0}.simple-title{font-size:.79rem;font-weight:800;color:var(--ed-navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.simple-meta{font-size:.69rem;color:var(--ed-muted)}.simple-val{text-align:right;font-weight:800;color:var(--ed-navy);font-size:.8rem}
+  .pill{display:inline-flex;align-items:center;padding:.24rem .48rem;border-radius:999px;font-size:.64rem;font-weight:800}.pill.red{background:rgba(217,75,85,.1);color:var(--ed-red)}.pill.yellow{background:rgba(217,149,8,.1);color:#ad7200}.pill.green{background:rgba(20,132,95,.1);color:var(--ed-green)}.pill.blue{background:rgba(8,101,217,.09);color:var(--ed-blue)}
+  .progress-thin{height:6px;background:#edf2f7;border-radius:999px;overflow:hidden;margin-top:.35rem}.progress-thin span{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--ed-blue),var(--ed-aqua))}
+  .empty-state{padding:1.25rem;text-align:center;color:var(--ed-muted);font-size:.8rem}.profit-positive{color:var(--ed-green)!important}.profit-negative{color:var(--ed-red)!important}
+  @media(max-width:1100px){.exec-grid.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.exec-grid.two{grid-template-columns:1fr}.exec-grid.equal{grid-template-columns:1fr}}
+  @media(max-width:700px){.exec-hero{padding:1.05rem;border-radius:19px}.exec-hero-main{display:block}.health-card{min-width:0;margin-top:.85rem}.exec-grid.kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:.65rem}.exec-card{border-radius:17px}.exec-card-body{padding:.85rem}.kpi{min-height:116px}.kpi .value{font-size:1.28rem}.kpi .icon{width:34px;height:34px;right:.8rem;top:.8rem}.mini-stats{grid-template-columns:repeat(3,minmax(0,1fr))}.chart-wrap{height:220px}.section-space{margin-top:.7rem}}
 </style>
 
-
-<div class="dashboard-page">
-
-  <section class="dashboard-hero">
-    <div class="dashboard-hero-content">
-      <div class="dashboard-eyebrow">📊 Inteligencia administrativa</div>
-      <h1 class="dashboard-title">Dashboard general de JVAQUA</h1>
-      <p class="dashboard-subtitle">
-        Consulta en tiempo real el comportamiento financiero, operativo y comercial
-        para tomar decisiones con mayor claridad.
-      </p>
+<div class="exec-dashboard">
+  <section class="exec-hero mb-3">
+    <div class="exec-hero-main">
+      <div>
+        <div class="exec-kicker">Centro de Control Ejecutivo</div>
+        <h1 class="exec-title">{% if request.user.get_full_name %}Hola, {{ request.user.get_full_name }}{% else %}Hola, {{ request.user.username }}{% endif %} 👋</h1>
+        <p class="exec-sub">{{ hoy|date:"l, j \d\e F \d\e Y"|capfirst }} · Una vista rápida de lo que requiere atención y cómo está operando JVAQUA.</p>
+      </div>
+      <div class="health-card">
+        <div><span class="health-dot {{ salud_empresa.nivel }}"></span><span class="health-title">{{ salud_empresa.titulo }}</span></div>
+        <div class="health-text">{{ salud_empresa.texto }}</div>
+      </div>
     </div>
   </section>
 
-<!-- ================= KPIs PRINCIPALES ================= -->
-<div class="row g-3 mb-3">
-  <div class="col-6 col-md-3">
-    <div class="card shadow-sm dashboard-kpi-card dashboard-soft-success">
-      <div class="card-body">
-        <div class="dashboard-kpi-label">Ingresos del mes</div>
-        <div class="dashboard-kpi-value text-success">${{ resumen_mes_actual.ingresos|floatformat:2 }}</div>
-        <div class="small mt-2 text-{{ estado_variacion_ingresos_mes }}">
-          {{ tendencia_ingresos_mes }} {{ variacion_ingresos_mes }}% vs mes anterior
-        </div>
-      </div>
-    </div>
+  <div class="exec-grid kpis">
+    <div class="exec-card kpi"><div class="exec-card-body"><div class="icon">💰</div><div class="label">Ingresos del mes</div><div class="value">${{ resumen_mes_actual.ingresos|floatformat:2 }}</div><div class="foot">{{ tendencia_ingresos_mes }} {{ variacion_ingresos_mes }}% vs. mes anterior</div></div></div>
+    <div class="exec-card kpi"><div class="exec-card-body"><div class="icon">📅</div><div class="label">Mantenimientos hoy</div><div class="value">{{ total_mantenimientos_hoy }}</div><div class="foot">{{ realizados_hoy }} realizados · {{ pendientes_hoy }} pendientes</div></div></div>
+    <div class="exec-card kpi"><div class="exec-card-body"><div class="icon">🧾</div><div class="label">Cobros vencidos</div><div class="value">{{ acciones.cantidad_cobros_vencidos }}</div><div class="foot">Prioridad financiera del día</div></div></div>
+    <div class="exec-card kpi"><div class="exec-card-body"><div class="icon">📦</div><div class="label">Stock crítico</div><div class="value">{{ total_productos_criticos }}</div><div class="foot">{{ total_productos_agotados }} agotado{{ total_productos_agotados|pluralize }}</div></div></div>
   </div>
 
-  <div class="col-6 col-md-3">
-    <div class="card shadow-sm dashboard-kpi-card dashboard-soft-danger">
-      <div class="card-body">
-        <div class="dashboard-kpi-label">Egresos del mes</div>
-        <div class="dashboard-kpi-value text-danger">${{ resumen_mes_actual.egresos|floatformat:2 }}</div>
-        <div class="small mt-2 text-{{ estado_variacion_egresos_mes }}">
-          {{ tendencia_egresos_mes }} {{ variacion_egresos_mes }}% vs mes anterior
+  <div class="exec-grid two section-space">
+    <section class="exec-card">
+      <div class="exec-card-head"><div class="exec-card-title">🎯 Prioridades de hoy</div><a class="exec-link" href="{% url 'home' %}">Abrir Centro de Acciones →</a></div>
+      <div class="exec-card-body pt-2">
+        <div class="priority-list">
+          {% if acciones.cantidad_cobros_vencidos %}<div class="priority-item"><span class="priority-marker red"></span><div class="priority-main"><div class="priority-title">{{ acciones.cantidad_cobros_vencidos }} cobro{{ acciones.cantidad_cobros_vencidos|pluralize }} vencido{{ acciones.cantidad_cobros_vencidos|pluralize }}</div><div class="priority-meta">Requieren gestión financiera inmediata.</div></div><span class="pill red">Urgente</span></div>{% endif %}
+          {% if total_atrasados %}<div class="priority-item"><span class="priority-marker red"></span><div class="priority-main"><div class="priority-title">{{ total_atrasados }} mantenimiento{{ total_atrasados|pluralize }} atrasado{{ total_atrasados|pluralize }}</div><div class="priority-meta">Revisa asignaciones y reprogramaciones.</div></div><a class="exec-link" href="{% url 'admin_operativo' %}">Ver</a></div>{% endif %}
+          {% if total_productos_criticos %}<div class="priority-item"><span class="priority-marker yellow"></span><div class="priority-main"><div class="priority-title">{{ total_productos_criticos }} producto{{ total_productos_criticos|pluralize }} con stock crítico</div><div class="priority-meta">{{ solicitudes_reposicion_pendientes }} solicitud{{ solicitudes_reposicion_pendientes|pluralize }} de reposición pendiente{{ solicitudes_reposicion_pendientes|pluralize }}.</div></div><a class="exec-link" href="{% url 'inventario' %}">Ver</a></div>{% endif %}
+          {% if acciones.cantidad_trabajadores_pendientes %}<div class="priority-item"><span class="priority-marker yellow"></span><div class="priority-main"><div class="priority-title">{{ acciones.cantidad_trabajadores_pendientes }} trabajador{{ acciones.cantidad_trabajadores_pendientes|pluralize }} con nómina pendiente</div><div class="priority-meta">Saldo pendiente: ${{ acciones.total_nomina_pendiente|floatformat:2 }}</div></div><span class="pill yellow">Revisar</span></div>{% endif %}
+          {% if total_contratos_por_revisar %}<div class="priority-item"><span class="priority-marker blue"></span><div class="priority-main"><div class="priority-title">{{ total_contratos_por_revisar }} contrato{{ total_contratos_por_revisar|pluralize }} por revisar</div><div class="priority-meta">Programación automática próxima a vencer o pendiente.</div></div><a class="exec-link" href="{% url 'contrato_list' %}">Ver</a></div>{% endif %}
+          {% if asistente_pendientes %}<div class="priority-item"><span class="priority-marker blue"></span><div class="priority-main"><div class="priority-title">{{ asistente_pendientes }} seguimiento{{ asistente_pendientes|pluralize }} del Asistente pendiente{{ asistente_pendientes|pluralize }}</div><div class="priority-meta">Casos aún sin evaluación final.</div></div><a class="exec-link" href="{% url 'asistente_tecnico:admin' %}">Ver</a></div>{% endif %}
+          {% if not acciones.cantidad_cobros_vencidos and not total_atrasados and not total_productos_criticos and not acciones.cantidad_trabajadores_pendientes and not total_contratos_por_revisar and not asistente_pendientes %}<div class="priority-item"><span class="priority-marker green"></span><div class="priority-main"><div class="priority-title">No hay prioridades críticas</div><div class="priority-meta">Los principales indicadores operativos están bajo control.</div></div><span class="pill green">Correcto</span></div>{% endif %}
         </div>
       </div>
-    </div>
-  </div>
+    </section>
 
-  <div class="col-6 col-md-3">
-    <div class="card shadow-sm dashboard-kpi-card dashboard-soft-primary">
-      <div class="card-body">
-        <div class="dashboard-kpi-label">Balance del mes</div>
-        <div class="dashboard-kpi-value text-primary">${{ resumen_mes_actual.balance|floatformat:2 }}</div>
-        <div class="small mt-2 text-{{ estado_variacion_balance_mes }}">
-          {{ tendencia_balance_mes }} {{ variacion_balance_mes }}% vs mes anterior
+    <section class="exec-card">
+      <div class="exec-card-head"><div class="exec-card-title">🏊 Operación de hoy</div><a class="exec-link" href="{% url 'admin_operativo' %}">Ir al Operativo →</a></div>
+      <div class="exec-card-body pt-2">
+        <div class="mini-stats">
+          <div class="mini-stat"><strong>{{ realizados_hoy }}</strong><span>Realizados</span></div>
+          <div class="mini-stat"><strong>{{ pendientes_hoy }}</strong><span>Pendientes</span></div>
+          <div class="mini-stat"><strong>{{ trabajadores_activos_hoy }}/{{ total_trabajadores_activos }}</strong><span>Técnicos activos</span></div>
         </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="col-6 col-md-3">
-    <div class="card shadow-sm dashboard-kpi-card dashboard-soft-info">
-      <div class="card-body">
-        <div class="dashboard-kpi-label">Ticket promedio</div>
-        <div class="dashboard-kpi-value text-dark">${{ kpi_ticket_promedio_mes|floatformat:2 }}</div>
-        <div class="small mt-2 text-muted">
-          {{ kpi_ingresos_mes_count }} ingreso{{ kpi_ingresos_mes_count|pluralize }} registrado{{ kpi_ingresos_mes_count|pluralize }}
+        <div class="mt-3">
+          <div class="d-flex justify-content-between small"><span class="text-muted">Cumplimiento diario</span><strong>{{ cumplimiento_hoy|floatformat:0 }}%</strong></div>
+          <div class="progress-thin"><span style="width:{{ cumplimiento_hoy }}%"></span></div>
         </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ================= ALERTAS + RESUMEN HOY ================= -->
-<div class="row g-3 mb-3">
-
-  <div class="col-lg-5">
-    {% if hay_alertas_operativas %}
-    <div class="card shadow-sm border-danger dashboard-section-card h-100">
-      <div class="card-body">
-        <div class="fw-bold text-danger mb-2">⚠ Alertas operativas</div>
-
-        <div class="d-flex gap-2 flex-wrap mb-3">
-          {% if total_atrasados > 0 %}
-          <span class="badge bg-danger">{{ total_atrasados }} atrasados</span>
-          {% endif %}
-
-          {% if total_pendientes_sin_asignar > 0 %}
-          <span class="badge bg-warning text-dark">
-            {{ total_pendientes_sin_asignar }} sin asignar
-          </span>
-          {% endif %}
-
-          {% if total_atrasados_sin_asignar > 0 %}
-          <span class="badge bg-dark">
-            {{ total_atrasados_sin_asignar }} atrasados sin asignar
-          </span>
-          {% endif %}
-        </div>
-
-        {% if requiere_atencion_items %}
-          <div class="d-grid gap-2">
-            {% for m in requiere_atencion_items %}
-            <div class="dashboard-list-item">
-              <div class="fw-semibold">{{ m.cliente }}</div>
-              <div class="small text-muted">
-                {{ m.fecha|date:"d/m/Y" }}
-                {% if m.es_atrasado %} · Atrasado{% endif %}
-                {% if m.sin_asignar %} · Sin asignar{% endif %}
-              </div>
-            </div>
-            {% endfor %}
-          </div>
-        {% endif %}
-
-        <a href="/dashboard/operativo/?filtro=urgentes" class="btn btn-danger btn-sm mt-3">
-          Ir al operativo
-        </a>
-      </div>
-    </div>
-    {% else %}
-    <div class="card shadow-sm dashboard-section-card h-100">
-      <div class="card-body">
-        <div class="fw-bold mb-2">✅ Operación bajo control</div>
-        <div class="text-muted">
-          No hay alertas operativas críticas en este momento.
-        </div>
-      </div>
-    </div>
-    {% endif %}
-  </div>
-
-  <div class="col-lg-7">
-    <div class="card shadow-sm dashboard-section-card h-100">
-      <div class="card-body">
-        <div class="fw-bold mb-3">🚀 Rendimiento del día</div>
-
-        <div class="row g-2">
-          <div class="col-6 col-md-3">
-            <div class="dashboard-mini-stat">
-              <div class="label">Mantenimientos</div>
-              <div class="value">{{ total_mantenimientos_hoy }}</div>
-            </div>
-          </div>
-
-          <div class="col-6 col-md-3">
-            <div class="dashboard-mini-stat">
-              <div class="label">Realizados</div>
-              <div class="value text-success">{{ realizados_hoy }}</div>
-            </div>
-          </div>
-
-          <div class="col-6 col-md-3">
-            <div class="dashboard-mini-stat">
-              <div class="label">Pendientes</div>
-              <div class="value text-warning">{{ pendientes_hoy }}</div>
-            </div>
-          </div>
-
-          <div class="col-6 col-md-3">
-            <div class="dashboard-mini-stat">
-              <div class="label">Trabajadores</div>
-              <div class="value">{{ trabajadores_activos_hoy }}</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="row g-2 mt-1">
-          <div class="col-md-4">
-            <div class="dashboard-mini-stat">
-              <div class="label">Cumplimiento hoy</div>
-              <div class="value text-{{ rendimiento_estado_clase }}">{{ cumplimiento_hoy }}%</div>
-            </div>
-          </div>
-          <div class="col-md-4">
-            <div class="dashboard-mini-stat">
-              <div class="label">Ingresos hoy</div>
-              <div class="value text-success">${{ ingresos_hoy|floatformat:2 }}</div>
-            </div>
-          </div>
-          <div class="col-md-4">
-            <div class="dashboard-mini-stat">
-              <div class="label">Balance hoy</div>
-              <div class="value {% if balance_hoy >= 0 %}text-primary{% else %}text-danger{% endif %}">
-                ${{ balance_hoy|floatformat:2 }}
-              </div>
-            </div>
-          </div>
-        </div>
-
-      </div>
-    </div>
-  </div>
-
-</div>
-
-<!-- ================= ANALÍTICA PRO ================= -->
-<div class="card shadow-sm dashboard-section-card mb-3">
-  <div class="card-body">
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-      <div class="fw-bold">📈 Analítica PRO del mes</div>
-      <div class="small text-muted">
-        Comparativo con el mes anterior
-      </div>
-    </div>
-
-    <div class="row g-2">
-      <div class="col-6 col-md-3">
-        <div class="dashboard-mini-stat">
-          <div class="label">Clientes activos</div>
-          <div class="value">{{ kpi_clientes_activos_mes }}</div>
-        </div>
-      </div>
-
-      <div class="col-6 col-md-3">
-        <div class="dashboard-mini-stat">
-          <div class="label">Total mantenimientos</div>
-          <div class="value">{{ kpi_total_mantenimientos_mes }}</div>
-        </div>
-      </div>
-
-      <div class="col-6 col-md-2">
-        <div class="dashboard-mini-stat">
-          <div class="label">Realizados</div>
-          <div class="value text-success">{{ kpi_mantenimientos_realizados_mes }}</div>
-        </div>
-      </div>
-
-      <div class="col-6 col-md-2">
-        <div class="dashboard-mini-stat">
-          <div class="label">Pendientes</div>
-          <div class="value text-warning">{{ kpi_mantenimientos_pendientes_mes }}</div>
-        </div>
-      </div>
-
-      <div class="col-6 col-md-2">
-        <div class="dashboard-mini-stat">
-          <div class="label">Atrasados</div>
-          <div class="value text-danger">{{ kpi_mantenimientos_atrasados_mes }}</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="row g-2 mt-1">
-      <div class="col-md-4">
-        <div class="dashboard-mini-stat">
-          <div class="label">Cumplimiento mensual</div>
-          <div class="value text-primary">{{ kpi_cumplimiento_mes }}%</div>
-        </div>
-      </div>
-
-      <div class="col-md-4">
-        <div class="dashboard-mini-stat">
-          <div class="label">Facturas pendientes</div>
-          <div class="value text-warning">{{ total_facturas_pendientes }}</div>
-        </div>
-      </div>
-
-      <div class="col-md-4">
-        <div class="dashboard-mini-stat">
-          <div class="label">Facturas vencidas</div>
-          <div class="value text-danger">{{ total_facturas_vencidas }}</div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ================= GRÁFICOS BASE ================= -->
-<div class="card shadow-sm dashboard-section-card mb-3">
-  <div class="card-body">
-    <div class="fw-bold mb-3">📊 Análisis visual</div>
-
-    <div class="row g-3">
-      <div class="col-lg-6">
-        <div class="dashboard-chart-wrap">
-          <canvas id="graficoFinanzas"></canvas>
-        </div>
-      </div>
-
-      <div class="col-lg-6">
-        <div class="dashboard-chart-wrap">
-          <canvas id="graficoOperativo"></canvas>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ================= TENDENCIAS PRO ================= -->
-<div class="card shadow-sm dashboard-section-card mb-3">
-  <div class="card-body">
-    <div class="fw-bold mb-3">📉 Tendencias PRO (últimos 6 meses)</div>
-
-    <div class="row g-3">
-      <div class="col-xl-6">
-        <div class="dashboard-chart-wrap">
-          <canvas id="graficoTendenciaFinanciera"></canvas>
-        </div>
-      </div>
-
-      <div class="col-xl-6">
-        <div class="dashboard-chart-wrap">
-          <canvas id="graficoTendenciaOperativa"></canvas>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ================= PRIORIDADES + EQUIPO ================= -->
-<div class="row g-3 mb-3">
-
-  <div class="col-lg-5">
-    <div class="card shadow-sm dashboard-section-card h-100">
-      <div class="card-body">
-        <div class="fw-bold mb-3">🎯 Prioridades del día</div>
-
-        {% if total_requieren_atencion > 0 %}
-          <div class="mb-3">
-            <span class="badge bg-danger">{{ total_requieren_atencion }} requieren atención</span>
-          </div>
-
-          <div class="d-grid gap-2">
-            {% for m in requiere_atencion_items %}
-            <a href="/dashboard/mantenimientos/{{ m.id }}/" class="text-decoration-none text-dark">
-              <div class="dashboard-list-item">
-                <div class="fw-semibold">{{ m.cliente }}</div>
-                <div class="small text-muted">
-                  {{ m.fecha|date:"d/m/Y" }}
-                  {% if m.es_atrasado %} · Atrasado{% endif %}
-                  {% if m.sin_asignar %} · Sin asignar{% endif %}
-                </div>
-              </div>
-            </a>
-            {% endfor %}
-          </div>
-        {% else %}
-          <div class="text-muted">
-            Sin prioridades críticas.
-          </div>
-        {% endif %}
-
-        {% if trabajador_recomendado %}
-        <div class="mt-3 dashboard-list-item">
-          <div class="fw-semibold">💡 Trabajador recomendado</div>
-          <div>{{ trabajador_recomendado.username }}</div>
-          <div class="small text-muted mt-1">{{ trabajador_recomendado.motivo }}</div>
-        </div>
-        {% endif %}
-      </div>
-    </div>
-  </div>
-
-  <div class="col-lg-7">
-    <div class="card shadow-sm dashboard-section-card h-100">
-      <div class="card-body">
-        <div class="fw-bold mb-3">👷 Estado del equipo</div>
-
-        <div class="row g-2 mb-3">
-          <div class="col-md-4">
-            <div class="dashboard-mini-stat">
-              <div class="label">Libres</div>
-              <div class="value text-success">{{ total_trabajadores_libres }}</div>
-            </div>
-          </div>
-          <div class="col-md-4">
-            <div class="dashboard-mini-stat">
-              <div class="label">Carga media</div>
-              <div class="value text-warning">{{ total_trabajadores_media }}</div>
-            </div>
-          </div>
-          <div class="col-md-4">
-            <div class="dashboard-mini-stat">
-              <div class="label">Saturados</div>
-              <div class="value text-danger">{{ total_trabajadores_saturados }}</div>
-            </div>
-          </div>
-        </div>
-
         {% if top_trabajadores %}
-        <div class="d-grid gap-2">
-          {% for t in top_trabajadores %}
-          <div class="dashboard-list-item">
-            <div class="d-flex justify-content-between align-items-center">
-              <div>
-                <div class="fw-semibold">{{ t.username }}</div>
-                <div class="small text-muted">
-                  Hoy: {{ t.carga_hoy }} · Atrasados: {{ t.atrasados }} · Próximos: {{ t.proximos }}
-                </div>
-              </div>
-              <span class="badge 
-                {% if t.estado == 'libre' %}bg-success
-                {% elif t.estado == 'media' %}bg-warning text-dark
-                {% else %}bg-danger{% endif %}">
-                {{ t.estado|title }}
-              </span>
-            </div>
-          </div>
+        <div class="simple-list mt-2">
+          {% for t in top_trabajadores|slice:":4" %}
+          <div class="simple-row"><div class="simple-main"><div class="simple-title">{{ t.username }}</div><div class="simple-meta">{{ t.carga_hoy }} hoy · {{ t.atrasados }} atrasados</div></div><span class="pill {% if t.estado == 'saturado' %}red{% elif t.estado == 'media' %}yellow{% else %}green{% endif %}">{{ t.estado|capfirst }}</span></div>
           {% endfor %}
         </div>
-        {% else %}
-        <div class="text-muted">No hay resumen de trabajadores disponible.</div>
         {% endif %}
       </div>
-    </div>
+    </section>
   </div>
 
-</div>
-
-<!-- ================= RANKINGS PRO ================= -->
-<div class="row g-3 mb-3">
-
-  <div class="col-xl-3 col-md-6">
-    <div class="card shadow-sm dashboard-section-card h-100">
-      <div class="card-body">
-        <div class="fw-bold mb-3">🏆 Top clientes</div>
-
-        {% if top_clientes_facturacion %}
-          <div class="d-grid gap-2">
-            {% for item in top_clientes_facturacion %}
-            <div class="dashboard-list-item">
-              <div class="d-flex justify-content-between align-items-center">
-                <div class="d-flex align-items-center gap-2">
-                  <span class="dashboard-ranking-badge">{{ forloop.counter }}</span>
-                  <div>
-                    <div class="fw-semibold">{{ item.cliente }}</div>
-                    <div class="small text-muted">Facturación del mes</div>
-                  </div>
-                </div>
-                <div class="fw-bold text-success">${{ item.total|floatformat:2 }}</div>
-              </div>
-            </div>
-            {% endfor %}
-          </div>
-        {% else %}
-          <div class="text-muted">Sin datos de facturación por cliente.</div>
-        {% endif %}
-      </div>
-    </div>
-  </div>
-
-  <div class="col-xl-3 col-md-6">
-    <div class="card shadow-sm dashboard-section-card h-100">
-      <div class="card-body">
-        <div class="fw-bold mb-3">📄 Top contratos</div>
-
-        {% if top_contratos_facturacion %}
-          <div class="d-grid gap-2">
-            {% for item in top_contratos_facturacion %}
-            <div class="dashboard-list-item">
-              <div class="d-flex justify-content-between align-items-center">
-                <div class="d-flex align-items-center gap-2">
-                  <span class="dashboard-ranking-badge">{{ forloop.counter }}</span>
-                  <div>
-                    <div class="fw-semibold">{{ item.contrato }}</div>
-                    <div class="small text-muted">{{ item.cliente }}</div>
-                  </div>
-                </div>
-                <div class="fw-bold text-primary">${{ item.total|floatformat:2 }}</div>
-              </div>
-            </div>
-            {% endfor %}
-          </div>
-        {% else %}
-          <div class="text-muted">Sin datos de contratos facturados.</div>
-        {% endif %}
-      </div>
-    </div>
-  </div>
-
-  <div class="col-xl-3 col-md-6">
-    <div class="card shadow-sm dashboard-section-card h-100">
-      <div class="card-body">
-        <div class="fw-bold mb-3">👷 Top trabajadores del mes</div>
-
-        {% if top_trabajadores_mes %}
-          <div class="d-grid gap-2">
-            {% for item in top_trabajadores_mes %}
-            <div class="dashboard-list-item">
-              <div class="d-flex justify-content-between align-items-center">
-                <div class="d-flex align-items-center gap-2">
-                  <span class="dashboard-ranking-badge">{{ forloop.counter }}</span>
-                  <div>
-                    <div class="fw-semibold">{{ item.trabajador }}</div>
-                    <div class="small text-muted">Mantenimientos realizados</div>
-                  </div>
-                </div>
-                <div class="fw-bold">{{ item.total }}</div>
-              </div>
-            </div>
-            {% endfor %}
-          </div>
-        {% else %}
-          <div class="text-muted">Sin datos de trabajadores este mes.</div>
-        {% endif %}
-      </div>
-    </div>
-  </div>
-
-  <div class="col-xl-3 col-md-6">
-    <div class="card shadow-sm dashboard-section-card h-100">
-      <div class="card-body">
-        <div class="fw-bold mb-3">🧪 Insumos más usados</div>
-
-        {% if top_insumos_mes %}
-          <div class="d-grid gap-2">
-            {% for item in top_insumos_mes %}
-            <div class="dashboard-list-item">
-              <div class="d-flex justify-content-between align-items-center">
-                <div class="d-flex align-items-center gap-2">
-                  <span class="dashboard-ranking-badge">{{ forloop.counter }}</span>
-                  <div>
-                    <div class="fw-semibold">{{ item.insumo }}</div>
-                    <div class="small text-muted">Consumo del mes</div>
-                  </div>
-                </div>
-                <div class="fw-bold">{{ item.total }}</div>
-              </div>
-            </div>
-            {% endfor %}
-          </div>
-        {% else %}
-          <div class="text-muted">Sin consumo registrado de insumos.</div>
-        {% endif %}
-      </div>
-    </div>
-  </div>
-
-</div>
-
-<!-- ================= FACTURACIÓN + RECURRENTES ================= -->
-<div class="row g-3 mb-3">
-
-  <div class="col-lg-6">
-    <div class="card shadow-sm dashboard-section-card h-100">
-      <div class="card-body">
-        <div class="fw-bold mb-3">🧾 Estado de facturación</div>
-
-        <div class="row g-2">
-          <div class="col-md-4">
-            <div class="dashboard-mini-stat">
-              <div class="label">Pendientes</div>
-              <div class="value text-warning">{{ total_facturas_pendientes }}</div>
-            </div>
-          </div>
-
-          <div class="col-md-4">
-            <div class="dashboard-mini-stat">
-              <div class="label">Vencidas</div>
-              <div class="value text-danger">{{ total_facturas_vencidas }}</div>
-            </div>
-          </div>
-
-          <div class="col-md-4">
-            <div class="dashboard-mini-stat">
-              <div class="label">Pagadas</div>
-              <div class="value text-success">{{ total_facturas_pagadas }}</div>
-            </div>
-          </div>
+  <div class="exec-grid equal section-space">
+    <section class="exec-card">
+      <div class="exec-card-head"><div class="exec-card-title">💵 Finanzas del mes</div><a class="exec-link" href="{% url 'flujo_mensual' %}">Centro Financiero →</a></div>
+      <div class="exec-card-body pt-2">
+        <div class="mini-stats">
+          <div class="mini-stat"><strong>${{ resumen_mes_actual.ingresos|floatformat:0 }}</strong><span>Ingresos</span></div>
+          <div class="mini-stat"><strong>${{ resumen_mes_actual.egresos|floatformat:0 }}</strong><span>Egresos</span></div>
+          <div class="mini-stat"><strong class="{% if resumen_mes_actual.balance >= 0 %}profit-positive{% else %}profit-negative{% endif %}">${{ resumen_mes_actual.balance|floatformat:0 }}</strong><span>Balance</span></div>
         </div>
-
-        <a href="/dashboard/finanzas/facturas/" class="btn btn-outline-primary btn-sm mt-3">
-          Ver facturación
-        </a>
+        <div class="chart-wrap mt-2"><canvas id="financeChart"></canvas></div>
       </div>
-    </div>
-  </div>
+    </section>
 
-  <div class="col-lg-6">
-    <div class="card shadow-sm dashboard-section-card h-100">
-      <div class="card-body">
-        <div class="fw-bold mb-3">🔁 Recurrentes próximos (3 días)</div>
-
-        {% if recurrentes_proximos_3_dias %}
-          <div class="d-grid gap-2">
-            {% for mov in recurrentes_proximos_3_dias %}
-            <div class="dashboard-list-item">
-              <div class="d-flex justify-content-between align-items-center">
-                <div>
-                  <div class="fw-semibold">{{ mov.concepto }}</div>
-                  <div class="small text-muted">
-                    {{ mov.proxima_fecha|date:"d/m/Y" }} · {{ mov.frecuencia|title }} · {{ mov.tipo|title }}
-                  </div>
-                </div>
-                <div class="fw-bold {% if mov.tipo == 'ingreso' %}text-success{% else %}text-danger{% endif %}">
-                  ${{ mov.monto|floatformat:2 }}
-                </div>
-              </div>
-            </div>
-            {% endfor %}
-          </div>
-        {% else %}
-          <div class="text-muted">No hay movimientos recurrentes próximos.</div>
-        {% endif %}
-
-        <a href="/dashboard/finanzas/recurrentes/" class="btn btn-outline-secondary btn-sm mt-3">
-          Ver recurrentes
-        </a>
-      </div>
-    </div>
-  </div>
-
-</div>
-
-<!-- ================= ACTIVIDAD ================= -->
-<div class="card shadow-sm dashboard-section-card">
-  <div class="card-body">
-
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-      <div class="fw-bold">🕘 Actividad reciente</div>
-      <a href="/dashboard/actividad/" class="btn btn-outline-dark btn-sm">
-        Ver historial
-      </a>
-    </div>
-
-    {% if actividades_recientes %}
-      <div class="d-grid gap-2">
-        {% for a in actividades_recientes %}
-        <div class="dashboard-activity-item">
-          <div class="fw-semibold">{{ a.titulo }}</div>
-          <div class="small text-muted">{{ a.descripcion }}</div>
+    <section class="exec-card">
+      <div class="exec-card-head"><div class="exec-card-title">📈 Margen operativo base</div><a class="exec-link" href="{% url 'contrato_list' %}">Ver contratos →</a></div>
+      <div class="exec-card-body pt-2">
+        <div class="mini-stats">
+          <div class="mini-stat"><strong>${{ ingreso_contratos_proyectado|floatformat:0 }}</strong><span>Ingreso mensual</span></div>
+          <div class="mini-stat"><strong>${{ nomina_contratos_proyectada|floatformat:0 }}</strong><span>Pago técnicos</span></div>
+          <div class="mini-stat"><strong>${{ quimicos_mes_total|floatformat:0 }}</strong><span>Químicos mes</span></div>
         </div>
-        {% endfor %}
+        <div class="mt-3 p-3 rounded-4" style="background:#f5f9fd;border:1px solid var(--ed-line)">
+          <div class="small text-muted">Margen operativo estimado</div>
+          <div class="fs-3 fw-bold {% if margen_operativo_base >= 0 %}profit-positive{% else %}profit-negative{% endif %}">${{ margen_operativo_base|floatformat:2 }}</div>
+          <div class="small text-muted">Ingreso de contratos − pago técnico − químicos registrados. No incluye otros gastos generales.</div>
+        </div>
+        {% if top_rentabilidad_contratos %}<div class="simple-list mt-2">{% for fila in top_rentabilidad_contratos|slice:":3" %}<div class="simple-row"><div class="simple-main"><div class="simple-title">{{ fila.contrato.cliente }}</div><div class="simple-meta">Técnico ${{ fila.tecnico|floatformat:0 }} · Químicos ${{ fila.quimicos|floatformat:0 }}</div></div><div class="simple-val {% if fila.margen >= 0 %}profit-positive{% else %}profit-negative{% endif %}">${{ fila.margen|floatformat:0 }}<div class="simple-meta">{{ fila.margen_pct }}%</div></div></div>{% endfor %}</div>{% endif %}
       </div>
-    {% else %}
-      <div class="text-muted">No hay actividad reciente registrada.</div>
-    {% endif %}
+    </section>
+  </div>
 
+  <div class="exec-grid equal section-space">
+    <section class="exec-card">
+      <div class="exec-card-head"><div class="exec-card-title">📦 Inventario crítico</div><a class="exec-link" href="{% url 'inventario' %}">Centro Logístico →</a></div>
+      <div class="exec-card-body pt-2">
+        {% if productos_criticos %}<div class="simple-list">{% for p in productos_criticos %}<div class="simple-row"><div class="simple-main"><div class="simple-title">{{ p.nombre }}</div><div class="simple-meta">Mínimo {{ p.stock_minimo|floatformat:3 }} {{ p.unidad_corta }}</div></div><div class="simple-val"><span class="pill {% if p.stock <= 0 %}red{% else %}yellow{% endif %}">{{ p.stock|floatformat:3 }} {{ p.unidad_corta }}</span></div></div>{% endfor %}</div>{% else %}<div class="empty-state">✅ No hay productos por debajo del stock mínimo.</div>{% endif %}
+      </div>
+    </section>
+
+    <section class="exec-card">
+      <div class="exec-card-head"><div class="exec-card-title">🧠 Asistente Técnico</div><a class="exec-link" href="{% url 'asistente_tecnico:admin' %}">Panel del Asistente →</a></div>
+      <div class="exec-card-body pt-2">
+        <div class="mini-stats">
+          <div class="mini-stat"><strong>{{ asistente_total_mes }}</strong><span>Casos del mes</span></div>
+          <div class="mini-stat"><strong>{{ asistente_tasa_exito }}%</strong><span>Éxito evaluado</span></div>
+          <div class="mini-stat"><strong>{{ asistente_pendientes }}</strong><span>Pendientes</span></div>
+        </div>
+        <div class="mt-3 d-flex gap-2 flex-wrap"><span class="pill green">{{ asistente_exitosos_mes }} exitosos</span><span class="pill red">{{ asistente_fallidos_mes }} fallidos</span><span class="pill blue">{{ asistente_pendientes }} por evaluar</span></div>
+        <p class="small text-muted mt-3 mb-0">El Asistente mantiene su historial independiente y estas métricas miden la efectividad de sus recomendaciones.</p>
+      </div>
+    </section>
+  </div>
+
+  <div class="exec-grid equal section-space">
+    <section class="exec-card">
+      <div class="exec-card-head"><div class="exec-card-title">📄 Contratos y crecimiento</div><a class="exec-link" href="{% url 'contrato_list' %}">Contratos →</a></div>
+      <div class="exec-card-body pt-2">
+        <div class="mini-stats"><div class="mini-stat"><strong>{{ total_contratos_activos }}</strong><span>Activos</span></div><div class="mini-stat"><strong>{{ clientes_nuevos_mes }}</strong><span>Clientes nuevos</span></div><div class="mini-stat"><strong>{{ total_contratos_por_revisar }}</strong><span>Por revisar</span></div></div>
+        {% if contratos_por_revisar %}<div class="simple-list mt-2">{% for c in contratos_por_revisar|slice:":4" %}<div class="simple-row"><div class="simple-main"><div class="simple-title">{{ c.cliente }}</div><div class="simple-meta">Programado hasta: {% if c.programado_hasta %}{{ c.programado_hasta|date:"d/m/Y" }}{% else %}Sin programación{% endif %}</div></div><a class="exec-link" href="{% url 'contrato_detalle' c.pk %}">Abrir</a></div>{% endfor %}</div>{% endif %}
+      </div>
+    </section>
+
+    <section class="exec-card">
+      <div class="exec-card-head"><div class="exec-card-title">🕘 Actividad reciente</div><a class="exec-link" href="{% url 'actividad_historial' %}">Ver historial →</a></div>
+      <div class="exec-card-body pt-2">
+        {% if actividades_recientes %}<div class="simple-list">{% for a in actividades_recientes %}<div class="simple-row"><div class="simple-main"><div class="simple-title">{{ a.titulo|default:a.accion|default:"Actividad del sistema" }}</div><div class="simple-meta">{% if a.user %}{{ a.user.username }} · {% endif %}{{ a.creada_en|date:"d/m H:i" }}</div></div></div>{% endfor %}</div>{% else %}<div class="empty-state">Aún no hay actividad reciente para mostrar.</div>{% endif %}
+      </div>
+    </section>
   </div>
 </div>
 
 <script>
-const f = JSON.parse('{{ grafico_finanzas|escapejs }}');
-const o = JSON.parse('{{ grafico_operativo|escapejs }}');
-const tf = JSON.parse('{{ grafico_tendencia_financiera|escapejs }}');
-const to = JSON.parse('{{ grafico_tendencia_operativa|escapejs }}');
-
-new Chart(document.getElementById('graficoFinanzas'), {
-  type: 'doughnut',
-  data: {
-    labels: f.labels,
-    datasets: [{
-      data: f.data,
-      borderWidth: 1
-    }]
-  },
-  options: {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { position: 'bottom' }
+(function(){
+  const finance = {{ grafico_tendencia_financiera|safe }};
+  const el = document.getElementById('financeChart');
+  if (!el || !window.Chart) return;
+  new Chart(el, {
+    type: 'line',
+    data: {
+      labels: finance.labels,
+      datasets: finance.datasets.map((d, i) => ({
+        label: d.label,
+        data: d.data,
+        borderWidth: 2,
+        tension: .35,
+        fill: false,
+        pointRadius: 2,
+        borderColor: i === 0 ? '#14845f' : (i === 1 ? '#d94b55' : '#0865d9'),
+        backgroundColor: i === 0 ? '#14845f' : (i === 1 ? '#d94b55' : '#0865d9')
+      }))
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:true,labels:{boxWidth:10,usePointStyle:true,font:{size:10}}}},
+      scales:{x:{grid:{display:false},ticks:{font:{size:10}}},y:{grid:{color:'#edf2f7'},ticks:{font:{size:10}}}}
     }
-  }
-});
-
-new Chart(document.getElementById('graficoOperativo'), {
-  type: 'bar',
-  data: {
-    labels: o.labels,
-    datasets: [{
-      label: 'Cantidad',
-      data: o.data,
-      borderWidth: 1
-    }]
-  },
-  options: {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { display: false }
-    },
-    scales: {
-      y: {
-        beginAtZero: true,
-        ticks: { precision: 0 }
-      }
-    }
-  }
-});
-
-new Chart(document.getElementById('graficoTendenciaFinanciera'), {
-  type: 'line',
-  data: {
-    labels: tf.labels,
-    datasets: tf.datasets.map(ds => ({
-      label: ds.label,
-      data: ds.data,
-      tension: 0.35,
-      fill: false,
-      borderWidth: 2
-    }))
-  },
-  options: {
-    responsive: true,
-    maintainAspectRatio: false,
-    interaction: {
-      mode: 'index',
-      intersect: false
-    },
-    plugins: {
-      legend: { position: 'bottom' }
-    },
-    scales: {
-      y: {
-        beginAtZero: true
-      }
-    }
-  }
-});
-
-new Chart(document.getElementById('graficoTendenciaOperativa'), {
-  type: 'line',
-  data: {
-    labels: to.labels,
-    datasets: to.datasets.map(ds => ({
-      label: ds.label,
-      data: ds.data,
-      tension: 0.35,
-      fill: false,
-      borderWidth: 2
-    }))
-  },
-  options: {
-    responsive: true,
-    maintainAspectRatio: false,
-    interaction: {
-      mode: 'index',
-      intersect: false
-    },
-    plugins: {
-      legend: { position: 'bottom' }
-    },
-    scales: {
-      y: {
-        beginAtZero: true,
-        ticks: { precision: 0 }
-      }
-    }
-  }
-});
+  });
+})();
 </script>
-
-</div>
-
 {% endblock %}

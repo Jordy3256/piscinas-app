@@ -1,3 +1,7 @@
+## v2.1.0 — Dashboard Ejecutivo Inteligente
+- Nuevo centro de control ejecutivo.
+- Prioridades, salud empresarial, finanzas, operación, inventario, contratos, rentabilidad base y Asistente Técnico.
+
 # JVAQUA ERP v1.4.0 — Sprint 2.5
 
 - Navegación del trabajador unificada en el detalle de mantenimiento y edición de consumos.
