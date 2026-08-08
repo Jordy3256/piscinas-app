@@ -1,0 +1,76 @@
+{% extends "dashboard/base_admin.html" %}
+{% block title %}{% if modo == 'crear' %}Nuevo producto{% else %}Editar producto{% endif %}{% endblock %}
+{% block top_title %}📦 Catálogo de productos{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+  <div>
+    <h3 class="fw-bold mb-1">{% if modo == 'crear' %}Nuevo producto{% else %}Editar {{ producto.nombre }}{% endif %}</h3>
+    <div class="text-muted">El inventario se controla únicamente en kilogramos o litros. En mantenimientos se puede registrar en g/kg o ml/L.</div>
+  </div>
+  <a href="{% if modo == 'editar' %}{% url 'inventario_producto_detalle' producto.id %}{% else %}{% url 'inventario_productos' %}{% endif %}" class="btn btn-outline-secondary">Volver</a>
+</div>
+
+<form method="post" class="card border-0 shadow-sm mb-4">
+  <div class="card-body p-4">{% csrf_token %}
+    <h5 class="fw-bold">📋 Información general</h5>
+    <div class="row g-3 mb-4">
+      <div class="col-md-6"><label class="form-label">Nombre *</label><input class="form-control" name="nombre" value="{{ producto.nombre|default:'' }}" required></div>
+      <div class="col-md-3"><label class="form-label">Código</label><input class="form-control" name="codigo" value="{{ producto.codigo|default:'' }}" placeholder="Automático si se deja vacío"></div>
+      <div class="col-md-3"><label class="form-label">Categoría</label><select class="form-select" name="categoria">{% for v,n in categorias %}<option value="{{ v }}" {% if producto.categoria == v %}selected{% endif %}>{{ n }}</option>{% endfor %}</select></div>
+      <div class="col-md-4"><label class="form-label">Marca</label><input class="form-control" name="marca" value="{{ producto.marca|default:'' }}"></div>
+      <div class="col-md-4"><label class="form-label">Modelo</label><input class="form-control" name="modelo" value="{{ producto.modelo|default:'' }}"></div>
+      <div class="col-12"><label class="form-label">Descripción</label><textarea class="form-control" rows="3" name="descripcion">{{ producto.descripcion|default:'' }}</textarea></div>
+    </div>
+
+    <h5 class="fw-bold">📦 Inventario</h5>
+    <div class="row g-3 mb-4">
+      <div class="col-md-4"><label class="form-label">Unidad base *</label><select class="form-select" name="unidad_base" id="unidadBase">{% for v,n in unidades %}<option value="{{ v }}" {% if producto.unidad_base == v %}selected{% endif %}>{{ n }}</option>{% endfor %}</select><div class="form-text">Solo kilogramos (kg) o litros (L).</div></div>
+      <div class="col-md-4"><label class="form-label">Stock mínimo</label><input class="form-control" type="number" step="0.001" min="0" name="stock_minimo" value="{{ producto.stock_minimo|default:'0' }}"></div>
+      <div class="col-md-4"><label class="form-label">Stock máximo</label><input class="form-control" type="number" step="0.001" min="0" name="stock_maximo" value="{{ producto.stock_maximo|default:'' }}"></div>
+    </div>
+
+    <h5 class="fw-bold">💰 Costos y venta</h5>
+    <div class="row g-3 mb-4">
+      <div class="col-md-4"><label class="form-label" id="costoLabel">Costo por {{ producto.unidad_corta }}</label><div class="input-group"><span class="input-group-text">$</span><input class="form-control" type="number" step="0.0001" min="0" name="costo" value="{{ producto.costo|default:'0' }}" required></div><div class="form-text">Las compras futuras pueden actualizar el costo promedio.</div></div>
+      <div class="col-md-4"><label class="form-label" id="precioLabel">Precio de venta por {{ producto.unidad_corta }}</label><div class="input-group"><span class="input-group-text">$</span><input class="form-control" type="number" step="0.01" min="0" name="precio" value="{{ producto.precio|default:'0' }}"></div></div>
+      {% if modo == 'editar' %}<div class="col-md-4"><div class="border rounded-4 bg-light p-3 h-100"><div class="small text-muted">Valor actual en bodega</div><div class="fs-4 fw-bold">${{ valor_stock|floatformat:2 }}</div><div class="small text-muted">{{ producto.stock|floatformat:3 }} {{ producto.unidad_corta }}</div></div></div>{% endif %}
+    </div>
+
+    <h5 class="fw-bold">⚙️ Uso del producto</h5>
+    <div class="row g-2 mb-4">
+      <div class="col-md-4 form-check ms-2"><input class="form-check-input" type="checkbox" name="activo" id="activo" {% if producto.activo %}checked{% endif %}><label class="form-check-label" for="activo">Producto activo</label></div>
+      <div class="col-md-4 form-check ms-2"><input class="form-check-input" type="checkbox" name="controla_inventario" id="ctrl" {% if producto.controla_inventario %}checked{% endif %}><label class="form-check-label" for="ctrl">Controla inventario</label></div>
+      <div class="col-md-4 form-check ms-2"><input class="form-check-input" type="checkbox" name="puede_venderse" id="venta" {% if producto.puede_venderse %}checked{% endif %}><label class="form-check-label" for="venta">Se vende</label></div>
+      <div class="col-md-4 form-check ms-2"><input class="form-check-input" type="checkbox" name="puede_mantenimiento" id="mant" {% if producto.puede_mantenimiento %}checked{% endif %}><label class="form-check-label" for="mant">Se usa en mantenimientos</label></div>
+      <div class="col-md-4 form-check ms-2"><input class="form-check-input" type="checkbox" name="puede_asignarse_trabajador" id="trab" {% if producto.puede_asignarse_trabajador %}checked{% endif %}><label class="form-check-label" for="trab">Se asigna a trabajadores</label></div>
+      <div class="col-md-4 form-check ms-2"><input class="form-check-input" type="checkbox" name="puede_construccion" id="cons" {% if producto.puede_construccion %}checked{% endif %}><label class="form-check-label" for="cons">Se usa en construcciones</label></div>
+    </div>
+    <div class="d-flex justify-content-end gap-2"><a class="btn btn-outline-secondary" href="{% if modo == 'editar' %}{% url 'inventario_producto_detalle' producto.id %}{% else %}{% url 'inventario_productos' %}{% endif %}">Cancelar</a><button class="btn btn-primary px-4">Guardar producto</button></div>
+  </div>
+</form>
+
+{% if modo == 'editar' %}
+<div class="card border-0 shadow-sm mb-4"><div class="card-body p-4">
+  <div class="d-flex justify-content-between flex-wrap gap-2 mb-3"><div><h5 class="fw-bold mb-1">⚖️ Ajustar existencia física</h5><div class="text-muted small">Úsalo para inventario inicial, conteos o correcciones. No crea una compra ni afecta Finanzas.</div></div><span class="badge text-bg-light border">Stock actual: {{ producto.stock|floatformat:3 }} {{ producto.unidad_corta }}</span></div>
+  <form method="post" action="{% url 'inventario_producto_ajustar_stock' producto.id %}" class="row g-3 align-items-end" onsubmit="return confirm('¿Confirmas que esta es la existencia física real?');">{% csrf_token %}
+    <div class="col-md-4"><label class="form-label">Nueva existencia física *</label><div class="input-group"><input class="form-control" type="number" step="0.001" min="0" name="stock_real" value="{{ producto.stock|floatformat:3 }}" required><span class="input-group-text">{{ producto.unidad_corta }}</span></div></div>
+    <div class="col-md-4"><label class="form-label">Motivo *</label><select class="form-select" name="motivo" required><option value="">Seleccionar...</option><option>Inventario inicial</option><option>Conteo físico</option><option>Corrección de registro</option><option>Pérdida / merma</option><option>Producto encontrado</option><option>Devolución no registrada</option><option>Otro ajuste autorizado</option></select></div>
+    <div class="col-md-4 d-grid"><button class="btn btn-outline-primary">Actualizar existencia</button></div>
+  </form>
+</div></div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-4"><div class="card border-0 shadow-sm h-100"><div class="card-body"><div class="small text-muted">Existencia actual</div><div class="fs-4 fw-bold">{{ producto.stock|floatformat:3 }} {{ producto.unidad_corta }}</div></div></div></div>
+  <div class="col-md-4"><div class="card border-0 shadow-sm h-100"><div class="card-body"><div class="small text-muted">Último movimiento</div><div class="fw-bold">{% if ultimo_movimiento %}{{ ultimo_movimiento.get_tipo_display }}{% else %}Sin movimientos{% endif %}</div>{% if ultimo_movimiento %}<div class="small text-muted">{{ ultimo_movimiento.creado_en|date:'d/m/Y H:i' }}</div>{% endif %}</div></div></div>
+  <div class="col-md-4"><div class="card border-0 shadow-sm h-100"><div class="card-body"><div class="small text-muted">Último ajuste</div><div class="fw-bold">{% if ultimo_ajuste %}{{ ultimo_ajuste.creado_en|date:'d/m/Y H:i' }}{% else %}Sin ajustes{% endif %}</div></div></div></div>
+</div>
+{% endif %}
+
+<script>
+(function(){
+  const u=document.getElementById('unidadBase'), c=document.getElementById('costoLabel'), p=document.getElementById('precioLabel');
+  function sync(){ if(!u)return; const unidad=u.value==='l'?'litro':'kg'; c.textContent='Costo por '+unidad; p.textContent='Precio de venta por '+unidad; }
+  u?.addEventListener('change',sync); sync();
+})();
+</script>
+{% endblock %}

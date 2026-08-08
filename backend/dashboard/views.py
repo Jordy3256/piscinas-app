@@ -5,6 +5,7 @@ from collections import defaultdict
 from decimal import Decimal
 from datetime import date, timedelta
 from calendar import monthrange, monthcalendar
+from urllib.parse import quote
 
 from django.conf import settings
 from django.contrib import messages
@@ -27,7 +28,7 @@ from django.views.decorators.http import require_http_methods, require_GET
 from pywebpush import webpush, WebPushException
 
 from trabajadores.models import Trabajador
-from inventario.models import Insumo
+from inventario.models import Insumo, InventarioTrabajador, SolicitudReposicion
 from mantenimientos.models import (
     Mantenimiento,
     UsoInsumo,
@@ -40,9 +41,20 @@ from finanzas.models import (
     MovimientoRecurrente,
     Factura,
     FacturaItem,
+    ObligacionTrabajador,
+    PagoTrabajador,
+    LotePagoTrabajador,
+    AnticipoTrabajador,
 )
 from clientes.models import Cliente
 from contratos.models import Contrato
+from contratos.programacion import (
+    DIAS_SEMANA,
+    cancelar_programacion_futura,
+    generar_mantenimientos_contrato,
+    normalizar_dias,
+    validar_programacion,
+)
 
 try:
     from .models import PushSubscription
@@ -60,6 +72,11 @@ except Exception:
     ActividadSistema = None
 
 logger = logging.getLogger(__name__)
+
+try:
+    from asistente_tecnico.models import CasoAsistenteTecnico
+except Exception:
+    CasoAsistenteTecnico = None
 
 
 # -------------------
@@ -100,6 +117,18 @@ FOTOS_REQUERIDAS = [
 
 def _nombre_foto_valido(nombre: str) -> bool:
     return nombre in FOTOS_REQUERIDAS
+
+
+def _telefono_whatsapp_ecuador(telefono):
+    """Normaliza teléfonos ecuatorianos para wa.me sin alterar el dato guardado."""
+    digitos = "".join(ch for ch in str(telefono or "") if ch.isdigit())
+    if digitos.startswith("00"):
+        digitos = digitos[2:]
+    if digitos.startswith("593"):
+        return digitos
+    if digitos.startswith("0") and len(digitos) >= 9:
+        return "593" + digitos[1:]
+    return digitos
 
 
 # -------------------
@@ -1247,6 +1276,16 @@ def _crear_notificacion(user, titulo, mensaje, url="/dashboard/notificaciones/",
     return notif
 
 
+def _actualizar_seguimientos_asistente(user):
+    """Genera recordatorios de seguimiento vencidos del Asistente Técnico."""
+    try:
+        from asistente_tecnico.services import generar_recordatorios_seguimiento
+        return generar_recordatorios_seguimiento(user=user, crear_notificacion=_crear_notificacion)
+    except Exception:
+        logger.exception("No se pudieron actualizar los seguimientos del Asistente Técnico.")
+        return 0
+
+
 def _registrar_actividad(user, titulo, descripcion, url=""):
     if ActividadSistema is None:
         return None
@@ -1537,6 +1576,155 @@ def push_test_view(request):
 
 
 # -------------------
+# Centro de Acciones del administrador
+# -------------------
+def _centro_acciones_contexto():
+    """Construye prioridades diarias sin duplicar la lógica financiera."""
+    hoy = timezone.localdate()
+    proximos_tres_dias = hoy + timedelta(days=3)
+    limite_programacion = hoy + timedelta(days=7)
+
+    facturas_base = list(
+        Factura.objects
+        .exclude(estado=Factura.ESTADO_ANULADA)
+        .select_related("cliente", "contrato")
+        .prefetch_related("pagos")
+        .order_by("fecha_vencimiento", "id")
+    )
+    facturas_pendientes = [f for f in facturas_base if f.saldo > 0]
+
+    cobros_vencidos = [
+        f for f in facturas_pendientes
+        if f.fecha_vencimiento and f.fecha_vencimiento < hoy
+    ]
+    cobros_hoy = [
+        f for f in facturas_pendientes
+        if (
+            (f.fecha_cobro_desde and f.fecha_cobro_desde <= hoy <= f.fecha_vencimiento)
+            or f.fecha_vencimiento == hoy
+        )
+    ]
+    ids_prioridad = {f.pk for f in cobros_vencidos + cobros_hoy}
+    cobros_proximos = [
+        f for f in facturas_pendientes
+        if f.pk not in ids_prioridad
+        and f.fecha_cobro_desde
+        and hoy < f.fecha_cobro_desde <= proximos_tres_dias
+    ]
+
+    facturas_por_emitir = [
+        f for f in facturas_base
+        if f.requiere_factura
+        and not f.factura_enviada
+        and f.fecha_facturacion_programada
+        and f.fecha_facturacion_programada <= hoy
+    ]
+
+    obligaciones = list(
+        ObligacionTrabajador.objects
+        .exclude(estado=ObligacionTrabajador.ESTADO_ANULADO)
+        .select_related("trabajador", "trabajador__user", "contrato", "contrato__cliente")
+        .prefetch_related("pagos")
+        .filter(fecha_pago_programada__lte=hoy)
+        .order_by("fecha_pago_programada", "trabajador_id", "id")
+    )
+    obligaciones_pendientes = [o for o in obligaciones if o.saldo > 0]
+    nomina_por_trabajador = {}
+    for obligacion in obligaciones_pendientes:
+        clave = obligacion.trabajador_id
+        fila = nomina_por_trabajador.setdefault(
+            clave,
+            {
+                "trabajador": obligacion.trabajador,
+                "saldo": Decimal("0.00"),
+                "cantidad": 0,
+                "fecha_mas_antigua": obligacion.fecha_pago_programada,
+            },
+        )
+        fila["saldo"] += obligacion.saldo
+        fila["cantidad"] += 1
+        if obligacion.fecha_pago_programada < fila["fecha_mas_antigua"]:
+            fila["fecha_mas_antigua"] = obligacion.fecha_pago_programada
+    nomina_pendiente = sorted(
+        nomina_por_trabajador.values(),
+        key=lambda item: (item["fecha_mas_antigua"], str(item["trabajador"])),
+    )
+
+    mantenimientos_hoy_qs = (
+        Mantenimiento.objects
+        .filter(fecha=hoy)
+        .select_related("cliente", "contrato")
+        .prefetch_related("trabajadores")
+        .order_by("estado", "id")
+    )
+    mantenimientos_hoy = list(mantenimientos_hoy_qs)
+    mantenimientos_atrasados = list(
+        Mantenimiento.objects
+        .filter(fecha__lt=hoy, estado="pendiente")
+        .select_related("cliente", "contrato")
+        .prefetch_related("trabajadores")
+        .order_by("fecha", "id")[:10]
+    )
+    mantenimientos_sin_asignar = list(
+        Mantenimiento.objects
+        .filter(fecha__lte=hoy, estado="pendiente", trabajadores__isnull=True)
+        .select_related("cliente", "contrato")
+        .order_by("fecha", "id")
+        .distinct()[:10]
+    )
+
+    contratos_programacion = list(
+        Contrato.objects
+        .filter(activo=True, generacion_automatica=True)
+        .filter(models.Q(programado_hasta__isnull=True) | models.Q(programado_hasta__lte=limite_programacion))
+        .select_related("cliente", "tecnico_designado", "tecnico_designado__user")
+        .order_by("programado_hasta", "id")[:10]
+    )
+
+    actividad_reciente = []
+    if ActividadSistema is not None:
+        actividad_reciente = list(
+            ActividadSistema.objects.select_related("user").all()[:8]
+        )
+
+    total_acciones = (
+        len(cobros_vencidos)
+        + len(cobros_hoy)
+        + len(facturas_por_emitir)
+        + len(nomina_pendiente)
+        + len(mantenimientos_atrasados)
+        + len(mantenimientos_sin_asignar)
+        + len(contratos_programacion)
+    )
+
+    return {
+        "hoy": hoy,
+        "cobros_vencidos": cobros_vencidos[:6],
+        "cobros_hoy": cobros_hoy[:6],
+        "cobros_proximos": cobros_proximos[:5],
+        "cantidad_cobros_vencidos": len(cobros_vencidos),
+        "cantidad_cobros_hoy": len(cobros_hoy),
+        "facturas_por_emitir": facturas_por_emitir[:6],
+        "cantidad_facturas_por_emitir": len(facturas_por_emitir),
+        "nomina_pendiente": nomina_pendiente[:6],
+        "cantidad_trabajadores_pendientes": len(nomina_pendiente),
+        "total_nomina_pendiente": sum((x["saldo"] for x in nomina_pendiente), Decimal("0.00")),
+        "mantenimientos_hoy": mantenimientos_hoy[:8],
+        "cantidad_mantenimientos_hoy": len(mantenimientos_hoy),
+        "cantidad_mantenimientos_pendientes_hoy": sum(1 for m in mantenimientos_hoy if m.estado == "pendiente"),
+        "cantidad_mantenimientos_realizados_hoy": sum(1 for m in mantenimientos_hoy if m.estado == "realizado"),
+        "mantenimientos_atrasados": mantenimientos_atrasados,
+        "cantidad_mantenimientos_atrasados": Mantenimiento.objects.filter(fecha__lt=hoy, estado="pendiente").count(),
+        "mantenimientos_sin_asignar": mantenimientos_sin_asignar,
+        "cantidad_mantenimientos_sin_asignar": Mantenimiento.objects.filter(fecha__lte=hoy, estado="pendiente", trabajadores__isnull=True).distinct().count(),
+        "contratos_programacion": contratos_programacion,
+        "cantidad_contratos_programacion": len(contratos_programacion),
+        "actividad_reciente": actividad_reciente,
+        "total_acciones": total_acciones,
+    }
+
+
+# -------------------
 # INICIO por rol (menú)
 # -------------------
 @login_required
@@ -1547,11 +1735,18 @@ def inicio_view(request):
         ctx["es_admin"] = True
         notificar_movimientos_recurrentes_proximos()
         notificar_trabajadores_mantenimientos_hoy()
+        try:
+            from finanzas.alertas_financieras import generar_alertas_financieras
+            generar_alertas_financieras(enviar_push=True)
+        except Exception:
+            logger.exception("No se pudieron actualizar las alertas financieras al abrir el Centro de Acciones.")
+        ctx.update(_centro_acciones_contexto())
         return render(request, "dashboard/home_admin.html", ctx)
 
     if es_trabajador(request.user):
         ctx["es_admin"] = False
         notificar_trabajadores_mantenimientos_hoy()
+        _actualizar_seguimientos_asistente(request.user)
         return render(request, "dashboard/home_trabajador.html", ctx)
 
     return render(request, "dashboard/no_autorizado.html", status=403)
@@ -1858,6 +2053,113 @@ def dashboard_view(request):
             ],
         }
 
+        # ================= Dashboard Ejecutivo v2.1 =================
+        acciones = _centro_acciones_contexto()
+
+        productos_criticos_qs = (
+            Insumo.objects
+            .filter(activo=True, controla_inventario=True, stock__lte=F("stock_minimo"))
+            .order_by("stock", "nombre")
+        )
+        productos_criticos = list(productos_criticos_qs[:6])
+        total_productos_criticos = productos_criticos_qs.count()
+        total_productos_agotados = productos_criticos_qs.filter(stock__lte=0).count()
+        solicitudes_reposicion_pendientes = SolicitudReposicion.objects.filter(estado="pendiente").count()
+
+        contratos_activos_qs = Contrato.objects.filter(activo=True).select_related("cliente")
+        total_contratos_activos = contratos_activos_qs.count()
+        contratos_por_revisar_qs = (
+            contratos_activos_qs
+            .filter(models.Q(programado_hasta__isnull=True) | models.Q(programado_hasta__lte=hoy + timedelta(days=7)))
+            .order_by("programado_hasta", "id")
+        )
+        contratos_por_revisar = list(contratos_por_revisar_qs[:6])
+        total_contratos_por_revisar = contratos_por_revisar_qs.count()
+
+        clientes_nuevos_mes = Cliente.objects.filter(
+            fecha_registro__date__gte=primer_dia_mes_actual,
+            fecha_registro__date__lte=ultimo_dia_mes_actual,
+        ).count()
+
+        total_trabajadores_activos = Trabajador.objects.filter(activo=True).count()
+
+        # Rentabilidad operativa base por contrato: ingreso mensual - técnico - químicos del mes.
+        consumos_contrato = {
+            fila["mantenimiento__contrato_id"]: (fila["total"] or Decimal("0.00"))
+            for fila in UsoInsumo.objects.filter(
+                mantenimiento__contrato_id__isnull=False,
+                mantenimiento__fecha__gte=primer_dia_mes_actual,
+                mantenimiento__fecha__lte=ultimo_dia_mes_actual,
+            ).values("mantenimiento__contrato_id").annotate(total=Sum("costo_total"))
+        }
+        rentabilidad_contratos = []
+        ingreso_contratos_proyectado = Decimal("0.00")
+        nomina_contratos_proyectada = Decimal("0.00")
+        quimicos_mes_total = Decimal("0.00")
+        for contrato in contratos_activos_qs:
+            ingreso = Decimal(contrato.precio_mensual or 0)
+            tecnico = Decimal(contrato.valor_tecnico_mensual or 0)
+            quimicos = Decimal(consumos_contrato.get(contrato.id, Decimal("0.00")) or 0)
+            margen = ingreso - tecnico - quimicos
+            ingreso_contratos_proyectado += ingreso
+            nomina_contratos_proyectada += tecnico
+            quimicos_mes_total += quimicos
+            rentabilidad_contratos.append({
+                "contrato": contrato,
+                "ingreso": ingreso,
+                "tecnico": tecnico,
+                "quimicos": quimicos,
+                "margen": margen,
+                "margen_pct": round((margen / ingreso) * 100, 1) if ingreso else 0,
+            })
+        rentabilidad_contratos.sort(key=lambda x: x["margen"], reverse=True)
+        top_rentabilidad_contratos = rentabilidad_contratos[:5]
+        margen_operativo_base = ingreso_contratos_proyectado - nomina_contratos_proyectada - quimicos_mes_total
+
+        # Asistente Técnico: seguimiento independiente del resto de módulos.
+        asistente_total_mes = 0
+        asistente_exitosos_mes = 0
+        asistente_pendientes = 0
+        asistente_fallidos_mes = 0
+        asistente_tasa_exito = 0
+        if CasoAsistenteTecnico is not None:
+            casos_mes = CasoAsistenteTecnico.objects.filter(
+                creado_en__date__gte=primer_dia_mes_actual,
+                creado_en__date__lte=ultimo_dia_mes_actual,
+            )
+            asistente_total_mes = casos_mes.count()
+            asistente_exitosos_mes = casos_mes.filter(resultado="exitoso").count()
+            asistente_fallidos_mes = casos_mes.filter(resultado="fallido").count()
+            asistente_pendientes = CasoAsistenteTecnico.objects.filter(resultado="pendiente").count()
+            respondidos = casos_mes.exclude(resultado="pendiente").count()
+            if respondidos:
+                asistente_tasa_exito = round((asistente_exitosos_mes / respondidos) * 100, 1)
+
+        # Salud general: un resumen accionable, no un sustituto de los datos.
+        senales_criticas = 0
+        senales_atencion = 0
+        if acciones.get("cantidad_cobros_vencidos", 0):
+            senales_criticas += 1
+        if total_atrasados:
+            senales_criticas += 1
+        if total_productos_agotados:
+            senales_criticas += 1
+        if acciones.get("cantidad_trabajadores_pendientes", 0):
+            senales_atencion += 1
+        if total_productos_criticos:
+            senales_atencion += 1
+        if total_contratos_por_revisar:
+            senales_atencion += 1
+        if asistente_pendientes:
+            senales_atencion += 1
+
+        if senales_criticas >= 2:
+            salud_empresa = {"nivel": "danger", "titulo": "Acción inmediata", "texto": "Hay varios puntos críticos que requieren atención hoy."}
+        elif senales_criticas or senales_atencion:
+            salud_empresa = {"nivel": "warning", "titulo": "Requiere atención", "texto": "La operación está activa, pero hay pendientes importantes por gestionar."}
+        else:
+            salud_empresa = {"nivel": "success", "titulo": "Operación estable", "texto": "Los indicadores principales están bajo control."}
+
         ctx = {
             **base_ctx,
             "modo": "admin",
@@ -1934,6 +2236,28 @@ def dashboard_view(request):
             "serie_financiera_6m": analitica_pro["serie_financiera_6m"],
             "serie_operativa_6m": analitica_pro["serie_operativa_6m"],
 
+            # Dashboard Ejecutivo v2.1
+            "acciones": acciones,
+            "productos_criticos": productos_criticos,
+            "total_productos_criticos": total_productos_criticos,
+            "total_productos_agotados": total_productos_agotados,
+            "solicitudes_reposicion_pendientes": solicitudes_reposicion_pendientes,
+            "total_contratos_activos": total_contratos_activos,
+            "contratos_por_revisar": contratos_por_revisar,
+            "total_contratos_por_revisar": total_contratos_por_revisar,
+            "clientes_nuevos_mes": clientes_nuevos_mes,
+            "total_trabajadores_activos": total_trabajadores_activos,
+            "ingreso_contratos_proyectado": ingreso_contratos_proyectado,
+            "nomina_contratos_proyectada": nomina_contratos_proyectada,
+            "quimicos_mes_total": quimicos_mes_total,
+            "margen_operativo_base": margen_operativo_base,
+            "top_rentabilidad_contratos": top_rentabilidad_contratos,
+            "asistente_total_mes": asistente_total_mes,
+            "asistente_exitosos_mes": asistente_exitosos_mes,
+            "asistente_fallidos_mes": asistente_fallidos_mes,
+            "asistente_pendientes": asistente_pendientes,
+            "asistente_tasa_exito": asistente_tasa_exito,
+            "salud_empresa": salud_empresa,
             "es_admin": True,
         }
         return render(request, "dashboard/dashboard.html", ctx)
@@ -2120,6 +2444,15 @@ def notificaciones_view(request):
 @login_required
 @require_GET
 def notificaciones_json_view(request):
+    if es_trabajador(request.user):
+        _actualizar_seguimientos_asistente(request.user)
+    if es_admin(request.user):
+        try:
+            from finanzas.alertas_financieras import generar_alertas_financieras
+            generar_alertas_financieras(enviar_push=True)
+        except Exception:
+            logger.exception("No se pudieron actualizar las alertas financieras.")
+
     if Notificacion is None:
         return JsonResponse({
             "ok": True,
@@ -2582,6 +2915,12 @@ def admin_operativo_view(request):
 # -------------------
 @login_required
 def mantenimiento_detalle_view(request, pk):
+    """Detalle unificado del mantenimiento.
+
+    Inspección, limpieza, consumos, fotografías y cierre se procesan en un
+    único POST. Las actividades son opcionales; únicamente las tres fotos
+    requeridas son obligatorias para finalizar.
+    """
     mantenimiento = get_object_or_404(Mantenimiento, pk=pk)
 
     if es_admin(request.user):
@@ -2599,12 +2938,49 @@ def mantenimiento_detalle_view(request, pk):
         return render(request, "dashboard/no_autorizado.html", status=403)
 
     es_usuario_admin = es_admin(request.user)
-    insumos = Insumo.objects.all().order_by("nombre")
+    trabajador_actual = None
+    if es_trabajador(request.user):
+        try:
+            trabajador_actual = request.user.trabajador
+        except Exception:
+            trabajador_actual = None
+
+    if trabajador_actual:
+        inventario_mantenimiento = list(
+            InventarioTrabajador.objects.filter(
+                trabajador=trabajador_actual,
+                stock__gt=0,
+                insumo__activo=True,
+                insumo__puede_mantenimiento=True,
+            ).select_related("insumo").order_by("insumo__nombre")
+        )
+        insumos = [x.insumo for x in inventario_mantenimiento]
+    else:
+        inventario_mantenimiento = []
+        insumos = list(
+            Insumo.objects.filter(activo=True, puede_mantenimiento=True).order_by("nombre")
+        )
+
+    trabajadores_mantenimiento = list(
+        mantenimiento.trabajadores.filter(activo=True)
+        .select_related("user")
+        .order_by("user__username")
+    )
     esta_realizado = mantenimiento.estado == "realizado"
     checklist, _ = ChecklistMantenimiento.objects.get_or_create(mantenimiento=mantenimiento)
 
+    cliente_operativo = mantenimiento.cliente
+    direccion_operativa = (cliente_operativo.direccion or "").strip()
+    maps_url = (cliente_operativo.enlace_google_maps or "").strip()
+    if not maps_url and direccion_operativa:
+        maps_url = "https://www.google.com/maps/search/?api=1&query=" + quote(direccion_operativa)
+    whatsapp_disponible = bool(
+        trabajador_actual
+        and _telefono_whatsapp_ecuador(cliente_operativo.telefono)
+    )
+
     if request.method == "POST":
-        accion = request.POST.get("accion")
+        accion = (request.POST.get("accion") or "").strip()
         next_url = (request.POST.get("next", "") or "").strip()
 
         def safe_return_url():
@@ -2616,79 +2992,10 @@ def mantenimiento_detalle_view(request, pk):
                 return next_url
             return f"/dashboard/mantenimientos/{mantenimiento.pk}/"
 
-        if accion == "guardar_checklist":
-            if esta_realizado:
-                messages.error(
-                    request,
-                    "Este mantenimiento está realizado y bloqueado para cambios. Debes volverlo a pendiente para editarlo.",
-                )
-                return redirect(safe_return_url())
-
-            campos_bool = [
-                "aspirado",
-                "cepillado",
-                "recoleccion_basura",
-                "limpieza_filtros",
-                "retrolavado_arena",
-                "cloro_granulado",
-                "tricloro",
-                "alguicida",
-                "metasilicato",
-                "floculante",
-            ]
-            for campo in campos_bool:
-                setattr(checklist, campo, request.POST.get(campo) == "on")
-            checklist.bomba_estado = request.POST.get("bomba_estado", "")
-            checklist.bomba_novedad = request.POST.get("bomba_novedad", "").strip()
-            checklist.filtro_estado = request.POST.get("filtro_estado", "")
-            checklist.filtro_novedad = request.POST.get("filtro_novedad", "").strip()
-            checklist.nivel_agua = request.POST.get("nivel_agua", "")
-            checklist.save()
-            messages.success(request, "Checklist guardado correctamente.")
-            return redirect(safe_return_url())
-
-        if accion == "marcar_realizado":
-            fotos_qs_validacion = mantenimiento.fotos.all()
-            fotos_por_nombre_validacion = {
-                f.descripcion: f for f in fotos_qs_validacion if _nombre_foto_valido(f.descripcion)
-            }
-            cantidad_fotos_requeridas = len(fotos_por_nombre_validacion)
-
-            if not checklist.completo():
-                messages.error(request, "Debes completar la limpieza y la inspección antes de cerrar el mantenimiento.")
-                return redirect(safe_return_url())
-
-            if cantidad_fotos_requeridas < 3:
-                messages.error(
-                    request,
-                    "Debes subir las 3 fotos requeridas antes de marcar como realizado."
-                )
-                return redirect(safe_return_url())
-
-            mantenimiento.estado = "realizado"
-            mantenimiento.save(update_fields=["estado"])
-
-            actor = request.user.username
-            _notificar_admins(
-                titulo="✅ Mantenimiento realizado",
-                mensaje=f"El mantenimiento de {mantenimiento.cliente} fue marcado como realizado por {actor}.",
-                url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
-                enviar_push=True,
-                excluir_user_id=request.user.id if es_usuario_admin else None,
-            )
-            _registrar_actividad(
-                user=request.user,
-                titulo="Mantenimiento realizado",
-                descripcion=f"{actor} marcó como realizado el mantenimiento de {mantenimiento.cliente}.",
-                url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
-            )
-
-            messages.success(request, f"Mantenimiento de {mantenimiento.cliente} marcado como realizado.")
-            return redirect(safe_return_url())
-
         if accion == "marcar_pendiente":
             mantenimiento.estado = "pendiente"
-            mantenimiento.save()
+            mantenimiento.borrador_guardado = True
+            mantenimiento.save(update_fields=["estado", "borrador_guardado"])
 
             actor = request.user.username
             _notificar_admins(
@@ -2704,205 +3011,254 @@ def mantenimiento_detalle_view(request, pk):
                 descripcion=f"{actor} marcó como pendiente el mantenimiento de {mantenimiento.cliente}.",
                 url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
             )
-
             messages.success(request, f"Mantenimiento de {mantenimiento.cliente} marcado como pendiente.")
             return redirect(safe_return_url())
 
-        if esta_realizado:
-            messages.error(request, "Este mantenimiento está realizado y bloqueado para cambios. Debes volverlo a pendiente para editarlo.")
+        if accion not in {"guardar_borrador_unificado", "finalizar_unificado"}:
+            messages.error(request, "Acción de mantenimiento no válida.")
             return redirect(safe_return_url())
 
-        if accion == "agregar_insumo":
-            insumo_id = request.POST.get("insumo_id")
-            cantidad_str = request.POST.get("cantidad")
-
-            try:
-                cantidad = int(cantidad_str)
-                if cantidad <= 0:
-                    raise ValueError
-            except Exception:
-                messages.error(request, "Cantidad inválida.")
-                return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
-
-            insumo = get_object_or_404(Insumo, pk=insumo_id)
-
-            if hasattr(insumo, "stock"):
-                if insumo.stock < cantidad:
-                    messages.error(
-                        request,
-                        f"Stock insuficiente de {insumo.nombre}. Disponible: {insumo.stock}",
-                    )
-                    return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
-                insumo.stock -= cantidad
-                insumo.save()
-
-            if hasattr(insumo, "precio"):
-                costo_unitario = insumo.precio
-            elif hasattr(insumo, "costo"):
-                costo_unitario = insumo.costo
-            else:
-                costo_unitario = 0
-
-            egreso = Egreso.objects.create(
-                mantenimiento=mantenimiento,
-                insumo=insumo,
-                cantidad=cantidad,
-                costo_unitario=costo_unitario,
-                total=0,
+        if esta_realizado:
+            messages.error(
+                request,
+                "Este mantenimiento está realizado y bloqueado para cambios. Debes volverlo a pendiente para editarlo.",
             )
+            return redirect(safe_return_url())
 
-            UsoInsumo.objects.create(
-                mantenimiento=mantenimiento,
-                insumo=insumo,
-                cantidad=cantidad,
-                egreso=egreso,
-            )
+        finalizar = accion == "finalizar_unificado"
+        consumos_creados = []
+        fotos_subidas = []
 
-            actor = request.user.username
-            _notificar_admins(
-                titulo="🧪 Insumo registrado",
-                mensaje=f"{actor} registró {insumo.nombre} x {cantidad} en {mantenimiento.cliente}.",
-                url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
-                enviar_push=False,
-                excluir_user_id=request.user.id if es_usuario_admin else None,
-            )
-            _registrar_actividad(
-                user=request.user,
-                titulo="Insumo registrado",
-                descripcion=f"{actor} registró {insumo.nombre} x {cantidad} en el mantenimiento de {mantenimiento.cliente}.",
-                url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
-            )
-
-            messages.success(request, f"Insumo registrado: {insumo.nombre} x {cantidad}")
-            return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
-
-        if accion == "subir_fotos_requeridas":
-            if esta_realizado:
-                messages.error(request, "Este mantenimiento está realizado y bloqueado para cambios. Debes volverlo a pendiente para editarlo.")
-                return redirect(safe_return_url())
-
-            mapa_fotos = [
-                ("Inicio de Mantenimiento", request.FILES.get("foto_inicio")),
-                ("Fin de Mantenimiento", request.FILES.get("foto_fin")),
-                ("Nivel PH y Cl", request.FILES.get("foto_nivel")),
-            ]
-
-            existentes = {
-                f.descripcion: f
+        # Validación previa: al finalizar comprobamos las evidencias antes de
+        # descontar inventario o escribir archivos. Así evitamos cualquier
+        # efecto parcial incluso fuera de la transacción de base de datos.
+        if finalizar:
+            nombres_existentes = {
+                f.descripcion
                 for f in mantenimiento.fotos.all()
                 if _nombre_foto_valido(f.descripcion)
             }
-
-            subidas = []
-            omitidas = []
-
-            for tipo_foto, imagen in mapa_fotos:
-                if not imagen:
-                    continue
-
-                if tipo_foto in existentes:
-                    omitidas.append(tipo_foto)
-                    continue
-
-                FotoMantenimiento.objects.create(
-                    mantenimiento=mantenimiento,
-                    imagen=imagen,
-                    descripcion=tipo_foto,
-                )
-                subidas.append(tipo_foto)
-
-            if subidas:
-                actor = request.user.username
-                detalle = ", ".join(subidas)
-                _notificar_admins(
-                    titulo="📸 Fotos requeridas subidas",
-                    mensaje=f"{actor} subió fotos en el mantenimiento de {mantenimiento.cliente}: {detalle}.",
-                    url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
-                    enviar_push=False,
-                    excluir_user_id=request.user.id if es_usuario_admin else None,
-                )
-                _registrar_actividad(
-                    user=request.user,
-                    titulo="Fotos requeridas subidas",
-                    descripcion=f"{actor} subió fotos en el mantenimiento de {mantenimiento.cliente}: {detalle}.",
-                    url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
-                )
-
-            if subidas and omitidas:
-                messages.success(
-                    request,
-                    f"Se subieron {len(subidas)} foto(s). Ya existían: {', '.join(omitidas)}."
-                )
-            elif subidas:
-                messages.success(
-                    request,
-                    f"Se subieron correctamente {len(subidas)} foto(s)."
-                )
-            elif omitidas:
-                messages.warning(
-                    request,
-                    f"No se subieron nuevas fotos porque ya existían: {', '.join(omitidas)}."
-                )
-            else:
+            nombres_nuevos = set()
+            if request.FILES.get("foto_inicio"):
+                nombres_nuevos.add("Inicio de Mantenimiento")
+            if request.FILES.get("foto_fin"):
+                nombres_nuevos.add("Fin de Mantenimiento")
+            if request.FILES.get("foto_nivel"):
+                nombres_nuevos.add("Nivel PH y Cl")
+            faltantes_previos = [
+                nombre for nombre in FOTOS_REQUERIDAS
+                if nombre not in nombres_existentes | nombres_nuevos
+            ]
+            if faltantes_previos:
                 messages.error(
                     request,
-                    "Debes seleccionar al menos una foto para subir."
+                    "Para finalizar debes cargar las 3 fotografías obligatorias. "
+                    f"Faltan: {', '.join(faltantes_previos)}.",
+                )
+                return redirect(safe_return_url())
+
+        try:
+            with transaction.atomic():
+                # ---------------------------------------------------------
+                # 1) Inspección y limpieza (opcionales)
+                # ---------------------------------------------------------
+                campos_bool = [
+                    "aspirado",
+                    "cepillado",
+                    "recoleccion_basura",
+                    "limpieza_filtros",
+                    "retrolavado_arena",
+                    "limpieza_filos",
+                ]
+                for campo in campos_bool:
+                    setattr(checklist, campo, request.POST.get(campo) == "on")
+
+                checklist.bomba_estado = request.POST.get("bomba_estado", "")
+                checklist.bomba_novedad = request.POST.get("bomba_novedad", "").strip()
+                checklist.filtro_estado = request.POST.get("filtro_estado", "")
+                checklist.filtro_novedad = request.POST.get("filtro_novedad", "").strip()
+                checklist.nivel_agua = request.POST.get("nivel_agua", "")
+
+                # Los campos químicos del checklist quedan obsoletos desde
+                # Inventario Inteligente. Se limpian al volver a guardar un
+                # mantenimiento pendiente para no duplicar información.
+                checklist.cloro_granulado = False
+                checklist.tricloro = False
+                checklist.alguicida = False
+                checklist.metasilicato = False
+                checklist.floculante = False
+                checklist.save()
+
+                # Estado del agua se conserva en el campo compatible ya
+                # existente, pero ahora forma parte de Inspección Inicial.
+                mantenimiento.estado_agua_rapido = request.POST.get("estado_agua", "")
+                mantenimiento.equipo_rapido = ""
+                mantenimiento.recomendaciones_rapidas = []
+                mantenimiento.observaciones = request.POST.get(
+                    "observaciones", mantenimiento.observaciones
+                ).strip()
+                mantenimiento.borrador_guardado = not finalizar
+                mantenimiento.save(
+                    update_fields=[
+                        "estado_agua_rapido",
+                        "equipo_rapido",
+                        "recomendaciones_rapidas",
+                        "observaciones",
+                        "borrador_guardado",
+                    ]
                 )
 
-            return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
+                # ---------------------------------------------------------
+                # 2) Productos utilizados. Se pueden agregar varias filas
+                #    dentro del mismo formulario.
+                # ---------------------------------------------------------
+                ids_insumo = request.POST.getlist("producto_insumo_id")
+                cantidades = request.POST.getlist("producto_cantidad")
+                unidades = request.POST.getlist("producto_unidad")
 
-        if accion == "subir_foto":
-            imagen = request.FILES.get("imagen")
-            tipo_foto = (request.POST.get("tipo_foto", "") or "").strip()
+                if trabajador_actual:
+                    trabajador_consumo = trabajador_actual
+                else:
+                    trabajador_consumo_id = (request.POST.get("trabajador_consumo_id") or "").strip()
+                    trabajador_consumo = None
+                    if any(x.strip() for x in ids_insumo):
+                        if not trabajador_consumo_id:
+                            raise ValueError("Selecciona el trabajador que utilizó los productos.")
+                        trabajador_consumo = get_object_or_404(
+                            Trabajador, pk=trabajador_consumo_id, activo=True
+                        )
+                        if not mantenimiento.trabajadores.filter(pk=trabajador_consumo.pk).exists():
+                            raise ValueError(
+                                "El trabajador seleccionado no está asignado a este mantenimiento."
+                            )
 
-            if not imagen:
-                messages.error(request, "Debes seleccionar una imagen.")
-                return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
+                for index, insumo_id in enumerate(ids_insumo):
+                    insumo_id = (insumo_id or "").strip()
+                    if not insumo_id:
+                        continue
 
-            if not _nombre_foto_valido(tipo_foto):
-                messages.error(request, "Tipo de foto inválido.")
-                return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
+                    cantidad_ingresada = cantidades[index] if index < len(cantidades) else ""
+                    unidad = unidades[index] if index < len(unidades) else "kg"
+                    insumo = get_object_or_404(
+                        Insumo,
+                        pk=insumo_id,
+                        activo=True,
+                        puede_mantenimiento=True,
+                    )
 
-            cantidad_fotos_actual = mantenimiento.fotos.count()
-            if cantidad_fotos_actual >= 3 and not mantenimiento.fotos.filter(descripcion=tipo_foto).exists():
-                messages.error(request, "Solo se permiten máximo 3 fotos por mantenimiento.")
-                return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
+                    cantidad_base = convertir_a_base(insumo, cantidad_ingresada, unidad)
+                    movimiento = consumir_trabajador(
+                        insumo=insumo,
+                        trabajador=trabajador_consumo,
+                        cantidad_base=cantidad_base,
+                        mantenimiento=mantenimiento,
+                        usuario=request.user,
+                    )
+                    uso = UsoInsumo.objects.create(
+                        mantenimiento=mantenimiento,
+                        insumo=insumo,
+                        trabajador=trabajador_consumo,
+                        cantidad=cantidad_base,
+                        cantidad_ingresada=Decimal(str(cantidad_ingresada).replace(",", ".")),
+                        unidad_registro=unidad,
+                        costo_unitario=movimiento.costo_unitario,
+                        costo_total=movimiento.total_costo,
+                    )
+                    consumos_creados.append(uso)
 
-            foto_existente = mantenimiento.fotos.filter(descripcion=tipo_foto).first()
-            if foto_existente:
-                messages.error(request, f"La foto '{tipo_foto}' ya fue subida. Si deseas cambiarla, elimínala primero.")
-                return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
+                # ---------------------------------------------------------
+                # 3) Fotografías requeridas. Las nuevas se guardan junto a
+                #    todo el formulario; las ya existentes se respetan.
+                # ---------------------------------------------------------
+                mapa_fotos = [
+                    ("Inicio de Mantenimiento", request.FILES.get("foto_inicio")),
+                    ("Fin de Mantenimiento", request.FILES.get("foto_fin")),
+                    ("Nivel PH y Cl", request.FILES.get("foto_nivel")),
+                ]
+                existentes = {
+                    f.descripcion: f
+                    for f in mantenimiento.fotos.all()
+                    if _nombre_foto_valido(f.descripcion)
+                }
+                for tipo_foto, imagen in mapa_fotos:
+                    if not imagen or tipo_foto in existentes:
+                        continue
+                    FotoMantenimiento.objects.create(
+                        mantenimiento=mantenimiento,
+                        imagen=imagen,
+                        descripcion=tipo_foto,
+                    )
+                    fotos_subidas.append(tipo_foto)
+                    existentes[tipo_foto] = True
 
-            FotoMantenimiento.objects.create(
-                mantenimiento=mantenimiento,
-                imagen=imagen,
-                descripcion=tipo_foto,
+                # ---------------------------------------------------------
+                # 4) Finalización. Solo las 3 fotografías son obligatorias.
+                #    Si falta alguna, toda la transacción se revierte,
+                #    incluyendo consumos de inventario añadidos en este POST.
+                # ---------------------------------------------------------
+                if finalizar:
+                    faltantes = [nombre for nombre in FOTOS_REQUERIDAS if nombre not in existentes]
+                    if faltantes:
+                        raise ValueError(
+                            "Para finalizar debes cargar las 3 fotografías obligatorias. "
+                            f"Faltan: {', '.join(faltantes)}."
+                        )
+                    mantenimiento.estado = "realizado"
+                    mantenimiento.borrador_guardado = False
+                    mantenimiento.save(update_fields=["estado", "borrador_guardado"])
+
+        except (ValueError, InventarioTrabajador.DoesNotExist) as exc:
+            messages.error(request, str(exc) or "No se pudo guardar el mantenimiento.")
+            return redirect(safe_return_url())
+        except Exception:
+            logger.exception("Error guardando mantenimiento unificado id=%s", mantenimiento.pk)
+            messages.error(
+                request,
+                "Ocurrió un error al guardar. No se aplicaron cambios parciales; inténtalo nuevamente.",
             )
+            return redirect(safe_return_url())
 
-            actor = request.user.username
+        actor = request.user.username
+        if finalizar:
             _notificar_admins(
-                titulo="📸 Nueva foto subida",
-                mensaje=f"{actor} subió la foto '{tipo_foto}' en el mantenimiento de {mantenimiento.cliente}.",
+                titulo="✅ Mantenimiento realizado",
+                mensaje=f"El mantenimiento de {mantenimiento.cliente} fue finalizado por {actor}.",
                 url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
-                enviar_push=False,
+                enviar_push=True,
                 excluir_user_id=request.user.id if es_usuario_admin else None,
             )
             _registrar_actividad(
                 user=request.user,
-                titulo="Foto subida",
-                descripcion=f"{actor} subió la foto '{tipo_foto}' al mantenimiento de {mantenimiento.cliente}.",
+                titulo="Mantenimiento realizado",
+                descripcion=(
+                    f"{actor} finalizó el mantenimiento de {mantenimiento.cliente}. "
+                    f"Nuevos consumos: {len(consumos_creados)}; fotos nuevas: {len(fotos_subidas)}."
+                ),
                 url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
             )
+            messages.success(request, f"Mantenimiento de {mantenimiento.cliente} finalizado correctamente.")
+        else:
+            _registrar_actividad(
+                user=request.user,
+                titulo="Borrador de mantenimiento guardado",
+                descripcion=(
+                    f"{actor} guardó el borrador de {mantenimiento.cliente}. "
+                    f"Nuevos consumos: {len(consumos_creados)}; fotos nuevas: {len(fotos_subidas)}."
+                ),
+                url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
+            )
+            messages.success(request, "Borrador guardado. Todo lo registrado quedó conservado.")
 
-            messages.success(request, f"Foto subida correctamente: {tipo_foto}.")
-            return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
+        return redirect(safe_return_url())
 
-    lista_usos = mantenimiento.usos_insumos.all()
+    lista_usos = mantenimiento.usos_insumos.select_related("insumo", "trabajador__user").all()
     lista_egresos = mantenimiento.egresos.all() if hasattr(mantenimiento, "egresos") else []
-    total_egresos = sum(e.total for e in lista_egresos) if lista_egresos else 0
+    total_egresos = sum((Decimal(u.subtotal()) for u in lista_usos), Decimal("0.00"))
 
     fotos_qs = mantenimiento.fotos.all()
-    fotos_por_nombre = {f.descripcion: f for f in fotos_qs if _nombre_foto_valido(f.descripcion)}
+    fotos_por_nombre = {
+        f.descripcion: f for f in fotos_qs if _nombre_foto_valido(f.descripcion)
+    }
     fotos = [fotos_por_nombre[nombre] for nombre in FOTOS_REQUERIDAS if nombre in fotos_por_nombre]
 
     historial_cliente_reciente = []
@@ -2918,8 +3274,6 @@ def mantenimiento_detalle_view(request, pk):
 
     cantidad_fotos = len(fotos)
     cantidad_usos = lista_usos.count()
-    checklist_completo = checklist.completo()
-
     checklist_limpieza_completados = sum(
         bool(valor)
         for valor in [
@@ -2928,6 +3282,7 @@ def mantenimiento_detalle_view(request, pk):
             checklist.recoleccion_basura,
             checklist.limpieza_filtros,
             checklist.retrolavado_arena,
+            checklist.limpieza_filos,
         ]
     )
     checklist_inspeccion_completados = sum(
@@ -2936,20 +3291,14 @@ def mantenimiento_detalle_view(request, pk):
             checklist.bomba_estado,
             checklist.filtro_estado,
             checklist.nivel_agua,
+            mantenimiento.estado_agua_rapido,
         ]
     )
-    checklist_completados = (
-        checklist_limpieza_completados
-        + checklist_inspeccion_completados
-    )
-    checklist_total = 8
-    checklist_porcentaje = round(
-        (checklist_completados / checklist_total) * 100
-    )
+    checklist_completados = checklist_limpieza_completados + checklist_inspeccion_completados
+    checklist_total = 10
+    checklist_porcentaje = round((checklist_completados / checklist_total) * 100)
 
-    puede_cerrar = cantidad_fotos == 3 and checklist_completo
-    puede_subir_fotos = cantidad_fotos < 3 and not esta_realizado
-
+    puede_cerrar = cantidad_fotos == 3
     foto_inicio = fotos_por_nombre.get("Inicio de Mantenimiento")
     foto_fin = fotos_por_nombre.get("Fin de Mantenimiento")
     foto_nivel = fotos_por_nombre.get("Nivel PH y Cl")
@@ -2962,27 +3311,136 @@ def mantenimiento_detalle_view(request, pk):
             "insumos": insumos,
             "lista_usos": lista_usos,
             "lista_egresos": lista_egresos,
+            "inventario_mantenimiento": inventario_mantenimiento,
+            "trabajadores_mantenimiento": trabajadores_mantenimiento,
+            "trabajador_actual": trabajador_actual,
             "total_egresos": total_egresos,
             "es_admin": es_usuario_admin,
+            "base_template": "dashboard/base_admin.html" if es_usuario_admin else "dashboard/base_trabajador.html",
             "fotos": fotos,
             "cantidad_fotos": cantidad_fotos,
             "cantidad_usos": cantidad_usos,
             "puede_cerrar": puede_cerrar,
-            "puede_subir_fotos": puede_subir_fotos,
             "esta_realizado": esta_realizado,
             "foto_inicio": foto_inicio,
             "foto_fin": foto_fin,
             "foto_nivel": foto_nivel,
             "historial_cliente_reciente": historial_cliente_reciente,
             "checklist": checklist,
-            "checklist_completo": checklist_completo,
             "checklist_limpieza_completados": checklist_limpieza_completados,
             "checklist_inspeccion_completados": checklist_inspeccion_completados,
             "checklist_completados": checklist_completados,
             "checklist_total": checklist_total,
             "checklist_porcentaje": checklist_porcentaje,
+            "cliente_operativo": cliente_operativo,
+            "maps_url": maps_url,
+            "whatsapp_disponible": whatsapp_disponible,
         },
     )
+
+
+@login_required
+@require_GET
+def mantenimiento_whatsapp_cliente_view(request, pk):
+    """Abre WhatsApp para un técnico asignado y registra el intento de contacto."""
+    mantenimiento = get_object_or_404(
+        Mantenimiento.objects.select_related("cliente"),
+        pk=pk,
+    )
+
+    if not es_trabajador(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    try:
+        trabajador = request.user.trabajador
+    except Exception:
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    if not mantenimiento.trabajadores.filter(pk=trabajador.pk).exists():
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    telefono = _telefono_whatsapp_ecuador(mantenimiento.cliente.telefono)
+    if not telefono:
+        messages.error(request, "El cliente no tiene un número de WhatsApp registrado.")
+        return redirect("mantenimiento_detalle", pk=mantenimiento.pk)
+
+    nombre_trabajador = (request.user.get_full_name() or "").strip() or request.user.username
+    mensaje = (
+        f"Hola, buenos días. Soy {nombre_trabajador}, técnico de JVAQUA. "
+        "Me encuentro aquí en su domicilio para realizar el mantenimiento de su piscina."
+    )
+
+    _registrar_actividad(
+        user=request.user,
+        titulo="Acceso rápido de WhatsApp utilizado",
+        descripcion=(
+            f"{nombre_trabajador} abrió WhatsApp para contactar a "
+            f"{mantenimiento.cliente} desde el mantenimiento #{mantenimiento.pk}."
+        ),
+        url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
+    )
+
+    return redirect(f"https://wa.me/{telefono}?text={quote(mensaje)}")
+
+
+@login_required
+def mi_cuenta_trabajador_view(request):
+    if not es_trabajador(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    trabajador = get_object_or_404(Trabajador.objects.select_related("user"), user=request.user)
+    hoy = timezone.localdate()
+    try:
+        anio = int(request.GET.get("anio") or hoy.year)
+        mes = int(request.GET.get("mes") or hoy.month)
+        if mes < 1 or mes > 12:
+            raise ValueError
+    except (TypeError, ValueError):
+        anio, mes = hoy.year, hoy.month
+
+    obligaciones = list(
+        ObligacionTrabajador.objects.filter(
+            trabajador=trabajador,
+            fecha_pago_programada__year=anio,
+            fecha_pago_programada__month=mes,
+        )
+        .exclude(estado=ObligacionTrabajador.ESTADO_ANULADO)
+        .select_related("contrato__cliente").prefetch_related("pagos")
+        .order_by("fecha_pago_programada", "id")
+    )
+    generado = sum((o.valor_acordado for o in obligaciones), Decimal("0.00"))
+    pagado = sum((o.monto_pagado for o in obligaciones), Decimal("0.00"))
+    pendiente = sum((o.saldo for o in obligaciones), Decimal("0.00"))
+    anticipos = list(AnticipoTrabajador.objects.filter(trabajador=trabajador).order_by("-fecha", "-id")[:30])
+    anticipos_pendientes = sum((a.monto for a in anticipos if not a.descontado), Decimal("0.00"))
+    proximas = [o.fecha_pago_programada for o in obligaciones if o.saldo > 0 and o.fecha_pago_programada]
+    proximo_pago = min(proximas) if proximas else None
+    contratos = list(Contrato.objects.filter(tecnico_designado=trabajador, activo=True).select_related("cliente").order_by("cliente__nombre"))
+    mantenimientos_mes = Mantenimiento.objects.filter(trabajadores=trabajador, fecha__year=anio, fecha__month=mes)
+    realizados_mes = mantenimientos_mes.filter(estado="realizado").count()
+    pendientes_mes = mantenimientos_mes.filter(estado="pendiente").count()
+    pagos_recientes = list(PagoTrabajador.objects.filter(obligacion__trabajador=trabajador, activo=True).select_related("obligacion__contrato__cliente").order_by("-fecha", "-id")[:30])
+    lotes = list(LotePagoTrabajador.objects.filter(trabajador=trabajador, activo=True).order_by("-fecha", "-id")[:20])
+    inventario_personal = list(
+        InventarioTrabajador.objects.filter(trabajador=trabajador, stock__gt=0)
+        .select_related("insumo").order_by("insumo__nombre")
+    )
+    movimientos_inventario_personal = list(
+        MovimientoInventario.objects.filter(trabajador=trabajador)
+        .select_related("insumo", "mantenimiento__cliente")
+        .order_by("-creado_en", "-id")[:30]
+    )
+    return render(request, "dashboard/mi_cuenta_trabajador.html", {
+        "trabajador": trabajador, "anio": anio, "mes": mes, "obligaciones": obligaciones,
+        "generado": generado, "pagado": pagado, "pendiente": pendiente,
+        "anticipos": anticipos, "anticipos_pendientes": anticipos_pendientes,
+        "proximo_pago": proximo_pago, "contratos": contratos,
+        "realizados_mes": realizados_mes, "pendientes_mes": pendientes_mes,
+        "pagos_recientes": pagos_recientes, "lotes": lotes,
+        "inventario_personal": inventario_personal,
+        "movimientos_inventario_personal": movimientos_inventario_personal,
+        "VAPID_PUBLIC_KEY": getattr(settings, "VAPID_PUBLIC_KEY", ""),
+        "meses": [(1,"Enero"),(2,"Febrero"),(3,"Marzo"),(4,"Abril"),(5,"Mayo"),(6,"Junio"),(7,"Julio"),(8,"Agosto"),(9,"Septiembre"),(10,"Octubre"),(11,"Noviembre"),(12,"Diciembre")],
+    })
 
 
 @login_required
@@ -3070,9 +3528,12 @@ def usoinsumo_eliminar_view(request, pk):
         insumo_nombre = getattr(insumo, "nombre", "Insumo")
         cantidad = uso.cantidad
 
-        if hasattr(insumo, "stock"):
-            insumo.stock += uso.cantidad
-            insumo.save()
+        if uso.trabajador_id:
+            revertir_consumo(uso=uso, usuario=request.user)
+        elif getattr(uso, "egreso_id", None):
+            # Registro histórico anterior al inventario por trabajador.
+            insumo.stock = Decimal(insumo.stock) + Decimal(uso.cantidad)
+            insumo.save(update_fields=["stock"])
 
         if getattr(uso, "egreso_id", None):
             uso.egreso.delete()
@@ -3100,7 +3561,11 @@ def usoinsumo_eliminar_view(request, pk):
     return render(
         request,
         "dashboard/usoinsumo_confirmar_eliminar.html",
-        {"uso": uso, "es_admin": es_admin(request.user)},
+        {
+            "uso": uso,
+            "es_admin": es_admin(request.user),
+            "base_template": "dashboard/base_admin.html" if es_admin(request.user) else "dashboard/base_trabajador.html",
+        },
     )
 
 
@@ -3129,51 +3594,58 @@ def usoinsumo_editar_view(request, pk):
 
     if request.method == "POST":
         nueva_cantidad_str = request.POST.get("cantidad", "").strip()
+        unidad = request.POST.get("unidad", uso.unidad_registro or "kg")
         try:
-            nueva_cantidad = int(nueva_cantidad_str)
-            if nueva_cantidad <= 0:
-                raise ValueError
-        except Exception:
-            messages.error(request, "Cantidad inválida.")
+            nueva_base = convertir_a_base(uso.insumo, nueva_cantidad_str, unidad)
+        except ValueError as exc:
+            messages.error(request, str(exc))
             return redirect(f"/dashboard/usos/{uso.pk}/editar/")
 
-        anterior = uso.cantidad
-        diff = nueva_cantidad - anterior
-
-        insumo = uso.insumo
-        insumo_nombre = getattr(insumo, "nombre", "Insumo")
-
-        if hasattr(insumo, "stock"):
-            if diff > 0 and insumo.stock < diff:
-                messages.error(request, f"Stock insuficiente. Disponible: {insumo.stock}")
+        anterior = Decimal(uso.cantidad)
+        if uso.trabajador_id:
+            try:
+                with transaction.atomic():
+                    revertir_consumo(uso=uso, usuario=request.user)
+                    movimiento = consumir_trabajador(
+                        insumo=uso.insumo,
+                        trabajador=uso.trabajador,
+                        cantidad_base=nueva_base,
+                        mantenimiento=mantenimiento,
+                        usuario=request.user,
+                        observacion=f"Edición consumo #{uso.pk}",
+                    )
+                    uso.cantidad = nueva_base
+                    uso.cantidad_ingresada = Decimal(str(nueva_cantidad_str).replace(",", "."))
+                    uso.unidad_registro = unidad
+                    uso.costo_unitario = movimiento.costo_unitario
+                    uso.costo_total = movimiento.total_costo
+                    uso.save(update_fields=["cantidad", "cantidad_ingresada", "unidad_registro", "costo_unitario", "costo_total"])
+            except (ValueError, InventarioTrabajador.DoesNotExist) as exc:
+                messages.error(request, str(exc) if str(exc) else "Stock insuficiente.")
                 return redirect(f"/dashboard/usos/{uso.pk}/editar/")
-            insumo.stock -= diff
-            insumo.save()
-
-        uso.cantidad = nueva_cantidad
-        uso.save()
-
-        if getattr(uso, "egreso_id", None):
-            eg = uso.egreso
-            eg.cantidad = nueva_cantidad
-            eg.save()
+        else:
+            # Compatibilidad para registros históricos sin trabajador.
+            diff = nueva_base - anterior
+            if diff > 0 and Decimal(uso.insumo.stock) < diff:
+                messages.error(request, f"Stock general insuficiente. Disponible: {uso.insumo.stock}")
+                return redirect(f"/dashboard/usos/{uso.pk}/editar/")
+            uso.insumo.stock = Decimal(uso.insumo.stock) - diff
+            uso.insumo.save(update_fields=["stock"])
+            uso.cantidad = nueva_base
+            uso.cantidad_ingresada = Decimal(str(nueva_cantidad_str).replace(",", "."))
+            uso.unidad_registro = unidad
+            uso.costo_unitario = uso.insumo.costo or 0
+            uso.costo_total = (nueva_base * Decimal(uso.insumo.costo or 0)).quantize(Decimal("0.01"))
+            uso.save()
 
         actor = request.user.username
-        _notificar_admins(
-            titulo="✏️ Insumo actualizado",
-            mensaje=f"{actor} actualizó un uso de insumo en {mantenimiento.cliente}.",
-            url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
-            enviar_push=False,
-            excluir_user_id=request.user.id if es_admin(request.user) else None,
-        )
         _registrar_actividad(
             user=request.user,
             titulo="Insumo actualizado",
-            descripcion=f"{actor} actualizó {insumo_nombre} de {anterior} a {nueva_cantidad} en el mantenimiento de {mantenimiento.cliente}.",
+            descripcion=f"{actor} actualizó {uso.insumo.nombre} de {anterior} a {nueva_base} {uso.insumo.unidad_corta} en {mantenimiento.cliente}.",
             url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
         )
-
-        messages.success(request, "Uso de insumo actualizado correctamente.")
+        messages.success(request, "Consumo actualizado correctamente.")
         return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/")
 
     return render(
@@ -3550,6 +4022,8 @@ def factura_list_view(request):
             "total_facturado": total_facturado,
             "total_pagado": total_pagado,
             "total_pendiente": total_pendiente,
+            "mantenimientos_futuros": mantenimientos_futuros,
+            "proximo_mantenimiento": proximo_mantenimiento,
             "es_admin": True,
         },
     )
@@ -4421,6 +4895,15 @@ def offline_view(request):
 @require_GET
 @login_required
 def unread_count_view(request):
+    if es_trabajador(request.user):
+        _actualizar_seguimientos_asistente(request.user)
+    if es_admin(request.user):
+        try:
+            from finanzas.alertas_financieras import generar_alertas_financieras
+            generar_alertas_financieras(enviar_push=True)
+        except Exception:
+            logger.exception("No se pudieron actualizar las alertas financieras.")
+
     if Notificacion is None:
         return JsonResponse({"count": 0})
 
@@ -4432,10 +4915,30 @@ def unread_count_view(request):
     return JsonResponse({"count": count})
 
 #======================
-# INVENTARIO PRO
+# INVENTARIO INTELIGENTE
 #======================
 
-from inventario.models import Insumo, VentaInsumo, EntradaStock, MovimientoInventario
+from inventario.models import (
+    Insumo, VentaInsumo, EntradaStock, MovimientoInventario,
+    InventarioTrabajador, CompraInsumo, PresentacionInsumo, SolicitudReposicion,
+)
+from inventario.services import (
+    convertir_a_base, entregar_a_trabajador, devolver_de_trabajador,
+    consumir_trabajador, revertir_consumo, decimal_positivo,
+)
+
+
+def _inventario_valorizado():
+    total = Decimal("0.00")
+    for insumo in Insumo.objects.filter(activo=True):
+        total += Decimal(insumo.stock or 0) * Decimal(insumo.costo or 0)
+    return total
+
+
+def _cantidad_texto(insumo, cantidad):
+    cantidad = Decimal(cantidad or 0)
+    unidad = "kg" if insumo.unidad_base == "kg" else "L"
+    return f"{cantidad:.3f} {unidad}"
 
 
 @login_required
@@ -4443,283 +4946,806 @@ def inventario_view(request):
     if not es_admin(request.user):
         return render(request, "dashboard/no_autorizado.html", status=403)
 
-    insumos = Insumo.objects.all().order_by("nombre")
+    insumos = list(Insumo.objects.filter(activo=True).prefetch_related("presentaciones").order_by("nombre"))
+    trabajadores = list(Trabajador.objects.filter(activo=True).select_related("user").order_by("user__username"))
+    inventarios_trabajadores = list(
+        InventarioTrabajador.objects.filter(stock__gt=0)
+        .select_related("trabajador__user", "insumo")
+        .order_by("trabajador__user__username", "insumo__nombre")
+    )
 
-    total_insumos = insumos.count()
-    bajo_stock = insumos.filter(stock__lte=F("stock_minimo")).count()
-    stock_total = sum(i.stock for i in insumos)
+    total_insumos = len(insumos)
+    bajo_stock = sum(1 for i in insumos if i.bajo_stock)
+    sin_stock = sum(1 for i in insumos if i.sin_stock)
+    stock_total_kg = sum((Decimal(i.stock) for i in insumos if i.unidad_base == "kg"), Decimal("0.000"))
 
     hoy = timezone.localdate()
     primer_dia_mes = hoy.replace(day=1)
-
     ventas_mes = VentaInsumo.objects.filter(fecha__gte=primer_dia_mes)
-    total_ventas_mes = ventas_mes.aggregate(total=Sum("total")).get("total") or 0
-    ganancia_mes = ventas_mes.aggregate(total=Sum("ganancia")).get("total") or 0
-    unidades_vendidas_mes = ventas_mes.aggregate(total=Sum("cantidad")).get("total") or 0
+    total_ventas_mes = ventas_mes.aggregate(total=Sum("total")).get("total") or Decimal("0")
+    ganancia_mes = ventas_mes.aggregate(total=Sum("ganancia")).get("total") or Decimal("0")
+    total_compras_mes = CompraInsumo.objects.filter(fecha__gte=primer_dia_mes).aggregate(total=Sum("total")).get("total") or Decimal("0")
+    consumo_mes = MovimientoInventario.objects.filter(tipo="mantenimiento", fecha__gte=primer_dia_mes)
+    costo_consumo_mes = consumo_mes.aggregate(total=Sum("total_costo")).get("total") or Decimal("0")
+    cantidad_consumo_mes = consumo_mes.aggregate(total=Sum("cantidad")).get("total") or Decimal("0")
+    solicitudes_pendientes = SolicitudReposicion.objects.filter(estado="pendiente").select_related("trabajador__user", "insumo").order_by("-creada_en")
 
     movimientos_recientes = list(
-        MovimientoInventario.objects.select_related("insumo").all().order_by("-creado_en", "-id")[:8]
+        MovimientoInventario.objects.select_related("insumo", "trabajador__user", "mantenimiento__cliente")
+        .all().order_by("-creado_en", "-id")[:12]
     )
 
-    top_vendidos = list(
-        VentaInsumo.objects
-        .filter(fecha__gte=primer_dia_mes)
-        .values("insumo__nombre")
-        .annotate(
-            cantidad_total=Sum("cantidad"),
-            monto_total=Sum("total"),
-            ganancia_total=Sum("ganancia"),
-        )
-        .order_by("-cantidad_total", "-monto_total")[:5]
-    )
+    resumen_trabajadores = []
+    por_trabajador = defaultdict(list)
+    for inv in inventarios_trabajadores:
+        por_trabajador[inv.trabajador].append(inv)
+    valor_asignado = Decimal("0.00")
+    productos_asignados = 0
+    for trabajador, stocks in por_trabajador.items():
+        valorizado = sum((Decimal(x.stock) * Decimal(x.insumo.costo or 0) for x in stocks), Decimal("0.00"))
+        valor_asignado += valorizado
+        productos_asignados += len(stocks)
+        resumen_trabajadores.append({"trabajador": trabajador, "stocks": stocks, "valor": valorizado})
 
-    return render(
-        request,
-        "dashboard/inventario.html",
-        {
-            "insumos": insumos,
-            "total_insumos": total_insumos,
-            "bajo_stock": bajo_stock,
-            "stock_total": stock_total,
-            "total_ventas_mes": float(total_ventas_mes),
-            "ganancia_mes": float(ganancia_mes),
-            "unidades_vendidas_mes": int(unidades_vendidas_mes or 0),
-            "movimientos_recientes": movimientos_recientes,
-            "top_vendidos": top_vendidos,
-            "es_admin": True,
-        },
-    )
+    return render(request, "dashboard/inventario.html", {
+        "insumos": insumos,
+        "trabajadores": trabajadores,
+        "inventarios_trabajadores": inventarios_trabajadores,
+        "resumen_trabajadores": resumen_trabajadores,
+        "total_insumos": total_insumos,
+        "bajo_stock": bajo_stock,
+        "sin_stock": sin_stock,
+        "stock_total_kg": stock_total_kg,
+        "valor_inventario": _inventario_valorizado(),
+        "valor_asignado": valor_asignado,
+        "productos_asignados": productos_asignados,
+        "total_ventas_mes": total_ventas_mes,
+        "ganancia_mes": ganancia_mes,
+        "total_compras_mes": total_compras_mes,
+        "costo_consumo_mes": costo_consumo_mes,
+        "cantidad_consumo_mes": cantidad_consumo_mes,
+        "solicitudes_pendientes": solicitudes_pendientes[:8],
+        "solicitudes_pendientes_count": solicitudes_pendientes.count(),
+        "movimientos_recientes": movimientos_recientes,
+        "es_admin": True,
+    })
 
-
-#======================
-# VENDER INSUMO
-#======================
 
 @login_required
-def vender_insumo_view(request):
+def compra_inventario_view(request):
     if not es_admin(request.user):
         return render(request, "dashboard/no_autorizado.html", status=403)
-
     if request.method != "POST":
-        return redirect("/dashboard/inventario/")
+        return redirect("inventario")
 
-    insumo_id = (request.POST.get("insumo_id") or "").strip()
-    cantidad_str = (request.POST.get("cantidad") or "").strip()
-
+    insumo = get_object_or_404(Insumo, pk=request.POST.get("insumo_id"))
     try:
-        cantidad = int(cantidad_str)
-        if cantidad <= 0:
-            raise ValueError
-    except Exception:
-        messages.error(request, "Cantidad inválida")
-        return redirect("/dashboard/inventario/")
+        cantidad_base = convertir_a_base(insumo, request.POST.get("cantidad"), request.POST.get("unidad", "base"), request.POST.get("presentacion_id") or None)
+        costo_unitario = decimal_positivo(request.POST.get("costo_unitario"), "Costo unitario")
+    except (ValueError, PresentacionInsumo.DoesNotExist) as exc:
+        messages.error(request, str(exc))
+        return redirect("inventario")
 
-    insumo = get_object_or_404(Insumo, pk=insumo_id)
+    proveedor = (request.POST.get("proveedor") or "").strip()
+    lote = (request.POST.get("lote") or "").strip()
+    fecha_fabricacion = parse_date((request.POST.get("fecha_fabricacion") or "").strip()) or None
+    fecha_vencimiento = parse_date((request.POST.get("fecha_vencimiento") or "").strip()) or None
+    observacion = (request.POST.get("observacion") or "").strip()
+    total = (cantidad_base * costo_unitario).quantize(Decimal("0.01"))
 
-    if insumo.stock < cantidad:
-        messages.error(
-            request,
-            f"Stock insuficiente de {insumo.nombre}. Disponible: {insumo.stock}"
+    with transaction.atomic():
+        insumo = Insumo.objects.select_for_update().get(pk=insumo.pk)
+        stock_anterior = Decimal(insumo.stock)
+        stock_nuevo = stock_anterior + cantidad_base
+        valor_anterior = stock_anterior * Decimal(insumo.costo or 0)
+        valor_compra = cantidad_base * costo_unitario
+        nuevo_costo = ((valor_anterior + valor_compra) / stock_nuevo) if stock_nuevo > 0 else costo_unitario
+        insumo.stock = stock_nuevo
+        insumo.costo = nuevo_costo.quantize(Decimal("0.0001"))
+        insumo.save(update_fields=["stock", "costo"])
+
+        egreso = Egreso.objects.create(
+            concepto=f"Compra inventario: {insumo.nombre}", categoria="quimicos" if insumo.categoria == "quimicos" else "materiales",
+            cantidad=1, costo_unitario=total, total=total, fecha=timezone.localdate(), proveedor=proveedor,
         )
-        return redirect("/dashboard/inventario/")
+        compra = CompraInsumo.objects.create(
+            insumo=insumo, cantidad=cantidad_base, costo_unitario=costo_unitario,
+            total=total, proveedor=proveedor, lote=lote, fecha_fabricacion=fecha_fabricacion,
+            fecha_vencimiento=fecha_vencimiento, observacion=observacion, egreso=egreso,
+        )
+        MovimientoInventario.objects.create(
+            insumo=insumo, tipo="compra", cantidad=cantidad_base,
+            stock_anterior=stock_anterior, stock_resultante=insumo.stock,
+            costo_unitario=costo_unitario, total_costo=total, usuario=request.user,
+            observacion=observacion or f"Compra #{compra.pk} · {proveedor or 'sin proveedor'}",
+        )
 
-    stock_anterior = insumo.stock
-    precio_unitario = Decimal(insumo.precio)
-    costo_unitario = Decimal(getattr(insumo, "costo", 0) or 0)
-    total = Decimal(cantidad) * precio_unitario
-    ganancia = Decimal(cantidad) * (precio_unitario - costo_unitario)
-
-    insumo.stock -= cantidad
-    insumo.save()
-
-    VentaInsumo.objects.create(
-        insumo=insumo,
-        cantidad=cantidad,
-        precio_unitario=precio_unitario,
-        costo_unitario=costo_unitario,
-        total=total,
-        ganancia=ganancia,
-    )
-
-    MovimientoInventario.objects.create(
-        insumo=insumo,
-        tipo="venta",
-        cantidad=cantidad,
-        stock_anterior=stock_anterior,
-        stock_resultante=insumo.stock,
-        observacion=f"Venta de insumo · utilidad ${ganancia}",
-    )
-
-    Ingreso.objects.create(
-        concepto=f"Venta de insumo: {insumo.nombre}",
-        total=total,
-        fecha=timezone.localdate(),
-    )
-
-    _registrar_actividad(
-        user=request.user,
-        titulo="Venta de insumo registrada",
-        descripcion=f"{request.user.username} registró la venta de {insumo.nombre} x {cantidad} por ${total}. Ganancia: ${ganancia}.",
-        url="/dashboard/inventario/",
-    )
-
-    messages.success(request, f"Venta registrada correctamente. Ganancia: ${ganancia}")
+    _registrar_actividad(request.user, "Compra de inventario", f"Se ingresaron {_cantidad_texto(insumo, cantidad_base)} de {insumo.nombre} por ${total}.", "/dashboard/inventario/")
+    messages.success(request, f"Compra registrada. Stock actual: {_cantidad_texto(insumo, insumo.stock)}")
     return redirect("inventario")
 
-
-#======================
-# ENTRADA DE STOCK
-#======================
 
 @login_required
 def agregar_stock_view(request):
     if not es_admin(request.user):
         return render(request, "dashboard/no_autorizado.html", status=403)
-
     if request.method != "POST":
-        return redirect("/dashboard/inventario/")
-
-    insumo_id = (request.POST.get("insumo_id") or "").strip()
-    cantidad_str = (request.POST.get("cantidad") or "").strip()
-    observacion = (request.POST.get("observacion") or "").strip()
-
+        return redirect("inventario")
+    insumo = get_object_or_404(Insumo, pk=request.POST.get("insumo_id"))
     try:
-        cantidad = int(cantidad_str)
-        if cantidad <= 0:
-            raise ValueError
-    except Exception:
-        messages.error(request, "Cantidad inválida.")
-        return redirect("/dashboard/inventario/")
+        cantidad_base = convertir_a_base(insumo, request.POST.get("cantidad"), request.POST.get("unidad", "base"))
+    except ValueError as exc:
+        messages.error(request, str(exc))
+        return redirect("inventario")
+    observacion = (request.POST.get("observacion") or "").strip()
+    with transaction.atomic():
+        insumo = Insumo.objects.select_for_update().get(pk=insumo.pk)
+        anterior = Decimal(insumo.stock)
+        insumo.stock = anterior + cantidad_base
+        insumo.save(update_fields=["stock"])
+        EntradaStock.objects.create(insumo=insumo, cantidad=cantidad_base, observacion=observacion)
+        MovimientoInventario.objects.create(
+            insumo=insumo, tipo="entrada", cantidad=cantidad_base, stock_anterior=anterior,
+            stock_resultante=insumo.stock, costo_unitario=insumo.costo or 0,
+            total_costo=(cantidad_base * Decimal(insumo.costo or 0)).quantize(Decimal("0.01")),
+            usuario=request.user, observacion=observacion or "Ajuste de entrada manual",
+        )
+    messages.success(request, "Stock agregado correctamente.")
+    return redirect("inventario")
 
-    insumo = get_object_or_404(Insumo, pk=insumo_id)
-    stock_anterior = insumo.stock
 
-    insumo.stock += cantidad
+@login_required
+def vender_insumo_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    if request.method != "POST":
+        return redirect("inventario")
+
+    insumo = get_object_or_404(Insumo, pk=request.POST.get("insumo_id"), puede_venderse=True)
+    try:
+        cantidad_base = convertir_a_base(insumo, request.POST.get("cantidad"), request.POST.get("unidad", "base"), request.POST.get("presentacion_id") or None)
+    except (ValueError, PresentacionInsumo.DoesNotExist) as exc:
+        messages.error(request, str(exc))
+        return redirect("inventario")
+
+    precio_unitario_raw = request.POST.get("precio_unitario")
+    precio_unitario = Decimal(str(precio_unitario_raw).replace(",", ".")) if precio_unitario_raw else Decimal(insumo.precio)
+
+    with transaction.atomic():
+        insumo = Insumo.objects.select_for_update().get(pk=insumo.pk)
+        if Decimal(insumo.stock) < cantidad_base:
+            messages.error(request, f"Stock insuficiente. Disponible: {_cantidad_texto(insumo, insumo.stock)}")
+            return redirect("inventario")
+        anterior = Decimal(insumo.stock)
+        costo_unitario = Decimal(insumo.costo or 0)
+        total = (cantidad_base * precio_unitario).quantize(Decimal("0.01"))
+        ganancia = (cantidad_base * (precio_unitario - costo_unitario)).quantize(Decimal("0.01"))
+        insumo.stock = anterior - cantidad_base
+        insumo.save(update_fields=["stock"])
+        venta = VentaInsumo.objects.create(
+            insumo=insumo, cantidad=cantidad_base, unidad_registro=request.POST.get("unidad", "base"),
+            precio_unitario=precio_unitario, costo_unitario=costo_unitario, total=total, ganancia=ganancia,
+        )
+        MovimientoInventario.objects.create(
+            insumo=insumo, tipo="venta", cantidad=cantidad_base,
+            stock_anterior=anterior, stock_resultante=insumo.stock,
+            costo_unitario=costo_unitario, total_costo=(cantidad_base * costo_unitario).quantize(Decimal("0.01")),
+            usuario=request.user, observacion=f"Venta #{venta.pk} · ingreso ${total}",
+        )
+        Ingreso.objects.create(concepto=f"Venta de insumo: {insumo.nombre}", total=total, fecha=timezone.localdate())
+
+    _registrar_actividad(request.user, "Venta de insumo registrada", f"Venta de {insumo.nombre} por ${total}. Ganancia estimada ${ganancia}.", "/dashboard/inventario/")
+    messages.success(request, f"Venta registrada correctamente. Ganancia estimada: ${ganancia}")
+    return redirect("inventario")
+
+
+@login_required
+def inventario_entrega_trabajador_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    if request.method != "POST":
+        return redirect("inventario")
+    insumo = get_object_or_404(Insumo, pk=request.POST.get("insumo_id"), puede_asignarse_trabajador=True)
+    trabajador = get_object_or_404(Trabajador, pk=request.POST.get("trabajador_id"), activo=True)
+    try:
+        cantidad = convertir_a_base(insumo, request.POST.get("cantidad"), request.POST.get("unidad", "base"))
+        entregar_a_trabajador(insumo=insumo, trabajador=trabajador, cantidad_base=cantidad, usuario=request.user, observacion=request.POST.get("observacion", ""))
+    except ValueError as exc:
+        messages.error(request, str(exc))
+        return redirect("inventario")
+    messages.success(request, f"Entrega registrada a {trabajador}: {_cantidad_texto(insumo, cantidad)} de {insumo.nombre}.")
+    return redirect("inventario")
+
+
+@login_required
+def inventario_devolucion_trabajador_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    if request.method != "POST":
+        return redirect("inventario")
+    insumo = get_object_or_404(Insumo, pk=request.POST.get("insumo_id"))
+    trabajador = get_object_or_404(Trabajador, pk=request.POST.get("trabajador_id"))
+    try:
+        cantidad = convertir_a_base(insumo, request.POST.get("cantidad"), request.POST.get("unidad", "base"))
+        devolver_de_trabajador(insumo=insumo, trabajador=trabajador, cantidad_base=cantidad, usuario=request.user, observacion=request.POST.get("observacion", ""))
+    except (ValueError, InventarioTrabajador.DoesNotExist) as exc:
+        messages.error(request, str(exc) if str(exc) else "El trabajador no tiene stock de ese producto.")
+        return redirect("inventario")
+    messages.success(request, "Devolución registrada correctamente.")
+    return redirect("inventario")
+
+
+def _codigo_producto_siguiente(categoria):
+    prefijos = {
+        "quimicos": "QUI", "repuestos": "REP", "herramientas": "HER",
+        "equipos": "EQU", "construccion": "MAT", "otros": "OTR",
+    }
+    prefijo = prefijos.get(categoria, "PRO")
+    existentes = Insumo.objects.filter(codigo__startswith=f"JVQ-{prefijo}-").values_list("codigo", flat=True)
+    mayor = 0
+    for codigo in existentes:
+        try:
+            mayor = max(mayor, int(str(codigo).rsplit("-", 1)[-1]))
+        except (TypeError, ValueError):
+            continue
+    return f"JVQ-{prefijo}-{mayor + 1:04d}"
+
+
+def _guardar_producto_desde_post(insumo, post):
+    nombre = (post.get("nombre") or "").strip()
+    if not nombre:
+        raise ValueError("El nombre del producto es obligatorio.")
+    categoria = (post.get("categoria") or "quimicos").strip()
+    if categoria not in dict(Insumo.CATEGORIA_CHOICES):
+        raise ValueError("Categoría inválida.")
+    unidad = (post.get("unidad_base") or "kg").strip()
+    if unidad not in dict(Insumo.UNIDAD_CHOICES):
+        raise ValueError("Unidad base inválida.")
+
+    def dec(nombre_campo, defecto="0"):
+        raw = (post.get(nombre_campo) or defecto).strip().replace(",", ".")
+        try:
+            return Decimal(raw)
+        except Exception:
+            raise ValueError(f"Valor inválido en {nombre_campo.replace('_', ' ')}.")
+
+    insumo.nombre = nombre
+    insumo.categoria = categoria
+    insumo.unidad_base = unidad
+    insumo.codigo = (post.get("codigo") or "").strip() or insumo.codigo or _codigo_producto_siguiente(categoria)
+    if Insumo.objects.filter(codigo=insumo.codigo).exclude(pk=insumo.pk).exists():
+        raise ValueError("Ya existe otro producto con ese código.")
+    insumo.marca = (post.get("marca") or "").strip()
+    insumo.modelo = (post.get("modelo") or "").strip()
+    insumo.descripcion = (post.get("descripcion") or "").strip()
+    insumo.stock_minimo = dec("stock_minimo", "0")
+    if insumo.stock_minimo < 0:
+        raise ValueError("El stock mínimo no puede ser negativo.")
+    maximo_raw = (post.get("stock_maximo") or "").strip().replace(",", ".")
+    insumo.stock_maximo = Decimal(maximo_raw) if maximo_raw else None
+    insumo.precio = dec("precio", "0")
+    insumo.costo = dec("costo", str(insumo.costo or "0"))
+    if insumo.costo < 0:
+        raise ValueError("El costo unitario no puede ser negativo.")
+    if insumo.precio < 0:
+        raise ValueError("El precio de venta no puede ser negativo.")
+    insumo.activo = post.get("activo") == "on"
+    insumo.puede_venderse = post.get("puede_venderse") == "on"
+    insumo.puede_mantenimiento = post.get("puede_mantenimiento") == "on"
+    insumo.puede_asignarse_trabajador = post.get("puede_asignarse_trabajador") == "on"
+    insumo.puede_construccion = post.get("puede_construccion") == "on"
+    insumo.controla_inventario = post.get("controla_inventario") == "on"
     insumo.save()
+    return insumo
 
-    EntradaStock.objects.create(
-        insumo=insumo,
-        cantidad=cantidad,
-        observacion=observacion,
-    )
 
-    MovimientoInventario.objects.create(
-        insumo=insumo,
-        tipo="entrada",
-        cantidad=cantidad,
-        stock_anterior=stock_anterior,
-        stock_resultante=insumo.stock,
-        observacion=observacion or "Entrada manual",
-    )
+@login_required
+def inventario_productos_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    q = (request.GET.get("q") or "").strip()
+    categoria = (request.GET.get("categoria") or "").strip()
+    estado = (request.GET.get("estado") or "activos").strip()
+    qs = Insumo.objects.prefetch_related("presentaciones").order_by("nombre")
+    if q:
+        qs = qs.filter(models.Q(nombre__icontains=q) | models.Q(codigo__icontains=q) | models.Q(marca__icontains=q) | models.Q(modelo__icontains=q))
+    if categoria in dict(Insumo.CATEGORIA_CHOICES):
+        qs = qs.filter(categoria=categoria)
+    if estado == "activos": qs = qs.filter(activo=True)
+    elif estado == "inactivos": qs = qs.filter(activo=False)
+
+    productos = list(qs)
+    valor_total = Decimal("0.00")
+    for producto in productos:
+        producto.valor_inventario = (Decimal(producto.stock or 0) * Decimal(producto.costo or 0)).quantize(Decimal("0.01"))
+        valor_total += producto.valor_inventario
+
+    return render(request, "dashboard/inventario_productos.html", {
+        "productos": productos, "q": q, "categoria": categoria, "estado": estado,
+        "categorias": Insumo.CATEGORIA_CHOICES, "valor_total_inventario": valor_total, "es_admin": True,
+    })
+
+
+@login_required
+def inventario_producto_crear_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    insumo = Insumo(activo=True, puede_venderse=True, puede_mantenimiento=True, puede_asignarse_trabajador=True, controla_inventario=True)
+    if request.method == "POST":
+        try:
+            _guardar_producto_desde_post(insumo, request.POST)
+            _registrar_actividad(request.user, "Producto creado", f"Se creó {insumo.nombre} ({insumo.codigo}).", f"/dashboard/inventario/productos/{insumo.pk}/")
+            messages.success(request, "Producto creado correctamente.")
+            return redirect("inventario_producto_detalle", pk=insumo.pk)
+        except (ValueError, Exception) as exc:
+            # Los errores de integridad/campo se muestran sin perder el formulario.
+            messages.error(request, str(exc))
+    return render(request, "dashboard/inventario_producto_form.html", {
+        "producto": insumo, "modo": "crear", "categorias": Insumo.CATEGORIA_CHOICES,
+        "unidades": Insumo.UNIDAD_CHOICES, "es_admin": True,
+    })
+
+
+@login_required
+def inventario_producto_editar_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    insumo = get_object_or_404(Insumo, pk=pk)
+    if request.method == "POST":
+        try:
+            costo_anterior = Decimal(insumo.costo or 0)
+            unidad_anterior = insumo.unidad_base
+            _guardar_producto_desde_post(insumo, request.POST)
+            if Decimal(insumo.costo or 0) != costo_anterior:
+                MovimientoInventario.objects.create(
+                    insumo=insumo, tipo="ajuste", cantidad=Decimal("0.000"),
+                    stock_anterior=insumo.stock, stock_resultante=insumo.stock,
+                    costo_unitario=insumo.costo or 0, total_costo=Decimal("0.00"), usuario=request.user,
+                    observacion=f"Ajuste de costo: ${costo_anterior:.4f} → ${Decimal(insumo.costo or 0):.4f} por {insumo.unidad_corta}.",
+                )
+            if unidad_anterior != insumo.unidad_base:
+                MovimientoInventario.objects.create(
+                    insumo=insumo, tipo="ajuste", cantidad=Decimal("0.000"),
+                    stock_anterior=insumo.stock, stock_resultante=insumo.stock,
+                    costo_unitario=insumo.costo or 0, total_costo=Decimal("0.00"), usuario=request.user,
+                    observacion=f"Unidad base actualizada: {unidad_anterior} → {insumo.unidad_base}.",
+                )
+            _registrar_actividad(request.user, "Producto actualizado", f"Se actualizó {insumo.nombre} ({insumo.codigo}).", f"/dashboard/inventario/productos/{insumo.pk}/")
+            messages.success(request, "Producto actualizado correctamente.")
+            return redirect("inventario_producto_detalle", pk=insumo.pk)
+        except Exception as exc:
+            messages.error(request, str(exc))
+    ultimo_movimiento = MovimientoInventario.objects.filter(insumo=insumo).order_by("-creado_en").first()
+    ultimo_ajuste = MovimientoInventario.objects.filter(insumo=insumo, tipo="ajuste").order_by("-creado_en").first()
+    valor_stock = (Decimal(insumo.stock or 0) * Decimal(insumo.costo or 0)).quantize(Decimal("0.01"))
+    return render(request, "dashboard/inventario_producto_form.html", {
+        "producto": insumo, "modo": "editar", "categorias": Insumo.CATEGORIA_CHOICES,
+        "unidades": Insumo.UNIDAD_CHOICES, "valor_stock": valor_stock,
+        "ultimo_movimiento": ultimo_movimiento, "ultimo_ajuste": ultimo_ajuste, "es_admin": True,
+    })
+
+
+@login_required
+def inventario_producto_detalle_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    insumo = get_object_or_404(Insumo.objects.prefetch_related("presentaciones"), pk=pk)
+    movimientos = list(MovimientoInventario.objects.filter(insumo=insumo).select_related("trabajador__user", "mantenimiento__cliente", "usuario").order_by("-creado_en")[:100])
+    stocks = list(InventarioTrabajador.objects.filter(insumo=insumo, stock__gt=0).select_related("trabajador__user").order_by("trabajador__user__username"))
+    hoy = timezone.localdate(); inicio = hoy.replace(day=1)
+    consumo = MovimientoInventario.objects.filter(insumo=insumo, tipo="mantenimiento", fecha__gte=inicio).aggregate(c=Sum("cantidad"), costo=Sum("total_costo"))
+    ventas = VentaInsumo.objects.filter(insumo=insumo, fecha__gte=inicio).aggregate(c=Sum("cantidad"), total=Sum("total"))
+    ultima_compra = CompraInsumo.objects.filter(insumo=insumo).order_by("-creado_en").first()
+    ultima_venta = VentaInsumo.objects.filter(insumo=insumo).order_by("-creado_en").first()
+    ultimo_ajuste = MovimientoInventario.objects.filter(insumo=insumo, tipo="ajuste").order_by("-creado_en").first()
+    ultima_asignacion = MovimientoInventario.objects.filter(insumo=insumo, tipo="entrega").order_by("-creado_en").first()
+    ultimo_consumo = MovimientoInventario.objects.filter(insumo=insumo, tipo="mantenimiento").order_by("-creado_en").first()
+    asignado_total = sum((Decimal(x.stock or 0) for x in stocks), Decimal("0.000"))
+    disponible_bodega = Decimal(insumo.stock or 0)
+    stock_empresa = disponible_bodega + asignado_total
+    valor_bodega = (disponible_bodega * Decimal(insumo.costo or 0)).quantize(Decimal("0.01"))
+    valor_empresa = (stock_empresa * Decimal(insumo.costo or 0)).quantize(Decimal("0.01"))
+    margen_unitario = Decimal(insumo.precio or 0) - Decimal(insumo.costo or 0)
+    margen_porcentaje = ((margen_unitario / Decimal(insumo.precio)) * 100) if Decimal(insumo.precio or 0) > 0 else Decimal("0")
+    return render(request, "dashboard/inventario_producto_detalle.html", {
+        "producto": insumo, "movimientos": movimientos, "stocks_trabajadores": stocks,
+        "consumo_mes": consumo.get("c") or Decimal("0"), "costo_consumo_mes": consumo.get("costo") or Decimal("0"),
+        "ventas_mes": ventas.get("c") or Decimal("0"), "ventas_total_mes": ventas.get("total") or Decimal("0"),
+        "ultima_compra": ultima_compra, "ultima_venta": ultima_venta, "ultimo_ajuste": ultimo_ajuste,
+        "ultima_asignacion": ultima_asignacion, "ultimo_consumo": ultimo_consumo,
+        "asignado_total": asignado_total, "disponible_bodega": disponible_bodega, "stock_empresa": stock_empresa,
+        "valor_stock": valor_bodega, "valor_empresa": valor_empresa,
+        "margen_unitario": margen_unitario, "margen_porcentaje": margen_porcentaje, "es_admin": True,
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def inventario_producto_ajustar_stock_view(request, pk):
+    """Ajusta el stock físico sin registrar una compra ficticia.
+
+    El cambio siempre deja trazabilidad en MovimientoInventario y no crea
+    ingresos ni egresos financieros. Solo administración puede utilizarlo.
+    """
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    motivo = (request.POST.get("motivo") or "").strip()
+    if not motivo:
+        messages.error(request, "Indica el motivo del ajuste de inventario.")
+        return redirect("inventario_producto_detalle", pk=pk)
+
+    raw = (request.POST.get("stock_real") or "").strip().replace(",", ".")
+    try:
+        stock_real = Decimal(raw).quantize(Decimal("0.001"))
+    except Exception:
+        messages.error(request, "La existencia real ingresada no es válida.")
+        return redirect("inventario_producto_detalle", pk=pk)
+    if stock_real < 0:
+        messages.error(request, "La existencia real no puede ser negativa.")
+        return redirect("inventario_producto_detalle", pk=pk)
+
+    with transaction.atomic():
+        insumo = Insumo.objects.select_for_update().get(pk=pk)
+        stock_anterior = Decimal(insumo.stock or 0).quantize(Decimal("0.001"))
+        diferencia = (stock_real - stock_anterior).quantize(Decimal("0.001"))
+        if diferencia == 0:
+            messages.info(request, "La existencia ingresada coincide con el stock actual. No se realizó ningún ajuste.")
+            return redirect("inventario_producto_detalle", pk=pk)
+
+        insumo.stock = stock_real
+        insumo.save(update_fields=["stock"])
+        costo = Decimal(insumo.costo or 0)
+        total_costo = (diferencia * costo).quantize(Decimal("0.01"))
+        signo = "+" if diferencia > 0 else ""
+        MovimientoInventario.objects.create(
+            insumo=insumo,
+            tipo="ajuste",
+            cantidad=diferencia,
+            stock_anterior=stock_anterior,
+            stock_resultante=stock_real,
+            costo_unitario=costo,
+            total_costo=total_costo,
+            usuario=request.user,
+            observacion=(
+                f"{motivo}. Conteo físico: {stock_anterior:.3f} → {stock_real:.3f} "
+                f"{insumo.unidad_corta} ({signo}{diferencia:.3f})."
+            ),
+        )
 
     _registrar_actividad(
-        user=request.user,
-        titulo="Entrada de stock registrada",
-        descripcion=f"{request.user.username} agregó {cantidad} unidades de {insumo.nombre}.",
-        url="/dashboard/inventario/",
+        request.user,
+        "Ajuste de inventario",
+        f"{insumo.nombre}: {stock_anterior:.3f} → {stock_real:.3f} {insumo.unidad_corta}. Motivo: {motivo}",
+        f"/dashboard/inventario/productos/{insumo.pk}/",
     )
+    messages.success(request, f"Existencia actualizada a {stock_real:.3f} {insumo.unidad_corta}. El ajuste quedó registrado en el Kardex.")
+    return redirect("inventario_producto_detalle", pk=pk)
 
-    messages.success(request, "Stock agregado correctamente.")
-    return redirect("/dashboard/inventario/")
+
+@login_required
+@require_http_methods(["POST"])
+def inventario_producto_ajustar_costo_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    raw = (request.POST.get("costo_nuevo") or "").strip().replace(",", ".")
+    motivo = (request.POST.get("motivo_costo") or "").strip() or "Actualización de costo"
+    try:
+        costo_nuevo = Decimal(raw).quantize(Decimal("0.0001"))
+    except Exception:
+        messages.error(request, "El costo ingresado no es válido.")
+        return redirect("inventario_producto_detalle", pk=pk)
+    if costo_nuevo < 0:
+        messages.error(request, "El costo no puede ser negativo.")
+        return redirect("inventario_producto_detalle", pk=pk)
+
+    with transaction.atomic():
+        insumo = Insumo.objects.select_for_update().get(pk=pk)
+        costo_anterior = Decimal(insumo.costo or 0).quantize(Decimal("0.0001"))
+        if costo_nuevo == costo_anterior:
+            messages.info(request, "El costo ingresado coincide con el costo actual.")
+            return redirect("inventario_producto_detalle", pk=pk)
+        insumo.costo = costo_nuevo
+        insumo.save(update_fields=["costo"])
+        MovimientoInventario.objects.create(
+            insumo=insumo, tipo="ajuste", cantidad=Decimal("0.000"),
+            stock_anterior=insumo.stock, stock_resultante=insumo.stock,
+            costo_unitario=costo_nuevo, total_costo=Decimal("0.00"), usuario=request.user,
+            observacion=f"{motivo}. Costo: ${costo_anterior:.4f} → ${costo_nuevo:.4f} por {insumo.unidad_corta}.",
+        )
+    _registrar_actividad(request.user, "Ajuste de costo", f"{insumo.nombre}: ${costo_anterior:.4f} → ${costo_nuevo:.4f}/{insumo.unidad_corta}.", f"/dashboard/inventario/productos/{insumo.pk}/")
+    messages.success(request, f"Costo actualizado a ${costo_nuevo:.4f} por {insumo.unidad_corta}.")
+    return redirect("inventario_producto_detalle", pk=pk)
 
 
-#======================
-# HISTORIAL INVENTARIO PRO
-#======================
+@login_required
+@require_http_methods(["POST"])
+def inventario_producto_toggle_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    insumo = get_object_or_404(Insumo, pk=pk)
+    insumo.activo = not insumo.activo
+    insumo.save(update_fields=["activo"])
+    messages.success(request, f"Producto {'activado' if insumo.activo else 'desactivado'} correctamente.")
+    return redirect("inventario_producto_detalle", pk=pk)
+
+
+@login_required
+@require_http_methods(["POST"])
+def inventario_producto_eliminar_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    insumo = get_object_or_404(Insumo, pk=pk)
+    tiene_historial = (
+        MovimientoInventario.objects.filter(insumo=insumo).exists()
+        or VentaInsumo.objects.filter(insumo=insumo).exists()
+        or CompraInsumo.objects.filter(insumo=insumo).exists()
+        or InventarioTrabajador.objects.filter(insumo=insumo, stock__gt=0).exists()
+        or Decimal(insumo.stock or 0) != 0
+    )
+    if tiene_historial:
+        insumo.activo = False
+        insumo.save(update_fields=["activo"])
+        messages.warning(request, "El producto tiene historial o existencias; se desactivó para conservar la trazabilidad.")
+        return redirect("inventario_producto_detalle", pk=pk)
+    nombre = insumo.nombre
+    insumo.delete()
+    messages.success(request, f"Producto {nombre} eliminado definitivamente.")
+    return redirect("inventario_productos")
+
+
+@login_required
+@require_http_methods(["POST"])
+def inventario_presentacion_agregar_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    insumo = get_object_or_404(Insumo, pk=pk)
+    nombre = (request.POST.get("nombre") or "").strip()
+    try:
+        cantidad = decimal_positivo(request.POST.get("cantidad_base"), "Cantidad de la presentación")
+        precio_raw = (request.POST.get("precio_venta") or "").strip().replace(",", ".")
+        precio = Decimal(precio_raw) if precio_raw else None
+        if not nombre: raise ValueError("Escribe el nombre de la presentación.")
+        PresentacionInsumo.objects.create(insumo=insumo, nombre=nombre, cantidad_base=cantidad, precio_venta=precio, activa=True)
+        messages.success(request, "Presentación agregada.")
+    except Exception as exc:
+        messages.error(request, str(exc))
+    return redirect("inventario_producto_detalle", pk=pk)
+
+
+@login_required
+@require_http_methods(["POST"])
+def inventario_presentacion_eliminar_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    presentacion = get_object_or_404(PresentacionInsumo, pk=pk)
+    insumo_id = presentacion.insumo_id
+    if presentacion.ventas.exists():
+        presentacion.activa = False; presentacion.save(update_fields=["activa"])
+        messages.warning(request, "La presentación tiene ventas históricas y fue desactivada.")
+    else:
+        presentacion.delete(); messages.success(request, "Presentación eliminada.")
+    return redirect("inventario_producto_detalle", pk=insumo_id)
+
+
+@login_required
+def mi_inventario_trabajador_view(request):
+    if not es_trabajador(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    trabajador = get_object_or_404(Trabajador.objects.select_related("user"), user=request.user)
+    stocks = list(InventarioTrabajador.objects.filter(trabajador=trabajador, stock__gt=0).select_related("insumo").order_by("insumo__nombre"))
+    movimientos = list(MovimientoInventario.objects.filter(trabajador=trabajador).select_related("insumo", "mantenimiento__cliente").order_by("-creado_en")[:100])
+    hoy = timezone.localdate(); inicio = hoy.replace(day=1)
+    consumos = {x["insumo_id"]: x["total"] or Decimal("0") for x in MovimientoInventario.objects.filter(trabajador=trabajador, tipo="mantenimiento", fecha__gte=inicio).values("insumo_id").annotate(total=Sum("cantidad"))}
+    ultimas_entregas = {}
+    for mov in MovimientoInventario.objects.filter(trabajador=trabajador, tipo="entrega").select_related("insumo").order_by("-creado_en"):
+        ultimas_entregas.setdefault(mov.insumo_id, mov)
+    items = []
+    for stock in stocks:
+        items.append({"stock": stock, "consumo_mes": consumos.get(stock.insumo_id, Decimal("0")), "ultima_entrega": ultimas_entregas.get(stock.insumo_id)})
+    return render(request, "dashboard/mi_inventario_trabajador.html", {
+        "trabajador": trabajador, "items": items, "movimientos": movimientos,
+        "valor_estimado": sum((Decimal(x.stock) * Decimal(x.insumo.costo or 0) for x in stocks), Decimal("0")),
+        "es_admin": False,
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def solicitud_reposicion_crear_view(request, insumo_id):
+    if not es_trabajador(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    trabajador = get_object_or_404(Trabajador, user=request.user)
+    insumo = get_object_or_404(Insumo, pk=insumo_id, activo=True)
+    stock = InventarioTrabajador.objects.filter(trabajador=trabajador, insumo=insumo).first()
+    if SolicitudReposicion.objects.filter(trabajador=trabajador, insumo=insumo, estado="pendiente").exists():
+        messages.info(request, "Ya existe una solicitud pendiente para este producto.")
+        return redirect("mi_inventario_trabajador")
+    cantidad = None
+    raw = (request.POST.get("cantidad_sugerida") or "").strip()
+    if raw:
+        try: cantidad = convertir_a_base(insumo, raw, request.POST.get("unidad", "base"))
+        except ValueError as exc:
+            messages.error(request, str(exc)); return redirect("mi_inventario_trabajador")
+    solicitud = SolicitudReposicion.objects.create(
+        trabajador=trabajador, insumo=insumo, stock_al_solicitar=Decimal(stock.stock if stock else 0),
+        cantidad_sugerida=cantidad, observacion=(request.POST.get("observacion") or "").strip(),
+    )
+    _notificar_admins("📦 Solicitud de reposición", f"{trabajador} solicitó reposición de {insumo.nombre}. Stock actual: {_cantidad_texto(insumo, solicitud.stock_al_solicitar)}.", "/dashboard/inventario/", enviar_push=True)
+    messages.success(request, "Solicitud enviada a administración.")
+    return redirect("mi_inventario_trabajador")
+
+
+@login_required
+@require_http_methods(["POST"])
+def solicitud_reposicion_atender_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    solicitud = get_object_or_404(SolicitudReposicion, pk=pk)
+    solicitud.estado = "atendida"
+    solicitud.atendida_en = timezone.now()
+    solicitud.atendida_por = request.user
+    solicitud.save(update_fields=["estado", "atendida_en", "atendida_por"])
+    messages.success(request, "Solicitud marcada como atendida.")
+    return redirect("inventario")
+
+
+@login_required
+def inventario_productos_criticos_pdf_view(request):
+    if not es_admin(request.user): return render(request, "dashboard/no_autorizado.html", status=403)
+    filas = [["Producto", "Categoría", "Stock", "Mínimo", "Estado"]]
+    for i in Insumo.objects.filter(activo=True).order_by("nombre"):
+        if i.stock <= i.stock_minimo:
+            filas.append([i.nombre, i.get_categoria_display(), _cantidad_texto(i, i.stock), _cantidad_texto(i, i.stock_minimo), "SIN STOCK" if i.sin_stock else "STOCK BAJO"])
+    return _pdf_inventario_response("Productos críticos JVAQUA", filas, "productos_criticos.pdf")
+
+
+@login_required
+def inventario_consumo_trabajadores_pdf_view(request):
+    if not es_admin(request.user): return render(request, "dashboard/no_autorizado.html", status=403)
+    filas = [["Trabajador", "Producto", "Consumo", "Costo"]]
+    qs = MovimientoInventario.objects.filter(tipo="mantenimiento").values("trabajador__user__first_name", "trabajador__user__last_name", "trabajador__user__username", "insumo__nombre", "insumo__unidad_base").annotate(cantidad=Sum("cantidad"), costo=Sum("total_costo")).order_by("trabajador__user__username", "insumo__nombre")
+    for x in qs:
+        nombre = (f"{x['trabajador__user__first_name']} {x['trabajador__user__last_name']}").strip() or x["trabajador__user__username"] or "—"
+        unidad = "kg" if x["insumo__unidad_base"] == "kg" else "L"
+        filas.append([nombre, x["insumo__nombre"], f"{Decimal(x['cantidad'] or 0):.3f} {unidad}", f"${Decimal(x['costo'] or 0):,.2f}"])
+    return _pdf_inventario_response("Consumo por trabajador JVAQUA", filas, "consumo_por_trabajador.pdf")
+
+
+@login_required
+def inventario_consumo_contratos_pdf_view(request):
+    if not es_admin(request.user): return render(request, "dashboard/no_autorizado.html", status=403)
+    filas = [["Cliente / contrato", "Producto", "Consumo", "Costo"]]
+    qs = MovimientoInventario.objects.filter(tipo="mantenimiento", mantenimiento__isnull=False).values("mantenimiento__cliente__nombre", "insumo__nombre", "insumo__unidad_base").annotate(cantidad=Sum("cantidad"), costo=Sum("total_costo")).order_by("mantenimiento__cliente__nombre", "insumo__nombre")
+    for x in qs:
+        unidad = "kg" if x["insumo__unidad_base"] == "kg" else "L"
+        filas.append([x["mantenimiento__cliente__nombre"] or "—", x["insumo__nombre"], f"{Decimal(x['cantidad'] or 0):.3f} {unidad}", f"${Decimal(x['costo'] or 0):,.2f}"])
+    return _pdf_inventario_response("Consumo por contrato JVAQUA", filas, "consumo_por_contrato.pdf")
+
 
 @login_required
 def inventario_historial_view(request):
     if not es_admin(request.user):
         return render(request, "dashboard/no_autorizado.html", status=403)
+    q = (request.GET.get("q") or "").strip()
+    tipo = (request.GET.get("tipo") or "").strip()
+    trabajador_id = (request.GET.get("trabajador") or "").strip()
+    insumo_id = (request.GET.get("insumo") or "").strip()
+    fecha_desde_str = (request.GET.get("fecha_desde") or "").strip()
+    fecha_hasta_str = (request.GET.get("fecha_hasta") or "").strip()
+    qs = MovimientoInventario.objects.select_related("insumo", "trabajador__user", "mantenimiento__cliente", "usuario").all()
+    if tipo in dict(MovimientoInventario.TIPO_CHOICES): qs = qs.filter(tipo=tipo)
+    if trabajador_id.isdigit(): qs = qs.filter(trabajador_id=int(trabajador_id))
+    if insumo_id.isdigit(): qs = qs.filter(insumo_id=int(insumo_id))
+    if fecha_desde_str and parse_date(fecha_desde_str): qs = qs.filter(fecha__gte=parse_date(fecha_desde_str))
+    if fecha_hasta_str and parse_date(fecha_hasta_str): qs = qs.filter(fecha__lte=parse_date(fecha_hasta_str))
+    if q: qs = qs.filter(models.Q(insumo__nombre__icontains=q) | models.Q(observacion__icontains=q) | models.Q(trabajador__user__username__icontains=q))
+    qs = qs.order_by("-creado_en", "-id")
+    paginator = Paginator(qs, 40)
+    page_obj = paginator.get_page(request.GET.get("page"))
+    qp = request.GET.copy(); qp.pop("page", None)
+    return render(request, "dashboard/inventario_historial.html", {
+        "page_obj": page_obj, "q": q, "tipo": tipo, "trabajador_id": trabajador_id, "insumo_id": insumo_id,
+        "fecha_desde": fecha_desde_str, "fecha_hasta": fecha_hasta_str,
+        "insumos_filtro": Insumo.objects.filter(activo=True).order_by("nombre"),
+        "trabajadores": Trabajador.objects.filter(activo=True).select_related("user").order_by("user__username"),
+        "tipos_movimiento": MovimientoInventario.TIPO_CHOICES,
+        "querystring": qp.urlencode(), "total_movimientos": qs.count(), "es_admin": True,
+    })
 
-    q = (request.GET.get("q", "") or "").strip()
-    tipo = (request.GET.get("tipo", "") or "").strip().lower()
-    fecha_desde_str = (request.GET.get("fecha_desde", "") or "").strip()
-    fecha_hasta_str = (request.GET.get("fecha_hasta", "") or "").strip()
-    insumo_id = (request.GET.get("insumo", "") or "").strip()
 
-    fecha_desde = parse_date(fecha_desde_str) if fecha_desde_str else None
-    fecha_hasta = parse_date(fecha_hasta_str) if fecha_hasta_str else None
+@login_required
+def inventario_trabajador_detalle_view(request, trabajador_id):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    trabajador = get_object_or_404(Trabajador.objects.select_related("user"), pk=trabajador_id)
+    stocks = list(InventarioTrabajador.objects.filter(trabajador=trabajador).select_related("insumo").order_by("insumo__nombre"))
+    movimientos = MovimientoInventario.objects.filter(trabajador=trabajador).select_related("insumo", "mantenimiento__cliente").order_by("-creado_en")[:100]
+    valor = sum((Decimal(x.stock) * Decimal(x.insumo.costo or 0) for x in stocks), Decimal("0.00"))
+    return render(request, "dashboard/inventario_trabajador.html", {"trabajador": trabajador, "stocks": stocks, "movimientos": movimientos, "valor": valor, "es_admin": True})
 
-    qs = MovimientoInventario.objects.select_related("insumo").all().order_by("-creado_en", "-id")
 
-    if tipo in ["entrada", "venta", "mantenimiento", "ajuste"]:
-        qs = qs.filter(tipo=tipo)
+def _pdf_inventario_response(titulo, filas, nombre_archivo, resumen=None):
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=1.1*cm, leftMargin=1.1*cm, topMargin=1.1*cm, bottomMargin=1.1*cm)
+    styles = getSampleStyleSheet(); story = [Paragraph(titulo, styles["Title"]), Spacer(1, 8)]
+    story.append(Paragraph(f"Generado: {timezone.localdate().strftime('%d/%m/%Y')}", styles["Normal"]))
+    if resumen:
+        story.append(Spacer(1, 6)); story.append(Paragraph(resumen, styles["Normal"]))
+    story.append(Spacer(1, 10))
+    tabla = Table(filas, repeatRows=1)
+    tabla.setStyle(TableStyle([
+        ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#D9EAF7")), ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+        ("GRID", (0,0), (-1,-1), .45, colors.lightgrey), ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+        ("FONTSIZE", (0,0), (-1,-1), 8.5), ("PADDING", (0,0), (-1,-1), 4),
+    ]))
+    story.append(tabla); doc.build(story); buffer.seek(0)
+    response = HttpResponse(buffer.getvalue(), content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename="{nombre_archivo}"'
+    return response
 
-    if fecha_desde:
-        qs = qs.filter(fecha__gte=fecha_desde)
 
-    if fecha_hasta:
-        qs = qs.filter(fecha__lte=fecha_hasta)
+@login_required
+def inventario_general_pdf_view(request):
+    if not es_admin(request.user): return render(request, "dashboard/no_autorizado.html", status=403)
+    filas = [["Producto", "Categoría", "Stock", "Mínimo", "Costo/base", "Valor"]]
+    for i in Insumo.objects.filter(activo=True).order_by("nombre"):
+        filas.append([i.nombre, i.get_categoria_display(), _cantidad_texto(i, i.stock), _cantidad_texto(i, i.stock_minimo), f"${i.costo:,.4f}", f"${(Decimal(i.stock)*Decimal(i.costo or 0)):,.2f}"])
+    return _pdf_inventario_response("Inventario General JVAQUA", filas, "inventario_general.pdf", f"Valor estimado del inventario: ${_inventario_valorizado():,.2f}")
 
-    if insumo_id.isdigit():
-        qs = qs.filter(insumo_id=int(insumo_id))
 
-    if q:
-        qs = qs.filter(insumo__nombre__icontains=q)
+@login_required
+def inventario_trabajador_pdf_view(request, trabajador_id):
+    if not es_admin(request.user): return render(request, "dashboard/no_autorizado.html", status=403)
+    trabajador = get_object_or_404(Trabajador, pk=trabajador_id)
+    filas = [["Producto", "Stock asignado", "Costo/base", "Valor"]]
+    for x in InventarioTrabajador.objects.filter(trabajador=trabajador).select_related("insumo").order_by("insumo__nombre"):
+        filas.append([x.insumo.nombre, _cantidad_texto(x.insumo, x.stock), f"${x.insumo.costo:,.4f}", f"${(Decimal(x.stock)*Decimal(x.insumo.costo or 0)):,.2f}"])
+    return _pdf_inventario_response(f"Inventario de {trabajador}", filas, f"inventario_trabajador_{trabajador_id}.pdf")
 
-    total_movimientos = qs.count()
-    total_entradas = qs.filter(tipo="entrada").count()
-    total_ventas = qs.filter(tipo="venta").count()
-    total_mantenimiento = qs.filter(tipo="mantenimiento").count()
 
-    unidades_entrada = qs.filter(tipo="entrada").aggregate(total=Sum("cantidad")).get("total") or 0
-    unidades_venta = qs.filter(tipo="venta").aggregate(total=Sum("cantidad")).get("total") or 0
-    unidades_mantenimiento = qs.filter(tipo="mantenimiento").aggregate(total=Sum("cantidad")).get("total") or 0
+@login_required
+def inventario_kardex_pdf_view(request, insumo_id):
+    if not es_admin(request.user): return render(request, "dashboard/no_autorizado.html", status=403)
+    insumo = get_object_or_404(Insumo, pk=insumo_id)
+    filas = [["Fecha", "Movimiento", "Cantidad", "Trabajador", "Mantenimiento", "Observación"]]
+    for m in MovimientoInventario.objects.filter(insumo=insumo).select_related("trabajador__user", "mantenimiento__cliente").order_by("-creado_en"):
+        filas.append([m.fecha.strftime("%d/%m/%Y"), m.get_tipo_display(), _cantidad_texto(insumo, m.cantidad), str(m.trabajador or "—"), str(m.mantenimiento or "—"), m.observacion or "—"])
+    return _pdf_inventario_response(f"Kardex · {insumo.nombre}", filas, f"kardex_{insumo_id}.pdf", f"Stock general actual: {_cantidad_texto(insumo, insumo.stock)}")
 
-    paginator = Paginator(qs, 25)
-    page_number = request.GET.get("page")
-    page_obj = paginator.get_page(page_number)
 
-    insumos_filtro = Insumo.objects.all().order_by("nombre")
+@login_required
+def inventario_movimientos_pdf_view(request):
+    if not es_admin(request.user): return render(request, "dashboard/no_autorizado.html", status=403)
+    filas = [["Fecha", "Producto", "Tipo", "Cantidad", "Trabajador", "Costo"]]
+    for m in MovimientoInventario.objects.select_related("insumo", "trabajador__user").order_by("-creado_en")[:1000]:
+        filas.append([m.fecha.strftime("%d/%m/%Y"), m.insumo.nombre, m.get_tipo_display(), _cantidad_texto(m.insumo, m.cantidad), str(m.trabajador or "—"), f"${m.total_costo:,.2f}"])
+    return _pdf_inventario_response("Movimientos de Inventario JVAQUA", filas, "movimientos_inventario.pdf")
 
-    top_vendidos = list(
-        VentaInsumo.objects
-        .values("insumo__nombre")
-        .annotate(
-            cantidad_total=Sum("cantidad"),
-            monto_total=Sum("total"),
-            ganancia_total=Sum("ganancia"),
-        )
-        .order_by("-cantidad_total", "-monto_total")[:10]
-    )
 
-    top_movidos = list(
-        MovimientoInventario.objects
-        .values("insumo__nombre")
-        .annotate(cantidad_total=Sum("cantidad"))
-        .order_by("-cantidad_total")[:10]
-    )
+@login_required
+def inventario_ventas_pdf_view(request):
+    if not es_admin(request.user): return render(request, "dashboard/no_autorizado.html", status=403)
+    filas = [["Fecha", "Producto", "Cantidad", "Venta", "Costo", "Ganancia"]]
+    total = Decimal("0.00"); ganancia = Decimal("0.00")
+    for v in VentaInsumo.objects.select_related("insumo").order_by("-creado_en")[:1000]:
+        total += Decimal(v.total or 0); ganancia += Decimal(v.ganancia or 0)
+        filas.append([v.fecha.strftime("%d/%m/%Y"), v.insumo.nombre, _cantidad_texto(v.insumo, v.cantidad), f"${v.total:,.2f}", f"${(Decimal(v.cantidad)*Decimal(v.costo_unitario or 0)):,.2f}", f"${v.ganancia:,.2f}"])
+    return _pdf_inventario_response("Ventas de Insumos JVAQUA", filas, "ventas_inventario.pdf", f"Ventas: ${total:,.2f} · Ganancia estimada: ${ganancia:,.2f}")
 
-    query_params = request.GET.copy()
-    if "page" in query_params:
-        query_params.pop("page")
-    querystring = query_params.urlencode()
 
-    return render(
-        request,
-        "dashboard/inventario_historial.html",
-        {
-            "page_obj": page_obj,
-            "q": q,
-            "tipo": tipo,
-            "fecha_desde": fecha_desde_str,
-            "fecha_hasta": fecha_hasta_str,
-            "insumo_id": insumo_id,
-            "insumos_filtro": insumos_filtro,
-            "total_movimientos": total_movimientos,
-            "total_entradas": total_entradas,
-            "total_ventas": total_ventas,
-            "total_mantenimiento": total_mantenimiento,
-            "unidades_entrada": int(unidades_entrada or 0),
-            "unidades_venta": int(unidades_venta or 0),
-            "unidades_mantenimiento": int(unidades_mantenimiento or 0),
-            "top_vendidos": top_vendidos,
-            "top_movidos": top_movidos,
-            "querystring": querystring,
-            "es_admin": True,
-        },
-    )
+@login_required
+def inventario_compras_pdf_view(request):
+    if not es_admin(request.user): return render(request, "dashboard/no_autorizado.html", status=403)
+    filas = [["Fecha", "Producto", "Cantidad", "Costo/base", "Total", "Proveedor", "Lote / vencimiento"]]
+    total = Decimal("0.00")
+    for c in CompraInsumo.objects.select_related("insumo").order_by("-creado_en")[:1000]:
+        total += Decimal(c.total or 0)
+        lote_txt = c.lote or "—"
+        if c.fecha_vencimiento:
+            lote_txt += f" · {c.fecha_vencimiento.strftime('%d/%m/%Y')}"
+        filas.append([c.fecha.strftime("%d/%m/%Y"), c.insumo.nombre, _cantidad_texto(c.insumo, c.cantidad), f"${c.costo_unitario:,.4f}", f"${c.total:,.2f}", c.proveedor or "—", lote_txt])
+    return _pdf_inventario_response("Compras de Inventario JVAQUA", filas, "compras_inventario.pdf", f"Total compras registradas: ${total:,.2f}")
 
 
 # ================================
@@ -5096,105 +6122,342 @@ def exportar_ganancias_pdf(request):
 
 @login_required
 def calculadora_quimicos_view(request):
+    # Compatibilidad con accesos antiguos: la calculadora evolucionó al Asistente Técnico.
     if not es_trabajador(request.user) and not es_admin(request.user):
         return render(request, "dashboard/no_autorizado.html", status=403)
-
-    return render(
-        request,
-        "dashboard/calculadora_quimicos.html",
-    )
+    return redirect("asistente_tecnico:inicio")
 
 
 # ================================
 # CONTRATOS
 # ================================
 
-FRECUENCIAS_CONTRATO_VALIDAS = {
-    "1_semanal",
-    "2_semanales",
-    "3_semanales",
-    "quincenal",
-    "personalizado",
-}
+FRECUENCIAS_CONTRATO_VALIDAS = {"1_semanal", "2_semanales", "3_semanales", "quincenal", "personalizado"}
+FORMAS_PAGO_CONTRATO_VALIDAS = {valor for valor, _ in Contrato.FORMA_PAGO_CHOICES}
+PROGRAMACIONES_COBRO_VALIDAS = {valor for valor, _ in Contrato.PROGRAMACION_COBRO_CHOICES}
+MOMENTOS_FACTURACION_VALIDOS = {valor for valor, _ in Contrato.MOMENTO_FACTURACION_CHOICES}
 
-FORMAS_PAGO_CONTRATO_VALIDAS = {
-    "adelantado",
-    "50_50",
-    "por_visita",
-    "fin_mensualidad",
-    "personalizado",
-}
+
+def _entero_post(request, nombre, minimo=0, maximo=None, obligatorio=False):
+    valor = (request.POST.get(nombre) or "").strip()
+    if not valor:
+        if obligatorio:
+            raise ValueError
+        return None
+    numero = int(valor)
+    if numero < minimo or (maximo is not None and numero > maximo):
+        raise ValueError
+    return numero
 
 
 def _validar_datos_contrato(request):
     cliente_id = (request.POST.get("cliente") or "").strip()
     frecuencia = (request.POST.get("frecuencia") or "").strip()
-    frecuencia_personalizada = (
-        request.POST.get("frecuencia_personalizada") or ""
-    ).strip()
+    frecuencia_personalizada = (request.POST.get("frecuencia_personalizada") or "").strip()
     forma_pago = (request.POST.get("forma_pago") or "").strip()
-    forma_pago_personalizada = (
-        request.POST.get("forma_pago_personalizada") or ""
-    ).strip()
-    precio_mensual_str = (
-        request.POST.get("precio_mensual") or ""
-    ).strip()
-    fecha_inicio_str = (
-        request.POST.get("fecha_inicio") or ""
-    ).strip()
+    forma_pago_personalizada = (request.POST.get("forma_pago_personalizada") or "").strip()
+    programacion_cobro = (request.POST.get("programacion_cobro") or "").strip()
+    programacion_personalizada = (request.POST.get("programacion_cobro_personalizada") or "").strip()
+    precio_mensual_str = (request.POST.get("precio_mensual") or "").strip()
+    valor_tecnico_str = (request.POST.get("valor_tecnico_mensual") or "0").strip()
+    fecha_inicio_str = (request.POST.get("fecha_inicio") or "").strip()
     activo = request.POST.get("activo") == "on"
-
+    generacion_automatica = request.POST.get("generacion_automatica") == "on"
+    tecnico_id = (request.POST.get("tecnico_designado") or "").strip()
+    dias_visita = normalizar_dias(request.POST.getlist("dias_visita"))
+    requiere_factura = request.POST.get("requiere_factura") == "on"
+    notificar_facturacion = request.POST.get("notificar_facturacion") == "on"
+    momento_facturacion = (request.POST.get("momento_facturacion") or "").strip()
     errores = []
 
-    cliente = None
-    if not cliente_id.isdigit():
-        errores.append("Debes seleccionar un cliente válido.")
-    else:
-        cliente = Cliente.objects.filter(pk=int(cliente_id)).first()
-        if cliente is None:
-            errores.append("El cliente seleccionado no existe.")
+    cliente = Cliente.objects.filter(pk=int(cliente_id)).first() if cliente_id.isdigit() else None
+    if cliente is None: errores.append("Debes seleccionar un cliente válido.")
+    if frecuencia not in FRECUENCIAS_CONTRATO_VALIDAS: errores.append("Debes seleccionar una frecuencia válida.")
+    if frecuencia == "personalizado" and not frecuencia_personalizada: errores.append("Debes escribir la frecuencia personalizada.")
+    if forma_pago not in FORMAS_PAGO_CONTRATO_VALIDAS: errores.append("Debes seleccionar una forma de pago válida.")
+    if forma_pago == "personalizado" and not forma_pago_personalizada: errores.append("Debes escribir la forma de pago personalizada.")
+    if programacion_cobro not in PROGRAMACIONES_COBRO_VALIDAS: errores.append("Debes seleccionar una programación de cobro válida.")
+    if programacion_cobro == "personalizado" and not programacion_personalizada: errores.append("Describe la programación de cobro personalizada.")
 
-    if frecuencia not in FRECUENCIAS_CONTRATO_VALIDAS:
-        errores.append("Debes seleccionar una frecuencia válida.")
-
-    if frecuencia == "personalizado" and not frecuencia_personalizada:
-        errores.append(
-            "Debes escribir la frecuencia personalizada."
-        )
-
-    if forma_pago not in FORMAS_PAGO_CONTRATO_VALIDAS:
-        errores.append("Debes seleccionar una forma de pago válida.")
-
-    if forma_pago == "personalizado" and not forma_pago_personalizada:
-        errores.append(
-            "Debes escribir la forma de pago personalizada."
-        )
+    campos_enteros = {}
+    configuracion = [
+        ("periodo_dia_inicio", 1, 31, True), ("cobro_mes_desfase", 0, 2, True),
+        ("cobro_dia_1", 1, 31, programacion_cobro in {"dia_fijo", "dos_pagos"}),
+        ("cobro_dia_2", 1, 31, programacion_cobro == "dos_pagos"),
+        ("cobro_rango_desde", 1, 31, programacion_cobro == "rango_dias"),
+        ("cobro_rango_hasta", 1, 31, programacion_cobro == "rango_dias"),
+        ("cobro_dias_despues_cierre", 0, 365, programacion_cobro == "despues_cierre"),
+        ("facturacion_dia", 1, 31, requiere_factura and momento_facturacion in {"dia_fijo", "personalizado"}),
+        ("facturacion_dias_antes", 0, 365, False),
+        ("notificacion_factura_dias_antes", 0, 365, False),
+    ]
+    for nombre, minimo, maximo, obligatorio in configuracion:
+        try: campos_enteros[nombre] = _entero_post(request, nombre, minimo, maximo, obligatorio)
+        except (TypeError, ValueError): errores.append(f"Revisa el valor de {nombre.replace('_', ' ')}.")
+    if programacion_cobro == "rango_dias" and campos_enteros.get("cobro_rango_desde") and campos_enteros.get("cobro_rango_hasta") and campos_enteros["cobro_rango_hasta"] < campos_enteros["cobro_rango_desde"]:
+        errores.append("El último día del rango no puede ser anterior al primero.")
 
     try:
-        precio_mensual = Decimal(precio_mensual_str)
-        if precio_mensual <= 0:
-            raise ValueError
+        porcentaje_primer_pago = Decimal((request.POST.get("porcentaje_primer_pago") or "50").strip())
+        if not Decimal("0.01") <= porcentaje_primer_pago <= Decimal("99.99"): raise ValueError
     except Exception:
-        precio_mensual = None
-        errores.append(
-            "El precio mensual debe ser un valor mayor que cero."
-        )
+        porcentaje_primer_pago = Decimal("50.00"); errores.append("El porcentaje del primer pago debe estar entre 0.01 y 99.99.")
 
+    if requiere_factura and momento_facturacion not in MOMENTOS_FACTURACION_VALIDOS:
+        errores.append("Selecciona cuándo debe emitirse la factura.")
+
+    tecnico_designado = None
+    if tecnico_id:
+        tecnico_designado = Trabajador.objects.filter(pk=int(tecnico_id), activo=True).select_related("user").first() if tecnico_id.isdigit() else None
+        if tecnico_designado is None: errores.append("El técnico seleccionado no existe o está inactivo.")
+    errores.extend(validar_programacion(frecuencia, dias_visita, tecnico_designado, automatica=generacion_automatica and activo))
+    try:
+        precio_mensual = Decimal(precio_mensual_str)
+        if precio_mensual <= 0: raise ValueError
+    except Exception:
+        precio_mensual = None; errores.append("El precio mensual debe ser un valor mayor que cero.")
+    try:
+        valor_tecnico_mensual = Decimal(valor_tecnico_str or "0")
+        if valor_tecnico_mensual < 0: raise ValueError
+    except Exception:
+        valor_tecnico_mensual = Decimal("0.00"); errores.append("El valor mensual del técnico debe ser cero o mayor.")
+    if valor_tecnico_mensual and not tecnico_designado: errores.append("Debes seleccionar un técnico para asignarle un valor mensual.")
     fecha_inicio = parse_date(fecha_inicio_str)
-    if not fecha_inicio:
-        errores.append("Debes seleccionar una fecha de inicio válida.")
+    if not fecha_inicio: errores.append("Debes seleccionar una fecha de inicio válida.")
 
     return {
-        "errores": errores,
-        "cliente": cliente,
-        "frecuencia": frecuencia,
-        "frecuencia_personalizada": frecuencia_personalizada,
-        "forma_pago": forma_pago,
-        "forma_pago_personalizada": forma_pago_personalizada,
-        "precio_mensual": precio_mensual,
-        "fecha_inicio": fecha_inicio,
-        "activo": activo,
+        "errores": errores, "cliente": cliente, "frecuencia": frecuencia,
+        "frecuencia_personalizada": frecuencia_personalizada, "forma_pago": forma_pago,
+        "forma_pago_personalizada": forma_pago_personalizada, "precio_mensual": precio_mensual,
+        "valor_tecnico_mensual": valor_tecnico_mensual, "fecha_inicio": fecha_inicio, "activo": activo,
+        "generacion_automatica": generacion_automatica, "tecnico_designado": tecnico_designado,
+        "tecnico_id": tecnico_id, "dias_visita": dias_visita, "programacion_cobro": programacion_cobro,
+        "programacion_cobro_personalizada": programacion_personalizada, "porcentaje_primer_pago": porcentaje_primer_pago,
+        "requiere_factura": requiere_factura, "momento_facturacion": momento_facturacion if requiere_factura else "",
+        "notificar_facturacion": notificar_facturacion if requiere_factura else False,
+        "observaciones_facturacion": (request.POST.get("observaciones_facturacion") or "").strip(),
+        **campos_enteros,
     }
+
+
+
+def _normalizar_telefono_cliente(valor):
+    return "".join(caracter for caracter in (valor or "") if caracter.isdigit())
+
+
+def _datos_cliente_desde_request(request):
+    return {
+        "nombre": (request.POST.get("nombre") or "").strip(),
+        "telefono": (request.POST.get("telefono") or "").strip(),
+        "email": (request.POST.get("email") or "").strip(),
+        "ciudad": (request.POST.get("ciudad") or "").strip(),
+        "sector_urbanizacion": (request.POST.get("sector_urbanizacion") or "").strip(),
+        "direccion": (request.POST.get("direccion") or "").strip(),
+        "enlace_google_maps": (request.POST.get("enlace_google_maps") or "").strip(),
+    }
+
+
+def _validar_cliente(datos, cliente_actual=None):
+    errores = []
+    for campo, etiqueta in (
+        ("nombre", "El nombre"),
+        ("telefono", "El teléfono principal"),
+        ("ciudad", "La ciudad"),
+        ("sector_urbanizacion", "El sector o urbanización"),
+        ("direccion", "La dirección"),
+    ):
+        if not datos.get(campo):
+            errores.append(f"{etiqueta} es obligatorio.")
+
+    telefono_normalizado = _normalizar_telefono_cliente(datos.get("telefono"))
+    if datos.get("telefono") and len(telefono_normalizado) < 7:
+        errores.append("Ingresa un teléfono principal válido.")
+
+    if telefono_normalizado:
+        candidatos = Cliente.objects.all()
+        if cliente_actual:
+            candidatos = candidatos.exclude(pk=cliente_actual.pk)
+        duplicado = next(
+            (
+                cliente for cliente in candidatos.only("id", "nombre", "telefono")
+                if _normalizar_telefono_cliente(cliente.telefono) == telefono_normalizado
+            ),
+            None,
+        )
+        if duplicado:
+            errores.append(
+                f"Ya existe el cliente {duplicado.nombre} con este teléfono."
+            )
+
+    return errores
+
+
+@login_required
+def cliente_list_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    q = (request.GET.get("q") or "").strip()
+    estado = (request.GET.get("estado") or "").strip().lower()
+    clientes = Cliente.objects.annotate(
+        total_contratos=Count("contratos", distinct=True),
+        contratos_activos=Count(
+            "contratos",
+            filter=models.Q(contratos__activo=True),
+            distinct=True,
+        ),
+    ).order_by("nombre", "id")
+
+    if q:
+        clientes = clientes.filter(
+            models.Q(nombre__icontains=q)
+            | models.Q(telefono__icontains=q)
+            | models.Q(email__icontains=q)
+            | models.Q(ciudad__icontains=q)
+            | models.Q(sector_urbanizacion__icontains=q)
+            | models.Q(direccion__icontains=q)
+        )
+    if estado == "activo":
+        clientes = clientes.filter(activo=True)
+    elif estado == "inactivo":
+        clientes = clientes.filter(activo=False)
+
+    total_clientes = clientes.count()
+    total_activos = clientes.filter(activo=True).count()
+    con_contrato = clientes.filter(contratos_activos__gt=0).count()
+    sin_contrato = clientes.filter(total_contratos=0).count()
+
+    paginator = Paginator(clientes, 20)
+    page_obj = paginator.get_page(request.GET.get("page"))
+    query_params = request.GET.copy()
+    query_params.pop("page", None)
+
+    return render(request, "dashboard/cliente_list.html", {
+        "page_obj": page_obj,
+        "q": q,
+        "estado": estado,
+        "total_clientes": total_clientes,
+        "total_activos": total_activos,
+        "con_contrato": con_contrato,
+        "sin_contrato": sin_contrato,
+        "querystring": query_params.urlencode(),
+        "es_admin": True,
+    })
+
+
+@login_required
+def cliente_crear_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    datos = {
+        "nombre": "", "telefono": "", "email": "", "ciudad": "",
+        "sector_urbanizacion": "", "direccion": "", "enlace_google_maps": "",
+    }
+    if request.method == "POST":
+        datos = _datos_cliente_desde_request(request)
+        errores = _validar_cliente(datos)
+        if errores:
+            for error in errores:
+                messages.error(request, error)
+        else:
+            cliente = Cliente.objects.create(**datos)
+            _registrar_actividad(
+                user=request.user,
+                titulo="Cliente creado",
+                descripcion=f"{request.user.username} registró a {cliente.nombre}.",
+                url=f"/dashboard/clientes/{cliente.pk}/",
+            )
+            messages.success(request, "Cliente creado correctamente.")
+            if request.POST.get("accion") == "guardar_y_contrato":
+                return redirect(f"/dashboard/contratos/nuevo/?cliente={cliente.pk}")
+            return redirect(f"/dashboard/clientes/{cliente.pk}/")
+
+    return render(request, "dashboard/cliente_form.html", {
+        "modo": "crear", "cliente": None, "datos": datos, "es_admin": True,
+    })
+
+
+@login_required
+def cliente_editar_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    cliente = get_object_or_404(Cliente, pk=pk)
+    datos = {
+        "nombre": cliente.nombre,
+        "telefono": cliente.telefono,
+        "email": cliente.email or "",
+        "ciudad": cliente.ciudad,
+        "sector_urbanizacion": cliente.sector_urbanizacion,
+        "direccion": cliente.direccion,
+        "enlace_google_maps": cliente.enlace_google_maps,
+    }
+    if request.method == "POST":
+        datos = _datos_cliente_desde_request(request)
+        errores = _validar_cliente(datos, cliente_actual=cliente)
+        if errores:
+            for error in errores:
+                messages.error(request, error)
+        else:
+            for campo, valor in datos.items():
+                setattr(cliente, campo, valor)
+            cliente.save()
+            _registrar_actividad(
+                user=request.user,
+                titulo="Cliente actualizado",
+                descripcion=f"{request.user.username} actualizó a {cliente.nombre}.",
+                url=f"/dashboard/clientes/{cliente.pk}/",
+            )
+            messages.success(request, "Cliente actualizado correctamente.")
+            return redirect(f"/dashboard/clientes/{cliente.pk}/")
+
+    return render(request, "dashboard/cliente_form.html", {
+        "modo": "editar", "cliente": cliente, "datos": datos, "es_admin": True,
+    })
+
+
+@login_required
+def cliente_detalle_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    cliente = get_object_or_404(Cliente, pk=pk)
+    contratos = cliente.contratos.select_related("tecnico_designado__user").order_by("-activo", "-id")
+    mantenimientos = Mantenimiento.objects.filter(cliente=cliente).order_by("-fecha", "-id")
+    proximo_mantenimiento = mantenimientos.filter(
+        estado="pendiente", fecha__gte=timezone.localdate()
+    ).order_by("fecha").first()
+    return render(request, "dashboard/cliente_detalle.html", {
+        "cliente": cliente,
+        "contratos": contratos,
+        "total_contratos": contratos.count(),
+        "contratos_activos": contratos.filter(activo=True).count(),
+        "total_mantenimientos": mantenimientos.count(),
+        "proximo_mantenimiento": proximo_mantenimiento,
+        "mantenimientos_recientes": mantenimientos[:8],
+        "es_admin": True,
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def cliente_crear_rapido_view(request):
+    if not es_admin(request.user):
+        return JsonResponse({"ok": False, "errores": ["No autorizado."]}, status=403)
+    datos = _datos_cliente_desde_request(request)
+    errores = _validar_cliente(datos)
+    if errores:
+        return JsonResponse({"ok": False, "errores": errores}, status=400)
+    cliente = Cliente.objects.create(**datos)
+    _registrar_actividad(
+        user=request.user,
+        titulo="Cliente creado",
+        descripcion=f"{request.user.username} registró rápidamente a {cliente.nombre}.",
+        url=f"/dashboard/clientes/{cliente.pk}/",
+    )
+    return JsonResponse({
+        "ok": True,
+        "cliente": {"id": cliente.pk, "nombre": cliente.nombre, "telefono": cliente.telefono},
+    })
 
 
 @login_required
@@ -5295,16 +6558,36 @@ def contrato_crear_view(request):
         .filter(activo=True)
         .order_by("nombre")
     )
+    trabajadores = (
+        Trabajador.objects
+        .filter(activo=True)
+        .select_related("user")
+        .order_by("user__username")
+    )
 
     datos_formulario = {
-        "cliente_id": "",
+        "cliente_id": (request.GET.get("cliente") or "").strip(),
         "frecuencia": "",
         "frecuencia_personalizada": "",
         "forma_pago": "",
         "forma_pago_personalizada": "",
+        "periodo_dia_inicio": timezone.localdate().day,
+        "programacion_cobro": "inicio_periodo",
+        "cobro_mes_desfase": 0,
+        "cobro_dia_1": "", "cobro_dia_2": "",
+        "cobro_rango_desde": "", "cobro_rango_hasta": "",
+        "cobro_dias_despues_cierre": 0, "porcentaje_primer_pago": "50.00",
+        "programacion_cobro_personalizada": "",
+        "requiere_factura": False, "momento_facturacion": "", "facturacion_dia": "",
+        "facturacion_dias_antes": 0, "notificar_facturacion": False,
+        "notificacion_factura_dias_antes": 1, "observaciones_facturacion": "",
         "precio_mensual": "",
+        "valor_tecnico_mensual": "",
         "fecha_inicio": timezone.localdate().isoformat(),
         "activo": True,
+        "generacion_automatica": True,
+        "tecnico_id": "",
+        "dias_visita": [],
     }
 
     if request.method == "POST":
@@ -5320,15 +6603,23 @@ def contrato_crear_view(request):
             "forma_pago_personalizada": (
                 validacion["forma_pago_personalizada"]
             ),
-            "precio_mensual": request.POST.get(
-                "precio_mensual",
-                "",
-            ),
+            **{campo: validacion.get(campo) or "" for campo in (
+                "periodo_dia_inicio", "programacion_cobro", "cobro_mes_desfase", "cobro_dia_1", "cobro_dia_2",
+                "cobro_rango_desde", "cobro_rango_hasta", "cobro_dias_despues_cierre", "porcentaje_primer_pago",
+                "programacion_cobro_personalizada", "momento_facturacion", "facturacion_dia", "facturacion_dias_antes",
+                "notificacion_factura_dias_antes", "observaciones_facturacion")},
+            "requiere_factura": validacion["requiere_factura"],
+            "notificar_facturacion": validacion["notificar_facturacion"],
+            "precio_mensual": request.POST.get("precio_mensual", ""),
+            "valor_tecnico_mensual": request.POST.get("valor_tecnico_mensual", ""),
             "fecha_inicio": request.POST.get(
                 "fecha_inicio",
                 "",
             ),
             "activo": validacion["activo"],
+            "generacion_automatica": validacion["generacion_automatica"],
+            "tecnico_id": validacion["tecnico_id"],
+            "dias_visita": validacion["dias_visita"],
         }
 
         if validacion["errores"]:
@@ -5346,10 +6637,29 @@ def contrato_crear_view(request):
                 forma_pago_personalizada=(
                     validacion["forma_pago_personalizada"]
                 ),
+                periodo_dia_inicio=validacion["periodo_dia_inicio"],
+                programacion_cobro=validacion["programacion_cobro"],
+                cobro_mes_desfase=validacion["cobro_mes_desfase"] or 0,
+                cobro_dia_1=validacion["cobro_dia_1"], cobro_dia_2=validacion["cobro_dia_2"],
+                cobro_rango_desde=validacion["cobro_rango_desde"], cobro_rango_hasta=validacion["cobro_rango_hasta"],
+                cobro_dias_despues_cierre=validacion["cobro_dias_despues_cierre"] or 0,
+                porcentaje_primer_pago=validacion["porcentaje_primer_pago"],
+                programacion_cobro_personalizada=validacion["programacion_cobro_personalizada"],
+                requiere_factura=validacion["requiere_factura"], momento_facturacion=validacion["momento_facturacion"],
+                facturacion_dia=validacion["facturacion_dia"], facturacion_dias_antes=validacion["facturacion_dias_antes"] or 0,
+                notificar_facturacion=validacion["notificar_facturacion"],
+                notificacion_factura_dias_antes=validacion["notificacion_factura_dias_antes"] or 1,
+                observaciones_facturacion=validacion["observaciones_facturacion"],
                 precio_mensual=validacion["precio_mensual"],
+                valor_tecnico_mensual=validacion["valor_tecnico_mensual"],
                 fecha_inicio=validacion["fecha_inicio"],
                 activo=validacion["activo"],
+                tecnico_designado=validacion["tecnico_designado"],
+                dias_visita=validacion["dias_visita"],
+                generacion_automatica=validacion["generacion_automatica"],
             )
+
+            resultado_programacion = generar_mantenimientos_contrato(contrato)
 
             _registrar_actividad(
                 user=request.user,
@@ -5362,9 +6672,10 @@ def contrato_crear_view(request):
                 url=f"/dashboard/contratos/{contrato.pk}/",
             )
 
+            creados = resultado_programacion.get("creados", 0)
             messages.success(
                 request,
-                "Contrato creado correctamente.",
+                f"Contrato creado correctamente. Se programaron {creados} mantenimientos.",
             )
             return redirect(
                 f"/dashboard/contratos/{contrato.pk}/"
@@ -5379,6 +6690,11 @@ def contrato_crear_view(request):
             "clientes": clientes,
             "frecuencias": Contrato.FRECUENCIA_CHOICES,
             "formas_pago": Contrato.FORMA_PAGO_CHOICES,
+            "programaciones_cobro": Contrato.PROGRAMACION_COBRO_CHOICES,
+            "momentos_facturacion": Contrato.MOMENTO_FACTURACION_CHOICES,
+            "trabajadores": trabajadores,
+            "dias_semana": DIAS_SEMANA.items(),
+            "dias_mes": range(1, 32),
             "datos_formulario": datos_formulario,
             "es_admin": True,
         },
@@ -5403,6 +6719,12 @@ def contrato_editar_view(request, pk):
         "-activo",
         "nombre",
     )
+    trabajadores = (
+        Trabajador.objects
+        .filter(activo=True)
+        .select_related("user")
+        .order_by("user__username")
+    )
 
     datos_formulario = {
         "cliente_id": str(contrato.cliente_id),
@@ -5414,9 +6736,26 @@ def contrato_editar_view(request, pk):
         "forma_pago_personalizada": (
             contrato.forma_pago_personalizada
         ),
+        "periodo_dia_inicio": contrato.periodo_dia_inicio,
+        "programacion_cobro": contrato.programacion_cobro,
+        "cobro_mes_desfase": contrato.cobro_mes_desfase,
+        "cobro_dia_1": contrato.cobro_dia_1 or "", "cobro_dia_2": contrato.cobro_dia_2 or "",
+        "cobro_rango_desde": contrato.cobro_rango_desde or "", "cobro_rango_hasta": contrato.cobro_rango_hasta or "",
+        "cobro_dias_despues_cierre": contrato.cobro_dias_despues_cierre,
+        "porcentaje_primer_pago": contrato.porcentaje_primer_pago,
+        "programacion_cobro_personalizada": contrato.programacion_cobro_personalizada,
+        "requiere_factura": contrato.requiere_factura, "momento_facturacion": contrato.momento_facturacion,
+        "facturacion_dia": contrato.facturacion_dia or "", "facturacion_dias_antes": contrato.facturacion_dias_antes,
+        "notificar_facturacion": contrato.notificar_facturacion,
+        "notificacion_factura_dias_antes": contrato.notificacion_factura_dias_antes,
+        "observaciones_facturacion": contrato.observaciones_facturacion,
         "precio_mensual": contrato.precio_mensual,
+        "valor_tecnico_mensual": contrato.valor_tecnico_mensual,
         "fecha_inicio": contrato.fecha_inicio.isoformat(),
         "activo": contrato.activo,
+        "generacion_automatica": contrato.generacion_automatica,
+        "tecnico_id": str(contrato.tecnico_designado_id or ""),
+        "dias_visita": normalizar_dias(contrato.dias_visita),
     }
 
     if request.method == "POST":
@@ -5432,15 +6771,23 @@ def contrato_editar_view(request, pk):
             "forma_pago_personalizada": (
                 validacion["forma_pago_personalizada"]
             ),
-            "precio_mensual": request.POST.get(
-                "precio_mensual",
-                "",
-            ),
+            **{campo: validacion.get(campo) or "" for campo in (
+                "periodo_dia_inicio", "programacion_cobro", "cobro_mes_desfase", "cobro_dia_1", "cobro_dia_2",
+                "cobro_rango_desde", "cobro_rango_hasta", "cobro_dias_despues_cierre", "porcentaje_primer_pago",
+                "programacion_cobro_personalizada", "momento_facturacion", "facturacion_dia", "facturacion_dias_antes",
+                "notificacion_factura_dias_antes", "observaciones_facturacion")},
+            "requiere_factura": validacion["requiere_factura"],
+            "notificar_facturacion": validacion["notificar_facturacion"],
+            "precio_mensual": request.POST.get("precio_mensual", ""),
+            "valor_tecnico_mensual": request.POST.get("valor_tecnico_mensual", ""),
             "fecha_inicio": request.POST.get(
                 "fecha_inicio",
                 "",
             ),
             "activo": validacion["activo"],
+            "generacion_automatica": validacion["generacion_automatica"],
+            "tecnico_id": validacion["tecnico_id"],
+            "dias_visita": validacion["dias_visita"],
         }
 
         if validacion["errores"]:
@@ -5456,12 +6803,30 @@ def contrato_editar_view(request, pk):
             contrato.forma_pago_personalizada = (
                 validacion["forma_pago_personalizada"]
             )
-            contrato.precio_mensual = (
-                validacion["precio_mensual"]
-            )
+            for campo in (
+                "periodo_dia_inicio", "programacion_cobro", "cobro_mes_desfase", "cobro_dia_1", "cobro_dia_2",
+                "cobro_rango_desde", "cobro_rango_hasta", "cobro_dias_despues_cierre", "porcentaje_primer_pago",
+                "programacion_cobro_personalizada", "requiere_factura", "momento_facturacion", "facturacion_dia",
+                "facturacion_dias_antes", "notificar_facturacion", "notificacion_factura_dias_antes",
+                "observaciones_facturacion"):
+                setattr(contrato, campo, validacion[campo])
+            contrato.precio_mensual = validacion["precio_mensual"]
+            contrato.valor_tecnico_mensual = validacion["valor_tecnico_mensual"]
             contrato.fecha_inicio = validacion["fecha_inicio"]
             contrato.activo = validacion["activo"]
+            contrato.tecnico_designado = validacion["tecnico_designado"]
+            contrato.dias_visita = validacion["dias_visita"]
+            contrato.generacion_automatica = validacion["generacion_automatica"]
             contrato.save()
+
+            if contrato.activo and contrato.generacion_automatica:
+                resultado_programacion = generar_mantenimientos_contrato(
+                    contrato,
+                    reconciliar=True,
+                )
+            else:
+                eliminados = cancelar_programacion_futura(contrato)
+                resultado_programacion = {"creados": 0, "eliminados": eliminados}
 
             _registrar_actividad(
                 user=request.user,
@@ -5475,7 +6840,7 @@ def contrato_editar_view(request, pk):
 
             messages.success(
                 request,
-                "Contrato actualizado correctamente.",
+                "Contrato actualizado correctamente. La programación futura fue sincronizada.",
             )
             return redirect(
                 f"/dashboard/contratos/{contrato.pk}/"
@@ -5490,6 +6855,11 @@ def contrato_editar_view(request, pk):
             "clientes": clientes,
             "frecuencias": Contrato.FRECUENCIA_CHOICES,
             "formas_pago": Contrato.FORMA_PAGO_CHOICES,
+            "programaciones_cobro": Contrato.PROGRAMACION_COBRO_CHOICES,
+            "momentos_facturacion": Contrato.MOMENTO_FACTURACION_CHOICES,
+            "trabajadores": trabajadores,
+            "dias_semana": DIAS_SEMANA.items(),
+            "dias_mes": range(1, 32),
             "datos_formulario": datos_formulario,
             "es_admin": True,
         },
@@ -5506,7 +6876,7 @@ def contrato_detalle_view(request, pk):
         )
 
     contrato = get_object_or_404(
-        Contrato.objects.select_related("cliente"),
+        Contrato.objects.select_related("cliente", "tecnico_designado__user"),
         pk=pk,
     )
 
@@ -5571,6 +6941,20 @@ def contrato_detalle_view(request, pk):
         or Decimal("0.00")
     )
 
+    mantenimientos_futuros = mantenimientos.filter(
+        estado="pendiente",
+        fecha__gte=timezone.localdate(),
+    ).count()
+    proximo_mantenimiento = mantenimientos.filter(
+        estado="pendiente",
+        fecha__gte=timezone.localdate(),
+    ).order_by("fecha").first()
+
+    hoy = timezone.localdate()
+    calendario_cobros = contrato.calendario_cobros(hoy.year, hoy.month)
+    periodo_inicio, periodo_fin = contrato.periodo_servicio(hoy.year, hoy.month)
+    fecha_facturacion_programada = contrato.fecha_programada_facturacion(hoy.year, hoy.month)
+
     return render(
         request,
         "dashboard/contrato_detalle.html",
@@ -5585,9 +6969,38 @@ def contrato_detalle_view(request, pk):
             "total_facturado": total_facturado,
             "total_pagado": total_pagado,
             "total_pendiente": total_pendiente,
+            "mantenimientos_futuros": mantenimientos_futuros,
+            "proximo_mantenimiento": proximo_mantenimiento,
+            "periodo_inicio_actual": periodo_inicio,
+            "periodo_fin_actual": periodo_fin,
+            "calendario_cobros": calendario_cobros,
+            "fecha_facturacion_programada": fecha_facturacion_programada,
             "es_admin": True,
         },
     )
+
+
+@login_required
+@require_http_methods(["POST"])
+def contrato_regenerar_programacion_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    contrato = get_object_or_404(
+        Contrato.objects.select_related("cliente", "tecnico_designado"),
+        pk=pk,
+    )
+    resultado = generar_mantenimientos_contrato(contrato, reconciliar=True)
+    errores = resultado.get("errores") or []
+    if errores:
+        for error in errores:
+            messages.error(request, error)
+    else:
+        messages.success(
+            request,
+            f"Programación actualizada: {resultado['creados']} mantenimientos creados.",
+        )
+    return redirect(f"/dashboard/contratos/{contrato.pk}/")
 
 
 @login_required
@@ -5604,6 +7017,11 @@ def contrato_toggle_view(request, pk):
 
     contrato.activo = not contrato.activo
     contrato.save(update_fields=["activo"])
+
+    if contrato.activo and contrato.generacion_automatica:
+        generar_mantenimientos_contrato(contrato, reconciliar=True)
+    elif not contrato.activo:
+        cancelar_programacion_futura(contrato)
 
     estado_texto = (
         "activado"

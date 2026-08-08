@@ -31,16 +31,24 @@ from .views import (
     home_view,
     dashboard_view,
     calculadora_quimicos_view,
+    mi_cuenta_trabajador_view,
 
-    # Contratos
+    # Clientes y contratos
+    cliente_list_view,
+    cliente_crear_view,
+    cliente_editar_view,
+    cliente_detalle_view,
+    cliente_crear_rapido_view,
     contrato_list_view,
     contrato_crear_view,
     contrato_editar_view,
     contrato_detalle_view,
+    contrato_regenerar_programacion_view,
     contrato_toggle_view,
 
     # Mantenimientos
     mantenimiento_detalle_view,
+    mantenimiento_whatsapp_cliente_view,
     mantenimiento_historial_view,
     foto_mantenimiento_eliminar_view,
     usoinsumo_eliminar_view,
@@ -54,7 +62,33 @@ from .views import (
     inventario_view,
     vender_insumo_view,
     agregar_stock_view,
+    compra_inventario_view,
+    inventario_entrega_trabajador_view,
+    inventario_devolucion_trabajador_view,
     inventario_historial_view,
+    inventario_trabajador_detalle_view,
+    inventario_general_pdf_view,
+    inventario_trabajador_pdf_view,
+    inventario_kardex_pdf_view,
+    inventario_movimientos_pdf_view,
+    inventario_ventas_pdf_view,
+    inventario_compras_pdf_view,
+    inventario_productos_view,
+    inventario_producto_crear_view,
+    inventario_producto_editar_view,
+    inventario_producto_detalle_view,
+    inventario_producto_ajustar_stock_view,
+    inventario_producto_ajustar_costo_view,
+    inventario_producto_toggle_view,
+    inventario_producto_eliminar_view,
+    inventario_presentacion_agregar_view,
+    inventario_presentacion_eliminar_view,
+    mi_inventario_trabajador_view,
+    solicitud_reposicion_crear_view,
+    solicitud_reposicion_atender_view,
+    inventario_productos_criticos_pdf_view,
+    inventario_consumo_trabajadores_pdf_view,
+    inventario_consumo_contratos_pdf_view,
 
     # Finanzas
     flujo_mensual_view,
@@ -213,6 +247,16 @@ urlpatterns = [
         calculadora_quimicos_view,
         name="calculadora_quimicos",
     ),
+    path("mi-cuenta/", mi_cuenta_trabajador_view, name="mi_cuenta_trabajador"),
+
+    # ======================
+    # Clientes y contratos
+    # ======================
+    path("clientes/", cliente_list_view, name="cliente_list"),
+    path("clientes/nuevo/", cliente_crear_view, name="cliente_crear"),
+    path("clientes/crear-rapido/", cliente_crear_rapido_view, name="cliente_crear_rapido"),
+    path("clientes/<int:pk>/", cliente_detalle_view, name="cliente_detalle"),
+    path("clientes/<int:pk>/editar/", cliente_editar_view, name="cliente_editar"),
 
     # ======================
     # Contratos
@@ -238,6 +282,11 @@ urlpatterns = [
         name="contrato_editar",
     ),
     path(
+        "contratos/<int:pk>/regenerar-programacion/",
+        contrato_regenerar_programacion_view,
+        name="contrato_regenerar_programacion",
+    ),
+    path(
         "contratos/<int:pk>/toggle/",
         contrato_toggle_view,
         name="contrato_toggle",
@@ -255,6 +304,11 @@ urlpatterns = [
         "mantenimientos/<int:pk>/",
         mantenimiento_detalle_view,
         name="mantenimiento_detalle",
+    ),
+    path(
+        "mantenimientos/<int:pk>/whatsapp/",
+        mantenimiento_whatsapp_cliente_view,
+        name="mantenimiento_whatsapp_cliente",
     ),
     path(
         "fotos/<int:pk>/eliminar/",
@@ -309,6 +363,32 @@ urlpatterns = [
         inventario_historial_view,
         name="inventario_historial",
     ),
+    path("inventario/comprar/", compra_inventario_view, name="compra_inventario"),
+    path("inventario/entregar/", inventario_entrega_trabajador_view, name="inventario_entrega_trabajador"),
+    path("inventario/devolver/", inventario_devolucion_trabajador_view, name="inventario_devolucion_trabajador"),
+    path("inventario/trabajador/<int:trabajador_id>/", inventario_trabajador_detalle_view, name="inventario_trabajador_detalle"),
+    path("inventario/pdf/general/", inventario_general_pdf_view, name="inventario_general_pdf"),
+    path("inventario/pdf/trabajador/<int:trabajador_id>/", inventario_trabajador_pdf_view, name="inventario_trabajador_pdf"),
+    path("inventario/pdf/kardex/<int:insumo_id>/", inventario_kardex_pdf_view, name="inventario_kardex_pdf"),
+    path("inventario/pdf/movimientos/", inventario_movimientos_pdf_view, name="inventario_movimientos_pdf"),
+    path("inventario/pdf/ventas/", inventario_ventas_pdf_view, name="inventario_ventas_pdf"),
+    path("inventario/pdf/compras/", inventario_compras_pdf_view, name="inventario_compras_pdf"),
+    path("inventario/productos/", inventario_productos_view, name="inventario_productos"),
+    path("inventario/productos/nuevo/", inventario_producto_crear_view, name="inventario_producto_crear"),
+    path("inventario/productos/<int:pk>/", inventario_producto_detalle_view, name="inventario_producto_detalle"),
+    path("inventario/productos/<int:pk>/editar/", inventario_producto_editar_view, name="inventario_producto_editar"),
+    path("inventario/productos/<int:pk>/ajustar-stock/", inventario_producto_ajustar_stock_view, name="inventario_producto_ajustar_stock"),
+    path("inventario/productos/<int:pk>/ajustar-costo/", inventario_producto_ajustar_costo_view, name="inventario_producto_ajustar_costo"),
+    path("inventario/productos/<int:pk>/toggle/", inventario_producto_toggle_view, name="inventario_producto_toggle"),
+    path("inventario/productos/<int:pk>/eliminar/", inventario_producto_eliminar_view, name="inventario_producto_eliminar"),
+    path("inventario/productos/<int:pk>/presentaciones/agregar/", inventario_presentacion_agregar_view, name="inventario_presentacion_agregar"),
+    path("inventario/presentaciones/<int:pk>/eliminar/", inventario_presentacion_eliminar_view, name="inventario_presentacion_eliminar"),
+    path("mi-inventario/", mi_inventario_trabajador_view, name="mi_inventario_trabajador"),
+    path("mi-inventario/reposicion/<int:insumo_id>/", solicitud_reposicion_crear_view, name="solicitud_reposicion_crear"),
+    path("inventario/reposicion/<int:pk>/atender/", solicitud_reposicion_atender_view, name="solicitud_reposicion_atender"),
+    path("inventario/pdf/productos-criticos/", inventario_productos_criticos_pdf_view, name="inventario_productos_criticos_pdf"),
+    path("inventario/pdf/consumo-trabajadores/", inventario_consumo_trabajadores_pdf_view, name="inventario_consumo_trabajadores_pdf"),
+    path("inventario/pdf/consumo-contratos/", inventario_consumo_contratos_pdf_view, name="inventario_consumo_contratos_pdf"),
 
     # ======================
     # Finanzas

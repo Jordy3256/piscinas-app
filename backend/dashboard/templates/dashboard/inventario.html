@@ -1,181 +1,66 @@
 {% extends "dashboard/base_admin.html" %}
-
-{% block title %}Inventario{% endblock %}
-{% block top_title %}📦 Inventario{% endblock %}
-
+{% block title %}Centro Logístico{% endblock %}
+{% block top_title %}📦 Centro Logístico{% endblock %}
 {% block content %}
+<style>
+.log-hero{border:0;border-radius:24px;background:linear-gradient(135deg,#073b82,#0c83c8);color:#fff;padding:1.35rem;box-shadow:0 18px 42px #0b5ed72c}.log-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.8rem}.log-stat{border:0;border-radius:18px;box-shadow:0 9px 24px #10233f10}.log-stat .v{font-size:1.45rem;font-weight:900;color:#10233f}.inv-product{border:1px solid #e4ebf3;border-radius:18px;padding:1rem;background:#fff;height:100%}.stock-low{border-color:#f2cb63;background:#fffaf0}.stock-zero{border-color:#ef9da8;background:#fff6f7}.quick-card{border:0;border-radius:20px;box-shadow:0 10px 28px #10233f12}.compact-form .form-control,.compact-form .form-select{min-height:44px}.section-title{font-weight:900;color:#10233f}.request-card{border:1px solid #f2d27a;border-radius:16px;background:#fffaf0;padding:.9rem}@media(min-width:992px){.log-grid{grid-template-columns:repeat(6,minmax(0,1fr))}}
+</style>
+<section class="log-hero mb-4"><div class="d-flex flex-wrap justify-content-between gap-3 align-items-center"><div><div class="small opacity-75 fw-bold">JVAQUA ERP</div><h2 class="fw-bold mb-1">Centro Logístico</h2><div class="opacity-75">Bodega, productos, inventario por técnico, compras, ventas y trazabilidad.</div></div><div class="d-flex flex-wrap gap-2"><a href="{% url 'inventario_productos' %}" class="btn btn-light fw-bold">📦 Productos</a><a href="{% url 'inventario_historial' %}" class="btn btn-outline-light">Movimientos</a></div></div></section>
 
-<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-  <div>
-    <div class="fw-bold fs-5">Control de inventario</div>
-    <div class="text-muted small">Administra stock, ventas, utilidad y movimientos de tus insumos</div>
-  </div>
-
-  <div class="d-flex flex-wrap gap-2">
-    <a href="/dashboard/inventario/historial/" class="btn btn-outline-primary">
-      📊 Ver historial
-    </a>
-
-    <!-- ✅ FIX -->
-    <a href="{% url 'reporte_ganancias' %}" class="btn btn-outline-success">
-      💰 Ver ganancias
-    </a>
-
-    <a href="/admin/inventario/insumo/add/" class="btn btn-primary">
-      + Nuevo insumo
-    </a>
-  </div>
+<div class="log-grid mb-4">
+  <div class="card log-stat"><div class="card-body"><div class="text-muted small">Inventario valorizado</div><div class="v">${{ valor_inventario|floatformat:2 }}</div></div></div>
+  <div class="card log-stat"><div class="card-body"><div class="text-muted small">Productos activos</div><div class="v">{{ total_insumos }}</div></div></div>
+  <div class="card log-stat"><div class="card-body"><div class="text-muted small">Stock bajo</div><div class="v">{{ bajo_stock }}</div></div></div>
+  <div class="card log-stat"><div class="card-body"><div class="text-muted small">Sin stock</div><div class="v">{{ sin_stock }}</div></div></div>
+  <div class="card log-stat"><div class="card-body"><div class="text-muted small">Asignado a técnicos</div><div class="v">${{ valor_asignado|floatformat:2 }}</div><div class="small text-muted">{{ productos_asignados }} posiciones</div></div></div>
+  <div class="card log-stat"><div class="card-body"><div class="text-muted small">Solicitudes</div><div class="v">{{ solicitudes_pendientes_count }}</div></div></div>
 </div>
 
-<div class="row g-3 mb-3">
-  <div class="col-12 col-md-3">
-    <div class="card shadow-sm">
-      <div class="card-body text-center">
-        <div class="text-muted small">Total insumos</div>
-        <div class="fs-3 fw-bold">{{ total_insumos }}</div>
-      </div>
-    </div>
-  </div>
-
-  <div class="col-12 col-md-3">
-    <div class="card shadow-sm border-warning">
-      <div class="card-body text-center">
-        <div class="text-muted small">Bajo stock</div>
-        <div class="fs-3 fw-bold text-warning">{{ bajo_stock }}</div>
-      </div>
-    </div>
-  </div>
-
-  <div class="col-12 col-md-3">
-    <div class="card shadow-sm border-primary">
-      <div class="card-body text-center">
-        <div class="text-muted small">Stock total</div>
-        <div class="fs-3 fw-bold text-primary">{{ stock_total }}</div>
-      </div>
-    </div>
-  </div>
-
-  <div class="col-12 col-md-3">
-    <div class="card shadow-sm border-success">
-      <div class="card-body text-center">
-        <div class="text-muted small">Ventas del mes</div>
-        <div class="fs-3 fw-bold text-success">${{ total_ventas_mes|floatformat:2 }}</div>
-        <div class="small text-muted">{{ unidades_vendidas_mes }} unidades</div>
-      </div>
-    </div>
-  </div>
+<div class="row g-3 mb-4">
+  <div class="col-md-4"><div class="card quick-card h-100"><div class="card-body"><div class="text-muted small">Compras del mes</div><div class="fs-3 fw-bold">${{ total_compras_mes|floatformat:2 }}</div><div class="small text-muted">Ingreso de mercadería a bodega.</div></div></div></div>
+  <div class="col-md-4"><div class="card quick-card h-100"><div class="card-body"><div class="text-muted small">Ventas del mes</div><div class="fs-3 fw-bold">${{ total_ventas_mes|floatformat:2 }}</div><div class="small text-muted">Ganancia estimada ${{ ganancia_mes|floatformat:2 }}</div></div></div></div>
+  <div class="col-md-4"><div class="card quick-card h-100"><div class="card-body"><div class="text-muted small">Consumo en mantenimientos</div><div class="fs-3 fw-bold">${{ costo_consumo_mes|floatformat:2 }}</div><div class="small text-muted">Costo químico acumulado del mes.</div></div></div></div>
 </div>
 
-<div class="row g-3 mb-3">
-  <div class="col-12 col-md-6">
-    <div class="card shadow-sm border-success">
-      <div class="card-body text-center">
-        <div class="text-muted small">Ganancia del mes</div>
-        <div class="fs-3 fw-bold text-success">${{ ganancia_mes|floatformat:2 }}</div>
-      </div>
-    </div>
-  </div>
-
-  <div class="col-12 col-md-6">
-    <div class="card shadow-sm border-secondary">
-      <div class="card-body text-center">
-        <div class="text-muted small">Resumen rápido</div>
-        <div class="small">
-          Historial, ventas, entradas y utilidad centralizados
-        </div>
-      </div>
-    </div>
-  </div>
+<div class="d-flex flex-wrap gap-2 mb-4">
+  <a href="{% url 'inventario_general_pdf' %}" class="btn btn-outline-secondary">PDF Inventario</a>
+  <a href="{% url 'inventario_movimientos_pdf' %}" class="btn btn-outline-secondary">PDF Movimientos</a>
+  <a href="{% url 'inventario_productos_criticos_pdf' %}" class="btn btn-outline-danger">PDF Stock crítico</a>
+  <a href="{% url 'inventario_consumo_trabajadores_pdf' %}" class="btn btn-outline-secondary">PDF Consumo técnicos</a>
+  <a href="{% url 'inventario_consumo_contratos_pdf' %}" class="btn btn-outline-secondary">PDF Consumo contratos</a>
 </div>
 
-<div class="row g-3 mb-3">
-  <div class="col-12 col-lg-6">
-    <div class="card shadow-sm h-100 border-success">
-      <div class="card-body">
-        <div class="fw-bold mb-3">💰 Registrar venta</div>
-
-        <form method="post" action="/dashboard/inventario/vender/" class="row g-2">
-          {% csrf_token %}
-
-          <div class="col-12">
-            <label class="form-label small text-muted">Insumo</label>
-            <select name="insumo_id" class="form-select" required>
-              <option value="">Selecciona un insumo</option>
-              {% for i in insumos %}
-                <option value="{{ i.id }}">
-                  {{ i.nombre }} · Stock: {{ i.stock }} · Precio: ${{ i.precio|floatformat:2 }}
-                </option>
-              {% endfor %}
-            </select>
-          </div>
-
-          <div class="col-12">
-            <label class="form-label small text-muted">Cantidad</label>
-            <input type="number" name="cantidad" min="1" class="form-control" required>
-          </div>
-
-          <div class="col-12 d-grid">
-            <button type="submit" class="btn btn-success">
-              Registrar venta
-            </button>
-          </div>
-        </form>
-
-      </div>
-    </div>
-  </div>
-
-  <div class="col-12 col-lg-6">
-    <div class="card shadow-sm h-100 border-primary">
-      <div class="card-body">
-        <div class="fw-bold mb-3">📥 Agregar stock</div>
-
-        <form method="post" action="/dashboard/inventario/agregar/" class="row g-2">
-          {% csrf_token %}
-
-          <div class="col-12">
-            <label class="form-label small text-muted">Insumo</label>
-            <select name="insumo_id" class="form-select" required>
-              <option value="">Selecciona un insumo</option>
-              {% for i in insumos %}
-                <option value="{{ i.id }}">
-                  {{ i.nombre }} · Stock actual: {{ i.stock }}
-                </option>
-              {% endfor %}
-            </select>
-          </div>
-
-          <div class="col-12 col-md-4">
-            <input type="number" name="cantidad" min="1" class="form-control" placeholder="Cantidad" required>
-          </div>
-
-          <div class="col-12 col-md-8">
-            <input type="text" name="observacion" class="form-control" placeholder="Observación">
-          </div>
-
-          <div class="col-12 d-grid">
-            <button type="submit" class="btn btn-primary">
-              Agregar stock
-            </button>
-          </div>
-        </form>
-
-      </div>
-    </div>
-  </div>
+<div class="row g-3 mb-4">
+  <div class="col-xl-6" id="registrar-compra"><div class="card quick-card h-100"><div class="card-body"><h5 class="section-title">🛍 Registrar compra</h5><form method="post" action="{% url 'compra_inventario' %}" class="row g-2 compact-form">{% csrf_token %}
+    <div class="col-12"><select class="form-select" name="insumo_id" required><option value="">Producto</option>{% for i in insumos %}<option value="{{ i.id }}">{{ i.nombre }} · {{ i.stock|floatformat:3 }} {{ i.unidad_corta }}</option>{% endfor %}</select></div>
+    <div class="col-5"><input class="form-control" name="cantidad" type="number" step="0.001" min="0.001" placeholder="Cantidad" required></div><div class="col-3"><select class="form-select" name="unidad"><option value="base">Unidad base</option><option value="kg">kg</option><option value="g">g</option><option value="l">L</option><option value="ml">ml</option></select></div><div class="col-4"><input class="form-control" name="costo_unitario" type="number" step="0.0001" min="0" placeholder="Costo/base" required></div>
+    <div class="col-6"><input class="form-control" name="proveedor" placeholder="Proveedor"></div><div class="col-6"><input class="form-control" name="lote" placeholder="Lote (opcional)"></div>
+    <div class="col-6"><label class="small text-muted">Fabricación</label><input class="form-control" type="date" name="fecha_fabricacion"></div><div class="col-6"><label class="small text-muted">Vencimiento</label><input class="form-control" type="date" name="fecha_vencimiento"></div>
+    <div class="col-12"><input class="form-control" name="observacion" placeholder="Observación"></div><div class="col-12 d-grid"><button class="btn btn-primary fw-bold">Registrar compra</button></div>
+  </form></div></div></div>
+  <div class="col-xl-6" id="entregar-trabajador"><div class="card quick-card h-100"><div class="card-body"><h5 class="section-title">👷 Entregar a trabajador</h5><form method="post" action="{% url 'inventario_entrega_trabajador' %}" class="row g-2 compact-form">{% csrf_token %}
+    <div class="col-12"><select class="form-select" name="trabajador_id" required><option value="">Trabajador</option>{% for t in trabajadores %}<option value="{{ t.id }}">{{ t.user.get_full_name|default:t.user.username }}</option>{% endfor %}</select></div>
+    <div class="col-12"><select class="form-select" name="insumo_id" required><option value="">Producto</option>{% for i in insumos %}{% if i.puede_asignarse_trabajador %}<option value="{{ i.id }}">{{ i.nombre }} · bodega {{ i.stock|floatformat:3 }} {{ i.unidad_corta }}</option>{% endif %}{% endfor %}</select></div>
+    <div class="col-7"><input class="form-control" name="cantidad" type="number" step="0.001" min="0.001" placeholder="Cantidad" required></div><div class="col-5"><select class="form-select" name="unidad"><option value="base">Unidad base</option><option value="kg">kg</option><option value="g">g</option><option value="l">L</option><option value="ml">ml</option></select></div>
+    <div class="col-12"><input class="form-control" name="observacion" placeholder="Observación"></div><div class="col-12 d-grid"><button class="btn btn-primary fw-bold">Registrar entrega</button></div>
+  </form><hr><h6 class="section-title">↩️ Devolución a bodega</h6><form method="post" action="{% url 'inventario_devolucion_trabajador' %}" class="row g-2 compact-form">{% csrf_token %}<div class="col-6"><select class="form-select" name="trabajador_id" required><option value="">Trabajador</option>{% for t in trabajadores %}<option value="{{ t.id }}">{{ t.user.get_full_name|default:t.user.username }}</option>{% endfor %}</select></div><div class="col-6"><select class="form-select" name="insumo_id" required><option value="">Producto</option>{% for i in insumos %}<option value="{{ i.id }}">{{ i.nombre }}</option>{% endfor %}</select></div><div class="col-5"><input class="form-control" name="cantidad" type="number" step="0.001" min="0.001" placeholder="Cantidad" required></div><div class="col-3"><select class="form-select" name="unidad"><option value="base">Unidad base</option><option value="kg">kg</option><option value="g">g</option><option value="l">L</option><option value="ml">ml</option></select></div><div class="col-4 d-grid"><button class="btn btn-outline-primary">Devolver</button></div></form></div></div></div>
 </div>
 
-<!-- ✅ FIX EN OTROS BOTONES -->
-<div class="card shadow-sm">
-  <div class="card-body d-flex justify-content-between">
-    <a href="/dashboard/inventario/historial/" class="btn btn-outline-primary">
-      Historial
-    </a>
-
-    <a href="{% url 'reporte_ganancias' %}" class="btn btn-outline-success">
-      Reporte de ganancias
-    </a>
-  </div>
+<div class="row g-3 mb-4">
+  <div class="col-xl-6"><div class="card quick-card h-100"><div class="card-body"><h5 class="section-title">🛒 Registrar venta</h5><form method="post" action="{% url 'vender_insumo' %}" class="row g-2 compact-form">{% csrf_token %}
+    <div class="col-12"><select class="form-select" name="insumo_id" required><option value="">Producto</option>{% for i in insumos %}{% if i.puede_venderse %}<option value="{{ i.id }}">{{ i.nombre }} · {{ i.stock|floatformat:3 }} {{ i.unidad_corta }}</option>{% endif %}{% endfor %}</select></div>
+    <div class="col-5"><input class="form-control" name="cantidad" type="number" step="0.001" min="0.001" placeholder="Cantidad" required></div><div class="col-3"><select class="form-select" name="unidad"><option value="base">Unidad base</option><option value="kg">kg</option><option value="g">g</option><option value="l">L</option><option value="ml">ml</option></select></div><div class="col-4"><input class="form-control" name="precio_unitario" type="number" step="0.01" min="0" placeholder="Precio/base"></div>
+    <div class="col-12 d-grid"><button class="btn btn-success fw-bold">Registrar venta + ingreso</button></div>
+  </form></div></div></div>
+  <div class="col-xl-6"><div class="card quick-card h-100"><div class="card-body"><h5 class="section-title">📄 Reportes comerciales</h5><div class="d-grid gap-2"><a href="{% url 'inventario_ventas_pdf' %}" class="btn btn-outline-success">PDF de ventas</a><a href="{% url 'inventario_compras_pdf' %}" class="btn btn-outline-primary">PDF de compras</a><a href="{% url 'inventario_general_pdf' %}" class="btn btn-outline-secondary">Inventario valorizado</a></div></div></div></div>
 </div>
 
+{% if solicitudes_pendientes %}<div class="card quick-card mb-4"><div class="card-body"><div class="d-flex justify-content-between align-items-center"><h5 class="section-title mb-0">📨 Solicitudes de reposición</h5><span class="badge bg-warning text-dark">{{ solicitudes_pendientes_count }} pendientes</span></div><div class="row g-2 mt-1">{% for s in solicitudes_pendientes %}<div class="col-lg-6"><div class="request-card"><div class="d-flex justify-content-between gap-2"><div><strong>{{ s.trabajador }}</strong><div>{{ s.insumo.nombre }}</div><div class="small text-muted">Stock al solicitar: {{ s.stock_al_solicitar|floatformat:3 }} {{ s.insumo.unidad_corta }}</div></div><form method="post" action="{% url 'solicitud_reposicion_atender' s.id %}">{% csrf_token %}<button class="btn btn-sm btn-outline-success">Atendida</button></form></div></div></div>{% endfor %}</div></div></div>{% endif %}
+
+<div class="d-flex justify-content-between align-items-center mb-2"><h5 class="section-title mb-0">📦 Existencias generales</h5><a href="{% url 'inventario_productos' %}" class="btn btn-sm btn-primary">Gestionar productos</a></div>
+<div class="row g-2 mb-4">{% for i in insumos %}<div class="col-md-6 col-xl-4"><div class="inv-product {% if i.sin_stock %}stock-zero{% elif i.bajo_stock %}stock-low{% endif %}"><div class="d-flex justify-content-between gap-2"><div><div class="fw-bold">{{ i.nombre }}</div><div class="small text-muted">{{ i.codigo }} · {{ i.get_categoria_display }}</div></div><div class="text-end"><div class="fw-bold">{{ i.stock|floatformat:3 }} {{ i.unidad_corta }}</div>{% if i.sin_stock %}<span class="badge bg-danger">Sin stock</span>{% elif i.bajo_stock %}<span class="badge bg-warning text-dark">Stock bajo</span>{% else %}<span class="badge bg-success">Normal</span>{% endif %}</div></div><div class="small mt-2">Costo: ${{ i.costo|floatformat:4 }} / {{ i.unidad_corta }} · Venta: ${{ i.precio|floatformat:2 }}</div><div class="d-flex gap-2 mt-2"><a class="btn btn-sm btn-outline-primary" href="{% url 'inventario_producto_detalle' i.id %}">Ver ficha</a><a class="btn btn-sm btn-outline-secondary" href="{% url 'inventario_kardex_pdf' i.id %}">Kardex PDF</a></div></div></div>{% empty %}<div class="text-muted">No hay productos.</div>{% endfor %}</div>
+
+<div class="card quick-card mb-4"><div class="card-body"><h5 class="section-title">👷 Inventario por trabajador</h5><div class="row g-3">{% for r in resumen_trabajadores %}<div class="col-md-6 col-xl-4"><div class="inv-product"><div class="d-flex justify-content-between"><div class="fw-bold">{{ r.trabajador.user.get_full_name|default:r.trabajador.user.username }}</div><div class="fw-bold">${{ r.valor|floatformat:2 }}</div></div><div class="small text-muted mb-2">{{ r.stocks|length }} productos asignados</div>{% for st in r.stocks|slice:':4' %}<div class="d-flex justify-content-between small"><span>{{ st.insumo.nombre }}</span><strong>{{ st.stock|floatformat:3 }} {{ st.insumo.unidad_corta }}</strong></div>{% endfor %}<div class="d-flex gap-2 mt-3"><a href="{% url 'inventario_trabajador_detalle' r.trabajador.id %}" class="btn btn-sm btn-primary">Ver historial</a><a href="{% url 'inventario_trabajador_pdf' r.trabajador.id %}" class="btn btn-sm btn-outline-secondary">PDF</a></div></div></div>{% empty %}<div class="text-muted">Todavía no hay inventario asignado.</div>{% endfor %}</div></div></div>
+
+<div class="card quick-card"><div class="card-body"><div class="d-flex justify-content-between align-items-center mb-3"><h5 class="section-title mb-0">🧾 Movimientos recientes</h5><a href="{% url 'inventario_historial' %}">Ver todos</a></div><div class="table-responsive"><table class="table align-middle"><thead><tr><th>Fecha</th><th>Producto</th><th>Movimiento</th><th>Cantidad</th><th>Trabajador</th><th>Costo</th></tr></thead><tbody>{% for m in movimientos_recientes %}<tr><td>{{ m.fecha|date:'d/m/Y' }}</td><td><a href="{% url 'inventario_producto_detalle' m.insumo.id %}">{{ m.insumo.nombre }}</a></td><td>{{ m.get_tipo_display }}</td><td>{{ m.cantidad|floatformat:3 }} {{ m.insumo.unidad_corta }}</td><td>{{ m.trabajador|default:'—' }}</td><td>${{ m.total_costo|floatformat:2 }}</td></tr>{% empty %}<tr><td colspan="6" class="text-muted">Sin movimientos.</td></tr>{% endfor %}</tbody></table></div></div></div>
 {% endblock %}
