@@ -157,7 +157,7 @@
     <section class="exec-card">
       <div class="exec-card-head"><div class="exec-card-title">🕘 Actividad reciente</div><a class="exec-link" href="{% url 'actividad_historial' %}">Ver historial →</a></div>
       <div class="exec-card-body pt-2">
-        {% if actividades_recientes %}<div class="simple-list">{% for a in actividades_recientes %}<div class="simple-row"><div class="simple-main"><div class="simple-title">{{ a.titulo|default:a.accion|default:"Actividad del sistema" }}</div><div class="simple-meta">{% if a.user %}{{ a.user.username }} · {% endif %}{{ a.creada_en|date:"d/m H:i" }}</div></div></div>{% endfor %}</div>{% else %}<div class="empty-state">Aún no hay actividad reciente para mostrar.</div>{% endif %}
+        {% if actividades_recientes %}<div class="simple-list">{% for a in actividades_recientes %}<div class="simple-row"><div class="simple-main"><div class="simple-title">{{ a.titulo|default:"Actividad del sistema" }}</div><div class="simple-meta">{% if a.user %}{{ a.user.username }} · {% endif %}{{ a.creada_en|date:"d/m H:i" }}</div></div></div>{% endfor %}</div>{% else %}<div class="empty-state">Aún no hay actividad reciente para mostrar.</div>{% endif %}
       </div>
     </section>
   </div>
