@@ -3,7 +3,7 @@
 {% block top_title %}🧠 Asistente Técnico Inteligente{% endblock %}
 {% block content %}
 <style>
-  .ati-wrap{max-width:1100px;margin:auto}.ati-hero{background:linear-gradient(135deg,#0b3b66,#0d6efd);color:#fff;border-radius:24px;padding:24px;margin-bottom:20px}.ati-card{border:1px solid #e6eaf0;border-radius:20px;background:#fff;box-shadow:0 8px 24px rgba(16,24,40,.06)}.ati-section{padding:20px}.ati-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.ati-input{border-radius:14px;min-height:48px}.ati-badge{display:inline-flex;align-items:center;padding:7px 12px;border-radius:999px;font-weight:700}.pri-alta{background:#fee2e2;color:#991b1b}.pri-media{background:#fef3c7;color:#92400e}.pri-baja{background:#dcfce7;color:#166534}.step{display:flex;gap:12px;padding:14px 0;border-bottom:1px solid #eef1f5}.step:last-child{border-bottom:0}.step-num{width:34px;height:34px;display:grid;place-items:center;border-radius:50%;background:#e8f1ff;color:#0d6efd;font-weight:800;flex:none}.prod{padding:14px;border:1px solid #e7ecf2;border-radius:16px;margin-bottom:10px}.ati-nav{display:flex;gap:8px;flex-wrap:wrap}.ati-warning{background:#fff7ed;border:1px solid #fed7aa;border-radius:14px;padding:12px 14px}.explain{font-size:.92rem;color:#667085}.photo-note{font-size:.82rem;color:#667085}@media(max-width:720px){.ati-grid{grid-template-columns:1fr}.ati-hero{border-radius:18px;padding:18px}.ati-section{padding:16px}}
+  .ati-wrap{max-width:1100px;margin:auto}.ati-hero{background:linear-gradient(135deg,#0b3b66,#0d6efd);color:#fff;border-radius:24px;padding:24px;margin-bottom:20px}.ati-card{border:1px solid #e6eaf0;border-radius:20px;background:#fff;box-shadow:0 8px 24px rgba(16,24,40,.06)}.ati-section{padding:20px}.ati-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.ati-input{border-radius:14px;min-height:48px}.ati-badge{display:inline-flex;align-items:center;padding:7px 12px;border-radius:999px;font-weight:700}.pri-alta{background:#fee2e2;color:#991b1b}.pri-media{background:#fef3c7;color:#92400e}.pri-baja{background:#dcfce7;color:#166534}.step{display:flex;gap:12px;padding:14px 0;border-bottom:1px solid #eef1f5}.step:last-child{border-bottom:0}.step-num{width:34px;height:34px;display:grid;place-items:center;border-radius:50%;background:#e8f1ff;color:#0d6efd;font-weight:800;flex:none}.prod{padding:14px;border:1px solid #e7ecf2;border-radius:16px;margin-bottom:10px}.ati-nav{display:flex;gap:8px;flex-wrap:wrap}.ati-warning{background:#fff7ed;border:1px solid #fed7aa;border-radius:14px;padding:12px 14px}.explain{font-size:.92rem;color:#667085}.photo-note{font-size:.82rem;color:#667085}.volume-helper{background:#f8fbff;border:1px solid #d8e8ff;border-radius:18px;padding:16px}.volume-toggle{display:flex;gap:8px;flex-wrap:wrap}.volume-toggle .btn{border-radius:999px}.volume-panel{margin-top:14px}@media(max-width:720px){.ati-grid{grid-template-columns:1fr}.ati-hero{border-radius:18px;padding:18px}.ati-section{padding:16px}}
 </style>
 <div class="ati-wrap">
   <div class="ati-hero">
@@ -17,8 +17,37 @@
     <h5 class="fw-bold mb-3">Nuevo diagnóstico</h5>
     <form method="post" enctype="multipart/form-data">
       {% csrf_token %}
+      <div class="volume-helper mb-3">
+        <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
+          <div>
+            <label class="form-label fw-bold mb-1">Volumen de la piscina</label>
+            <div class="small text-muted">Puedes ingresar los m³ directamente o calcularlos con las medidas.</div>
+          </div>
+          <div class="volume-toggle" role="group" aria-label="Método de volumen">
+            <input class="btn-check" type="radio" name="metodo_volumen" id="metodoDimensiones" value="dimensiones" {% if request.POST.metodo_volumen == 'dimensiones' %}checked{% endif %}>
+            <label class="btn btn-outline-primary btn-sm" for="metodoDimensiones">📐 Calcular por medidas</label>
+            <input class="btn-check" type="radio" name="metodo_volumen" id="metodoVolumen" value="volumen" {% if request.POST.metodo_volumen != 'dimensiones' %}checked{% endif %}>
+            <label class="btn btn-outline-primary btn-sm" for="metodoVolumen">🌊 Ya conozco los m³</label>
+          </div>
+        </div>
+
+        <div id="dimensionFields" class="volume-panel {% if request.POST.metodo_volumen != 'dimensiones' %}d-none{% endif %}">
+          <div class="ati-grid">
+            <div><label class="form-label fw-semibold">Largo</label><div class="input-group"><input class="form-control ati-input dimension-input" type="number" step="0.01" min="0.01" name="largo_m" value="{{ request.POST.largo_m }}" placeholder="Ej.: 6"><span class="input-group-text">m</span></div></div>
+            <div><label class="form-label fw-semibold">Ancho</label><div class="input-group"><input class="form-control ati-input dimension-input" type="number" step="0.01" min="0.01" name="ancho_m" value="{{ request.POST.ancho_m }}" placeholder="Ej.: 3"><span class="input-group-text">m</span></div></div>
+            <div><label class="form-label fw-semibold">Profundidad promedio</label><div class="input-group"><input class="form-control ati-input dimension-input" type="number" step="0.01" min="0.01" name="profundidad_m" value="{{ request.POST.profundidad_m }}" placeholder="Ej.: 1.50"><span class="input-group-text">m</span></div></div>
+            <div><label class="form-label fw-semibold">Volumen calculado</label><div class="alert alert-primary mb-0 py-2"><strong id="volumePreview">0.00 m³</strong></div></div>
+          </div>
+          <div class="small text-muted mt-2">Cálculo: largo × ancho × profundidad promedio.</div>
+        </div>
+
+        <div id="volumeField" class="volume-panel {% if request.POST.metodo_volumen == 'dimensiones' %}d-none{% endif %}">
+          <label class="form-label fw-semibold">Metros cúbicos</label>
+          <div class="input-group"><input class="form-control ati-input" type="number" step="0.01" min="0.01" name="volumen_m3" value="{{ request.POST.volumen_m3 }}" placeholder="Ej.: 27"><span class="input-group-text">m³</span></div>
+        </div>
+      </div>
+
       <div class="ati-grid">
-        <div><label class="form-label fw-semibold">Volumen de la piscina</label><div class="input-group"><input class="form-control ati-input" type="number" step="0.01" min="0.01" name="volumen_m3" required value="{{ request.POST.volumen_m3 }}"><span class="input-group-text">m³</span></div></div>
         <div><label class="form-label fw-semibold">pH actual</label><input class="form-control ati-input" type="number" step="0.01" min="0" max="14" name="ph" required value="{{ request.POST.ph }}"></div>
         <div><label class="form-label fw-semibold">Cloro actual</label><div class="input-group"><input class="form-control ati-input" type="number" step="0.01" min="0" max="20" name="cloro" required value="{{ request.POST.cloro }}"><span class="input-group-text">ppm</span></div></div>
         <div><label class="form-label fw-semibold">Estado del agua</label><select class="form-select ati-input" name="estado_agua" required><option value="">Seleccionar</option>{% for value,label in estado_choices %}<option value="{{ value }}" {% if request.POST.estado_agua == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
@@ -44,4 +73,35 @@
 
   {% if recientes %}<div class="ati-card"><div class="ati-section"><div class="d-flex justify-content-between align-items-center"><h5 class="fw-bold mb-3">Últimos cálculos</h5><a href="{% url 'asistente_tecnico:historial' %}" class="btn btn-sm btn-outline-primary">Ver todos</a></div>{% for item in recientes %}<a href="{% url 'asistente_tecnico:caso_detalle' item.pk %}" class="d-flex justify-content-between align-items-center text-decoration-none text-dark py-3 border-top"><div><div class="fw-semibold">{{ item.diagnostico }}</div><small class="text-muted">{{ item.creado_en|date:'d/m/Y H:i' }} · {{ item.volumen_m3 }} m³ · {{ item.get_estado_agua_display }}</small></div><span class="badge {% if item.resultado == 'exitoso' %}text-bg-success{% elif item.resultado == 'fallido' %}text-bg-danger{% elif item.resultado == 'parcial' %}text-bg-warning{% else %}text-bg-secondary{% endif %}">{{ item.get_resultado_display }}</span></a>{% endfor %}</div></div>{% endif %}
 </div>
+<script>
+(function(){
+  const dimensionRadio = document.getElementById('metodoDimensiones');
+  const volumeRadio = document.getElementById('metodoVolumen');
+  const dimensionFields = document.getElementById('dimensionFields');
+  const volumeField = document.getElementById('volumeField');
+  const dimensionInputs = Array.from(document.querySelectorAll('.dimension-input'));
+  const volumeInput = document.querySelector('input[name="volumen_m3"]');
+  const preview = document.getElementById('volumePreview');
+
+  function updatePreview(){
+    const nums = dimensionInputs.map(function(el){ return parseFloat(el.value || '0'); });
+    const total = nums.length === 3 ? nums[0] * nums[1] * nums[2] : 0;
+    preview.textContent = (Number.isFinite(total) ? total : 0).toFixed(2) + ' m³';
+  }
+
+  function updateMode(){
+    const byDimensions = dimensionRadio.checked;
+    dimensionFields.classList.toggle('d-none', !byDimensions);
+    volumeField.classList.toggle('d-none', byDimensions);
+    dimensionInputs.forEach(function(el){ el.required = byDimensions; });
+    if (volumeInput) volumeInput.required = !byDimensions;
+    updatePreview();
+  }
+
+  dimensionRadio.addEventListener('change', updateMode);
+  volumeRadio.addEventListener('change', updateMode);
+  dimensionInputs.forEach(function(el){ el.addEventListener('input', updatePreview); });
+  updateMode();
+})();
+</script>
 {% endblock %}

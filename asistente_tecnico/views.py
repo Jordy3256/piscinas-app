@@ -76,12 +76,25 @@ def asistente_inicio_view(request):
     caso = None
 
     if request.method == "POST":
+        metodo_volumen = (request.POST.get("metodo_volumen") or "volumen").strip()
         try:
-            volumen = Decimal((request.POST.get("volumen_m3") or "").replace(",", "."))
             ph = Decimal((request.POST.get("ph") or "").replace(",", "."))
             cloro = Decimal((request.POST.get("cloro") or "").replace(",", "."))
+
+            if metodo_volumen == "dimensiones":
+                largo = Decimal((request.POST.get("largo_m") or "").replace(",", "."))
+                ancho = Decimal((request.POST.get("ancho_m") or "").replace(",", "."))
+                profundidad = Decimal((request.POST.get("profundidad_m") or "").replace(",", "."))
+                if largo <= 0 or ancho <= 0 or profundidad <= 0:
+                    raise ValueError
+                volumen = (largo * ancho * profundidad).quantize(Decimal("0.01"))
+            else:
+                volumen = Decimal((request.POST.get("volumen_m3") or "").replace(",", "."))
         except (InvalidOperation, ValueError):
-            messages.error(request, "Revisa volumen, pH y cloro. Deben ser valores numéricos válidos.")
+            messages.error(
+                request,
+                "Revisa las medidas o el volumen, pH y cloro. Deben ser valores numéricos válidos.",
+            )
         else:
             estado = request.POST.get("estado_agua") or ""
             tipo_piscina = request.POST.get("tipo_piscina") or ""
@@ -267,7 +280,10 @@ def asistente_admin_view(request):
     por_tipo_piscina = list(qs.values("tipo_piscina").annotate(total=Count("id"), exitosos=Count("id", filter=Q(resultado="exitoso"))).order_by("tipo_piscina"))
     fallas_conteo = {}
     rangos_volumen = {"0–25 m³": [0, 0], "25–50 m³": [0, 0], "50–100 m³": [0, 0], ">100 m³": [0, 0]}
-    for caso in qs.only("volumen_m3", "resultado", "fallas"):
+    # Usar un queryset independiente sin select_related.
+    # En Django, combinar select_related() con only() omitiendo las FK relacionadas
+    # puede provocar FieldError al evaluar la consulta en el panel administrativo.
+    for caso in CasoAsistenteTecnico.objects.only("volumen_m3", "resultado", "fallas"):
         v = float(caso.volumen_m3)
         clave = "0–25 m³" if v <= 25 else "25–50 m³" if v <= 50 else "50–100 m³" if v <= 100 else ">100 m³"
         rangos_volumen[clave][0] += 1
