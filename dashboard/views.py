@@ -15,7 +15,7 @@ from django.contrib.auth.models import User
 from django.contrib.staticfiles import finders
 from django.core.paginator import Paginator
 from django.db import transaction, models
-from django.db.models import Sum, Count
+from django.db.models import Sum, Count, Q
 from django.db.models import F
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
@@ -1748,10 +1748,227 @@ def inicio_view(request):
         ctx["es_admin"] = False
         notificar_trabajadores_mantenimientos_hoy()
         _actualizar_seguimientos_asistente(request.user)
+        ctx.update(_inicio_trabajador_contexto(request.user))
         return render(request, "dashboard/home_trabajador.html", ctx)
 
     return render(request, "dashboard/no_autorizado.html", status=403)
 
+
+
+def _nombre_usuario(user):
+    nombre = (user.get_full_name() or "").strip()
+    return nombre or user.username
+
+
+def _inicio_trabajador_contexto(user):
+    hoy = timezone.localdate()
+    trabajador = getattr(user, "trabajador", None)
+    if not trabajador:
+        return {"hoy": hoy, "nombre_trabajador": _nombre_usuario(user)}
+
+    mantenimientos = Mantenimiento.objects.filter(trabajadores=trabajador)
+    ordenes = OrdenTrabajo.objects.filter(trabajador=trabajador)
+    pendientes_hoy = mantenimientos.filter(fecha=hoy, estado="pendiente").count()
+    realizados_hoy = mantenimientos.filter(fecha=hoy, estado="realizado").count()
+    atrasados = mantenimientos.filter(fecha__lt=hoy, estado="pendiente").count()
+    ordenes_hoy = ordenes.filter(fecha=hoy).exclude(estado__in=["completada", "cancelada"]).count()
+    ordenes_pendientes = ordenes.exclude(estado__in=["completada", "cancelada"]).count()
+
+    seguimientos = 0
+    if CasoAsistenteTecnico is not None:
+        seguimientos = CasoAsistenteTecnico.objects.filter(
+            user=user,
+            resultado="pendiente",
+            seguimiento_programado_para__isnull=False,
+            seguimiento_programado_para__lte=timezone.now(),
+        ).count()
+
+    proximo_pago = (
+        ObligacionTrabajador.objects.filter(
+            trabajador=trabajador,
+            estado__in=[ObligacionTrabajador.ESTADO_PENDIENTE, ObligacionTrabajador.ESTADO_PARCIAL],
+            fecha_pago_programada__gte=hoy,
+        ).order_by("fecha_pago_programada", "id").first()
+    )
+    if proximo_pago is None:
+        proximo_pago = (
+            ObligacionTrabajador.objects.filter(
+                trabajador=trabajador,
+                estado__in=[ObligacionTrabajador.ESTADO_PENDIENTE, ObligacionTrabajador.ESTADO_PARCIAL],
+            ).order_by("fecha_pago_programada", "id").first()
+        )
+
+    inventario_productos = InventarioTrabajador.objects.filter(trabajador=trabajador, stock__gt=0).count()
+    consejo = None
+    try:
+        from asistente_tecnico.models import ConsejoJVAQUA
+        consejo = ConsejoJVAQUA.objects.filter(activo=True).order_by("orden", "id").first()
+    except Exception:
+        consejo = None
+
+    acciones = []
+    if atrasados:
+        acciones.append({"tipo":"danger","icono":"bi-exclamation-triangle-fill","titulo":f"{atrasados} mantenimiento(s) atrasado(s)","texto":"Revísalos antes de continuar con la agenda de hoy."})
+    if pendientes_hoy:
+        acciones.append({"tipo":"primary","icono":"bi-calendar-check-fill","titulo":f"{pendientes_hoy} mantenimiento(s) pendiente(s) hoy","texto":"Consulta tu ruta y completa los registros asignados."})
+    if ordenes_pendientes:
+        acciones.append({"tipo":"warning","icono":"bi-tools","titulo":f"{ordenes_pendientes} orden(es) de trabajo pendiente(s)","texto":"Las órdenes extraordinarias están dentro de tu agenda de mantenimientos."})
+    if seguimientos:
+        acciones.append({"tipo":"info","icono":"bi-cpu-fill","titulo":f"{seguimientos} seguimiento(s) del Asistente","texto":"Cuéntanos cómo terminó el tratamiento para mejorar las recomendaciones."})
+
+    return {
+        "hoy": hoy,
+        "nombre_trabajador": _nombre_usuario(user),
+        "mantenimientos_pendientes_hoy": pendientes_hoy,
+        "mantenimientos_realizados_hoy": realizados_hoy,
+        "mantenimientos_atrasados": atrasados,
+        "ordenes_hoy": ordenes_hoy,
+        "ordenes_pendientes": ordenes_pendientes,
+        "seguimientos_pendientes": seguimientos,
+        "proximo_pago": proximo_pago,
+        "inventario_productos": inventario_productos,
+        "acciones_trabajador": acciones[:4],
+        "consejo_jvaqua": consejo,
+    }
+
+
+@login_required
+def trabajadores_list_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    hoy = timezone.localdate()
+    inicio_mes = hoy.replace(day=1)
+    trabajadores = list(Trabajador.objects.select_related("user").order_by("-activo", "user__first_name", "user__username"))
+    for t in trabajadores:
+        t.mantenimientos_mes = Mantenimiento.objects.filter(trabajadores=t, fecha__gte=inicio_mes, fecha__lte=hoy, estado="realizado").count()
+        t.ordenes_mes = OrdenTrabajo.objects.filter(trabajador=t, fecha__gte=inicio_mes, fecha__lte=hoy, estado="completada").count()
+        t.inventario_productos_count = InventarioTrabajador.objects.filter(trabajador=t, stock__gt=0).count()
+        t.pagos_mes = PagoTrabajador.objects.filter(obligacion__trabajador=t, activo=True, fecha__gte=inicio_mes, fecha__lte=hoy).aggregate(total=Sum("monto"))["total"] or Decimal("0.00")
+    return render(request, "dashboard/trabajadores_list.html", {"trabajadores": trabajadores, "hoy": hoy})
+
+
+def _rango_trabajador_request(request):
+    desde = parse_date(request.GET.get("desde") or "")
+    hasta = parse_date(request.GET.get("hasta") or "")
+    if desde and hasta and desde > hasta:
+        desde, hasta = hasta, desde
+    return desde, hasta
+
+
+def _trabajador_expediente_contexto(trabajador, desde=None, hasta=None):
+    m_qs = Mantenimiento.objects.filter(trabajadores=trabajador).select_related("cliente", "contrato").order_by("-fecha", "-id")
+    o_qs = OrdenTrabajo.objects.filter(trabajador=trabajador).select_related("contrato", "cliente", "tipo").order_by("-fecha", "-id")
+    ob_qs = ObligacionTrabajador.objects.filter(trabajador=trabajador).select_related("contrato", "contrato__cliente").order_by("-fecha_pago_programada", "-id")
+    pag_qs = PagoTrabajador.objects.filter(obligacion__trabajador=trabajador, activo=True).select_related("obligacion", "obligacion__contrato", "obligacion__contrato__cliente").order_by("-fecha", "-id")
+    usos_qs = UsoInsumo.objects.filter(trabajador=trabajador).select_related("insumo", "mantenimiento", "mantenimiento__cliente").order_by("-mantenimiento__fecha", "-id")
+    if desde:
+        m_qs=m_qs.filter(fecha__gte=desde); o_qs=o_qs.filter(fecha__gte=desde); ob_qs=ob_qs.filter(fecha_pago_programada__gte=desde); pag_qs=pag_qs.filter(fecha__gte=desde); usos_qs=usos_qs.filter(mantenimiento__fecha__gte=desde)
+    if hasta:
+        m_qs=m_qs.filter(fecha__lte=hasta); o_qs=o_qs.filter(fecha__lte=hasta); ob_qs=ob_qs.filter(fecha_pago_programada__lte=hasta); pag_qs=pag_qs.filter(fecha__lte=hasta); usos_qs=usos_qs.filter(mantenimiento__fecha__lte=hasta)
+
+    inventario = InventarioTrabajador.objects.filter(trabajador=trabajador).select_related("insumo").filter(stock__gt=0).order_by("insumo__nombre")
+    contratos_asignados = Contrato.objects.filter(tecnico_designado=trabajador).select_related("cliente").order_by("-activo", "cliente__nombre")
+    anticipos = AnticipoTrabajador.objects.filter(trabajador=trabajador).order_by("-fecha", "-id")
+    if desde:
+        anticipos = anticipos.filter(fecha__gte=desde)
+    if hasta:
+        anticipos = anticipos.filter(fecha__lte=hasta)
+    pagos_total = pag_qs.aggregate(total=Sum("monto"))["total"] or Decimal("0.00")
+    anticipos_total = anticipos.aggregate(total=Sum("monto"))["total"] or Decimal("0.00")
+    pago_ordenes_total = o_qs.filter(pago_trabajador__isnull=False).aggregate(total=Sum("pago_trabajador"))["total"] or Decimal("0.00")
+    obligaciones_total = ob_qs.exclude(estado=ObligacionTrabajador.ESTADO_ANULADO).aggregate(total=Sum("valor_acordado"))["total"] or Decimal("0.00")
+    casos=[]; total_lecciones=0; completadas=0
+    try:
+        from asistente_tecnico.models import ProgresoLeccion, LeccionAcademia
+        casos_qs = CasoAsistenteTecnico.objects.filter(trabajador=trabajador).order_by("-creado_en") if CasoAsistenteTecnico else []
+        if CasoAsistenteTecnico:
+            if desde:
+                casos_qs = casos_qs.filter(creado_en__date__gte=desde)
+            if hasta:
+                casos_qs = casos_qs.filter(creado_en__date__lte=hasta)
+            casos = list(casos_qs[:30])
+        total_lecciones = LeccionAcademia.objects.filter(publicada=True, categoria__activa=True).count()
+        completadas = ProgresoLeccion.objects.filter(user=trabajador.user, completada=True, leccion__publicada=True, leccion__categoria__activa=True).count()
+    except Exception:
+        pass
+    academia_pct = round((completadas / total_lecciones * 100), 0) if total_lecciones else 0
+    realizados = m_qs.filter(estado="realizado").count()
+    total_m = m_qs.count()
+    ordenes_comp = o_qs.filter(estado="completada").count()
+    return {
+        "trabajador": trabajador, "desde": desde, "hasta": hasta,
+        "mantenimientos": m_qs[:100], "ordenes": o_qs[:100], "obligaciones": ob_qs[:100], "pagos": pag_qs[:100],
+        "inventario": inventario, "usos": usos_qs[:100], "casos_asistente": casos,
+        "contratos_asignados": contratos_asignados, "anticipos": anticipos[:100],
+        "mantenimientos_total": total_m, "mantenimientos_realizados": realizados,
+        "cumplimiento_pct": round(realizados/total_m*100, 1) if total_m else 0,
+        "ordenes_total": o_qs.count(), "ordenes_completadas": ordenes_comp,
+        "pagos_total": pagos_total, "anticipos_total": anticipos_total, "pago_ordenes_total": pago_ordenes_total, "obligaciones_total": obligaciones_total,
+        "contratos_asignados_total": contratos_asignados.count(), "inventario_productos": inventario.count(), "academia_completadas": completadas,
+        "academia_total": total_lecciones, "academia_pct": academia_pct,
+    }
+
+
+@login_required
+def trabajador_detalle_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    trabajador = get_object_or_404(Trabajador.objects.select_related("user"), pk=pk)
+    desde, hasta = _rango_trabajador_request(request)
+    ctx = _trabajador_expediente_contexto(trabajador, desde, hasta)
+    return render(request, "dashboard/trabajador_detalle.html", ctx)
+
+
+@login_required
+def trabajador_expediente_pdf_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    trabajador = get_object_or_404(Trabajador.objects.select_related("user"), pk=pk)
+    desde, hasta = _rango_trabajador_request(request)
+    seccion = (request.GET.get("seccion") or "completo").strip().lower()
+    ctx = _trabajador_expediente_contexto(trabajador, desde, hasta)
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_CENTER
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+    from io import BytesIO
+    buffer=BytesIO()
+    nombre=_nombre_usuario(trabajador.user)
+    doc=SimpleDocTemplate(buffer,pagesize=A4,rightMargin=14*mm,leftMargin=14*mm,topMargin=14*mm,bottomMargin=14*mm)
+    styles=getSampleStyleSheet(); styles.add(ParagraphStyle(name='CenterSmall', parent=styles['Normal'], alignment=TA_CENTER, textColor=colors.HexColor('#60748c')))
+    story=[Paragraph('JVAQUA ERP', styles['Title']), Paragraph('Expediente del trabajador', styles['Heading2']), Paragraph(nombre, styles['Heading1'])]
+    periodo = f"Período: {desde.strftime('%d/%m/%Y') if desde else 'Inicio'} - {hasta.strftime('%d/%m/%Y') if hasta else 'Actualidad'}"
+    story += [Paragraph(periodo, styles['CenterSmall']), Spacer(1,8)]
+    info=[["Usuario", trabajador.user.username],["Teléfono", trabajador.telefono or "—"],["Correo", trabajador.user.email or "—"],["Fecha de ingreso", trabajador.fecha_ingreso.strftime('%d/%m/%Y') if trabajador.fecha_ingreso else "—"],["Estado", "Activo" if trabajador.activo else "Inactivo"],["Último acceso", timezone.localtime(trabajador.user.last_login).strftime('%d/%m/%Y %H:%M') if trabajador.user.last_login else "—"]]
+    t=Table(info,colWidths=[45*mm,120*mm]); t.setStyle(TableStyle([('BACKGROUND',(0,0),(0,-1),colors.HexColor('#eef5ff')),('FONTNAME',(0,0),(0,-1),'Helvetica-Bold'),('GRID',(0,0),(-1,-1),.25,colors.HexColor('#d8e2ef')),('PADDING',(0,0),(-1,-1),6)])); story += [t,Spacer(1,10)]
+    resumen=[["Mantenimientos",ctx['mantenimientos_total']],["Realizados",ctx['mantenimientos_realizados']],["Órdenes",ctx['ordenes_total']],["Órdenes completadas",ctx['ordenes_completadas']],["Pagos registrados",f"${ctx['pagos_total']:.2f}"],["Productos asignados",ctx['inventario_productos']],["Academia",f"{ctx['academia_pct']:.0f}%"]]
+    rt=Table(resumen,colWidths=[55*mm,35*mm]); rt.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,0),colors.HexColor('#0b5ed7')),('TEXTCOLOR',(0,0),(-1,0),colors.white),('GRID',(0,0),(-1,-1),.25,colors.HexColor('#d8e2ef')),('PADDING',(0,0),(-1,-1),5)])); story += [Paragraph('Resumen',styles['Heading2']),rt,Spacer(1,10)]
+    def section(title, headers, rows, widths=None):
+        nonlocal story
+        story += [Paragraph(title,styles['Heading2'])]
+        if not rows:
+            story += [Paragraph('Sin registros para el período seleccionado.',styles['Normal']),Spacer(1,8)]; return
+        data=[headers]+rows
+        tb=Table(data,repeatRows=1,colWidths=widths)
+        tb.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,0),colors.HexColor('#10233f')),('TEXTCOLOR',(0,0),(-1,0),colors.white),('FONTNAME',(0,0),(-1,0),'Helvetica-Bold'),('FONTSIZE',(0,0),(-1,-1),7.5),('GRID',(0,0),(-1,-1),.25,colors.HexColor('#d8e2ef')),('VALIGN',(0,0),(-1,-1),'TOP'),('PADDING',(0,0),(-1,-1),4)]))
+        story += [tb,Spacer(1,10)]
+    if seccion in ('completo','operativo'):
+        section('Mantenimientos',['Fecha','Cliente','Estado'],[[m.fecha.strftime('%d/%m/%Y'),str(m.cliente),m.get_estado_display()] for m in ctx['mantenimientos']], [28*mm,105*mm,30*mm])
+        section('Órdenes de trabajo',['Fecha','Trabajo','Estado'],[[o.fecha.strftime('%d/%m/%Y'),o.descripcion_corta,o.get_estado_display()] for o in ctx['ordenes']], [28*mm,105*mm,30*mm])
+    if seccion in ('completo','nomina','finanzas'):
+        section('Pagos',['Fecha','Contrato / período','Monto'],[[p.fecha.strftime('%d/%m/%Y'),f"{p.obligacion.contrato.cliente} · {p.obligacion.periodo_label}",f"${p.monto:.2f}"] for p in ctx['pagos']], [28*mm,105*mm,30*mm])
+    if seccion in ('completo','inventario'):
+        section('Inventario asignado',['Producto','Cantidad','Unidad'],[[x.insumo.nombre,f"{x.stock:.3f}",x.insumo.unidad_corta] for x in ctx['inventario']], [105*mm,30*mm,28*mm])
+        section('Consumos registrados',['Fecha','Producto','Cantidad'],[[u.mantenimiento.fecha.strftime('%d/%m/%Y'),u.insumo.nombre,f"{u.cantidad_mostrada} {u.unidad_mostrada}"] for u in ctx['usos']], [28*mm,105*mm,30*mm])
+    if seccion in ('completo','conocimiento'):
+        section('Asistente Técnico',['Fecha','Diagnóstico','Resultado'],[[timezone.localtime(c.creado_en).strftime('%d/%m/%Y'),c.diagnostico,c.get_resultado_display()] for c in ctx['casos_asistente']], [28*mm,105*mm,30*mm])
+    story += [Spacer(1,8),Paragraph(f"Generado por JVAQUA ERP · {timezone.localtime().strftime('%d/%m/%Y %H:%M')}",styles['CenterSmall'])]
+    doc.build(story)
+    response=HttpResponse(buffer.getvalue(),content_type='application/pdf')
+    response['Content-Disposition']=f'attachment; filename="expediente_trabajador_{trabajador.pk}.pdf"'
+    return response
 
 # -------------------
 # /dashboard/home/ = pantalla REAL por rol

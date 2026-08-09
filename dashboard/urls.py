@@ -57,6 +57,9 @@ from .views import (
     # Operativo admin
     admin_operativo_view,
     asignar_trabajadores_view,
+    trabajadores_list_view,
+    trabajador_detalle_view,
+    trabajador_expediente_pdf_view,
 
     # Inventario
     inventario_view,
@@ -339,6 +342,9 @@ urlpatterns = [
         asignar_trabajadores_view,
         name="asignar_trabajadores",
     ),
+    path("trabajadores/", trabajadores_list_view, name="trabajadores_list"),
+    path("trabajadores/<int:pk>/", trabajador_detalle_view, name="trabajador_detalle"),
+    path("trabajadores/<int:pk>/expediente.pdf", trabajador_expediente_pdf_view, name="trabajador_expediente_pdf"),
 
     # ======================
     # Inventario
