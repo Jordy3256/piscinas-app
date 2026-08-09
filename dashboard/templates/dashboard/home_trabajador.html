@@ -26,12 +26,12 @@
   .worker-access-card:active{transform:scale(.985)}
   .worker-access-card::after{content:"";position:absolute;width:125px;height:125px;right:-58px;bottom:-62px;border-radius:50%;opacity:.55}
   .worker-access-card.maintenance::after{background:#e8f2ff}
-  .worker-access-card.calculator::after{background:#e8fbf3}.worker-access-card.account::after{background:#f1ecff}
+  .worker-access-card.calculator::after{background:#e8fbf3}.worker-access-card.inventory::after{background:#eef8ff}.worker-access-card.knowledge::after{background:#fff6de}.worker-access-card.account::after{background:#f1ecff}
   .worker-access-body{position:relative;z-index:1;height:100%;display:flex;flex-direction:column;padding:1.15rem}
   .worker-access-top{display:flex;align-items:flex-start;gap:.95rem}
   .worker-access-icon{width:58px;height:58px;flex:0 0 58px;display:grid;place-items:center;border-radius:18px;font-size:1.5rem;box-shadow:inset 0 1px 0 rgba(255,255,255,.6)}
   .worker-access-icon.maintenance{color:#0b5ed7;background:linear-gradient(145deg,#edf5ff,#dbeaff)}
-  .worker-access-icon.calculator{color:#14865d;background:linear-gradient(145deg,#effcf6,#d9f5e8)}.worker-access-icon.account{color:#6f42c1;background:linear-gradient(145deg,#f7f2ff,#ebe0ff)}
+  .worker-access-icon.calculator{color:#14865d;background:linear-gradient(145deg,#effcf6,#d9f5e8)}.worker-access-icon.inventory{color:#087bbf;background:linear-gradient(145deg,#f0f9ff,#dff2ff)}.worker-access-icon.knowledge{color:#a66a00;background:linear-gradient(145deg,#fffaf0,#fff0c8)}.worker-access-icon.account{color:#6f42c1;background:linear-gradient(145deg,#f7f2ff,#ebe0ff)}
   .worker-access-title{margin:.1rem 0 .35rem;color:#10233f;font-size:1.04rem;font-weight:900;line-height:1.2}
   .worker-access-text{margin:0;color:#718198;font-size:.88rem;line-height:1.48}
   .worker-access-footer{display:flex;align-items:center;justify-content:space-between;gap:.8rem;margin-top:auto;padding-top:1.1rem}
@@ -39,7 +39,7 @@
   .worker-access-action{width:42px;height:42px;display:grid;place-items:center;flex:0 0 42px;border-radius:14px;color:#fff;font-size:1rem;box-shadow:0 9px 19px rgba(0,0,0,.13);transition:transform .2s ease}
   .worker-access-card:hover .worker-access-action{transform:translateX(3px)}
   .worker-access-action.primary{background:linear-gradient(135deg,#0b5ed7,#0c83bd)}
-  .worker-access-action.success{background:linear-gradient(135deg,#169c68,#20bd7c)}.worker-access-action.account{background:linear-gradient(135deg,#6f42c1,#8e63da)}
+  .worker-access-action.success{background:linear-gradient(135deg,#169c68,#20bd7c)}.worker-access-action.inventory{background:linear-gradient(135deg,#087bbf,#13b7d6)}.worker-access-action.knowledge{background:linear-gradient(135deg,#c38200,#f0ad00)}.worker-access-action.account{background:linear-gradient(135deg,#6f42c1,#8e63da)}
   .worker-tip{display:flex;align-items:flex-start;gap:.85rem;padding:1rem;border:1px solid rgba(242,169,0,.15);border-radius:20px;background:linear-gradient(135deg,#fffdf7,#fff8e7);box-shadow:0 9px 24px rgba(91,70,22,.06)}
   .worker-tip-icon{width:42px;height:42px;flex:0 0 42px;display:grid;place-items:center;border-radius:14px;color:#9b6a00;background:#fff0be;font-size:1.05rem}
   .worker-tip-title{margin-bottom:.2rem;color:#5d4a1c;font-size:.85rem;font-weight:900}
@@ -53,7 +53,7 @@
     <div class="worker-hero-content">
       <div class="worker-hero-label"><i class="bi bi-droplet-half"></i>Panel operativo</div>
       <h1 class="worker-hero-title">Todo lo que necesitas para tu jornada</h1>
-      <p class="worker-hero-text">Accede rápidamente a tus mantenimientos asignados y a las herramientas técnicas de JVAQUA.</p>
+      <p class="worker-hero-text">Tu jornada, herramientas y accesos personales están organizados en un solo lugar.</p>
       <div class="worker-hero-status">
         <span class="worker-status-pill"><i class="bi bi-phone"></i>Optimizado para móvil</span>
         <span class="worker-status-pill"><i class="bi bi-cloud-check"></i>Sistema actualizado</span>
@@ -101,6 +101,42 @@
           <div class="worker-access-footer">
             <span class="worker-access-meta"><i class="bi bi-beaker"></i>Diagnóstico y seguimiento</span>
             <span class="worker-access-action success"><i class="bi bi-arrow-right"></i></span>
+          </div>
+        </div>
+      </article>
+    </a>
+
+    <a class="worker-access-link" href="{% url 'mi_inventario_trabajador' %}">
+      <article class="worker-access-card inventory">
+        <div class="worker-access-body">
+          <div class="worker-access-top">
+            <div class="worker-access-icon inventory"><i class="bi bi-box-seam-fill"></i></div>
+            <div>
+              <h3 class="worker-access-title">Mi inventario</h3>
+              <p class="worker-access-text">Consulta los productos e insumos que tienes disponibles y sus cantidades actuales.</p>
+            </div>
+          </div>
+          <div class="worker-access-footer">
+            <span class="worker-access-meta"><i class="bi bi-clipboard-check"></i>Solo consulta</span>
+            <span class="worker-access-action inventory"><i class="bi bi-arrow-right"></i></span>
+          </div>
+        </div>
+      </article>
+    </a>
+
+    <a class="worker-access-link" href="{% url 'asistente_tecnico:centro_conocimiento' %}">
+      <article class="worker-access-card knowledge">
+        <div class="worker-access-body">
+          <div class="worker-access-top">
+            <div class="worker-access-icon knowledge"><i class="bi bi-mortarboard-fill"></i></div>
+            <div>
+              <h3 class="worker-access-title">Centro de Conocimiento</h3>
+              <p class="worker-access-text">Accede a Academia JVAQUA, biblioteca técnica, casos reales y contenidos de aprendizaje.</p>
+            </div>
+          </div>
+          <div class="worker-access-footer">
+            <span class="worker-access-meta"><i class="bi bi-book"></i>Aprender y consultar</span>
+            <span class="worker-access-action knowledge"><i class="bi bi-arrow-right"></i></span>
           </div>
         </div>
       </article>

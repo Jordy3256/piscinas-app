@@ -455,7 +455,7 @@
 
     .bottom-nav-links {
       display: grid;
-      grid-template-columns: repeat(6, minmax(0, 1fr));
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 5px;
     }
 
@@ -718,39 +718,16 @@
             <span>Inicio</span>
           </a>
 
-          <a class="nav-item-app {% if request.path == '/dashboard/home/' or '/mantenimientos/' in request.path %}active{% endif %}"
+          <a class="nav-item-app {% if request.path == '/dashboard/home/' or '/mantenimientos/' in request.path or '/dashboard/ordenes/' in request.path %}active{% endif %}"
              href="/dashboard/home/">
             <i class="bi bi-card-checklist"></i>
             <span>Mantenimientos</span>
-          </a>
-          <a class="nav-item-app {% if '/dashboard/ordenes/' in request.path %}active{% endif %}"
-             href="{% url 'ordenes_trabajo:mis_ordenes' %}">
-            <i class="bi bi-tools"></i>
-            <span>Órdenes</span>
           </a>
 
           <a class="nav-item-app {% if '/dashboard/asistente/' in request.path or 'calculadora' in request.path %}active{% endif %}"
              href="{% url 'asistente_tecnico:inicio' %}">
             <i class="bi bi-stars"></i>
             <span>Asistente</span>
-          </a>
-
-          <a class="nav-item-app {% if '/dashboard/mi-inventario/' in request.path %}active{% endif %}"
-             href="{% url 'mi_inventario_trabajador' %}">
-            <i class="bi bi-box-seam-fill"></i>
-            <span>Inventario</span>
-          </a>
-
-          <a class="nav-item-app {% if '/dashboard/mi-cuenta/' in request.path %}active{% endif %}"
-             href="{% url 'mi_cuenta_trabajador' %}">
-            <i class="bi bi-person-vcard-fill"></i>
-            <span>Mi cuenta</span>
-          </a>
-
-          <a class="nav-item-app {% if '/dashboard/notificaciones/' in request.path %}active{% endif %}"
-             href="/dashboard/notificaciones/">
-            <i class="bi bi-bell-fill"></i>
-            <span>Notificaciones</span>
           </a>
         </div>
       </div>
@@ -763,7 +740,7 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
   <script>
-    window.APP_VERSION = "20260728-01";
+    window.APP_VERSION = "20260809-01";
   </script>
 
   <script>

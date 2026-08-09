@@ -49,6 +49,12 @@
   @media(max-width:991px){.ac-layout{grid-template-columns:1fr}.ac-quick{grid-template-columns:repeat(3,minmax(0,1fr))}}
   @media(max-width:720px){.ac-hero{padding:1.15rem}.ac-hero-grid{grid-template-columns:1fr}.ac-total{min-width:0}.ac-quick{grid-template-columns:repeat(2,minmax(0,1fr))}.ac-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.ac-item{grid-template-columns:1fr}.ac-action{width:100%}}
   @media(max-width:390px){.ac-quick{grid-template-columns:1fr}.ac-stats{grid-template-columns:1fr}}
+
+  .erp-map{margin:1.15rem 0;padding:1.05rem;border:1px solid var(--ac-border);border-radius:22px;background:#fff;box-shadow:0 8px 24px rgba(21,34,56,.06)}
+  .erp-map-head{display:flex;justify-content:space-between;align-items:end;gap:1rem;margin-bottom:.85rem}.erp-map-title{margin:0;font-size:1.08rem;font-weight:900;color:var(--ac-dark)}.erp-map-note{color:var(--ac-muted);font-size:.78rem}
+  .erp-group{margin-top:.9rem}.erp-group:first-of-type{margin-top:0}.erp-group-title{margin:0 0 .5rem;color:var(--ac-muted);font-size:.7rem;font-weight:900;letter-spacing:.08em;text-transform:uppercase}
+  .erp-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.65rem}.erp-link{display:flex;align-items:center;gap:.7rem;min-height:74px;padding:.8rem;border:1px solid #e8edf4;border-radius:16px;background:linear-gradient(145deg,#fff,#fbfcff);text-decoration:none;color:var(--ac-dark);transition:.18s}.erp-link:hover{transform:translateY(-2px);border-color:rgba(11,94,215,.22);box-shadow:0 8px 19px rgba(21,34,56,.08);color:var(--ac-blue)}.erp-icon{width:39px;height:39px;flex:0 0 39px;display:grid;place-items:center;border-radius:12px;background:rgba(11,94,215,.08);font-size:1rem}.erp-name{font-size:.85rem;font-weight:900}.erp-desc{margin-top:.12rem;color:var(--ac-muted);font-size:.68rem;line-height:1.25}
+  @media(max-width:991px){.erp-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:620px){.erp-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.erp-map{padding:.85rem}.erp-link{min-height:68px;padding:.68rem}}
 </style>
 {% endblock %}
 
@@ -80,6 +86,39 @@
     <div class="ac-stat"><div class="ac-stat-label">Facturas por emitir</div><div class="ac-stat-value">{{ cantidad_facturas_por_emitir }}</div><div class="ac-stat-note">Programadas hasta hoy</div></div>
     <div class="ac-stat"><div class="ac-stat-label">Nómina pendiente</div><div class="ac-stat-value">${{ total_nomina_pendiente|floatformat:2 }}</div><div class="ac-stat-note">{{ cantidad_trabajadores_pendientes }} trabajador{{ cantidad_trabajadores_pendientes|pluralize:"es" }}</div></div>
     <div class="ac-stat"><div class="ac-stat-label">Mantenimientos hoy</div><div class="ac-stat-value">{{ cantidad_mantenimientos_hoy }}</div><div class="ac-stat-note">{{ cantidad_mantenimientos_realizados_hoy }} realizados · {{ cantidad_mantenimientos_pendientes_hoy }} pendientes</div></div>
+  </section>
+
+  <section class="erp-map" aria-label="Mapa del ERP">
+    <div class="erp-map-head"><div><h2 class="erp-map-title">Mapa del ERP</h2><div class="erp-map-note">Todos los módulos siguen disponibles, organizados por función.</div></div></div>
+
+    <div class="erp-group"><h3 class="erp-group-title">Gestión comercial</h3><div class="erp-grid">
+      <a class="erp-link" href="{% url 'cliente_list' %}"><span class="erp-icon">👥</span><span><span class="erp-name d-block">Clientes</span><span class="erp-desc d-block">Datos, contacto, piscinas e historial</span></span></a>
+      <a class="erp-link" href="{% url 'contrato_list' %}"><span class="erp-icon">📄</span><span><span class="erp-name d-block">Contratos</span><span class="erp-desc d-block">Altas, renovaciones y programación</span></span></a>
+    </div></div>
+
+    <div class="erp-group"><h3 class="erp-group-title">Operación</h3><div class="erp-grid">
+      <a class="erp-link" href="{% url 'admin_operativo' %}"><span class="erp-icon">⚙️</span><span><span class="erp-name d-block">Operativo</span><span class="erp-desc d-block">Mantenimientos, agenda y programación</span></span></a>
+      <a class="erp-link" href="{% url 'ordenes_trabajo:lista' %}"><span class="erp-icon">🛠️</span><span><span class="erp-name d-block">Órdenes de trabajo</span><span class="erp-desc d-block">Visitas extras y trabajos puntuales</span></span></a>
+      <a class="erp-link" href="{% url 'asignar_trabajadores' %}"><span class="erp-icon">👷</span><span><span class="erp-name d-block">Trabajadores</span><span class="erp-desc d-block">Asignación y carga operativa</span></span></a>
+      <a class="erp-link" href="{% url 'mantenimiento_historial' %}"><span class="erp-icon">🗂️</span><span><span class="erp-name d-block">Historial operativo</span><span class="erp-desc d-block">Servicios realizados y registros</span></span></a>
+    </div></div>
+
+    <div class="erp-group"><h3 class="erp-group-title">Recursos</h3><div class="erp-grid">
+      <a class="erp-link" href="{% url 'inventario' %}"><span class="erp-icon">📦</span><span><span class="erp-name d-block">Inventario</span><span class="erp-desc d-block">Productos, compras, stock y Kardex</span></span></a>
+      <a class="erp-link" href="{% url 'flujo_mensual' %}"><span class="erp-icon">💰</span><span><span class="erp-name d-block">Finanzas</span><span class="erp-desc d-block">Cobros, nómina, ingresos y egresos</span></span></a>
+    </div></div>
+
+    <div class="erp-group"><h3 class="erp-group-title">Inteligencia y conocimiento</h3><div class="erp-grid">
+      <a class="erp-link" href="{% url 'dashboard' %}"><span class="erp-icon">📊</span><span><span class="erp-name d-block">Dashboard</span><span class="erp-desc d-block">Indicadores y decisiones ejecutivas</span></span></a>
+      <a class="erp-link" href="{% url 'asistente_tecnico:conocimiento_admin' %}"><span class="erp-icon">🧠</span><span><span class="erp-name d-block">Centro de Conocimiento</span><span class="erp-desc d-block">Academia, biblioteca y motor de conocimiento</span></span></a>
+      <a class="erp-link" href="{% url 'reporte_ganancias' %}"><span class="erp-icon">📈</span><span><span class="erp-name d-block">Reportes</span><span class="erp-desc d-block">Reportes ejecutivos y financieros</span></span></a>
+      <a class="erp-link" href="{% url 'actividad_historial' %}"><span class="erp-icon">🕘</span><span><span class="erp-name d-block">Actividad</span><span class="erp-desc d-block">Trazabilidad reciente del sistema</span></span></a>
+    </div></div>
+
+    <div class="erp-group"><h3 class="erp-group-title">Sistema</h3><div class="erp-grid">
+      <a class="erp-link" href="/admin/"><span class="erp-icon">⚙️</span><span><span class="erp-name d-block">Configuración</span><span class="erp-desc d-block">Parámetros y administración avanzada</span></span></a>
+      <a class="erp-link" href="/dashboard/notificaciones/"><span class="erp-icon">🔔</span><span><span class="erp-name d-block">Notificaciones</span><span class="erp-desc d-block">Bandeja e historial de avisos</span></span></a>
+    </div></div>
   </section>
 
   <div class="ac-layout">

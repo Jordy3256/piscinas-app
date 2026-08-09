@@ -2,6 +2,14 @@
 {% block title %}Mis Órdenes{% endblock %}
 {% block top_title %}🛠 Mis órdenes de trabajo{% endblock %}
 {% block content %}
+<div class="card border-0 shadow-sm mb-3" style="border-radius:18px;overflow:hidden;">
+  <div class="card-body p-2">
+    <div class="nav nav-pills nav-fill gap-2" aria-label="Trabajo asignado">
+      <a class="nav-link fw-bold" href="/dashboard/home/"><i class="bi bi-calendar-check me-1"></i>Mantenimientos</a>
+      <a class="nav-link active fw-bold" href="{% url 'ordenes_trabajo:mis_ordenes' %}"><i class="bi bi-tools me-1"></i>Órdenes de trabajo</a>
+    </div>
+  </div>
+</div>
 <style>.mo-card{border:1px solid #e2e8f0;border-radius:18px;background:#fff;box-shadow:0 9px 25px rgba(15,23,42,.06);padding:15px}.mo-title{font-weight:900;color:#0f172a}.mo-meta{font-size:.8rem;color:#64748b}</style>
 <div class="d-grid gap-3"><div class="card border-0 rounded-4 shadow-sm"><div class="card-body"><h1 class="h4 fw-bold mb-1">Trabajos adicionales</h1><p class="text-muted mb-0">Visitas extraordinarias y trabajos puntuales asignados por administración.</p></div></div>
 {% for titulo, lista, clase in sections %}{% endfor %}
