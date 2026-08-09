@@ -156,7 +156,7 @@
   <div class="card premium-card mb-3">
     <div class="card-body">
       <div class="premium-title"><i class="bi bi-droplet-half"></i><span>Productos utilizados <span class="badge bg-light text-secondary">Opcional</span></span></div>
-      <div class="text-muted small mb-3">Este es el único registro de productos/químicos del mantenimiento. Los consumos nuevos descuentan automáticamente el inventario del trabajador.</div>
+      <div class="text-muted small mb-3">Este es el único registro de productos/químicos del mantenimiento. {% if modalidad_quimicos == 'contrato' %}Los consumos se descuentan del inventario en sitio de este contrato.{% elif modalidad_quimicos == 'cliente' %}Los productos son proporcionados por el cliente: se registra lo aplicado sin descontar inventario JVAQUA.{% else %}Los consumos se descuentan del inventario del trabajador.{% endif %}</div>{% if modalidad_quimicos == 'contrato' %}<a class="btn btn-sm btn-outline-primary mb-3" href="{% url 'inventario_contrato_trabajador' m.contrato.id %}">🏊 Ver / reponer inventario en sitio</a>{% endif %}
 
       {% if lista_usos %}
       <div class="vstack gap-2 mb-3">
@@ -177,7 +177,7 @@
 
         <div id="productosNuevos" class="vstack gap-2"></div>
         <button type="button" class="btn btn-outline-primary w-100" id="agregarProductoBtn"><i class="bi bi-plus-circle me-1"></i> Agregar producto</button>
-        {% if trabajador_actual and not inventario_mantenimiento %}<div class="alert alert-warning mt-3 mb-0">No tienes productos disponibles en tu inventario. Solicita reposición a administración.</div>{% endif %}
+        {% if modalidad_quimicos == 'contrato' and not inventario_mantenimiento %}<div class="alert alert-warning mt-3 mb-0">Este contrato usa inventario en sitio, pero todavía no tiene productos configurados. Solicita reposición a administración.</div>{% elif modalidad_quimicos == 'trabajador' and trabajador_actual and not inventario_mantenimiento %}<div class="alert alert-warning mt-3 mb-0">No tienes productos disponibles en tu inventario. Solicita reposición a administración.</div>{% endif %}
       {% endif %}
     </div>
   </div>
@@ -239,9 +239,9 @@
   <div class="product-row producto-nuevo-row">
     <div class="d-flex justify-content-between align-items-center mb-2"><strong>Producto a utilizar</strong><button type="button" class="btn btn-sm btn-outline-danger quitarProductoBtn">Quitar</button></div>
     <div class="row g-2">
-      <div class="col-12"><select class="form-select" name="producto_insumo_id"><option value="">-- Selecciona producto --</option>{% if trabajador_actual %}{% for inv in inventario_mantenimiento %}<option value="{{ inv.insumo.id }}">{{ inv.insumo.nombre }} · disponible {{ inv.stock|floatformat:3 }} {{ inv.insumo.unidad_corta }}</option>{% endfor %}{% else %}{% for i in insumos %}<option value="{{ i.id }}">{{ i.nombre }}</option>{% endfor %}{% endif %}</select></div>
+      <div class="col-12"><select class="form-select" name="producto_insumo_id"><option value="">-- Selecciona producto --</option>{% if modalidad_quimicos == 'contrato' %}{% for inv in inventario_mantenimiento %}<option value="{{ inv.insumo.id }}">{{ inv.insumo.nombre }} · estimado {{ inv.stock_estimado|floatformat:3 }} {{ inv.insumo.unidad_corta }}</option>{% endfor %}{% elif modalidad_quimicos == 'trabajador' and trabajador_actual %}{% for inv in inventario_mantenimiento %}<option value="{{ inv.insumo.id }}">{{ inv.insumo.nombre }} · disponible {{ inv.stock|floatformat:3 }} {{ inv.insumo.unidad_corta }}</option>{% endfor %}{% else %}{% for i in insumos %}<option value="{{ i.id }}">{{ i.nombre }}</option>{% endfor %}{% endif %}</select></div>
       <div class="col-7"><input class="form-control" type="number" step="0.001" min="0.001" name="producto_cantidad" placeholder="Cantidad"></div>
-      <div class="col-5"><select class="form-select" name="producto_unidad"><option value="g">Gramos (g)</option><option value="kg">Kilogramos (kg)</option><option value="unidad">Unidades</option></select></div>
+      <div class="col-5"><select class="form-select" name="producto_unidad"><option value="g">Gramos (g)</option><option value="kg">Kilogramos (kg)</option><option value="ml">Mililitros (ml)</option><option value="l">Litros (L)</option></select></div>
     </div>
   </div>
 </template>

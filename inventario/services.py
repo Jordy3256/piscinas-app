@@ -2,7 +2,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 from django.db import transaction
 
-from .models import InventarioTrabajador, MovimientoInventario, PresentacionInsumo
+from .models import InventarioTrabajador, InventarioContrato, MovimientoInventario, PresentacionInsumo
 
 Q3 = Decimal("0.001")
 Q2 = Decimal("0.01")
@@ -122,11 +122,36 @@ def consumir_trabajador(*, insumo, trabajador, cantidad_base, mantenimiento, usu
 
 @transaction.atomic
 def revertir_consumo(*, uso, usuario=None):
+    origen = getattr(uso, "origen_inventario", "trabajador") or "trabajador"
+    cantidad = Decimal(uso.cantidad)
+
+    if origen == "cliente":
+        return
+
+    if origen == "contrato":
+        contrato = uso.mantenimiento.contrato
+        inv, _ = InventarioContrato.objects.select_for_update().get_or_create(contrato=contrato, insumo=uso.insumo)
+        _materializar_estimado_contrato(inv)
+        antes = Decimal(inv.stock)
+        inv.stock = (antes + cantidad).quantize(Q3)
+        from django.utils import timezone
+        inv.fecha_referencia_estimacion = timezone.localdate()
+        inv.save(update_fields=["stock", "fecha_referencia_estimacion", "actualizado_en"] )
+        MovimientoInventario.objects.create(
+            insumo=uso.insumo, tipo="ajuste_contrato", cantidad=cantidad,
+            stock_anterior=Decimal(uso.insumo.stock), stock_resultante=Decimal(uso.insumo.stock),
+            contrato=contrato, trabajador=uso.trabajador, mantenimiento=uso.mantenimiento,
+            stock_contrato_anterior=antes, stock_contrato_resultante=inv.stock,
+            costo_unitario=uso.costo_unitario or uso.insumo.costo or 0,
+            total_costo=-(Decimal(uso.costo_total or 0)), usuario=usuario,
+            observacion=f"Reverso de consumo del contrato en mantenimiento #{uso.mantenimiento_id}",
+        )
+        return
+
     if not uso.trabajador_id:
         return
     inv, _ = InventarioTrabajador.objects.select_for_update().get_or_create(trabajador=uso.trabajador, insumo=uso.insumo)
     antes = Decimal(inv.stock)
-    cantidad = Decimal(uso.cantidad)
     inv.stock = antes + cantidad
     inv.save(update_fields=["stock", "actualizado_en"])
     MovimientoInventario.objects.create(
@@ -137,4 +162,95 @@ def revertir_consumo(*, uso, usuario=None):
         costo_unitario=uso.costo_unitario or uso.insumo.costo or 0,
         total_costo=-(Decimal(uso.costo_total or 0)), usuario=usuario,
         observacion=f"Reverso de consumo eliminado/ajustado en mantenimiento #{uso.mantenimiento_id}",
+    )
+
+def _materializar_estimado_contrato(inv, hoy=None):
+    from django.utils import timezone
+    hoy = hoy or timezone.localdate()
+    referencia = inv.fecha_referencia_estimacion or hoy
+    dias = max((hoy - referencia).days, 0)
+    if dias > 0 and Decimal(inv.consumo_diario_estimado or 0) > 0:
+        consumido = Decimal(inv.consumo_diario_estimado or 0) * Decimal(dias)
+        inv.stock = max(Decimal(inv.stock or 0) - consumido, Decimal("0.000")).quantize(Q3)
+        inv.fecha_referencia_estimacion = hoy
+        inv.save(update_fields=["stock", "fecha_referencia_estimacion", "actualizado_en"])
+    elif referencia != hoy:
+        inv.fecha_referencia_estimacion = hoy
+        inv.save(update_fields=["fecha_referencia_estimacion", "actualizado_en"])
+    return inv
+
+
+@transaction.atomic
+def reponer_contrato(*, contrato, insumo, cantidad_base, usuario=None, trabajador=None, observacion=""):
+    insumo = insumo.__class__.objects.select_for_update().get(pk=insumo.pk)
+    cantidad_base = decimal_positivo(cantidad_base)
+    if Decimal(insumo.stock) < cantidad_base:
+        raise ValueError(f"Stock general insuficiente. Disponible: {insumo.stock} {insumo.unidad_corta}.")
+
+    inv, _ = InventarioContrato.objects.select_for_update().get_or_create(contrato=contrato, insumo=insumo)
+    _materializar_estimado_contrato(inv)
+    general_antes = Decimal(insumo.stock)
+    contrato_antes = Decimal(inv.stock)
+    insumo.stock = (general_antes - cantidad_base).quantize(Q3)
+    inv.stock = (contrato_antes + cantidad_base).quantize(Q3)
+    from django.utils import timezone
+    inv.fecha_referencia_estimacion = timezone.localdate()
+    insumo.save(update_fields=["stock"] )
+    inv.save(update_fields=["stock", "fecha_referencia_estimacion", "actualizado_en"] )
+
+    return MovimientoInventario.objects.create(
+        insumo=insumo, tipo="reposicion_contrato", cantidad=cantidad_base,
+        stock_anterior=general_antes, stock_resultante=insumo.stock,
+        contrato=contrato, trabajador=trabajador,
+        stock_contrato_anterior=contrato_antes, stock_contrato_resultante=inv.stock,
+        costo_unitario=insumo.costo or 0, total_costo=_costo_total(insumo, cantidad_base),
+        usuario=usuario, observacion=observacion or f"Reposición al contrato #{contrato.pk}",
+    )
+
+
+@transaction.atomic
+def consumir_contrato(*, contrato, insumo, cantidad_base, mantenimiento=None, usuario=None, trabajador=None, observacion=""):
+    inv = InventarioContrato.objects.select_for_update().get(contrato=contrato, insumo=insumo)
+    _materializar_estimado_contrato(inv)
+    cantidad_base = decimal_positivo(cantidad_base)
+    if Decimal(inv.stock) < cantidad_base:
+        raise ValueError(f"Stock del contrato insuficiente. Disponible estimado: {inv.stock} {insumo.unidad_corta}.")
+    antes = Decimal(inv.stock)
+    inv.stock = (antes - cantidad_base).quantize(Q3)
+    from django.utils import timezone
+    inv.fecha_referencia_estimacion = timezone.localdate()
+    inv.save(update_fields=["stock", "fecha_referencia_estimacion", "actualizado_en"] )
+    return MovimientoInventario.objects.create(
+        insumo=insumo, tipo="consumo_contrato", cantidad=cantidad_base,
+        stock_anterior=Decimal(insumo.stock), stock_resultante=Decimal(insumo.stock),
+        contrato=contrato, trabajador=trabajador, mantenimiento=mantenimiento,
+        stock_contrato_anterior=antes, stock_contrato_resultante=inv.stock,
+        costo_unitario=insumo.costo or 0, total_costo=_costo_total(insumo, cantidad_base),
+        usuario=usuario, observacion=observacion or f"Consumo del inventario del contrato #{contrato.pk}",
+    )
+
+
+@transaction.atomic
+def ajustar_inventario_contrato(*, contrato, insumo, nueva_existencia, usuario=None, trabajador=None, observacion=""):
+    inv, _ = InventarioContrato.objects.select_for_update().get_or_create(contrato=contrato, insumo=insumo)
+    _materializar_estimado_contrato(inv)
+    try:
+        nueva = Decimal(str(nueva_existencia).replace(",", ".")).quantize(Q3)
+    except Exception:
+        raise ValueError("La existencia física no es válida.")
+    if nueva < 0:
+        raise ValueError("La existencia física no puede ser negativa.")
+    antes = Decimal(inv.stock)
+    inv.stock = nueva
+    from django.utils import timezone
+    inv.fecha_referencia_estimacion = timezone.localdate()
+    inv.save(update_fields=["stock", "fecha_referencia_estimacion", "actualizado_en"] )
+    diferencia = nueva - antes
+    return MovimientoInventario.objects.create(
+        insumo=insumo, tipo="ajuste_contrato", cantidad=abs(diferencia),
+        stock_anterior=Decimal(insumo.stock), stock_resultante=Decimal(insumo.stock),
+        contrato=contrato, trabajador=trabajador,
+        stock_contrato_anterior=antes, stock_contrato_resultante=nueva,
+        costo_unitario=insumo.costo or 0, total_costo=_costo_total(insumo, abs(diferencia)),
+        usuario=usuario, observacion=observacion or "Verificación física del inventario en sitio",
     )

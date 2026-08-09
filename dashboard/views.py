@@ -28,7 +28,7 @@ from django.views.decorators.http import require_http_methods, require_GET
 from pywebpush import webpush, WebPushException
 
 from trabajadores.models import Trabajador
-from inventario.models import Insumo, InventarioTrabajador, SolicitudReposicion
+from inventario.models import Insumo, InventarioTrabajador, InventarioContrato, MovimientoInventario, SolicitudReposicion
 from mantenimientos.models import (
     Mantenimiento,
     UsoInsumo,
@@ -1275,6 +1275,53 @@ def _crear_notificacion(user, titulo, mensaje, url="/dashboard/notificaciones/",
             )
 
     return notif
+
+
+def _actualizar_alertas_inventario_contratos(user):
+    """Genera como máximo una alerta diaria por inventario en sitio próximo al mínimo."""
+    if Notificacion is None or not getattr(user, "is_authenticated", False):
+        return 0
+    try:
+        qs = InventarioContrato.objects.filter(
+            contrato__activo=True,
+            contrato__quimicos_proveedor="jvaqua",
+            contrato__quimicos_almacenamiento="contrato",
+        ).select_related("contrato__cliente", "contrato__tecnico_designado__user", "contrato__responsable_reposicion__user", "insumo")
+        if es_trabajador(user):
+            trabajador = getattr(user, "trabajador", None)
+            if not trabajador:
+                return 0
+            qs = qs.filter(Q(contrato__responsable_reposicion=trabajador) | Q(contrato__responsable_reposicion__isnull=True, contrato__tecnico_designado=trabajador))
+        elif not es_admin(user):
+            return 0
+
+        hoy = timezone.localdate()
+        creadas = 0
+        for inv in qs:
+            dias = inv.dias_hasta_minimo
+            estimado = inv.stock_estimado
+            requiere = estimado <= Decimal(inv.stock_minimo or 0) or (dias is not None and dias <= 3)
+            if not requiere:
+                continue
+            referencia = min(hoy.toordinal() * 1000 + (inv.pk % 1000), 2147483647)
+            titulo = f"⚠ Reposición · {inv.contrato.cliente}"
+            if estimado <= Decimal(inv.stock_minimo or 0):
+                mensaje = f"{inv.insumo.nombre} está en mínimo: {estimado:.3f} {inv.insumo.unidad_corta}."
+            else:
+                mensaje = f"{inv.insumo.nombre} llegará al mínimo en aproximadamente {dias} días."
+            url_alerta = (
+                f"/dashboard/mi-inventario/contrato/{inv.contrato_id}/"
+                if es_trabajador(user) else f"/dashboard/contratos/{inv.contrato_id}/#inventario-sitio"
+            )
+            _, creado = Notificacion.objects.get_or_create(
+                user=user, tipo="general", referencia_id=referencia,
+                defaults={"titulo": titulo, "mensaje": mensaje, "url": url_alerta, "leida": False},
+            )
+            creadas += int(creado)
+        return creadas
+    except Exception:
+        logger.exception("No se pudieron actualizar las alertas de inventario por contrato.")
+        return 0
 
 
 def _actualizar_seguimientos_asistente(user):
@@ -2695,7 +2742,9 @@ def notificaciones_view(request):
 def notificaciones_json_view(request):
     if es_trabajador(request.user):
         _actualizar_seguimientos_asistente(request.user)
+        _actualizar_alertas_inventario_contratos(request.user)
     if es_admin(request.user):
+        _actualizar_alertas_inventario_contratos(request.user)
         try:
             from finanzas.alertas_financieras import generar_alertas_financieras
             generar_alertas_financieras(enviar_push=True)
@@ -3194,7 +3243,24 @@ def mantenimiento_detalle_view(request, pk):
         except Exception:
             trabajador_actual = None
 
-    if trabajador_actual:
+    contrato_quimicos = mantenimiento.contrato
+    modalidad_quimicos = "cliente" if contrato_quimicos.quimicos_proveedor == "cliente" else (
+        "contrato" if contrato_quimicos.quimicos_almacenamiento == "contrato" else "trabajador"
+    )
+
+    if modalidad_quimicos == "contrato":
+        inventario_mantenimiento = list(
+            InventarioContrato.objects.filter(
+                contrato=contrato_quimicos,
+                insumo__activo=True,
+                insumo__puede_mantenimiento=True,
+            ).select_related("insumo").order_by("insumo__nombre")
+        )
+        insumos = [x.insumo for x in inventario_mantenimiento]
+    elif modalidad_quimicos == "cliente":
+        inventario_mantenimiento = []
+        insumos = list(Insumo.objects.filter(activo=True, puede_mantenimiento=True).order_by("nombre"))
+    elif trabajador_actual:
         inventario_mantenimiento = list(
             InventarioTrabajador.objects.filter(
                 trabajador=trabajador_actual,
@@ -3396,13 +3462,35 @@ def mantenimiento_detalle_view(request, pk):
                     )
 
                     cantidad_base = convertir_a_base(insumo, cantidad_ingresada, unidad)
-                    movimiento = consumir_trabajador(
-                        insumo=insumo,
-                        trabajador=trabajador_consumo,
-                        cantidad_base=cantidad_base,
-                        mantenimiento=mantenimiento,
-                        usuario=request.user,
-                    )
+                    contrato_consumo = mantenimiento.contrato
+                    if contrato_consumo.quimicos_proveedor == "cliente":
+                        origen_inventario = "cliente"
+                        costo_unitario = Decimal("0.0000")
+                        costo_total = Decimal("0.00")
+                    elif contrato_consumo.quimicos_almacenamiento == "contrato":
+                        origen_inventario = "contrato"
+                        movimiento = consumir_contrato(
+                            contrato=contrato_consumo,
+                            insumo=insumo,
+                            trabajador=trabajador_consumo,
+                            cantidad_base=cantidad_base,
+                            mantenimiento=mantenimiento,
+                            usuario=request.user,
+                        )
+                        costo_unitario = movimiento.costo_unitario
+                        costo_total = movimiento.total_costo
+                    else:
+                        origen_inventario = "trabajador"
+                        movimiento = consumir_trabajador(
+                            insumo=insumo,
+                            trabajador=trabajador_consumo,
+                            cantidad_base=cantidad_base,
+                            mantenimiento=mantenimiento,
+                            usuario=request.user,
+                        )
+                        costo_unitario = movimiento.costo_unitario
+                        costo_total = movimiento.total_costo
+
                     uso = UsoInsumo.objects.create(
                         mantenimiento=mantenimiento,
                         insumo=insumo,
@@ -3410,10 +3498,22 @@ def mantenimiento_detalle_view(request, pk):
                         cantidad=cantidad_base,
                         cantidad_ingresada=Decimal(str(cantidad_ingresada).replace(",", ".")),
                         unidad_registro=unidad,
-                        costo_unitario=movimiento.costo_unitario,
-                        costo_total=movimiento.total_costo,
+                        costo_unitario=costo_unitario,
+                        costo_total=costo_total,
+                        origen_inventario=origen_inventario,
                     )
                     consumos_creados.append(uso)
+
+                    if origen_inventario == "contrato":
+                        inv_contrato = InventarioContrato.objects.filter(contrato=contrato_consumo, insumo=insumo).first()
+                        if inv_contrato and inv_contrato.stock_estimado <= Decimal(inv_contrato.stock_minimo or 0):
+                            titulo = f"⚠ Reposición requerida · {contrato_consumo.cliente}"
+                            mensaje = f"{insumo.nombre} llegó al mínimo del inventario en sitio ({inv_contrato.stock_estimado:.3f} {insumo.unidad_corta})."
+                            url_alerta = f"/dashboard/contratos/{contrato_consumo.pk}/#inventario-sitio"
+                            _notificar_admins(titulo=titulo, mensaje=mensaje, url=url_alerta, enviar_push=False)
+                            responsable = contrato_consumo.responsable_reposicion or contrato_consumo.tecnico_designado
+                            if responsable and getattr(responsable, "user_id", None):
+                                _crear_notificacion(responsable.user, titulo, mensaje, url=url_alerta, enviar_push=False)
 
                 # ---------------------------------------------------------
                 # 3) Fotografías requeridas. Las nuevas se guardan junto a
@@ -3561,6 +3661,8 @@ def mantenimiento_detalle_view(request, pk):
             "lista_usos": lista_usos,
             "lista_egresos": lista_egresos,
             "inventario_mantenimiento": inventario_mantenimiento,
+            "modalidad_quimicos": modalidad_quimicos,
+            "contrato_quimicos": contrato_quimicos,
             "trabajadores_mantenimiento": trabajadores_mantenimiento,
             "trabajador_actual": trabajador_actual,
             "total_egresos": total_egresos,
@@ -3777,10 +3879,11 @@ def usoinsumo_eliminar_view(request, pk):
         insumo_nombre = getattr(insumo, "nombre", "Insumo")
         cantidad = uso.cantidad
 
-        if uso.trabajador_id:
+        origen_uso = getattr(uso, "origen_inventario", "trabajador") or "trabajador"
+        if origen_uso in {"contrato", "cliente"} or (origen_uso == "trabajador" and uso.trabajador_id):
             revertir_consumo(uso=uso, usuario=request.user)
         elif getattr(uso, "egreso_id", None):
-            # Registro histórico anterior al inventario por trabajador.
+            # Registro histórico anterior al inventario inteligente.
             insumo.stock = Decimal(insumo.stock) + Decimal(uso.cantidad)
             insumo.save(update_fields=["stock"])
 
@@ -3851,25 +3954,33 @@ def usoinsumo_editar_view(request, pk):
             return redirect(f"/dashboard/usos/{uso.pk}/editar/")
 
         anterior = Decimal(uso.cantidad)
-        if uso.trabajador_id:
+        origen = getattr(uso, "origen_inventario", "trabajador") or "trabajador"
+        if origen in {"contrato", "cliente"} or (origen == "trabajador" and uso.trabajador_id):
             try:
                 with transaction.atomic():
                     revertir_consumo(uso=uso, usuario=request.user)
-                    movimiento = consumir_trabajador(
-                        insumo=uso.insumo,
-                        trabajador=uso.trabajador,
-                        cantidad_base=nueva_base,
-                        mantenimiento=mantenimiento,
-                        usuario=request.user,
-                        observacion=f"Edición consumo #{uso.pk}",
-                    )
+                    if origen == "contrato":
+                        movimiento = consumir_contrato(
+                            contrato=mantenimiento.contrato, insumo=uso.insumo, trabajador=uso.trabajador,
+                            cantidad_base=nueva_base, mantenimiento=mantenimiento, usuario=request.user,
+                            observacion=f"Edición consumo #{uso.pk}",
+                        )
+                        costo_unitario, costo_total = movimiento.costo_unitario, movimiento.total_costo
+                    elif origen == "cliente":
+                        costo_unitario, costo_total = Decimal("0.0000"), Decimal("0.00")
+                    else:
+                        movimiento = consumir_trabajador(
+                            insumo=uso.insumo, trabajador=uso.trabajador, cantidad_base=nueva_base,
+                            mantenimiento=mantenimiento, usuario=request.user, observacion=f"Edición consumo #{uso.pk}",
+                        )
+                        costo_unitario, costo_total = movimiento.costo_unitario, movimiento.total_costo
                     uso.cantidad = nueva_base
                     uso.cantidad_ingresada = Decimal(str(nueva_cantidad_str).replace(",", "."))
                     uso.unidad_registro = unidad
-                    uso.costo_unitario = movimiento.costo_unitario
-                    uso.costo_total = movimiento.total_costo
+                    uso.costo_unitario = costo_unitario
+                    uso.costo_total = costo_total
                     uso.save(update_fields=["cantidad", "cantidad_ingresada", "unidad_registro", "costo_unitario", "costo_total"])
-            except (ValueError, InventarioTrabajador.DoesNotExist) as exc:
+            except (ValueError, InventarioTrabajador.DoesNotExist, InventarioContrato.DoesNotExist) as exc:
                 messages.error(request, str(exc) if str(exc) else "Stock insuficiente.")
                 return redirect(f"/dashboard/usos/{uso.pk}/editar/")
         else:
@@ -5169,11 +5280,11 @@ def unread_count_view(request):
 
 from inventario.models import (
     Insumo, VentaInsumo, EntradaStock, MovimientoInventario,
-    InventarioTrabajador, CompraInsumo, PresentacionInsumo, SolicitudReposicion,
+    InventarioTrabajador, InventarioContrato, CompraInsumo, PresentacionInsumo, SolicitudReposicion,
 )
 from inventario.services import (
     convertir_a_base, entregar_a_trabajador, devolver_de_trabajador,
-    consumir_trabajador, revertir_consumo, decimal_positivo,
+    consumir_trabajador, consumir_contrato, reponer_contrato, ajustar_inventario_contrato, revertir_consumo, decimal_positivo,
 )
 
 
@@ -5214,10 +5325,23 @@ def inventario_view(request):
     total_ventas_mes = ventas_mes.aggregate(total=Sum("total")).get("total") or Decimal("0")
     ganancia_mes = ventas_mes.aggregate(total=Sum("ganancia")).get("total") or Decimal("0")
     total_compras_mes = CompraInsumo.objects.filter(fecha__gte=primer_dia_mes).aggregate(total=Sum("total")).get("total") or Decimal("0")
-    consumo_mes = MovimientoInventario.objects.filter(tipo="mantenimiento", fecha__gte=primer_dia_mes)
+    consumo_mes = MovimientoInventario.objects.filter(tipo__in=["mantenimiento", "consumo_contrato"], fecha__gte=primer_dia_mes)
     costo_consumo_mes = consumo_mes.aggregate(total=Sum("total_costo")).get("total") or Decimal("0")
     cantidad_consumo_mes = consumo_mes.aggregate(total=Sum("cantidad")).get("total") or Decimal("0")
     solicitudes_pendientes = SolicitudReposicion.objects.filter(estado="pendiente").select_related("trabajador__user", "insumo").order_by("-creada_en")
+    inventarios_contratos = list(
+        InventarioContrato.objects.filter(contrato__activo=True)
+        .select_related("contrato__cliente", "contrato__responsable_reposicion__user", "insumo")
+        .order_by("contrato__cliente__nombre", "insumo__nombre")
+    )
+    contratos_inventario = {}
+    for fila in inventarios_contratos:
+        cid = fila.contrato_id
+        item = contratos_inventario.setdefault(cid, {"contrato": fila.contrato, "stocks": [], "criticos": 0, "valor": Decimal("0.00")})
+        item["stocks"].append(fila)
+        if fila.estado_stock in {"critico", "agotado"}: item["criticos"] += 1
+        item["valor"] += Decimal(fila.stock_estimado or 0) * Decimal(fila.insumo.costo or 0)
+    resumen_contratos_inventario = list(contratos_inventario.values())
 
     movimientos_recientes = list(
         MovimientoInventario.objects.select_related("insumo", "trabajador__user", "mantenimiento__cliente")
@@ -5248,6 +5372,9 @@ def inventario_view(request):
         "valor_inventario": _inventario_valorizado(),
         "valor_asignado": valor_asignado,
         "productos_asignados": productos_asignados,
+        "resumen_contratos_inventario": resumen_contratos_inventario,
+        "contratos_inventario_count": len(resumen_contratos_inventario),
+        "contratos_inventario_critico": sum(1 for x in resumen_contratos_inventario if x["criticos"]),
         "total_ventas_mes": total_ventas_mes,
         "ganancia_mes": ganancia_mes,
         "total_compras_mes": total_compras_mes,
@@ -6386,6 +6513,8 @@ FRECUENCIAS_CONTRATO_VALIDAS = {"1_semanal", "2_semanales", "3_semanales", "quin
 FORMAS_PAGO_CONTRATO_VALIDAS = {valor for valor, _ in Contrato.FORMA_PAGO_CHOICES}
 PROGRAMACIONES_COBRO_VALIDAS = {valor for valor, _ in Contrato.PROGRAMACION_COBRO_CHOICES}
 MOMENTOS_FACTURACION_VALIDOS = {valor for valor, _ in Contrato.MOMENTO_FACTURACION_CHOICES}
+QUIMICOS_PROVEEDORES_VALIDOS = {valor for valor, _ in Contrato.QUIMICOS_PROVEEDOR_CHOICES}
+QUIMICOS_ALMACENAMIENTOS_VALIDOS = {valor for valor, _ in Contrato.QUIMICOS_ALMACENAMIENTO_CHOICES}
 
 
 def _entero_post(request, nombre, minimo=0, maximo=None, obligatorio=False):
@@ -6418,6 +6547,9 @@ def _validar_datos_contrato(request):
     requiere_factura = request.POST.get("requiere_factura") == "on"
     notificar_facturacion = request.POST.get("notificar_facturacion") == "on"
     momento_facturacion = (request.POST.get("momento_facturacion") or "").strip()
+    quimicos_proveedor = (request.POST.get("quimicos_proveedor") or "jvaqua").strip()
+    quimicos_almacenamiento = (request.POST.get("quimicos_almacenamiento") or "trabajador").strip()
+    responsable_reposicion_id = (request.POST.get("responsable_reposicion") or "").strip()
     errores = []
 
     cliente = Cliente.objects.filter(pk=int(cliente_id)).first() if cliente_id.isdigit() else None
@@ -6456,6 +6588,19 @@ def _validar_datos_contrato(request):
     if requiere_factura and momento_facturacion not in MOMENTOS_FACTURACION_VALIDOS:
         errores.append("Selecciona cuándo debe emitirse la factura.")
 
+    if quimicos_proveedor not in QUIMICOS_PROVEEDORES_VALIDOS:
+        errores.append("Selecciona quién proporciona los químicos.")
+    if quimicos_proveedor == "jvaqua" and quimicos_almacenamiento not in QUIMICOS_ALMACENAMIENTOS_VALIDOS:
+        errores.append("Selecciona dónde se almacenan los químicos de JVAQUA.")
+    if quimicos_proveedor == "cliente":
+        quimicos_almacenamiento = ""
+
+    responsable_reposicion = None
+    if responsable_reposicion_id and quimicos_proveedor == "jvaqua" and quimicos_almacenamiento == "contrato":
+        responsable_reposicion = Trabajador.objects.filter(pk=int(responsable_reposicion_id), activo=True).select_related("user").first() if responsable_reposicion_id.isdigit() else None
+        if responsable_reposicion is None:
+            errores.append("El responsable de reposición seleccionado no existe o está inactivo.")
+
     tecnico_designado = None
     if tecnico_id:
         tecnico_designado = Trabajador.objects.filter(pk=int(tecnico_id), activo=True).select_related("user").first() if tecnico_id.isdigit() else None
@@ -6486,6 +6631,10 @@ def _validar_datos_contrato(request):
         "requiere_factura": requiere_factura, "momento_facturacion": momento_facturacion if requiere_factura else "",
         "notificar_facturacion": notificar_facturacion if requiere_factura else False,
         "observaciones_facturacion": (request.POST.get("observaciones_facturacion") or "").strip(),
+        "quimicos_proveedor": quimicos_proveedor,
+        "quimicos_almacenamiento": quimicos_almacenamiento,
+        "responsable_reposicion": responsable_reposicion,
+        "responsable_reposicion_id": responsable_reposicion_id,
         **campos_enteros,
     }
 
@@ -6838,6 +6987,9 @@ def contrato_crear_view(request):
         "generacion_automatica": True,
         "tecnico_id": "",
         "dias_visita": [],
+        "quimicos_proveedor": "jvaqua",
+        "quimicos_almacenamiento": "trabajador",
+        "responsable_reposicion_id": "",
     }
 
     if request.method == "POST":
@@ -6870,6 +7022,9 @@ def contrato_crear_view(request):
             "generacion_automatica": validacion["generacion_automatica"],
             "tecnico_id": validacion["tecnico_id"],
             "dias_visita": validacion["dias_visita"],
+            "quimicos_proveedor": validacion["quimicos_proveedor"],
+            "quimicos_almacenamiento": validacion["quimicos_almacenamiento"],
+            "responsable_reposicion_id": validacion["responsable_reposicion_id"],
         }
 
         if validacion["errores"]:
@@ -6907,6 +7062,9 @@ def contrato_crear_view(request):
                 tecnico_designado=validacion["tecnico_designado"],
                 dias_visita=validacion["dias_visita"],
                 generacion_automatica=validacion["generacion_automatica"],
+                quimicos_proveedor=validacion["quimicos_proveedor"],
+                quimicos_almacenamiento=validacion["quimicos_almacenamiento"],
+                responsable_reposicion=validacion["responsable_reposicion"],
             )
 
             resultado_programacion = generar_mantenimientos_contrato(contrato)
@@ -6942,6 +7100,8 @@ def contrato_crear_view(request):
             "formas_pago": Contrato.FORMA_PAGO_CHOICES,
             "programaciones_cobro": Contrato.PROGRAMACION_COBRO_CHOICES,
             "momentos_facturacion": Contrato.MOMENTO_FACTURACION_CHOICES,
+            "quimicos_proveedores": Contrato.QUIMICOS_PROVEEDOR_CHOICES,
+            "quimicos_almacenamientos": Contrato.QUIMICOS_ALMACENAMIENTO_CHOICES,
             "trabajadores": trabajadores,
             "dias_semana": DIAS_SEMANA.items(),
             "dias_mes": range(1, 32),
@@ -7006,6 +7166,9 @@ def contrato_editar_view(request, pk):
         "generacion_automatica": contrato.generacion_automatica,
         "tecnico_id": str(contrato.tecnico_designado_id or ""),
         "dias_visita": normalizar_dias(contrato.dias_visita),
+        "quimicos_proveedor": contrato.quimicos_proveedor,
+        "quimicos_almacenamiento": contrato.quimicos_almacenamiento,
+        "responsable_reposicion_id": str(contrato.responsable_reposicion_id or ""),
     }
 
     if request.method == "POST":
@@ -7038,6 +7201,9 @@ def contrato_editar_view(request, pk):
             "generacion_automatica": validacion["generacion_automatica"],
             "tecnico_id": validacion["tecnico_id"],
             "dias_visita": validacion["dias_visita"],
+            "quimicos_proveedor": validacion["quimicos_proveedor"],
+            "quimicos_almacenamiento": validacion["quimicos_almacenamiento"],
+            "responsable_reposicion_id": validacion["responsable_reposicion_id"],
         }
 
         if validacion["errores"]:
@@ -7067,6 +7233,9 @@ def contrato_editar_view(request, pk):
             contrato.tecnico_designado = validacion["tecnico_designado"]
             contrato.dias_visita = validacion["dias_visita"]
             contrato.generacion_automatica = validacion["generacion_automatica"]
+            contrato.quimicos_proveedor = validacion["quimicos_proveedor"]
+            contrato.quimicos_almacenamiento = validacion["quimicos_almacenamiento"]
+            contrato.responsable_reposicion = validacion["responsable_reposicion"]
             contrato.save()
 
             if contrato.activo and contrato.generacion_automatica:
@@ -7107,6 +7276,8 @@ def contrato_editar_view(request, pk):
             "formas_pago": Contrato.FORMA_PAGO_CHOICES,
             "programaciones_cobro": Contrato.PROGRAMACION_COBRO_CHOICES,
             "momentos_facturacion": Contrato.MOMENTO_FACTURACION_CHOICES,
+            "quimicos_proveedores": Contrato.QUIMICOS_PROVEEDOR_CHOICES,
+            "quimicos_almacenamientos": Contrato.QUIMICOS_ALMACENAMIENTO_CHOICES,
             "trabajadores": trabajadores,
             "dias_semana": DIAS_SEMANA.items(),
             "dias_mes": range(1, 32),
@@ -7205,6 +7376,23 @@ def contrato_detalle_view(request, pk):
     periodo_inicio, periodo_fin = contrato.periodo_servicio(hoy.year, hoy.month)
     fecha_facturacion_programada = contrato.fecha_programada_facturacion(hoy.year, hoy.month)
 
+    inventario_contrato = list(
+        InventarioContrato.objects.filter(contrato=contrato)
+        .select_related("insumo")
+        .order_by("insumo__nombre")
+    )
+    for fila in inventario_contrato:
+        fila.valor_estimado = (Decimal(fila.stock_estimado or 0) * Decimal(fila.insumo.costo or 0)).quantize(Decimal("0.01"))
+    movimientos_inventario_contrato = list(
+        MovimientoInventario.objects.filter(contrato=contrato)
+        .select_related("insumo", "trabajador__user")
+        .order_by("-creado_en", "-id")[:30]
+    )
+    valor_inventario_contrato = sum((x.valor_estimado for x in inventario_contrato), Decimal("0.00"))
+    inventario_critico_contrato = sum(1 for x in inventario_contrato if x.estado_stock in {"critico", "agotado"})
+    proxima_reposicion_dias = min((x.dias_hasta_minimo for x in inventario_contrato if x.dias_hasta_minimo is not None), default=None)
+    insumos_inventario = Insumo.objects.filter(activo=True, puede_mantenimiento=True).order_by("nombre")
+
     return render(
         request,
         "dashboard/contrato_detalle.html",
@@ -7225,10 +7413,139 @@ def contrato_detalle_view(request, pk):
             "periodo_fin_actual": periodo_fin,
             "calendario_cobros": calendario_cobros,
             "fecha_facturacion_programada": fecha_facturacion_programada,
+            "inventario_contrato": inventario_contrato,
+            "movimientos_inventario_contrato": movimientos_inventario_contrato,
+            "valor_inventario_contrato": valor_inventario_contrato,
+            "inventario_critico_contrato": inventario_critico_contrato,
+            "proxima_reposicion_dias": proxima_reposicion_dias,
+            "insumos_inventario": insumos_inventario,
             "es_admin": True,
         },
     )
 
+
+
+@login_required
+def inventario_contrato_trabajador_view(request, pk):
+    contrato = get_object_or_404(
+        Contrato.objects.select_related("cliente", "tecnico_designado__user", "responsable_reposicion__user"),
+        pk=pk,
+    )
+    usuario_admin = es_admin(request.user)
+    trabajador = getattr(request.user, "trabajador", None) if es_trabajador(request.user) else None
+    if not usuario_admin:
+        permitido = bool(
+            trabajador and (
+                contrato.responsable_reposicion_id == trabajador.id
+                or (contrato.responsable_reposicion_id is None and contrato.tecnico_designado_id == trabajador.id)
+                or Mantenimiento.objects.filter(contrato=contrato, trabajadores=trabajador).exists()
+            )
+        )
+        if not permitido:
+            return render(request, "dashboard/no_autorizado.html", status=403)
+    if contrato.quimicos_proveedor != "jvaqua" or contrato.quimicos_almacenamiento != "contrato":
+        messages.info(request, "Este contrato no utiliza inventario en sitio.")
+        return redirect("inicio" if usuario_admin else "home")
+
+    stocks = list(InventarioContrato.objects.filter(contrato=contrato).select_related("insumo").order_by("insumo__nombre"))
+    movimientos = MovimientoInventario.objects.filter(contrato=contrato).select_related("insumo", "trabajador__user", "usuario").order_by("-creado_en")[:40]
+    return render(request, "dashboard/inventario_contrato_trabajador.html", {
+        "contrato": contrato,
+        "stocks": stocks,
+        "movimientos": movimientos,
+        "es_admin": usuario_admin,
+        "base_template": "dashboard/base_admin.html" if usuario_admin else "dashboard/base_trabajador.html",
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def contrato_inventario_configurar_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    contrato = get_object_or_404(Contrato, pk=pk)
+    if contrato.quimicos_proveedor != "jvaqua" or contrato.quimicos_almacenamiento != "contrato":
+        messages.error(request, "Este contrato no utiliza inventario en sitio.")
+        return redirect(f"/dashboard/contratos/{contrato.pk}/")
+    insumo = get_object_or_404(Insumo, pk=request.POST.get("insumo_id"), activo=True)
+    try:
+        minimo = Decimal((request.POST.get("stock_minimo") or "0").replace(",", "."))
+        consumo = Decimal((request.POST.get("consumo_diario_estimado") or "0").replace(",", "."))
+        if minimo < 0 or consumo < 0:
+            raise ValueError
+    except Exception:
+        messages.error(request, "Revisa el stock mínimo y el consumo diario estimado.")
+        return redirect(f"/dashboard/contratos/{contrato.pk}/#inventario-sitio")
+    inv, creado = InventarioContrato.objects.get_or_create(contrato=contrato, insumo=insumo)
+    inv.stock_minimo = minimo
+    inv.consumo_diario_estimado = consumo
+    inv.save(update_fields=["stock_minimo", "consumo_diario_estimado", "actualizado_en"])
+    _registrar_actividad(
+        user=request.user,
+        titulo="Inventario de contrato configurado",
+        descripcion=f"{request.user.username} configuró {insumo.nombre} para {contrato.cliente}.",
+        url=f"/dashboard/contratos/{contrato.pk}/#inventario-sitio",
+    )
+    messages.success(request, "Producto configurado en el inventario del contrato.")
+    return redirect(f"/dashboard/contratos/{contrato.pk}/#inventario-sitio")
+
+
+@login_required
+@require_http_methods(["POST"])
+def contrato_inventario_reponer_view(request, pk):
+    if not es_admin(request.user) and not es_trabajador(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    contrato = get_object_or_404(Contrato.objects.select_related("tecnico_designado__user", "responsable_reposicion__user"), pk=pk)
+    trabajador = None
+    if es_trabajador(request.user):
+        trabajador = getattr(request.user, "trabajador", None)
+        responsable = contrato.responsable_reposicion or contrato.tecnico_designado
+        if responsable and trabajador and responsable.pk != trabajador.pk and not Mantenimiento.objects.filter(contrato=contrato, trabajadores=trabajador).exists():
+            return render(request, "dashboard/no_autorizado.html", status=403)
+    insumo = get_object_or_404(Insumo, pk=request.POST.get("insumo_id"), activo=True)
+    unidad = request.POST.get("unidad") or "base"
+    try:
+        cantidad = convertir_a_base(insumo, request.POST.get("cantidad"), unidad)
+        movimiento = reponer_contrato(
+            contrato=contrato, insumo=insumo, cantidad_base=cantidad,
+            usuario=request.user, trabajador=trabajador,
+            observacion=(request.POST.get("observacion") or "").strip(),
+        )
+    except (ValueError, InventarioContrato.DoesNotExist) as exc:
+        messages.error(request, str(exc))
+        return redirect(f"/dashboard/contratos/{contrato.pk}/#inventario-sitio")
+    _registrar_actividad(
+        user=request.user, titulo="Reposición en sitio",
+        descripcion=f"{request.user.username} llevó {cantidad} {insumo.unidad_corta} de {insumo.nombre} a {contrato.cliente}.",
+        url=f"/dashboard/contratos/{contrato.pk}/#inventario-sitio",
+    )
+    messages.success(request, "Reposición registrada. Se descontó automáticamente de la bodega general.")
+    return redirect(f"/dashboard/contratos/{contrato.pk}/#inventario-sitio")
+
+
+@login_required
+@require_http_methods(["POST"])
+def contrato_inventario_ajustar_view(request, pk, inventario_id):
+    contrato = get_object_or_404(Contrato, pk=pk)
+    inv = get_object_or_404(InventarioContrato.objects.select_related("insumo"), pk=inventario_id, contrato=contrato)
+    trabajador = getattr(request.user, "trabajador", None) if es_trabajador(request.user) else None
+    if not es_admin(request.user):
+        responsable = contrato.responsable_reposicion or contrato.tecnico_designado
+        permitido = bool(trabajador and (not responsable or responsable.pk == trabajador.pk or Mantenimiento.objects.filter(contrato=contrato, trabajadores=trabajador).exists()))
+        if not permitido:
+            return render(request, "dashboard/no_autorizado.html", status=403)
+    try:
+        ajustar_inventario_contrato(
+            contrato=contrato, insumo=inv.insumo,
+            nueva_existencia=request.POST.get("nueva_existencia"),
+            usuario=request.user, trabajador=trabajador,
+            observacion=(request.POST.get("observacion") or "Verificación física").strip(),
+        )
+    except ValueError as exc:
+        messages.error(request, str(exc))
+        return redirect(f"/dashboard/contratos/{contrato.pk}/#inventario-sitio")
+    messages.success(request, "Existencia física del contrato actualizada y registrada en Kardex.")
+    return redirect(f"/dashboard/contratos/{contrato.pk}/#inventario-sitio")
 
 @login_required
 @require_http_methods(["POST"])

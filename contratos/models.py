@@ -54,6 +54,17 @@ class Contrato(models.Model):
         ("personalizado", "Personalizado"),
     ]
 
+
+    QUIMICOS_PROVEEDOR_CHOICES = [
+        ("jvaqua", "JVAQUA"),
+        ("cliente", "Cliente"),
+    ]
+
+    QUIMICOS_ALMACENAMIENTO_CHOICES = [
+        ("trabajador", "Inventario del trabajador"),
+        ("contrato", "Inventario del contrato (en sitio)"),
+    ]
+
     MOMENTO_FACTURACION_CHOICES = [
         ("antes_inicio", "Antes de iniciar el periodo"),
         ("inicio_periodo", "Al iniciar el periodo"),
@@ -134,6 +145,29 @@ class Contrato(models.Model):
     generacion_automatica = models.BooleanField(default=True)
     programado_hasta = models.DateField(null=True, blank=True)
     activo = models.BooleanField(default=True)
+
+    # Gestión logística de químicos por contrato.
+    quimicos_proveedor = models.CharField(
+        max_length=20,
+        choices=QUIMICOS_PROVEEDOR_CHOICES,
+        default="jvaqua",
+        help_text="Indica si los químicos son proporcionados por JVAQUA o por el cliente.",
+    )
+    quimicos_almacenamiento = models.CharField(
+        max_length=20,
+        choices=QUIMICOS_ALMACENAMIENTO_CHOICES,
+        default="trabajador",
+        blank=True,
+        help_text="Cuando JVAQUA proporciona químicos, indica dónde se almacenan.",
+    )
+    responsable_reposicion = models.ForeignKey(
+        Trabajador,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="contratos_reposicion",
+        help_text="Responsable principal de reponer el inventario en sitio. Si se deja vacío, se usa el técnico designado.",
+    )
 
     def ingreso_mensual(self):
         return self.precio_mensual
@@ -256,6 +290,11 @@ class Contrato(models.Model):
         self.forma_pago_personalizada = (self.forma_pago_personalizada or "").strip()
         self.programacion_cobro_personalizada = (self.programacion_cobro_personalizada or "").strip()
         self.observaciones_facturacion = (self.observaciones_facturacion or "").strip()
+        if self.quimicos_proveedor == "cliente":
+            self.quimicos_almacenamiento = ""
+            self.responsable_reposicion = None
+        elif self.quimicos_almacenamiento not in {"trabajador", "contrato"}:
+            self.quimicos_almacenamiento = "trabajador"
         if self.frecuencia != "personalizado":
             self.frecuencia_personalizada = ""
         if self.forma_pago != "personalizado":

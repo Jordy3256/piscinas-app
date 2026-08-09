@@ -275,4 +275,85 @@
     </div>
   </div>
 </div>
+
+<section class="cd-card mt-4" id="inventario-sitio">
+  <div class="cd-card-header">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <div>
+        <div class="cd-card-title">🧪 Logística de químicos</div>
+        <div class="small text-muted mt-1">Modalidad: {% if contrato.quimicos_proveedor == 'cliente' %}Químicos proporcionados por el cliente{% elif contrato.quimicos_almacenamiento == 'contrato' %}Inventario en sitio{% else %}Inventario del trabajador{% endif %}</div>
+      </div>
+      <a class="btn btn-sm btn-outline-primary" href="/dashboard/contratos/{{ contrato.id }}/editar/">Configurar</a>
+    </div>
+  </div>
+  <div class="p-3 p-lg-4">
+    <div class="row g-3 mb-3">
+      <div class="col-6 col-lg-3"><div class="border rounded-4 p-3 h-100"><div class="small text-muted">Proveedor</div><div class="fw-bold">{{ contrato.get_quimicos_proveedor_display }}</div></div></div>
+      <div class="col-6 col-lg-3"><div class="border rounded-4 p-3 h-100"><div class="small text-muted">Almacenamiento</div><div class="fw-bold">{% if contrato.quimicos_proveedor == 'cliente' %}Cliente{% else %}{{ contrato.get_quimicos_almacenamiento_display }}{% endif %}</div></div></div>
+      <div class="col-6 col-lg-3"><div class="border rounded-4 p-3 h-100"><div class="small text-muted">Responsable reposición</div><div class="fw-bold">{{ contrato.responsable_reposicion|default:contrato.tecnico_designado|default:'Automático' }}</div></div></div>
+      <div class="col-6 col-lg-3"><div class="border rounded-4 p-3 h-100"><div class="small text-muted">Próxima reposición</div><div class="fw-bold">{% if proxima_reposicion_dias is not None %}{% if proxima_reposicion_dias == 0 %}Ahora{% else %}≈ {{ proxima_reposicion_dias }} días{% endif %}{% else %}Sin estimación{% endif %}</div></div></div>
+    </div>
+
+    {% if contrato.quimicos_proveedor == 'cliente' %}
+      <div class="alert alert-info mb-0">Los químicos son proporcionados por el cliente. El técnico puede registrar lo aplicado, pero no se descuenta inventario de JVAQUA.</div>
+    {% elif contrato.quimicos_almacenamiento == 'trabajador' %}
+      <div class="alert alert-success mb-0">Este contrato utiliza el inventario personal del trabajador asignado, como en el flujo estándar.</div>
+    {% else %}
+      <div class="row g-3 mb-4">
+        <div class="col-md-4"><div class="border rounded-4 p-3"><div class="small text-muted">Valor estimado en sitio</div><div class="fs-4 fw-bold">${{ valor_inventario_contrato|floatformat:2 }}</div></div></div>
+        <div class="col-md-4"><div class="border rounded-4 p-3"><div class="small text-muted">Productos</div><div class="fs-4 fw-bold">{{ inventario_contrato|length }}</div></div></div>
+        <div class="col-md-4"><div class="border rounded-4 p-3"><div class="small text-muted">Críticos / agotados</div><div class="fs-4 fw-bold">{{ inventario_critico_contrato }}</div></div></div>
+      </div>
+
+      <div class="row g-3 mb-4">
+        {% for inv in inventario_contrato %}
+        <div class="col-md-6 col-xl-4"><div class="border rounded-4 p-3 h-100">
+          <div class="d-flex justify-content-between gap-2 align-items-start">
+            <div><div class="fw-bold">{{ inv.insumo.nombre }}</div><div class="small text-muted">Estimado desde {{ inv.fecha_referencia_estimacion|date:'d/m/Y' }}</div></div>
+            {% if inv.estado_stock == 'agotado' %}<span class="badge bg-danger">Agotado</span>{% elif inv.estado_stock == 'critico' %}<span class="badge bg-danger">Crítico</span>{% elif inv.estado_stock == 'proximo' %}<span class="badge bg-warning text-dark">Próximo</span>{% else %}<span class="badge bg-success">Correcto</span>{% endif %}
+          </div>
+          <div class="mt-3"><div class="small text-muted">Existencia estimada</div><div class="fs-4 fw-bold">{{ inv.stock_estimado|floatformat:3 }} {{ inv.insumo.unidad_corta }}</div></div>
+          <div class="small mt-2">Mínimo: {{ inv.stock_minimo|floatformat:3 }} {{ inv.insumo.unidad_corta }} · Consumo diario: {{ inv.consumo_diario_estimado|floatformat:3 }} {{ inv.insumo.unidad_corta }}</div>
+          <div class="small text-muted">{% if inv.dias_hasta_minimo is not None %}≈ {{ inv.dias_hasta_minimo }} días para llegar al mínimo{% else %}Sin consumo diario configurado{% endif %}</div>
+          <div class="small mt-2">Valor estimado: ${{ inv.valor_estimado|floatformat:2 }}</div>
+          <form method="post" action="{% url 'contrato_inventario_ajustar' contrato.id inv.id %}" class="row g-2 mt-2">{% csrf_token %}
+            <div class="col-7"><input class="form-control form-control-sm" type="number" step="0.001" min="0" name="nueva_existencia" placeholder="Conteo físico" required></div>
+            <div class="col-5 d-grid"><button class="btn btn-sm btn-outline-secondary">Verificar</button></div>
+            <div class="col-12"><input class="form-control form-control-sm" name="observacion" placeholder="Observación (opcional)"></div>
+          </form>
+        </div></div>
+        {% empty %}<div class="col-12"><div class="text-muted">Todavía no hay productos configurados para este contrato.</div></div>{% endfor %}
+      </div>
+
+      <div class="row g-3">
+        <div class="col-lg-6"><div class="border rounded-4 p-3 h-100">
+          <h6 class="fw-bold">Configurar producto en sitio</h6>
+          <form method="post" action="{% url 'contrato_inventario_configurar' contrato.id %}" class="row g-2">{% csrf_token %}
+            <div class="col-12"><select class="form-select" name="insumo_id" required><option value="">Producto</option>{% for i in insumos_inventario %}<option value="{{ i.id }}">{{ i.nombre }}</option>{% endfor %}</select></div>
+            <div class="col-6"><input class="form-control" type="number" step="0.001" min="0" name="stock_minimo" placeholder="Stock mínimo" required></div>
+            <div class="col-6"><input class="form-control" type="number" step="0.001" min="0" name="consumo_diario_estimado" placeholder="Consumo diario"></div>
+            <div class="col-12 d-grid"><button class="btn btn-primary">Guardar configuración</button></div>
+          </form>
+        </div></div>
+        <div class="col-lg-6"><div class="border rounded-4 p-3 h-100">
+          <h6 class="fw-bold">Reponer desde Bodega General</h6>
+          <form method="post" action="{% url 'contrato_inventario_reponer' contrato.id %}" class="row g-2">{% csrf_token %}
+            <div class="col-12"><select class="form-select" name="insumo_id" required><option value="">Producto</option>{% for inv in inventario_contrato %}<option value="{{ inv.insumo.id }}">{{ inv.insumo.nombre }} · bodega {{ inv.insumo.stock|floatformat:3 }} {{ inv.insumo.unidad_corta }}</option>{% endfor %}</select></div>
+            <div class="col-7"><input class="form-control" type="number" step="0.001" min="0.001" name="cantidad" placeholder="Cantidad" required></div>
+            <div class="col-5"><select class="form-select" name="unidad"><option value="base">Unidad base</option><option value="kg">kg</option><option value="g">g</option><option value="l">L</option><option value="ml">ml</option></select></div>
+            <div class="col-12"><input class="form-control" name="observacion" placeholder="Entrega / observación"></div>
+            <div class="col-12 d-grid"><button class="btn btn-success">Registrar reposición</button></div>
+          </form>
+        </div></div>
+      </div>
+
+      {% if movimientos_inventario_contrato %}
+      <hr class="my-4"><h6 class="fw-bold">Historial logístico reciente</h6>
+      <div class="table-responsive"><table class="table align-middle"><thead><tr><th>Fecha</th><th>Producto</th><th>Movimiento</th><th>Cantidad</th><th>Responsable</th></tr></thead><tbody>
+        {% for m in movimientos_inventario_contrato %}<tr><td>{{ m.creado_en|date:'d/m/Y H:i' }}</td><td>{{ m.insumo.nombre }}</td><td>{{ m.get_tipo_display }}</td><td>{{ m.cantidad|floatformat:3 }} {{ m.insumo.unidad_corta }}</td><td>{{ m.trabajador|default:m.usuario|default:'Sistema' }}</td></tr>{% endfor %}
+      </tbody></table></div>
+      {% endif %}
+    {% endif %}
+  </div>
+</section>
 {% endblock %}

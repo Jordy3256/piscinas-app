@@ -73,6 +73,12 @@ class Mantenimiento(models.Model):
 
 
 class UsoInsumo(models.Model):
+    ORIGEN_INVENTARIO_CHOICES = [
+        ("trabajador", "Inventario del trabajador"),
+        ("contrato", "Inventario del contrato"),
+        ("cliente", "Producto proporcionado por el cliente"),
+    ]
+
     UNIDAD_REGISTRO_CHOICES = [
         ("g", "Gramos"),
         ("kg", "Kilogramos"),
@@ -101,6 +107,12 @@ class UsoInsumo(models.Model):
     unidad_registro = models.CharField(max_length=10, choices=UNIDAD_REGISTRO_CHOICES, default="kg")
     costo_unitario = models.DecimalField(max_digits=12, decimal_places=4, default=0)
     costo_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    origen_inventario = models.CharField(
+        max_length=20,
+        choices=ORIGEN_INVENTARIO_CHOICES,
+        default="trabajador",
+        db_index=True,
+    )
 
     # Se conserva para compatibilidad con consumos históricos que generaban un Egreso.
     # Los consumos nuevos no crean egreso porque el costo ya se reconoce al comprar inventario.

@@ -62,6 +62,16 @@ class ContratoAdmin(admin.ModelAdmin):
             },
         ),
         (
+            "Gestión de químicos",
+            {
+                "fields": (
+                    "quimicos_proveedor",
+                    "quimicos_almacenamiento",
+                    "responsable_reposicion",
+                )
+            },
+        ),
+        (
             "Información de pago",
             {
                 "fields": (

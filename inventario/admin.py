@@ -5,6 +5,7 @@ from .models import (
     EntradaStock,
     Insumo,
     InventarioTrabajador,
+    InventarioContrato,
     MovimientoInventario,
     PresentacionInsumo,
     VentaInsumo,
@@ -40,6 +41,14 @@ class InventarioTrabajadorAdmin(admin.ModelAdmin):
     list_filter = ("trabajador", "insumo__categoria")
     search_fields = ("trabajador__user__username", "insumo__nombre")
 
+
+
+
+@admin.register(InventarioContrato)
+class InventarioContratoAdmin(admin.ModelAdmin):
+    list_display = ("contrato", "insumo", "stock", "stock_minimo", "consumo_diario_estimado", "fecha_referencia_estimacion", "actualizado_en")
+    list_filter = ("insumo__categoria", "contrato__activo")
+    search_fields = ("contrato__cliente__nombre", "insumo__nombre")
 
 @admin.register(MovimientoInventario)
 class MovimientoInventarioAdmin(admin.ModelAdmin):

@@ -259,6 +259,37 @@
           </div>
 
           <div class="cf-card mb-3">
+            <div class="cf-card-header">
+              <div class="cf-card-title">🧪 Gestión de químicos</div>
+              <div class="cf-card-subtitle">Define quién proporciona los productos y de qué inventario deben descontarse.</div>
+            </div>
+            <div class="cf-card-body">
+              <div class="row g-3">
+                <div class="col-12 col-md-6">
+                  <label class="form-label">¿Quién proporciona los químicos?</label>
+                  <select class="form-select" name="quimicos_proveedor" id="quimicos_proveedor">
+                    {% for valor, etiqueta in quimicos_proveedores %}<option value="{{ valor }}" {% if datos_formulario.quimicos_proveedor == valor %}selected{% endif %}>{{ etiqueta }}</option>{% endfor %}
+                  </select>
+                </div>
+                <div class="col-12 col-md-6" id="quimicos-almacenamiento-wrap">
+                  <label class="form-label">¿Dónde se almacenan?</label>
+                  <select class="form-select" name="quimicos_almacenamiento" id="quimicos_almacenamiento">
+                    {% for valor, etiqueta in quimicos_almacenamientos %}<option value="{{ valor }}" {% if datos_formulario.quimicos_almacenamiento == valor %}selected{% endif %}>{{ etiqueta }}</option>{% endfor %}
+                  </select>
+                </div>
+                <div class="col-12" id="responsable-reposicion-wrap">
+                  <label class="form-label">Responsable de reposición en sitio <span class="text-muted fw-normal">(opcional)</span></label>
+                  <select class="form-select" name="responsable_reposicion" id="responsable_reposicion">
+                    <option value="">Automático: técnico designado</option>
+                    {% for t in trabajadores %}<option value="{{ t.id }}" {% if datos_formulario.responsable_reposicion_id|stringformat:'s' == t.id|stringformat:'s' %}selected{% endif %}>{{ t.user.get_full_name|default:t.user.username }}</option>{% endfor %}
+                  </select>
+                  <div class="cf-note mt-2">Si el cliente proporciona los químicos, el mantenimiento registra lo aplicado pero no descuenta inventario JVAQUA.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="cf-card mb-3">
             <div class="cf-card-header"><div class="cf-card-title">⚙️ Estado del contrato</div></div>
             <div class="cf-card-body">
               <div class="form-check form-switch">
@@ -339,6 +370,20 @@
     const clienteRapidoErrores = document.getElementById("cliente-rapido-errores");
     const guardarClienteRapido = document.getElementById("guardar-cliente-rapido");
     const clienteSelect = document.getElementById("cliente");
+    const quimicosProveedor = document.getElementById("quimicos_proveedor");
+    const quimicosAlmacenamiento = document.getElementById("quimicos_almacenamiento");
+    const quimicosAlmacenamientoWrap = document.getElementById("quimicos-almacenamiento-wrap");
+    const responsableReposicionWrap = document.getElementById("responsable-reposicion-wrap");
+
+    function actualizarGestionQuimicos(){
+      const jvaqua = quimicosProveedor && quimicosProveedor.value === "jvaqua";
+      const enSitio = jvaqua && quimicosAlmacenamiento && quimicosAlmacenamiento.value === "contrato";
+      if (quimicosAlmacenamientoWrap) quimicosAlmacenamientoWrap.style.display = jvaqua ? "block" : "none";
+      if (responsableReposicionWrap) responsableReposicionWrap.style.display = enSitio ? "block" : "none";
+    }
+    if (quimicosProveedor) quimicosProveedor.addEventListener("change", actualizarGestionQuimicos);
+    if (quimicosAlmacenamiento) quimicosAlmacenamiento.addEventListener("change", actualizarGestionQuimicos);
+    actualizarGestionQuimicos();
 
 
     const programacionCobro = document.getElementById("programacion_cobro");

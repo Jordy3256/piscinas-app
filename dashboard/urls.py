@@ -43,6 +43,10 @@ from .views import (
     contrato_crear_view,
     contrato_editar_view,
     contrato_detalle_view,
+    inventario_contrato_trabajador_view,
+    contrato_inventario_configurar_view,
+    contrato_inventario_reponer_view,
+    contrato_inventario_ajustar_view,
     contrato_regenerar_programacion_view,
     contrato_toggle_view,
 
@@ -279,6 +283,10 @@ urlpatterns = [
         contrato_detalle_view,
         name="contrato_detalle",
     ),
+    path("mi-inventario/contrato/<int:pk>/", inventario_contrato_trabajador_view, name="inventario_contrato_trabajador"),
+    path("contratos/<int:pk>/inventario/configurar/", contrato_inventario_configurar_view, name="contrato_inventario_configurar"),
+    path("contratos/<int:pk>/inventario/reponer/", contrato_inventario_reponer_view, name="contrato_inventario_reponer"),
+    path("contratos/<int:pk>/inventario/<int:inventario_id>/ajustar/", contrato_inventario_ajustar_view, name="contrato_inventario_ajustar"),
     path(
         "contratos/<int:pk>/editar/",
         contrato_editar_view,

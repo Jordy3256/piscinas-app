@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, ROUND_FLOOR
 
 from django.contrib.auth.models import User
 from django.db import models
@@ -99,6 +99,63 @@ class InventarioTrabajador(models.Model):
         ordering = ["trabajador__user__username", "insumo__nombre"]
 
 
+class InventarioContrato(models.Model):
+    contrato = models.ForeignKey(
+        "contratos.Contrato",
+        on_delete=models.CASCADE,
+        related_name="inventario_en_sitio",
+    )
+    insumo = models.ForeignKey(
+        Insumo,
+        on_delete=models.PROTECT,
+        related_name="stocks_contratos",
+    )
+    stock = models.DecimalField(max_digits=12, decimal_places=3, default=Decimal("0.000"))
+    stock_minimo = models.DecimalField(max_digits=12, decimal_places=3, default=Decimal("0.000"))
+    consumo_diario_estimado = models.DecimalField(max_digits=12, decimal_places=3, default=Decimal("0.000"))
+    fecha_referencia_estimacion = models.DateField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.contrato} · {self.insumo}: {self.stock} {self.insumo.unidad_corta}"
+
+    @property
+    def stock_estimado(self):
+        from django.utils import timezone
+        dias = max((timezone.localdate() - self.fecha_referencia_estimacion).days, 0)
+        estimado = Decimal(self.stock or 0) - (Decimal(self.consumo_diario_estimado or 0) * Decimal(dias))
+        return max(estimado, Decimal("0.000"))
+
+    @property
+    def dias_hasta_minimo(self):
+        consumo = Decimal(self.consumo_diario_estimado or 0)
+        if consumo <= 0:
+            return None
+        restante = self.stock_estimado - Decimal(self.stock_minimo or 0)
+        if restante <= 0:
+            return 0
+        return int((restante / consumo).to_integral_value(rounding=ROUND_FLOOR))
+
+    @property
+    def estado_stock(self):
+        estimado = self.stock_estimado
+        if estimado <= 0:
+            return "agotado"
+        if estimado <= Decimal(self.stock_minimo or 0):
+            return "critico"
+        if self.dias_hasta_minimo is not None and self.dias_hasta_minimo <= 3:
+            return "proximo"
+        return "correcto"
+
+    class Meta:
+        verbose_name = "Inventario de contrato"
+        verbose_name_plural = "Inventarios de contratos"
+        constraints = [
+            models.UniqueConstraint(fields=["contrato", "insumo"], name="uniq_inventario_contrato_insumo")
+        ]
+        ordering = ["contrato__cliente__nombre", "insumo__nombre"]
+
+
 class VentaInsumo(models.Model):
     insumo = models.ForeignKey(Insumo, on_delete=models.PROTECT, related_name="ventas")
     cantidad = models.DecimalField(max_digits=12, decimal_places=3)
@@ -168,6 +225,9 @@ class MovimientoInventario(models.Model):
         ("devolucion", "Devolución de trabajador"),
         ("mantenimiento", "Consumo en mantenimiento"),
         ("ajuste", "Ajuste"),
+        ("reposicion_contrato", "Reposición a contrato"),
+        ("consumo_contrato", "Consumo de contrato"),
+        ("ajuste_contrato", "Ajuste de contrato"),
     ]
 
     insumo = models.ForeignKey(Insumo, on_delete=models.PROTECT, related_name="movimientos")
@@ -179,6 +239,9 @@ class MovimientoInventario(models.Model):
     stock_trabajador_anterior = models.DecimalField(max_digits=12, decimal_places=3, null=True, blank=True)
     stock_trabajador_resultante = models.DecimalField(max_digits=12, decimal_places=3, null=True, blank=True)
     mantenimiento = models.ForeignKey("mantenimientos.Mantenimiento", on_delete=models.SET_NULL, null=True, blank=True, related_name="movimientos_inventario")
+    contrato = models.ForeignKey("contratos.Contrato", on_delete=models.SET_NULL, null=True, blank=True, related_name="movimientos_inventario")
+    stock_contrato_anterior = models.DecimalField(max_digits=12, decimal_places=3, null=True, blank=True)
+    stock_contrato_resultante = models.DecimalField(max_digits=12, decimal_places=3, null=True, blank=True)
     costo_unitario = models.DecimalField(max_digits=12, decimal_places=4, default=0)
     total_costo = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     usuario = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="movimientos_inventario_registrados")
