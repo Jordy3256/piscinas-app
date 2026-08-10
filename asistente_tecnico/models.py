@@ -257,3 +257,132 @@ class PropuestaConocimiento(models.Model):
 
     def __str__(self):
         return self.titulo
+
+
+# ============================================================
+# Academia JVAQUA CMS (Sprint 3.1)
+# ============================================================
+class ContenidoAcademia(models.Model):
+    TIPOS = [
+        ("biblioteca", "Biblioteca Técnica"),
+        ("procedimiento", "Procedimiento"),
+        ("equipo", "Equipo"),
+    ]
+    ESTADOS = [
+        ("borrador", "Borrador"),
+        ("aprobado", "Aprobado"),
+        ("archivado", "Archivado"),
+    ]
+    NIVELES = [
+        ("basico", "Básico"),
+        ("intermedio", "Intermedio"),
+        ("avanzado", "Avanzado"),
+    ]
+    tipo = models.CharField(max_length=20, choices=TIPOS, db_index=True)
+    codigo = models.CharField(max_length=40, unique=True)
+    titulo = models.CharField(max_length=180)
+    slug = models.SlugField(max_length=210, unique=True)
+    resumen = models.CharField(max_length=320, blank=True, default="")
+    imagen_principal = models.ImageField(upload_to="academia/principales/", blank=True, null=True)
+    nivel = models.CharField(max_length=20, choices=NIVELES, default="basico", db_index=True)
+    tiempo_lectura_min = models.PositiveSmallIntegerField(default=5)
+    estado = models.CharField(max_length=20, choices=ESTADOS, default="borrador", db_index=True)
+    version = models.CharField(max_length=20, default="1.0")
+    introduccion = models.TextField(blank=True, default="")
+    contenido = models.TextField(blank=True, default="")
+    procedimiento = models.TextField(blank=True, default="")
+    herramientas_materiales = models.TextField(blank=True, default="")
+    funcionamiento = models.TextField(blank=True, default="")
+    componentes = models.TextField(blank=True, default="")
+    mantenimiento = models.TextField(blank=True, default="")
+    fallas_frecuentes = models.TextField(blank=True, default="")
+    buenas_practicas = models.TextField(blank=True, default="")
+    errores_comunes = models.TextField(blank=True, default="")
+    recomendaciones_jvaqua = models.TextField(blank=True, default="")
+    referencias_tecnicas = models.TextField(blank=True, default="")
+    etiquetas = models.CharField(max_length=500, blank=True, default="")
+    relacionados = models.ManyToManyField("self", blank=True, symmetrical=True)
+    orden = models.PositiveSmallIntegerField(default=0)
+    creado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="contenidos_academia_creados")
+    aprobado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="contenidos_academia_aprobados")
+    aprobado_en = models.DateTimeField(null=True, blank=True)
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["tipo", "orden", "titulo"]
+        verbose_name = "Contenido de Academia"
+        verbose_name_plural = "Contenidos de Academia"
+        indexes = [models.Index(fields=["tipo", "estado"], name="ati_cms_tipo_estado_idx"), models.Index(fields=["estado", "actualizado_en"], name="ati_cms_estado_act_idx")]
+
+    def __str__(self):
+        return f"{self.get_tipo_display()} · {self.titulo}"
+
+    @property
+    def es_oficial(self):
+        return self.estado == "aprobado"
+
+
+class ImagenContenidoAcademia(models.Model):
+    contenido = models.ForeignKey(ContenidoAcademia, on_delete=models.CASCADE, related_name="galeria")
+    imagen = models.ImageField(upload_to="academia/galeria/")
+    titulo = models.CharField(max_length=140, blank=True, default="")
+    descripcion = models.CharField(max_length=280, blank=True, default="")
+    orden = models.PositiveSmallIntegerField(default=0)
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["orden", "id"]
+        verbose_name = "Imagen de Academia"
+        verbose_name_plural = "Imágenes de Academia"
+
+    def __str__(self):
+        return self.titulo or f"Imagen #{self.pk}"
+
+
+class VersionContenidoAcademia(models.Model):
+    contenido = models.ForeignKey(ContenidoAcademia, on_delete=models.CASCADE, related_name="versiones")
+    version = models.CharField(max_length=20)
+    snapshot = models.JSONField(default=dict)
+    motivo = models.CharField(max_length=280, blank=True, default="")
+    creado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="versiones_academia_creadas")
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-creado_en", "-id"]
+        verbose_name = "Versión de contenido"
+        verbose_name_plural = "Versiones de contenido"
+
+    def __str__(self):
+        return f"{self.contenido.titulo} · v{self.version}"
+
+
+class ExperienciaConocimiento(models.Model):
+    ESTADOS = [
+        ("borrador", "Borrador"),
+        ("revision", "En revisión"),
+        ("aprobada", "Aprobada"),
+        ("descartada", "Descartada"),
+    ]
+    DESTINOS = [("", "Sin convertir"), ("biblioteca", "Biblioteca Técnica"), ("procedimiento", "Procedimiento"), ("equipo", "Equipo")]
+    titulo = models.CharField(max_length=180)
+    problema = models.TextField()
+    analisis = models.TextField(blank=True, default="")
+    solucion = models.TextField(blank=True, default="")
+    resultado = models.TextField(blank=True, default="")
+    aprendizaje = models.TextField(blank=True, default="")
+    estado = models.CharField(max_length=20, choices=ESTADOS, default="borrador", db_index=True)
+    destino_sugerido = models.CharField(max_length=20, choices=DESTINOS, blank=True, default="")
+    convertido_en = models.ForeignKey(ContenidoAcademia, on_delete=models.SET_NULL, null=True, blank=True, related_name="experiencias_origen")
+    creado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="experiencias_conocimiento_creadas")
+    revisado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="experiencias_conocimiento_revisadas")
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["estado", "-actualizado_en"]
+        verbose_name = "Experiencia de conocimiento"
+        verbose_name_plural = "Experiencias de conocimiento"
+
+    def __str__(self):
+        return self.titulo

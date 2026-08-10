@@ -33,4 +33,20 @@ urlpatterns = [
     path("administracion/version/nueva/", views.asistente_version_nueva_view, name="version_nueva"),
     path("administracion/version/<int:pk>/activar/", views.asistente_version_activar_view, name="version_activar"),
     path("administracion/casos/<int:pk>/destacar/", views.asistente_destacar_view, name="destacar"),
+
+    # Academia JVAQUA CMS 3.1
+    path("academia-jvaqua/", views.academia_publica_view, name="academia_cms"),
+    path("academia-jvaqua/contenido/<slug:slug>/", views.academia_contenido_detalle_view, name="academia_contenido_detalle"),
+    path("academia-jvaqua/pdf/manual/", views.academia_pdf_manual_view, name="academia_pdf_manual"),
+    path("academia-jvaqua/pdf/categoria/<str:tipo>/", views.academia_pdf_categoria_view, name="academia_pdf_categoria"),
+    path("academia-jvaqua/pdf/<slug:slug>/", views.academia_pdf_articulo_view, name="academia_pdf_articulo"),
+    path("administracion/academia-cms/", views.academia_cms_admin_view, name="cms_admin"),
+    path("administracion/academia-cms/contenido/nuevo/", views.academia_cms_contenido_form_view, name="cms_contenido_nuevo"),
+    path("administracion/academia-cms/contenido/<int:pk>/editar/", views.academia_cms_contenido_form_view, name="cms_contenido_editar"),
+    path("administracion/academia-cms/contenido/<int:contenido_pk>/imagen/", views.academia_cms_imagen_form_view, name="cms_imagen_nueva"),
+    path("administracion/academia-cms/imagen/<int:pk>/eliminar/", views.academia_cms_imagen_eliminar_view, name="cms_imagen_eliminar"),
+    path("administracion/academia-cms/experiencias/", views.experiencias_conocimiento_view, name="cms_experiencias"),
+    path("administracion/academia-cms/experiencia/nueva/", views.experiencia_conocimiento_form_view, name="cms_experiencia_nueva"),
+    path("administracion/academia-cms/experiencia/<int:pk>/editar/", views.experiencia_conocimiento_form_view, name="cms_experiencia_editar"),
+    path("administracion/academia-cms/experiencia/<int:pk>/convertir/", views.experiencia_convertir_view, name="cms_experiencia_convertir"),
 ]

@@ -1,0 +1,32 @@
+{% extends base_template %}
+{% block title %}Academia JVAQUA · Administración{% endblock %}
+{% block top_title %}🎓 Academia JVAQUA{% endblock %}
+{% block content %}
+<style>
+.cms-wrap{max-width:1250px;margin:auto}.cms-kpis{display:grid;grid-template-columns:repeat(5,minmax(130px,1fr));gap:12px}.cms-kpi,.cms-card{border:1px solid #e7edf5;border-radius:20px;background:#fff;box-shadow:0 8px 24px #10233f0d}.cms-kpi{padding:16px}.cms-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.cms-card{padding:18px;text-decoration:none;color:inherit}.cms-badge{display:inline-flex;padding:5px 10px;border-radius:99px;font-size:.78rem;font-weight:700}.cms-approved{background:#e8f7ef;color:#16794b}.cms-draft{background:#fff5d9;color:#986a00}.cms-archived{background:#eef1f5;color:#5d6673}@media(max-width:900px){.cms-kpis{grid-template-columns:repeat(2,1fr)}.cms-grid{grid-template-columns:1fr}}
+</style>
+<div class="cms-wrap">
+  <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-3">
+    <div><h2 class="fw-bold mb-1">Gestor de Contenido</h2><div class="text-muted">Crea, revisa, aprueba y versiona el conocimiento oficial de JVAQUA.</div></div>
+    <div class="d-flex gap-2 flex-wrap"><a class="btn btn-outline-primary" href="{% url 'asistente_tecnico:academia_cms' %}">Vista del trabajador</a><a class="btn btn-outline-secondary" href="{% url 'asistente_tecnico:cms_experiencias' %}">Base de conocimiento</a><a class="btn btn-primary" href="{% url 'asistente_tecnico:cms_contenido_nuevo' %}">+ Nuevo contenido</a></div>
+  </div>
+  <div class="cms-kpis mb-4">
+    <div class="cms-kpi"><div class="small text-muted">Total</div><div class="fs-3 fw-bold">{{ total }}</div></div>
+    <div class="cms-kpi"><div class="small text-muted">Aprobados</div><div class="fs-3 fw-bold text-success">{{ aprobados }}</div></div>
+    <div class="cms-kpi"><div class="small text-muted">Borradores</div><div class="fs-3 fw-bold text-warning">{{ borradores }}</div></div>
+    <div class="cms-kpi"><div class="small text-muted">Archivados</div><div class="fs-3 fw-bold">{{ archivados }}</div></div>
+    <div class="cms-kpi"><div class="small text-muted">Experiencias por revisar</div><div class="fs-3 fw-bold text-primary">{{ experiencias_revision }}</div></div>
+  </div>
+  <form class="cms-card mb-3" method="get">
+    <div class="row g-2"><div class="col-md-5"><input class="form-control" name="q" value="{{ q }}" placeholder="Buscar por título, código, etiqueta o contenido..."></div><div class="col-md-3"><select name="tipo" class="form-select"><option value="">Todos los tipos</option>{% for v,l in tipos %}<option value="{{ v }}" {% if tipo == v %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></div><div class="col-md-2"><select name="estado" class="form-select"><option value="">Todos los estados</option>{% for v,l in estados %}<option value="{{ v }}" {% if estado == v %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></div><div class="col-md-2"><button class="btn btn-primary w-100">Filtrar</button></div></div>
+  </form>
+  <div class="cms-grid">
+  {% for c in contenidos %}
+    <a class="cms-card" href="{% url 'asistente_tecnico:cms_contenido_editar' c.pk %}">
+      <div class="d-flex justify-content-between gap-2"><div class="small text-primary fw-bold">{{ c.codigo }} · {{ c.get_tipo_display }}</div><span class="cms-badge {% if c.estado == 'aprobado' %}cms-approved{% elif c.estado == 'borrador' %}cms-draft{% else %}cms-archived{% endif %}">{{ c.get_estado_display }}</span></div>
+      <h5 class="fw-bold mt-2 mb-1">{{ c.titulo }}</h5><div class="text-muted small">{{ c.resumen|default:"Sin resumen" }}</div><div class="small mt-3">v{{ c.version }} · {{ c.get_nivel_display }} · {{ c.tiempo_lectura_min }} min</div>
+    </a>
+  {% empty %}<div class="cms-card"><strong>No hay contenido todavía.</strong><div class="text-muted">Crea la primera ficha de la Academia.</div></div>{% endfor %}
+  </div>
+</div>
+{% endblock %}

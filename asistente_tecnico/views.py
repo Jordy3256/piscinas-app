@@ -665,3 +665,247 @@ def articulo_form_view(request, pk=None):
 @require_http_methods(["GET", "POST"])
 def consejo_form_view(request, pk=None):
     return _crud_conocimiento(request, ConsejoJVAQUA, ConsejoJVAQUAForm, "Consejo JVAQUA", pk)
+
+
+# ============================================================
+# Academia JVAQUA CMS - Sprint 3.1
+# ============================================================
+from django.http import HttpResponse
+from django.utils.text import slugify
+from .forms import ContenidoAcademiaForm, ImagenContenidoAcademiaForm, ExperienciaConocimientoForm
+from .models import ContenidoAcademia, ImagenContenidoAcademia, VersionContenidoAcademia, ExperienciaConocimiento
+
+
+def _snapshot_contenido(obj):
+    campos = [
+        "tipo", "codigo", "titulo", "slug", "resumen", "nivel", "tiempo_lectura_min", "estado", "version",
+        "introduccion", "contenido", "procedimiento", "herramientas_materiales", "funcionamiento", "componentes",
+        "mantenimiento", "fallas_frecuentes", "buenas_practicas", "errores_comunes", "recomendaciones_jvaqua",
+        "referencias_tecnicas", "etiquetas", "orden",
+    ]
+    return {c: getattr(obj, c, "") for c in campos}
+
+
+def _guardar_version(obj, user, motivo=""):
+    VersionContenidoAcademia.objects.create(
+        contenido=obj, version=obj.version, snapshot=_snapshot_contenido(obj), motivo=motivo, creado_por=user,
+    )
+
+
+@login_required
+def academia_cms_admin_view(request):
+    if not _es_admin(request.user):
+        return HttpResponseForbidden("No autorizado")
+    qs = ContenidoAcademia.objects.all()
+    q = (request.GET.get("q") or "").strip()
+    tipo = (request.GET.get("tipo") or "").strip()
+    estado = (request.GET.get("estado") or "").strip()
+    if q:
+        qs = qs.filter(Q(titulo__icontains=q) | Q(codigo__icontains=q) | Q(resumen__icontains=q) | Q(etiquetas__icontains=q) | Q(contenido__icontains=q))
+    if tipo:
+        qs = qs.filter(tipo=tipo)
+    if estado:
+        qs = qs.filter(estado=estado)
+    ctx = {
+        "base_template": "dashboard/base_admin.html", "contenidos": qs[:200], "q": q, "tipo": tipo, "estado": estado,
+        "tipos": ContenidoAcademia.TIPOS, "estados": ContenidoAcademia.ESTADOS,
+        "total": ContenidoAcademia.objects.count(),
+        "aprobados": ContenidoAcademia.objects.filter(estado="aprobado").count(),
+        "borradores": ContenidoAcademia.objects.filter(estado="borrador").count(),
+        "archivados": ContenidoAcademia.objects.filter(estado="archivado").count(),
+        "experiencias_revision": ExperienciaConocimiento.objects.filter(estado="revision").count(),
+        "es_admin": True,
+    }
+    return render(request, "asistente_tecnico/cms_admin.html", ctx)
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def academia_cms_contenido_form_view(request, pk=None):
+    if not _es_admin(request.user):
+        return HttpResponseForbidden("No autorizado")
+    obj = get_object_or_404(ContenidoAcademia, pk=pk) if pk else None
+    estado_anterior = obj.estado if obj else None
+    version_anterior = obj.version if obj else None
+    if request.method == "POST":
+        form = ContenidoAcademiaForm(request.POST, request.FILES, instance=obj)
+        if form.is_valid():
+            nuevo = form.save(commit=False)
+            if not nuevo.creado_por_id:
+                nuevo.creado_por = request.user
+            if nuevo.estado == "aprobado" and estado_anterior != "aprobado":
+                nuevo.aprobado_por = request.user
+                nuevo.aprobado_en = timezone.now()
+            elif nuevo.estado != "aprobado":
+                nuevo.aprobado_por = None
+                nuevo.aprobado_en = None
+            nuevo.save()
+            form.save_m2m()
+            motivo = (request.POST.get("motivo_version") or "").strip()
+            if not obj or version_anterior != nuevo.version or motivo or estado_anterior != nuevo.estado:
+                _guardar_version(nuevo, request.user, motivo or "Actualización de contenido")
+            messages.success(request, "Contenido guardado correctamente.")
+            return redirect("asistente_tecnico:cms_admin")
+    else:
+        form = ContenidoAcademiaForm(instance=obj)
+    return render(request, "asistente_tecnico/cms_contenido_form.html", {
+        "base_template": "dashboard/base_admin.html", "form": form, "obj": obj, "es_admin": True,
+    })
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def academia_cms_imagen_form_view(request, contenido_pk):
+    if not _es_admin(request.user):
+        return HttpResponseForbidden("No autorizado")
+    contenido = get_object_or_404(ContenidoAcademia, pk=contenido_pk)
+    if request.method == "POST":
+        form = ImagenContenidoAcademiaForm(request.POST, request.FILES)
+        if form.is_valid():
+            imagen = form.save(commit=False); imagen.contenido = contenido; imagen.save()
+            messages.success(request, "Imagen añadida a la galería.")
+            return redirect("asistente_tecnico:cms_contenido_editar", pk=contenido.pk)
+    else:
+        form = ImagenContenidoAcademiaForm()
+    return render(request, "asistente_tecnico/cms_imagen_form.html", {"base_template":"dashboard/base_admin.html","form":form,"contenido":contenido,"es_admin":True})
+
+
+@login_required
+@require_http_methods(["POST"])
+def academia_cms_imagen_eliminar_view(request, pk):
+    if not _es_admin(request.user):
+        return HttpResponseForbidden("No autorizado")
+    imagen = get_object_or_404(ImagenContenidoAcademia, pk=pk); contenido_pk = imagen.contenido_id; imagen.delete()
+    messages.success(request, "Imagen eliminada.")
+    return redirect("asistente_tecnico:cms_contenido_editar", pk=contenido_pk)
+
+
+@login_required
+def academia_publica_view(request):
+    if not (_es_trabajador(request.user) or _es_admin(request.user)):
+        return HttpResponseForbidden("No autorizado")
+    qs = ContenidoAcademia.objects.filter(estado="aprobado")
+    q = (request.GET.get("q") or "").strip(); tipo = (request.GET.get("tipo") or "").strip()
+    if q:
+        qs = qs.filter(Q(titulo__icontains=q) | Q(resumen__icontains=q) | Q(etiquetas__icontains=q) | Q(contenido__icontains=q) | Q(procedimiento__icontains=q) | Q(fallas_frecuentes__icontains=q))
+    if tipo: qs = qs.filter(tipo=tipo)
+    return render(request, "asistente_tecnico/academia_cms_publica.html", {
+        "base_template": _base_template(request.user), "contenidos": qs[:200], "q": q, "tipo": tipo,
+        "tipos": ContenidoAcademia.TIPOS, "es_admin": _es_admin(request.user), "consejo": _consejo_del_dia(),
+    })
+
+
+@login_required
+def academia_contenido_detalle_view(request, slug):
+    if not (_es_trabajador(request.user) or _es_admin(request.user)):
+        return HttpResponseForbidden("No autorizado")
+    filtros = {"slug": slug}
+    if not _es_admin(request.user): filtros["estado"] = "aprobado"
+    obj = get_object_or_404(ContenidoAcademia.objects.prefetch_related("relacionados", "galeria"), **filtros)
+    return render(request, "asistente_tecnico/academia_contenido_detalle.html", {"base_template":_base_template(request.user),"obj":obj,"es_admin":_es_admin(request.user)})
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def experiencia_conocimiento_form_view(request, pk=None):
+    if not _es_admin(request.user):
+        return HttpResponseForbidden("No autorizado")
+    obj = get_object_or_404(ExperienciaConocimiento, pk=pk) if pk else None
+    if request.method == "POST":
+        form = ExperienciaConocimientoForm(request.POST, instance=obj)
+        if form.is_valid():
+            nuevo=form.save(commit=False)
+            if not nuevo.creado_por_id: nuevo.creado_por=request.user
+            if nuevo.estado in {"aprobada","descartada"}: nuevo.revisado_por=request.user
+            nuevo.save(); messages.success(request,"Experiencia guardada."); return redirect("asistente_tecnico:cms_experiencias")
+    else: form=ExperienciaConocimientoForm(instance=obj)
+    return render(request,"asistente_tecnico/cms_experiencia_form.html",{"base_template":"dashboard/base_admin.html","form":form,"obj":obj,"es_admin":True})
+
+
+@login_required
+def experiencias_conocimiento_view(request):
+    if not _es_admin(request.user): return HttpResponseForbidden("No autorizado")
+    return render(request,"asistente_tecnico/cms_experiencias.html",{"base_template":"dashboard/base_admin.html","experiencias":ExperienciaConocimiento.objects.all()[:200],"es_admin":True})
+
+
+@login_required
+@require_http_methods(["POST"])
+def experiencia_convertir_view(request, pk):
+    if not _es_admin(request.user): return HttpResponseForbidden("No autorizado")
+    exp=get_object_or_404(ExperienciaConocimiento,pk=pk)
+    if exp.convertido_en_id:
+        messages.info(request,"Esta experiencia ya fue convertida en contenido oficial.")
+        return redirect("asistente_tecnico:cms_experiencias")
+    tipo=exp.destino_sugerido or "biblioteca"
+    base=slugify(exp.titulo) or f"experiencia-{exp.pk}"; slug=base; n=2
+    while ContenidoAcademia.objects.filter(slug=slug).exists(): slug=f"{base}-{n}"; n+=1
+    codigo=f"EXP-{exp.pk:05d}"
+    while ContenidoAcademia.objects.filter(codigo=codigo).exists(): codigo=f"EXP-{exp.pk:05d}-{n}"; n+=1
+    contenido=ContenidoAcademia.objects.create(tipo=tipo,codigo=codigo,titulo=exp.titulo,slug=slug,resumen=exp.problema[:320],introduccion=exp.analisis,contenido=exp.solucion,buenas_practicas=exp.aprendizaje,recomendaciones_jvaqua=exp.resultado,estado="borrador",creado_por=request.user)
+    _guardar_version(contenido,request.user,"Creado desde Base de Conocimiento")
+    exp.convertido_en=contenido; exp.save(update_fields=["convertido_en","actualizado_en"])
+    messages.success(request,"Experiencia convertida en borrador. Revísala y apruébala antes de publicarla.")
+    return redirect("asistente_tecnico:cms_contenido_editar",pk=contenido.pk)
+
+
+def _pdf_styles():
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER
+    styles=getSampleStyleSheet()
+    styles.add(ParagraphStyle(name="JTitle", parent=styles["Title"], alignment=TA_CENTER, textColor="#0A5AA8", spaceAfter=12))
+    styles.add(ParagraphStyle(name="JH", parent=styles["Heading2"], textColor="#0A5AA8", spaceBefore=10, spaceAfter=6))
+    return styles
+
+
+def _texto_pdf(texto):
+    import html
+    return html.escape(texto or "").replace("\n", "<br/>")
+
+
+def _contenido_story(obj, styles):
+    from reportlab.platypus import Paragraph, Spacer
+    story=[Paragraph("JVAQUA · Manual Técnico Oficial",styles["JTitle"]),Paragraph(_texto_pdf(obj.titulo),styles["Heading1"])]
+    story += [Paragraph(f"{obj.get_tipo_display()} · Nivel {obj.get_nivel_display()} · Versión {obj.version}", styles["Normal"]), Spacer(1,10)]
+    if obj.resumen: story += [Paragraph(_texto_pdf(obj.resumen),styles["Italic"]),Spacer(1,8)]
+    secciones=[("Introducción",obj.introduccion),("Contenido",obj.contenido),("Procedimiento",obj.procedimiento),("Herramientas / materiales",obj.herramientas_materiales),("Funcionamiento",obj.funcionamiento),("Componentes",obj.componentes),("Mantenimiento",obj.mantenimiento),("Fallas frecuentes",obj.fallas_frecuentes),("Buenas prácticas",obj.buenas_practicas),("Errores comunes",obj.errores_comunes),("Recomendaciones JVAQUA",obj.recomendaciones_jvaqua),("Referencias técnicas",obj.referencias_tecnicas)]
+    for titulo,texto in secciones:
+        if texto: story += [Paragraph(titulo,styles["JH"]),Paragraph(_texto_pdf(texto),styles["BodyText"]),Spacer(1,6)]
+    return story
+
+
+def _pdf_response(nombre, objetos):
+    from io import BytesIO
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, PageBreak, Paragraph
+    buf=BytesIO(); doc=SimpleDocTemplate(buf,pagesize=A4,rightMargin=16*mm,leftMargin=16*mm,topMargin=16*mm,bottomMargin=16*mm)
+    styles=_pdf_styles(); story=[]
+    objs=list(objetos)
+    if len(objs)>1:
+        story += [Paragraph("JVAQUA",styles["JTitle"]),Paragraph("Manual Técnico Oficial",styles["Title"]),Paragraph(f"Contenido aprobado · {timezone.localdate().strftime('%d/%m/%Y')}",styles["Normal"]),PageBreak()]
+    for i,obj in enumerate(objs):
+        if i: story.append(PageBreak())
+        story.extend(_contenido_story(obj,styles))
+    doc.build(story); data=buf.getvalue(); buf.close()
+    resp=HttpResponse(data,content_type="application/pdf"); resp["Content-Disposition"]=f'attachment; filename="{nombre}"'; return resp
+
+
+@login_required
+def academia_pdf_articulo_view(request, slug):
+    filtros={"slug":slug};
+    if not _es_admin(request.user): filtros["estado"]="aprobado"
+    obj=get_object_or_404(ContenidoAcademia,**filtros)
+    return _pdf_response(f"JVAQUA_{slug}.pdf",[obj])
+
+
+@login_required
+def academia_pdf_categoria_view(request, tipo):
+    if tipo not in {x[0] for x in ContenidoAcademia.TIPOS}: return HttpResponse("Tipo inválido",status=400)
+    qs=ContenidoAcademia.objects.filter(estado="aprobado",tipo=tipo)
+    return _pdf_response(f"JVAQUA_{tipo}.pdf",qs)
+
+
+@login_required
+def academia_pdf_manual_view(request):
+    qs=ContenidoAcademia.objects.filter(estado="aprobado")
+    return _pdf_response("Manual_Tecnico_Oficial_JVAQUA.pdf",qs)
