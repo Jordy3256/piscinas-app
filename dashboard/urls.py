@@ -29,6 +29,7 @@ from .views import (
     # Core
     inicio_view,
     home_view,
+    ruta_matriz_google_view,
     dashboard_view,
     calculadora_quimicos_view,
     mi_cuenta_trabajador_view,
@@ -148,6 +149,8 @@ urlpatterns = [
         offline_view,
         name="offline",
     ),
+
+    path("ruta/matriz-google/", ruta_matriz_google_view, name="ruta_matriz_google"),
 
     # ======================
     # Push

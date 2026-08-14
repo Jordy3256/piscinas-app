@@ -12,7 +12,7 @@ from django.views.decorators.http import require_http_methods
 
 from trabajadores.models import Trabajador
 from .engine import DEFAULT_RULES, calcular_recomendacion
-from .models import CasoAsistenteTecnico, MotorRecomendacion
+from .models import CasoAsistenteTecnico, MotorRecomendacion, ContenidoAcademia, ProgresoContenidoAcademia, FavoritoContenidoAcademia, ConsultaContenidoAcademia
 from .services import generar_recordatorios_seguimiento
 
 
@@ -417,21 +417,19 @@ def _progreso_usuario(user):
 def centro_conocimiento_view(request):
     if not (_es_trabajador(request.user) or _es_admin(request.user)):
         return HttpResponseForbidden("No autorizado")
-    total, completadas, porcentaje = _progreso_usuario(request.user)
-    categorias = CategoriaAcademia.objects.filter(activa=True).prefetch_related("lecciones")
-    articulos = ArticuloBiblioteca.objects.filter(publicada=True)
-    casos_destacados = CasoAsistenteTecnico.objects.filter(destacado=True).select_related("user", "motor")[:6]
+    oficiales = ContenidoAcademia.objects.filter(estado="aprobado")
+    if not _es_admin(request.user):
+        oficiales = oficiales.exclude(acceso="suscriptor")
+    curso = oficiales.exclude(modulo_curso="")
+    total = curso.count()
+    completadas = ProgresoContenidoAcademia.objects.filter(user=request.user, completado=True, contenido__in=curso).count()
+    porcentaje = round((completadas / total) * 100) if total else 0
+    recientes = [x.contenido for x in ConsultaContenidoAcademia.objects.filter(user=request.user, contenido__estado="aprobado").select_related("contenido")[:4]]
+    favoritos = [x.contenido for x in FavoritoContenidoAcademia.objects.filter(user=request.user, contenido__estado="aprobado").select_related("contenido")[:4]]
     return render(request, "asistente_tecnico/centro_conocimiento.html", {
-        "base_template": _base_template(request.user),
-        "motor": _motor_activo(),
-        "consejo": _consejo_del_dia(),
-        "categorias_count": categorias.count(),
-        "lecciones_count": LeccionAcademia.objects.filter(publicada=True, categoria__activa=True).count(),
-        "articulos_count": articulos.count(),
-        "casos_count": casos_destacados.count(),
-        "total_lecciones": total,
-        "completadas": completadas,
-        "porcentaje": porcentaje,
+        "base_template": _base_template(request.user), "consejo": _consejo_del_dia(),
+        "total_contenidos": oficiales.count(), "total_curso": total, "completadas": completadas,
+        "porcentaje": porcentaje, "recientes": recientes, "favoritos": favoritos,
         "es_admin": _es_admin(request.user),
     })
 
@@ -673,7 +671,10 @@ def consejo_form_view(request, pk=None):
 from django.http import HttpResponse
 from django.utils.text import slugify
 from .forms import ContenidoAcademiaForm, ImagenContenidoAcademiaForm, ExperienciaConocimientoForm
-from .models import ContenidoAcademia, ImagenContenidoAcademia, VersionContenidoAcademia, ExperienciaConocimiento
+from .models import (
+    ContenidoAcademia, ImagenContenidoAcademia, VersionContenidoAcademia, ExperienciaConocimiento,
+    ProgresoContenidoAcademia, FavoritoContenidoAcademia, ConsultaContenidoAcademia,
+)
 
 
 def _snapshot_contenido(obj):
@@ -681,7 +682,7 @@ def _snapshot_contenido(obj):
         "tipo", "codigo", "titulo", "slug", "resumen", "nivel", "tiempo_lectura_min", "estado", "version",
         "introduccion", "contenido", "procedimiento", "herramientas_materiales", "funcionamiento", "componentes",
         "mantenimiento", "fallas_frecuentes", "buenas_practicas", "errores_comunes", "recomendaciones_jvaqua",
-        "referencias_tecnicas", "etiquetas", "orden",
+        "referencias_tecnicas", "etiquetas", "acceso", "modulo_curso", "orden_curso", "orden",
     ]
     return {c: getattr(obj, c, "") for c in campos}
 
@@ -785,13 +786,28 @@ def academia_publica_view(request):
     if not (_es_trabajador(request.user) or _es_admin(request.user)):
         return HttpResponseForbidden("No autorizado")
     qs = ContenidoAcademia.objects.filter(estado="aprobado")
-    q = (request.GET.get("q") or "").strip(); tipo = (request.GET.get("tipo") or "").strip()
+    if not _es_admin(request.user):
+        qs = qs.exclude(acceso="suscriptor")
+    q = (request.GET.get("q") or "").strip()
+    tipo = (request.GET.get("tipo") or "").strip()
+    modo = (request.GET.get("modo") or "consultar").strip()
+    modulo = (request.GET.get("modulo") or "").strip()
     if q:
         qs = qs.filter(Q(titulo__icontains=q) | Q(resumen__icontains=q) | Q(etiquetas__icontains=q) | Q(contenido__icontains=q) | Q(procedimiento__icontains=q) | Q(fallas_frecuentes__icontains=q))
     if tipo: qs = qs.filter(tipo=tipo)
+    if modulo: qs = qs.filter(modulo_curso=modulo)
+    completadas_ids = set(ProgresoContenidoAcademia.objects.filter(user=request.user, completado=True).values_list("contenido_id", flat=True))
+    if modo == "aprender":
+        qs = qs.exclude(modulo_curso="").order_by("modulo_curso", "orden_curso", "orden", "titulo")
+        total = qs.count(); hechas = sum(1 for pk in qs.values_list("pk", flat=True) if pk in completadas_ids)
+        progreso = round((hechas / total) * 100) if total else 0
+    else:
+        total = hechas = progreso = 0
     return render(request, "asistente_tecnico/academia_cms_publica.html", {
-        "base_template": _base_template(request.user), "contenidos": qs[:200], "q": q, "tipo": tipo,
-        "tipos": ContenidoAcademia.TIPOS, "es_admin": _es_admin(request.user), "consejo": _consejo_del_dia(),
+        "base_template": _base_template(request.user), "contenidos": qs[:200], "q": q, "tipo": tipo, "modo": modo,
+        "modulo": modulo, "tipos": ContenidoAcademia.TIPOS, "modulos": ContenidoAcademia.MODULOS_CURSO,
+        "completadas_ids": completadas_ids, "curso_total": total, "curso_completadas": hechas, "curso_porcentaje": progreso,
+        "es_admin": _es_admin(request.user), "consejo": _consejo_del_dia(),
     })
 
 
@@ -802,7 +818,36 @@ def academia_contenido_detalle_view(request, slug):
     filtros = {"slug": slug}
     if not _es_admin(request.user): filtros["estado"] = "aprobado"
     obj = get_object_or_404(ContenidoAcademia.objects.prefetch_related("relacionados", "galeria"), **filtros)
-    return render(request, "asistente_tecnico/academia_contenido_detalle.html", {"base_template":_base_template(request.user),"obj":obj,"es_admin":_es_admin(request.user)})
+    if not _es_admin(request.user) and obj.acceso == "suscriptor":
+        return HttpResponseForbidden("Contenido no disponible para este perfil")
+    ConsultaContenidoAcademia.objects.update_or_create(user=request.user, contenido=obj, defaults={"consultado_en": timezone.now()})
+    completado = ProgresoContenidoAcademia.objects.filter(user=request.user, contenido=obj, completado=True).exists()
+    favorito = FavoritoContenidoAcademia.objects.filter(user=request.user, contenido=obj).exists()
+    return render(request, "asistente_tecnico/academia_contenido_detalle.html", {
+        "base_template":_base_template(request.user), "obj":obj, "es_admin":_es_admin(request.user),
+        "completado": completado, "favorito": favorito,
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def academia_contenido_completar_view(request, slug):
+    obj = get_object_or_404(ContenidoAcademia, slug=slug, estado="aprobado")
+    ProgresoContenidoAcademia.objects.update_or_create(user=request.user, contenido=obj, defaults={"completado": True, "completado_en": timezone.now()})
+    messages.success(request, "Contenido marcado como aprendido.")
+    return redirect("asistente_tecnico:academia_contenido_detalle", slug=slug)
+
+
+@login_required
+@require_http_methods(["POST"])
+def academia_contenido_favorito_view(request, slug):
+    obj = get_object_or_404(ContenidoAcademia, slug=slug, estado="aprobado")
+    fav = FavoritoContenidoAcademia.objects.filter(user=request.user, contenido=obj)
+    if fav.exists():
+        fav.delete(); messages.info(request, "Eliminado de favoritos.")
+    else:
+        FavoritoContenidoAcademia.objects.create(user=request.user, contenido=obj); messages.success(request, "Guardado en favoritos.")
+    return redirect("asistente_tecnico:academia_contenido_detalle", slug=slug)
 
 
 @login_required

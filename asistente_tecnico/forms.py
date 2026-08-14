@@ -65,7 +65,7 @@ class ContenidoAcademiaForm(StyledModelForm):
             "tipo", "codigo", "titulo", "resumen", "imagen_principal", "nivel", "tiempo_lectura_min",
             "estado", "version", "introduccion", "contenido", "procedimiento", "herramientas_materiales",
             "funcionamiento", "componentes", "mantenimiento", "fallas_frecuentes", "buenas_practicas",
-            "errores_comunes", "recomendaciones_jvaqua", "referencias_tecnicas", "etiquetas", "relacionados", "orden",
+            "errores_comunes", "recomendaciones_jvaqua", "referencias_tecnicas", "etiquetas", "acceso", "modulo_curso", "orden_curso", "relacionados", "orden",
         ]
         widgets = {
             "introduccion": forms.Textarea(attrs={"rows": 4}),

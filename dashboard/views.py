@@ -1,6 +1,9 @@
 # dashboard/views.py
 import json
 import logging
+import os
+import urllib.request
+import urllib.error
 from collections import defaultdict
 from decimal import Decimal
 from datetime import date, timedelta
@@ -2021,6 +2024,84 @@ def trabajador_expediente_pdf_view(request, pk):
 # /dashboard/home/ = pantalla REAL por rol
 # -------------------
 @login_required
+@login_required
+@require_http_methods(["POST"])
+def ruta_matriz_google_view(request):
+    """Devuelve tiempos/distancias reales por carretera para la ruta diaria.
+
+    Usa Google Routes API (computeRouteMatrix). La clave se mantiene solo en
+    servidor mediante GOOGLE_MAPS_API_KEY. Si no está configurada, el cliente
+    conserva su optimización local como fallback.
+    """
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+    except Exception:
+        return JsonResponse({"ok": False, "error": "Solicitud inválida."}, status=400)
+
+    points = payload.get("points") or []
+    if not isinstance(points, list) or len(points) < 2 or len(points) > 25:
+        return JsonResponse({"ok": False, "error": "Se requieren entre 2 y 25 puntos."}, status=400)
+
+    clean = []
+    try:
+        for point in points:
+            lat = float(point["lat"]); lng = float(point["lng"])
+            if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+                raise ValueError
+            clean.append((lat, lng))
+    except Exception:
+        return JsonResponse({"ok": False, "error": "Coordenadas inválidas."}, status=400)
+
+    api_key = os.environ.get("GOOGLE_MAPS_API_KEY", "").strip()
+    if not api_key:
+        return JsonResponse({"ok": False, "error": "GOOGLE_MAPS_API_KEY no configurada.", "fallback": True}, status=503)
+
+    waypoints = [{"waypoint": {"location": {"latLng": {"latitude": lat, "longitude": lng}}}} for lat, lng in clean]
+    body = json.dumps({
+        "origins": waypoints,
+        "destinations": waypoints,
+        "travelMode": "DRIVE",
+        "routingPreference": "TRAFFIC_AWARE",
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        "https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix",
+        data=body,
+        method="POST",
+        headers={
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": api_key,
+            "X-Goog-FieldMask": "originIndex,destinationIndex,duration,distanceMeters,status,condition",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=12) as response:
+            rows = json.loads(response.read().decode("utf-8") or "[]")
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="ignore")[:500]
+        logger.warning("Google Routes API HTTP %s: %s", exc.code, detail)
+        return JsonResponse({"ok": False, "error": "Google Routes no pudo calcular la matriz.", "fallback": True}, status=502)
+    except Exception as exc:
+        logger.warning("Google Routes API error: %s", exc)
+        return JsonResponse({"ok": False, "error": "No fue posible consultar Google Routes.", "fallback": True}, status=502)
+
+    matrix = {}
+    for row in rows:
+        oi = row.get("originIndex"); di = row.get("destinationIndex")
+        if oi is None or di is None:
+            continue
+        duration = row.get("duration", "0s")
+        try:
+            seconds = float(str(duration).rstrip("s"))
+        except Exception:
+            seconds = 0
+        matrix[f"{oi}:{di}"] = {
+            "minutes": round(seconds / 60, 2),
+            "meters": int(row.get("distanceMeters") or 0),
+            "condition": row.get("condition") or "",
+        }
+    return JsonResponse({"ok": True, "matrix": matrix})
+
+
 def home_view(request):
     return dashboard_view(request)
 

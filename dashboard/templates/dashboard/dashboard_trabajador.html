@@ -1429,7 +1429,7 @@
   if(!raw) return;
   let stops=[]; try{stops=JSON.parse(raw)}catch(e){return}
   if(!stops.length) return;
-  let origin=null, ordered=[];
+  let origin=null, ordered=[], roadMatrix=null, pointIndex=new Map();
   const list=document.getElementById('routeList'), status=document.getElementById('routeStatus'), all=document.getElementById('routeOpenAll');
   function minutes(t){if(!t)return null;const a=t.split(':').map(Number);return a[0]*60+a[1]}
   function coords(url){
@@ -1439,66 +1439,78 @@
     return null;
   }
   function km(a,b){if(!a||!b)return 99999;const R=6371,d=Math.PI/180;const x=(b.lat-a.lat)*d,y=(b.lng-a.lng)*d;const q=Math.sin(x/2)**2+Math.cos(a.lat*d)*Math.cos(b.lat*d)*Math.sin(y/2)**2;return 2*R*Math.asin(Math.sqrt(q))}
-  function constraintScore(x){
-    if(x.estado==='realizado')return 9e9;
-    const fixed=minutes(x.hora_fija), win=minutes(x.ventana_desde);
-    if(x.tipo_horario==='fijo'&&fixed!==null)return fixed;
-    if(x.tipo_horario==='ventana'&&win!==null)return win+10000;
-    return (x.prioridad==='alta'?20000:30000);
-  }
-  function optimize(){
-    const pool=stops.filter(x=>x.estado!=='realizado'); pool.forEach(x=>x._c=coords(x.maps));
-    let cur=origin, now=new Date(), clock=now.getHours()*60+now.getMinutes(); const out=[];
-    while(pool.length){
-      let bestIndex=0, bestScore=Infinity;
-      pool.forEach((x,i)=>{
-        const dist=(cur&&x._c)?km(cur,x._c):0;
-        const travel=Math.min(120,dist/30*60); // estimación orientativa; Maps hará la navegación real.
-        const arrival=clock+travel;
-        let score=dist*10 + (x.prioridad==='alta'?-180:0);
-        if(x.tipo_horario==='fijo'){
-          const target=minutes(x.hora_fija); const delta=target-arrival;
-          score += delta<0 ? 10000+Math.abs(delta)*100 : (delta<=75 ? -5000+delta : delta*2);
-        }else if(x.tipo_horario==='ventana'){
-          const from=minutes(x.ventana_desde), to=minutes(x.ventana_hasta);
-          if(arrival>to) score+=10000+(arrival-to)*100;
-          else if(arrival>=from) score-=4000;
-          else score+=(from-arrival)*1.5;
-        }else if(!cur){ score += i*2; }
-        if(score<bestScore){bestScore=score;bestIndex=i}
-      });
-      const x=pool.splice(bestIndex,1)[0], dist=(cur&&x._c)?km(cur,x._c):0, travel=Math.min(120,dist/30*60);
-      clock+=travel;
-      if(x.tipo_horario==='fijo'&&minutes(x.hora_fija)!==null) clock=Math.max(clock,minutes(x.hora_fija));
-      if(x.tipo_horario==='ventana'&&minutes(x.ventana_desde)!==null) clock=Math.max(clock,minutes(x.ventana_desde));
-      clock+=Number(x.duracion||30); out.push(x); if(x._c)cur=x._c;
+  function fallbackTravel(a,b){return Math.min(180,km(a,b)/30*60)}
+  function travelBetween(fromStop,toStop){
+    if(roadMatrix){
+      const fi=fromStop===null?0:pointIndex.get(fromStop.id), ti=pointIndex.get(toStop.id);
+      const row=roadMatrix[fi+':'+ti]; if(row&&Number.isFinite(+row.minutes)) return +row.minutes;
     }
-    ordered=[...out,...stops.filter(x=>x.estado==='realizado')]; render();
+    const a=fromStop===null?origin:fromStop._c; return fallbackTravel(a,toStop._c);
+  }
+  function chooseRoute(){
+    const pool=stops.filter(x=>x.estado!=='realizado'&&x._c), missing=stops.filter(x=>x.estado!=='realizado'&&!x._c);
+    let current=null, clock=new Date().getHours()*60+new Date().getMinutes(), out=[];
+    while(pool.length){
+      let best=0,bestScore=Infinity;
+      pool.forEach((x,i)=>{
+        const travel=travelBetween(current,x), arrival=clock+travel;
+        let score=travel*8 + (x.prioridad==='alta'?-120:0);
+        if(x.tipo_horario==='fijo'){
+          const target=minutes(x.hora_fija);
+          if(target!==null){const late=arrival-target; score += late>0 ? 50000+late*500 : Math.max(0,(target-arrival)-75)*8; if(arrival<=target&&target-arrival<=75)score-=2500;}
+        }else if(x.tipo_horario==='ventana'){
+          const from=minutes(x.ventana_desde),to=minutes(x.ventana_hasta);
+          if(to!==null&&arrival>to)score+=40000+(arrival-to)*400;
+          else if(from!==null&&arrival<from)score+=(from-arrival)*3;
+          else score-=1500;
+        }
+        // Evita escoger una parada libre que haga imposible llegar a la siguiente cita fija/ventana.
+        const finish=Math.max(arrival,(x.tipo_horario==='fijo'?minutes(x.hora_fija):x.tipo_horario==='ventana'?minutes(x.ventana_desde):arrival)??arrival)+Number(x.duracion||30);
+        for(const y of pool){if(y===x)continue;const deadline=y.tipo_horario==='fijo'?minutes(y.hora_fija):y.tipo_horario==='ventana'?minutes(y.ventana_hasta):null;if(deadline!==null){const onward=travelBetween(x,y);if(finish+onward>deadline)score+=25000+(finish+onward-deadline)*250;}}
+        if(score<bestScore){bestScore=score;best=i}
+      });
+      const x=pool.splice(best,1)[0], travel=travelBetween(current,x); clock+=travel;
+      if(x.tipo_horario==='fijo'&&minutes(x.hora_fija)!==null)clock=Math.max(clock,minutes(x.hora_fija));
+      if(x.tipo_horario==='ventana'&&minutes(x.ventana_desde)!==null)clock=Math.max(clock,minutes(x.ventana_desde));
+      x._arrival=clock; x._travel=travel; clock+=Number(x.duracion||30); out.push(x); current=x;
+    }
+    ordered=[...out,...missing,...stops.filter(x=>x.estado==='realizado')]; render();
+  }
+  async function optimize(){
+    stops.forEach(x=>x._c=coords(x.maps)); roadMatrix=null; pointIndex=new Map();
+    const located=stops.filter(x=>x.estado!=='realizado'&&x._c);
+    if(!origin||located.length<2){chooseRoute();return}
+    const points=[origin,...located.map(x=>x._c)]; located.forEach((x,i)=>pointIndex.set(x.id,i+1));
+    if(status)status.textContent='Analizando tiempos reales por carretera y horarios…';
+    try{
+      const token=document.querySelector('[name=csrfmiddlewaretoken]')?.value || (document.cookie.match(/(?:^|; )csrftoken=([^;]+)/)||[])[1] || '';
+      const r=await fetch('/dashboard/ruta/matriz-google/',{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':decodeURIComponent(token)},body:JSON.stringify({points})});
+      const data=await r.json(); if(data.ok)roadMatrix=data.matrix;
+    }catch(e){}
+    chooseRoute();
   }
   function navTarget(x){return x._c ? (x._c.lat+','+x._c.lng) : (x.direccion || x.cliente)}
   function mapsOne(x){if(x.maps)return x.maps;return 'https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(navTarget(x))+'&travelmode=driving'}
   function wazeOne(x){if(x._c)return 'https://waze.com/ul?ll='+x._c.lat+','+x._c.lng+'&navigate=yes';return 'https://waze.com/ul?q='+encodeURIComponent(x.direccion||x.cliente)+'&navigate=yes'}
+  function hhmm(v){if(!Number.isFinite(v))return '';v=Math.round(v);return String(Math.floor(v/60)%24).padStart(2,'0')+':'+String(v%60).padStart(2,'0')}
   function render(){
     if(!list)return; list.innerHTML='';
     ordered.forEach((x,i)=>{const done=x.estado==='realizado';let h='Horario libre';if(x.tipo_horario==='fijo')h='Hora fija · '+x.hora_fija;if(x.tipo_horario==='ventana')h='Ventana · '+x.ventana_desde+'–'+x.ventana_hasta;
-      const div=document.createElement('div');div.className='route-stop'+(done?' done':'');div.innerHTML=`<div class="d-flex gap-3"><span class="route-number ${done?'done':''}">${done?'✓':i+1}</span><div class="flex-grow-1"><div class="d-flex justify-content-between gap-2"><strong>${x.cliente}</strong>${x.prioridad==='alta'?'<span class="badge text-bg-danger">Alta</span>':''}</div><div class="route-meta mt-1">${h} · ${x.duracion} min</div><div class="route-meta">${x.direccion||'Dirección no registrada'}</div>${!x._c?'<div class="route-warning mt-1">⚠ La ubicación no contiene coordenadas visibles; Maps usará el enlace/dirección disponible.</div>':''}<div class="d-flex flex-wrap gap-2 mt-2"><a class="btn btn-sm btn-outline-primary" target="_blank" rel="noopener" href="${mapsOne(x)}">Google Maps</a><a class="btn btn-sm btn-outline-dark" target="_blank" rel="noopener" href="${wazeOne(x)}">Waze</a><a class="btn btn-sm btn-primary" href="/dashboard/mantenimientos/${x.id}/">Abrir mantenimiento</a></div></div></div>`;list.appendChild(div)
+      const eta=x._arrival?` · Llegada aprox. ${hhmm(x._arrival)}`:''; const drive=x._travel?` · ${Math.round(x._travel)} min en ruta`:'';
+      const div=document.createElement('div');div.className='route-stop'+(done?' done':'');div.innerHTML=`<div class="d-flex gap-3"><span class="route-number ${done?'done':''}">${done?'✓':i+1}</span><div class="flex-grow-1"><div class="d-flex justify-content-between gap-2"><strong>${x.cliente}</strong>${x.prioridad==='alta'?'<span class="badge text-bg-danger">Alta</span>':''}</div><div class="route-meta mt-1">${h} · ${x.duracion} min${eta}${drive}</div><div class="route-meta">${x.direccion||'Dirección no registrada'}</div>${!x._c?'<div class="route-warning mt-1">⚠ Falta una coordenada GPS precisa; esta visita no puede optimizarse por carretera.</div>':''}<div class="d-flex flex-wrap gap-2 mt-2"><a class="btn btn-sm btn-outline-primary" target="_blank" rel="noopener" href="${mapsOne(x)}">Google Maps</a><a class="btn btn-sm btn-outline-dark" target="_blank" rel="noopener" href="${wazeOne(x)}">Waze</a><a class="btn btn-sm btn-primary" href="/dashboard/mantenimientos/${x.id}/">Abrir mantenimiento</a></div></div></div>`;list.appendChild(div)
     });
     const p=ordered.filter(x=>x.estado!=='realizado');if(p.length){const dest=navTarget(p[p.length-1]);const wp=p.slice(0,-1).map(navTarget).join('|');let url='https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(dest)+'&travelmode=driving';if(origin)url+='&origin='+origin.lat+','+origin.lng;if(wp)url+='&waypoints='+encodeURIComponent(wp);all.href=url;all.classList.remove('disabled')}
-    if(status){const located=ordered.filter(x=>x._c&&x.estado!=='realizado').length;status.textContent=origin?'Ruta recalculada desde tu ubicación actual. '+located+' visita(s) con coordenadas detectadas.':'Ruta sugerida según horarios y prioridad. Activa tu ubicación para optimizar también por cercanía.'}
+    if(status){const located=ordered.filter(x=>x._c&&x.estado!=='realizado').length;status.textContent=roadMatrix?'Ruta optimizada con tiempos reales por carretera, horarios y duración de cada servicio. '+located+' paradas GPS.':origin?'Ruta calculada por cercanía GPS. Para usar tiempos reales por carretera configura GOOGLE_MAPS_API_KEY en Render.':'Activa tu ubicación para calcular la ruta desde donde comienzas la jornada.'}
   }
-  function locate(){if(!navigator.geolocation){optimize();return}if(status)status.textContent='Obteniendo tu ubicación para calcular la ruta…';navigator.geolocation.getCurrentPosition(p=>{origin={lat:p.coords.latitude,lng:p.coords.longitude};optimize()},()=>{origin=null;optimize()},{enableHighAccuracy:true,timeout:7000,maximumAge:300000})}
+  function locate(){if(!navigator.geolocation){optimize();return}if(status)status.textContent='Obteniendo tu ubicación para calcular la mejor ruta…';navigator.geolocation.getCurrentPosition(p=>{origin={lat:p.coords.latitude,lng:p.coords.longitude};optimize()},()=>{origin=null;optimize()},{enableHighAccuracy:true,timeout:9000,maximumAge:180000})}
   const routePanel=document.getElementById('rutaHoyPanel');
-  function openRoute(){
-    routePanel?.classList.remove('d-none');
-    routePanel?.scrollIntoView({behavior:'smooth', block:'start'});
-    if(!ordered.length) locate();
-  }
-  function closeRoute(){ routePanel?.classList.add('d-none'); }
+  function openRoute(){routePanel?.classList.remove('d-none');routePanel?.scrollIntoView({behavior:'smooth',block:'start'});locate()}
+  function closeRoute(){routePanel?.classList.add('d-none')}
   document.getElementById('btnVerRuta')?.addEventListener('click',openRoute);
   document.getElementById('btnRecalcularRuta')?.addEventListener('click',()=>{openRoute();locate()});
   document.getElementById('routeRefresh')?.addEventListener('click',locate);
   document.getElementById('routeClose')?.addEventListener('click',closeRoute);
-  optimize();
+  stops.forEach(x=>x._c=coords(x.maps)); chooseRoute();
 })();
 </script>
 {% endblock %}

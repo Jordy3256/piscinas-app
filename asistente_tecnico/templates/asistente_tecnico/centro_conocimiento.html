@@ -1,27 +1,33 @@
 {% extends base_template %}
-{% block title %}Centro de Conocimiento JVAQUA{% endblock %}
-{% block top_title %}🧠 Centro de Conocimiento{% endblock %}
+{% block title %}Academia JVAQUA{% endblock %}
+{% block top_title %}🎓 Academia JVAQUA{% endblock %}
 {% block content %}
 <style>
-.cc-wrap{max-width:1120px;margin:auto}.cc-hero{border-radius:26px;padding:24px;color:#fff;background:linear-gradient(135deg,#073b82,#0b7fbe);box-shadow:0 18px 42px rgba(5,55,110,.22)}.cc-card{border:1px solid #e7edf5;border-radius:22px;box-shadow:0 10px 28px rgba(14,35,67,.07);transition:.18s transform,.18s box-shadow;background:#fff}.cc-card:hover{transform:translateY(-2px);box-shadow:0 16px 34px rgba(14,35,67,.11)}.cc-icon{width:52px;height:52px;display:grid;place-items:center;border-radius:16px;background:#eef6ff;font-size:1.55rem}.cc-progress{height:10px;border-radius:99px}.cc-link{text-decoration:none;color:inherit}.advice{border-radius:20px;background:linear-gradient(135deg,#fff8dc,#fff);border:1px solid #ffe69c}@media(max-width:720px){.cc-hero{padding:18px;border-radius:20px}.cc-card{border-radius:18px}}
+.ac-wrap{max-width:1120px;margin:auto}.ac-hero{border-radius:28px;padding:26px;color:#fff;background:linear-gradient(135deg,#063d78,#087fb8);box-shadow:0 18px 42px rgba(5,55,110,.2)}
+.ac-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.ac-card{display:block;text-decoration:none;color:inherit;background:#fff;border:1px solid #e5edf6;border-radius:22px;padding:20px;box-shadow:0 9px 25px #10233f10;transition:.18s}
+.ac-card:hover{transform:translateY(-2px);box-shadow:0 15px 32px #10233f18}.ac-icon{width:58px;height:58px;border-radius:18px;display:grid;place-items:center;background:#eef7ff;font-size:1.7rem}.ac-progress{height:9px;border-radius:99px}
+.ac-mini{background:#fff;border:1px solid #e7edf5;border-radius:18px;padding:14px}.ac-advice{border-radius:20px;background:#fff8dc;border:1px solid #ffe69c}
+@media(max-width:800px){.ac-grid{grid-template-columns:1fr}.ac-hero{padding:20px;border-radius:22px}}
 </style>
-<div class="cc-wrap">
-  <section class="cc-hero mb-4">
-    <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
-      <div><div class="small opacity-75">Conocimiento técnico de la empresa</div><h2 class="fw-bold mb-2">Centro de Conocimiento JVAQUA</h2><p class="mb-0 opacity-90">Aprende, consulta y conserva la experiencia técnica del equipo. El Asistente sigue funcionando como una sola herramienta de diagnóstico, cálculo, recomendaciones y seguimiento.</p></div>
-      <a class="btn btn-light" href="{% url 'asistente_tecnico:inicio' %}">🧪 Abrir Asistente</a>
-    </div>
-  </section>
+<div class="ac-wrap">
+<section class="ac-hero mb-4">
+ <div class="d-flex justify-content-between gap-3 flex-wrap align-items-start">
+  <div><div class="small opacity-75">Aprende · Consulta · Resuelve</div><h2 class="fw-bold mb-2">Academia JVAQUA</h2><p class="mb-0 opacity-90">Conocimiento práctico para comprender, mantener y solucionar problemas de piscinas con el respaldo del Asistente Técnico Inteligente.</p></div>
+  {% if es_admin %}<a class="btn btn-light" href="{% url 'asistente_tecnico:cms_admin' %}">Administrar contenido</a>{% endif %}
+ </div>
+</section>
 
-  {% if consejo %}<div class="advice p-3 mb-4"><div class="small fw-bold text-warning-emphasis mb-1">💬 Consejo del día</div><div class="fw-semibold">{{ consejo.texto }}</div></div>{% endif %}
+<div class="ac-grid mb-4">
+ <a class="ac-card" href="{% url 'asistente_tecnico:academia_cms' %}?modo=aprender"><div class="ac-icon mb-3">🎓</div><h4 class="fw-bold">Aprender</h4><p class="text-muted">Curso guiado desde los fundamentos hasta procedimientos, química, problemas y equipos.</p><div class="d-flex justify-content-between small"><span>{{ completadas }} de {{ total_curso }}</span><strong>{{ porcentaje }}%</strong></div><div class="progress ac-progress mt-2"><div class="progress-bar" style="width:{{ porcentaje }}%"></div></div></a>
+ <a class="ac-card" href="{% url 'asistente_tecnico:academia_cms' %}?modo=consultar"><div class="ac-icon mb-3">📚</div><h4 class="fw-bold">Consultar</h4><p class="text-muted">Busca rápidamente productos, parámetros, procedimientos y equipos cuando necesites recordar algo.</p><span class="badge text-bg-light">{{ total_contenidos }} contenidos oficiales</span></a>
+ <a class="ac-card" href="{% url 'asistente_tecnico:inicio' %}"><div class="ac-icon mb-3">🤖</div><h4 class="fw-bold">Resolver</h4><p class="text-muted">Describe el problema de tu piscina y utiliza el Asistente Técnico para diagnóstico, cálculos y un protocolo paso a paso.</p><span class="badge text-bg-primary">Abrir Asistente</span></a>
+</div>
 
-  <div class="row g-3 mb-4">
-    <div class="col-md-6"><a class="cc-link" href="{% url 'asistente_tecnico:academia_cms' %}"><div class="cc-card h-100 p-3"><div class="d-flex gap-3"><div class="cc-icon">🎓</div><div class="flex-grow-1"><h5 class="fw-bold mb-1">Academia JVAQUA</h5><div class="text-muted small mb-3">Biblioteca Técnica, Procedimientos y Equipos con contenido oficial ilustrado y versionado.</div><div class="d-flex justify-content-between small"><span>{{ completadas }}/{{ total_lecciones }} completadas</span><strong>{{ porcentaje }}%</strong></div><div class="progress cc-progress mt-1"><div class="progress-bar" style="width:{{ porcentaje }}%"></div></div></div></div></div></a></div>
-    <div class="col-md-6"><a class="cc-link" href="{% url 'asistente_tecnico:biblioteca' %}"><div class="cc-card h-100 p-3"><div class="d-flex gap-3"><div class="cc-icon">📚</div><div><h5 class="fw-bold mb-1">Biblioteca Técnica</h5><div class="text-muted small">Consulta rápida de equipos, productos, filtración, mantenimiento, fallas y procedimientos.</div><div class="mt-3"><span class="badge text-bg-light">{{ articulos_count }} fichas publicadas</span></div></div></div></div></a></div>
-    <div class="col-md-6"><a class="cc-link" href="{% url 'asistente_tecnico:casos_reales' %}"><div class="cc-card h-100 p-3"><div class="d-flex gap-3"><div class="cc-icon">⭐</div><div><h5 class="fw-bold mb-1">Casos Reales JVAQUA</h5><div class="text-muted small">Experiencias destacadas del Asistente que sirven como referencia de aprendizaje para situaciones similares.</div><div class="mt-3"><span class="badge text-bg-light">{{ casos_count }} casos destacados</span></div></div></div></div></a></div>
-    <div class="col-md-6"><a class="cc-link" href="{% url 'asistente_tecnico:certificacion' %}"><div class="cc-card h-100 p-3"><div class="d-flex gap-3"><div class="cc-icon">🎖️</div><div><h5 class="fw-bold mb-1">Progreso y Certificación</h5><div class="text-muted small">Visualiza tu avance formativo. No bloquea funciones ni permisos dentro del ERP.</div><div class="mt-3"><span class="badge text-bg-primary">{{ porcentaje }}% de avance</span></div></div></div></div></a></div>
-  </div>
+{% if consejo %}<div class="ac-advice p-3 mb-4"><div class="small fw-bold mb-1">💡 Consejo técnico</div><div>{{ consejo.texto }}</div></div>{% endif %}
 
-  {% if es_admin %}<div class="cc-card p-3"><div class="d-flex justify-content-between align-items-center gap-3 flex-wrap"><div><h5 class="fw-bold mb-1">Administración del conocimiento</h5><div class="text-muted small">Crea lecciones, fichas técnicas, consejos y revisa patrones detectados por el Motor de Conocimiento.</div></div><a class="btn btn-primary" href="{% url 'asistente_tecnico:cms_admin' %}">Gestionar contenido</a></div></div>{% endif %}
+{% if recientes or favoritos %}<div class="row g-3">
+ {% if recientes %}<div class="col-lg-6"><h5 class="fw-bold mb-2">🕒 Últimos consultados</h5>{% for c in recientes %}<a class="ac-mini d-block text-decoration-none text-dark mb-2" href="{% url 'asistente_tecnico:academia_contenido_detalle' c.slug %}"><strong>{{ c.titulo }}</strong><div class="small text-muted">{{ c.resumen|truncatechars:95 }}</div></a>{% endfor %}</div>{% endif %}
+ {% if favoritos %}<div class="col-lg-6"><h5 class="fw-bold mb-2">⭐ Favoritos</h5>{% for c in favoritos %}<a class="ac-mini d-block text-decoration-none text-dark mb-2" href="{% url 'asistente_tecnico:academia_contenido_detalle' c.slug %}"><strong>{{ c.titulo }}</strong><div class="small text-muted">{{ c.resumen|truncatechars:95 }}</div></a>{% endfor %}</div>{% endif %}
+</div>{% endif %}
 </div>
 {% endblock %}

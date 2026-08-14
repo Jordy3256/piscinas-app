@@ -278,6 +278,17 @@ class ContenidoAcademia(models.Model):
         ("intermedio", "Intermedio"),
         ("avanzado", "Avanzado"),
     ]
+    ACCESOS = [
+        ("compartido", "Trabajadores y suscriptores"),
+        ("interno", "Solo JVAQUA"),
+        ("suscriptor", "Solo suscriptores"),
+    ]
+    MODULOS_CURSO = [
+        ("fundamentos", "1. Fundamentos"), ("quimica", "2. Química del agua"),
+        ("productos", "3. Productos químicos"), ("mantenimiento", "4. Mantenimiento"),
+        ("problemas", "5. Problemas del agua"), ("equipos", "6. Equipos"),
+        ("preventivo", "7. Mantenimiento preventivo"), ("avanzado", "8. Conocimiento avanzado"),
+    ]
     tipo = models.CharField(max_length=20, choices=TIPOS, db_index=True)
     codigo = models.CharField(max_length=40, unique=True)
     titulo = models.CharField(max_length=180)
@@ -301,6 +312,9 @@ class ContenidoAcademia(models.Model):
     recomendaciones_jvaqua = models.TextField(blank=True, default="")
     referencias_tecnicas = models.TextField(blank=True, default="")
     etiquetas = models.CharField(max_length=500, blank=True, default="")
+    acceso = models.CharField(max_length=20, choices=ACCESOS, default="compartido", db_index=True)
+    modulo_curso = models.CharField(max_length=30, choices=MODULOS_CURSO, blank=True, default="", db_index=True)
+    orden_curso = models.PositiveSmallIntegerField(default=0)
     relacionados = models.ManyToManyField("self", blank=True, symmetrical=True)
     orden = models.PositiveSmallIntegerField(default=0)
     creado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="contenidos_academia_creados")
@@ -386,3 +400,31 @@ class ExperienciaConocimiento(models.Model):
 
     def __str__(self):
         return self.titulo
+
+
+class ProgresoContenidoAcademia(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="progreso_contenido_academia")
+    contenido = models.ForeignKey(ContenidoAcademia, on_delete=models.CASCADE, related_name="progresos_curso")
+    completado = models.BooleanField(default=True)
+    completado_en = models.DateTimeField(default=timezone.now)
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["user", "contenido"], name="ati_unique_user_content_progress")]
+        ordering = ["-completado_en"]
+
+
+class FavoritoContenidoAcademia(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="favoritos_academia")
+    contenido = models.ForeignKey(ContenidoAcademia, on_delete=models.CASCADE, related_name="favoritos")
+    creado_en = models.DateTimeField(auto_now_add=True)
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["user", "contenido"], name="ati_unique_user_content_favorite")]
+        ordering = ["-creado_en"]
+
+
+class ConsultaContenidoAcademia(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="consultas_academia")
+    contenido = models.ForeignKey(ContenidoAcademia, on_delete=models.CASCADE, related_name="consultas")
+    consultado_en = models.DateTimeField(default=timezone.now, db_index=True)
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["user", "contenido"], name="ati_unique_user_content_recent")]
+        ordering = ["-consultado_en"]

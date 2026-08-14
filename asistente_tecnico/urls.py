@@ -37,6 +37,8 @@ urlpatterns = [
     # Academia JVAQUA CMS 3.1
     path("academia-jvaqua/", views.academia_publica_view, name="academia_cms"),
     path("academia-jvaqua/contenido/<slug:slug>/", views.academia_contenido_detalle_view, name="academia_contenido_detalle"),
+    path("academia-jvaqua/contenido/<slug:slug>/completar/", views.academia_contenido_completar_view, name="academia_contenido_completar"),
+    path("academia-jvaqua/contenido/<slug:slug>/favorito/", views.academia_contenido_favorito_view, name="academia_contenido_favorito"),
     path("academia-jvaqua/pdf/manual/", views.academia_pdf_manual_view, name="academia_pdf_manual"),
     path("academia-jvaqua/pdf/categoria/<str:tipo>/", views.academia_pdf_categoria_view, name="academia_pdf_categoria"),
     path("academia-jvaqua/pdf/<slug:slug>/", views.academia_pdf_articulo_view, name="academia_pdf_articulo"),
