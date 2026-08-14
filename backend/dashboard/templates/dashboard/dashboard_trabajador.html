@@ -846,6 +846,15 @@
 
 </style>
 
+<div class="card border-0 shadow-sm mb-3" style="border-radius:18px;overflow:hidden;">
+  <div class="card-body p-2">
+    <div class="nav nav-pills nav-fill gap-2" aria-label="Trabajo asignado">
+      <a class="nav-link active fw-bold" href="/dashboard/home/"><i class="bi bi-calendar-check me-1"></i>Mantenimientos</a>
+      <a class="nav-link fw-bold" href="{% url 'ordenes_trabajo:mis_ordenes' %}"><i class="bi bi-tools me-1"></i>Órdenes de trabajo</a>
+    </div>
+  </div>
+</div>
+
 <section class="worker-page-header">
   <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
     <div>
@@ -929,6 +938,53 @@
     </div>
   </div>
 </div>
+
+<style>
+.route-today-card{border-radius:18px;background:linear-gradient(145deg,#fff,#f7fbff)}
+.route-kpi{border:1px solid #e9ecef;border-radius:14px;padding:.7rem .8rem;background:#fff;display:flex;flex-direction:column}.route-kpi span{font-size:.75rem;color:#6c757d}.route-kpi strong{font-size:1rem}
+.route-stop{border:1px solid #e9ecef;border-radius:16px;padding:14px;background:#fff}.route-stop.done{opacity:.65}.route-number{width:34px;height:34px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:#0d6efd;color:#fff;font-weight:800;flex:0 0 34px}.route-number.done{background:#198754}.route-meta{font-size:.78rem;color:#6c757d}.route-warning{font-size:.76rem;color:#b45309}
+</style>
+{% if ruta_total_visitas and not fecha_seleccionada %}
+<div class="card shadow-sm mb-3 border-0 route-today-card">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+      <div>
+        <div class="fw-bold worker-section-title">📍 Ruta sugerida de hoy</div>
+        <div class="worker-subtitle">Una ayuda opcional para ordenar tus visitas según horarios, prioridad y ubicación.</div>
+      </div>
+      <span class="badge rounded-pill text-bg-light border">{{ ruta_pendientes }} pendientes</span>
+    </div>
+    <div class="row g-2 mt-2">
+      <div class="col-6"><div class="route-kpi"><span>Visitas</span><strong>{{ ruta_total_visitas }}</strong></div></div>
+      <div class="col-6"><div class="route-kpi"><span>Servicio estimado</span><strong>{% widthratio ruta_total_minutos 60 1 %} h aprox.</strong></div></div>
+    </div>
+    <div class="progress mt-3" style="height:8px"><div class="progress-bar bg-success" role="progressbar" style="width:{% widthratio ruta_completadas ruta_total_visitas 100 %}%"></div></div>
+    <div class="d-grid d-sm-flex gap-2 mt-3">
+      <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#rutaHoyModal" id="btnVerRuta"><i class="bi bi-sign-turn-right-fill me-1"></i> Ver ruta sugerida</button>
+      <button type="button" class="btn btn-outline-secondary" id="btnRecalcularRuta"><i class="bi bi-arrow-repeat me-1"></i> Recalcular desde mi ubicación</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="rutaHoyModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-fullscreen-sm-down modal-lg">
+    <div class="modal-content border-0">
+      <div class="modal-header">
+        <div><h5 class="modal-title fw-bold">📍 Ruta sugerida</h5><div class="small text-muted">{{ ruta_fecha|date:"d/m/Y" }} · Puedes cambiar el orden cuando quieras.</div></div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-info py-2 small" id="routeStatus">Calculando el orden sugerido…</div>
+        <div id="routeList" class="vstack gap-2"></div>
+      </div>
+      <div class="modal-footer d-grid d-sm-flex">
+        <button class="btn btn-outline-secondary" type="button" id="routeRefresh">Recalcular</button>
+        <a class="btn btn-primary disabled" id="routeOpenAll" target="_blank" rel="noopener"><i class="bi bi-map me-1"></i>Abrir ruta en Google Maps</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
 
 {% if vista_actual == "agenda" %}
   <div class="card shadow-sm mb-4 worker-calendar-card">
@@ -1173,7 +1229,45 @@
     <span class="text-muted small">Pendientes anteriores</span>
   </div>
 
-  {% if mantenimientos_atrasados %}
+  {% if ordenes_hoy or ordenes_atrasadas or ordenes_proximas %}
+<section class="card worker-card border-0 shadow-sm rounded-4 mb-3" style="border-left:4px solid #7c3aed !important;">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap mb-3">
+      <div>
+        <div class="small text-uppercase fw-bold" style="color:#7c3aed;letter-spacing:.06em">Trabajos adicionales</div>
+        <h2 class="worker-section-title mb-1">Órdenes de trabajo</h2>
+        <div class="worker-subtitle">Visitas extraordinarias, reparaciones y trabajos puntuales asignados por administración.</div>
+      </div>
+      <a href="{% url 'ordenes_trabajo:mis_ordenes' %}" class="btn btn-outline-primary btn-sm">Ver todas</a>
+    </div>
+    <div class="d-grid gap-2">
+      {% for o in ordenes_atrasadas %}
+        <a href="{% url 'ordenes_trabajo:detalle' o.pk %}" class="text-decoration-none text-reset">
+          <div class="p-3 rounded-4 border border-danger bg-danger-subtle">
+            <div class="d-flex justify-content-between gap-2"><div><div class="fw-bold">{{ o.tipo.icono }} {{ o.nombre_contacto }}</div><div class="small text-muted">{{ o.tipo.nombre }} · {{ o.fecha|date:"d/m/Y" }}</div></div><span class="badge text-bg-danger">Atrasada</span></div>
+          </div>
+        </a>
+      {% endfor %}
+      {% for o in ordenes_hoy %}
+        <a href="{% url 'ordenes_trabajo:detalle' o.pk %}" class="text-decoration-none text-reset">
+          <div class="p-3 rounded-4 border" style="background:#f8f5ff;border-color:#ddd1ff !important;">
+            <div class="d-flex justify-content-between gap-2"><div><div class="fw-bold">{{ o.tipo.icono }} {{ o.nombre_contacto }}</div><div class="small text-muted">{{ o.tipo.nombre }}{% if o.hora %} · {{ o.hora|time:"H:i" }}{% endif %}</div></div><span class="badge {% if o.estado == 'completada' %}text-bg-success{% elif o.estado == 'en_proceso' %}text-bg-info{% else %}text-bg-warning{% endif %}">{{ o.get_estado_display }}</span></div>
+          </div>
+        </a>
+      {% endfor %}
+      {% if not ordenes_hoy and not ordenes_atrasadas %}
+        {% for o in ordenes_proximas|slice:":3" %}
+          <a href="{% url 'ordenes_trabajo:detalle' o.pk %}" class="text-decoration-none text-reset">
+            <div class="p-3 rounded-4 border bg-light"><div class="fw-bold">{{ o.tipo.icono }} {{ o.nombre_contacto }}</div><div class="small text-muted">{{ o.fecha|date:"d/m/Y" }} · {{ o.tipo.nombre }}</div></div>
+          </a>
+        {% endfor %}
+      {% endif %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
+{% if mantenimientos_atrasados %}
     <div class="vstack gap-2 mb-4">
       {% for m in mantenimientos_atrasados %}
       <a class="text-decoration-none" href="/dashboard/mantenimientos/{{ m.id }}/">
@@ -1333,4 +1427,82 @@
   {% endif %}
 {% endif %}
 
+<script>
+(function(){
+  const raw = '{{ ruta_mantenimientos_json|escapejs }}';
+  if(!raw) return;
+  let stops=[]; try{stops=JSON.parse(raw)}catch(e){return}
+  if(!stops.length) return;
+  let origin=null, ordered=[];
+  const list=document.getElementById('routeList'), status=document.getElementById('routeStatus'), all=document.getElementById('routeOpenAll');
+  // Bootstrap inserta el backdrop directamente bajo <body>. Si el modal queda dentro de
+  // un contenedor que crea un stacking context, el backdrop puede terminar encima del
+  // modal y bloquear todos los clics. Mantener el modal como hijo directo de <body>
+  // evita ese bloqueo tanto en móvil como en escritorio.
+  const routeModalEl=document.getElementById('rutaHoyModal');
+  if(routeModalEl && routeModalEl.parentElement !== document.body){
+    document.body.appendChild(routeModalEl);
+  }
+  function minutes(t){if(!t)return null;const a=t.split(':').map(Number);return a[0]*60+a[1]}
+  function coords(url){
+    if(!url)return null;
+    const pats=[/@(-?\d+\.\d+),(-?\d+\.\d+)/,/[?&](?:q|query|destination)=(-?\d+\.\d+)%?2C(-?\d+\.\d+)/i,/\/(-?\d+\.\d+),(-?\d+\.\d+)(?:[/?]|$)/];
+    const u=decodeURIComponent(url); for(const p of pats){const m=u.match(p);if(m)return {lat:+m[1],lng:+m[2]}}
+    return null;
+  }
+  function km(a,b){if(!a||!b)return 99999;const R=6371,d=Math.PI/180;const x=(b.lat-a.lat)*d,y=(b.lng-a.lng)*d;const q=Math.sin(x/2)**2+Math.cos(a.lat*d)*Math.cos(b.lat*d)*Math.sin(y/2)**2;return 2*R*Math.asin(Math.sqrt(q))}
+  function constraintScore(x){
+    if(x.estado==='realizado')return 9e9;
+    const fixed=minutes(x.hora_fija), win=minutes(x.ventana_desde);
+    if(x.tipo_horario==='fijo'&&fixed!==null)return fixed;
+    if(x.tipo_horario==='ventana'&&win!==null)return win+10000;
+    return (x.prioridad==='alta'?20000:30000);
+  }
+  function optimize(){
+    const pool=stops.filter(x=>x.estado!=='realizado'); pool.forEach(x=>x._c=coords(x.maps));
+    let cur=origin, now=new Date(), clock=now.getHours()*60+now.getMinutes(); const out=[];
+    while(pool.length){
+      let bestIndex=0, bestScore=Infinity;
+      pool.forEach((x,i)=>{
+        const dist=(cur&&x._c)?km(cur,x._c):0;
+        const travel=Math.min(120,dist/30*60); // estimación orientativa; Maps hará la navegación real.
+        const arrival=clock+travel;
+        let score=dist*10 + (x.prioridad==='alta'?-180:0);
+        if(x.tipo_horario==='fijo'){
+          const target=minutes(x.hora_fija); const delta=target-arrival;
+          score += delta<0 ? 10000+Math.abs(delta)*100 : (delta<=75 ? -5000+delta : delta*2);
+        }else if(x.tipo_horario==='ventana'){
+          const from=minutes(x.ventana_desde), to=minutes(x.ventana_hasta);
+          if(arrival>to) score+=10000+(arrival-to)*100;
+          else if(arrival>=from) score-=4000;
+          else score+=(from-arrival)*1.5;
+        }else if(!cur){ score += i*2; }
+        if(score<bestScore){bestScore=score;bestIndex=i}
+      });
+      const x=pool.splice(bestIndex,1)[0], dist=(cur&&x._c)?km(cur,x._c):0, travel=Math.min(120,dist/30*60);
+      clock+=travel;
+      if(x.tipo_horario==='fijo'&&minutes(x.hora_fija)!==null) clock=Math.max(clock,minutes(x.hora_fija));
+      if(x.tipo_horario==='ventana'&&minutes(x.ventana_desde)!==null) clock=Math.max(clock,minutes(x.ventana_desde));
+      clock+=Number(x.duracion||30); out.push(x); if(x._c)cur=x._c;
+    }
+    ordered=[...out,...stops.filter(x=>x.estado==='realizado')]; render();
+  }
+  function navTarget(x){return x._c ? (x._c.lat+','+x._c.lng) : (x.direccion || x.cliente)}
+  function mapsOne(x){if(x.maps)return x.maps;return 'https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(navTarget(x))+'&travelmode=driving'}
+  function wazeOne(x){if(x._c)return 'https://waze.com/ul?ll='+x._c.lat+','+x._c.lng+'&navigate=yes';return 'https://waze.com/ul?q='+encodeURIComponent(x.direccion||x.cliente)+'&navigate=yes'}
+  function render(){
+    if(!list)return; list.innerHTML='';
+    ordered.forEach((x,i)=>{const done=x.estado==='realizado';let h='Horario libre';if(x.tipo_horario==='fijo')h='Hora fija · '+x.hora_fija;if(x.tipo_horario==='ventana')h='Ventana · '+x.ventana_desde+'–'+x.ventana_hasta;
+      const div=document.createElement('div');div.className='route-stop'+(done?' done':'');div.innerHTML=`<div class="d-flex gap-3"><span class="route-number ${done?'done':''}">${done?'✓':i+1}</span><div class="flex-grow-1"><div class="d-flex justify-content-between gap-2"><strong>${x.cliente}</strong>${x.prioridad==='alta'?'<span class="badge text-bg-danger">Alta</span>':''}</div><div class="route-meta mt-1">${h} · ${x.duracion} min</div><div class="route-meta">${x.direccion||'Dirección no registrada'}</div>${!x._c?'<div class="route-warning mt-1">⚠ La ubicación no contiene coordenadas visibles; Maps usará el enlace/dirección disponible.</div>':''}<div class="d-flex flex-wrap gap-2 mt-2"><a class="btn btn-sm btn-outline-primary" target="_blank" rel="noopener" href="${mapsOne(x)}">Google Maps</a><a class="btn btn-sm btn-outline-dark" target="_blank" rel="noopener" href="${wazeOne(x)}">Waze</a><a class="btn btn-sm btn-primary" href="/dashboard/mantenimientos/${x.id}/">Abrir mantenimiento</a></div></div></div>`;list.appendChild(div)
+    });
+    const p=ordered.filter(x=>x.estado!=='realizado');if(p.length){const dest=navTarget(p[p.length-1]);const wp=p.slice(0,-1).map(navTarget).join('|');let url='https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(dest)+'&travelmode=driving';if(origin)url+='&origin='+origin.lat+','+origin.lng;if(wp)url+='&waypoints='+encodeURIComponent(wp);all.href=url;all.classList.remove('disabled')}
+    if(status){const located=ordered.filter(x=>x._c&&x.estado!=='realizado').length;status.textContent=origin?'Ruta recalculada desde tu ubicación actual. '+located+' visita(s) con coordenadas detectadas.':'Ruta sugerida según horarios y prioridad. Activa tu ubicación para optimizar también por cercanía.'}
+  }
+  function locate(){if(!navigator.geolocation){optimize();return}if(status)status.textContent='Obteniendo tu ubicación para calcular la ruta…';navigator.geolocation.getCurrentPosition(p=>{origin={lat:p.coords.latitude,lng:p.coords.longitude};optimize()},()=>{origin=null;optimize()},{enableHighAccuracy:true,timeout:7000,maximumAge:300000})}
+  document.getElementById('btnVerRuta')?.addEventListener('click',()=>{if(!ordered.length)locate()});
+  document.getElementById('btnRecalcularRuta')?.addEventListener('click',()=>{locate();bootstrap.Modal.getOrCreateInstance(document.getElementById('rutaHoyModal')).show()});
+  document.getElementById('routeRefresh')?.addEventListener('click',locate);
+  optimize();
+})();
+</script>
 {% endblock %}
