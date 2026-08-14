@@ -1,0 +1,246 @@
+/* JVAQUA ERP v1.4.0 — Mobile First global polish.
+   Capa visual transversal: no modifica reglas de negocio. */
+:root {
+  --jv25-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --jv25-safe-top: env(safe-area-inset-top, 0px);
+  --jv25-edge: 12px;
+  --jv25-touch: 46px;
+}
+
+html, body { max-width: 100%; overflow-x: hidden; }
+img, video, canvas, svg { max-width: 100%; height: auto; }
+input, select, textarea, button { max-width: 100%; }
+.min-w-0 { min-width: 0 !important; }
+
+/* Contenido largo nunca debe romper la pantalla. */
+.card, .alert, .modal-content, .dropdown-menu, td, th, p, .form-text, .small {
+  overflow-wrap: anywhere;
+}
+
+/* Acciones horizontales tolerantes a pantallas estrechas. */
+.jv25-actions,
+.jv-page-actions,
+.page-actions,
+.jv-form-actions,
+.card-footer .d-flex,
+.modal-footer {
+  gap: .55rem !important;
+  flex-wrap: wrap !important;
+}
+
+/* Controles cómodos para uso táctil. */
+.form-control, .form-select, .btn { touch-action: manipulation; }
+
+@media (max-width: 991.98px) {
+  .container, .container-fluid { max-width: 100%; }
+  .app-shell { max-width: 100% !important; }
+}
+
+@media (max-width: 767.98px) {
+  :root { --jv25-edge: 10px; --jv25-touch: 48px; }
+
+  body { padding-bottom: var(--jv25-safe-bottom); }
+  .page-content, .app-content {
+    width: 100%;
+    padding-left: var(--jv25-edge) !important;
+    padding-right: var(--jv25-edge) !important;
+  }
+
+  /* Cabecera: máxima información con menor altura. */
+  .topbar { padding-left: 7px !important; padding-right: 7px !important; }
+  .topbar .container { padding-top: .62rem !important; padding-bottom: .62rem !important; }
+  .topbar-inner, .topbar-panel { width: 100%; max-width: calc(100vw - 14px); }
+  .brand-copy { min-width: 0; }
+  .brand-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .topbar-actions, .top-actions { flex-shrink: 0; gap: 5px !important; }
+
+  /* El botón volver ocupa poco y queda accesible. */
+  .jv-backbar {
+    position: sticky;
+    top: 76px;
+    z-index: 1016;
+    min-height: 44px;
+    margin: 0 calc(var(--jv25-edge) * -1) .7rem !important;
+    padding: .38rem var(--jv25-edge) !important;
+    background: rgba(248, 251, 255, .94);
+    border-bottom: 1px solid rgba(16, 35, 63, .06);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+  body.app-body .jv-backbar { background: rgba(243, 246, 250, .94); }
+  .jv-back-btn { min-width: 44px !important; min-height: 40px !important; }
+  .jv-breadcrumb { display: none !important; }
+
+  /* Tarjetas más densas, conservando jerarquía. */
+  .card { border-radius: 17px !important; }
+  .card-header { padding: .85rem .95rem !important; }
+  .card-body { padding: .95rem !important; }
+  .card-footer { padding: .8rem .95rem !important; }
+  .row { --bs-gutter-x: .8rem; --bs-gutter-y: .8rem; }
+
+  /* Evita zoom automático de Safari y mejora toque. */
+  .form-control, .form-select, textarea.form-control {
+    min-height: var(--jv25-touch);
+    font-size: 16px !important;
+    border-radius: 12px !important;
+  }
+  textarea.form-control { min-height: 96px; }
+  .form-label { margin-bottom: .35rem; }
+  .form-check-input { width: 1.25rem; height: 1.25rem; }
+
+  .btn:not(.nav-item-app) {
+    min-height: 44px;
+    white-space: normal;
+  }
+  .btn-sm:not(.nav-item-app) { min-height: 40px; }
+  .btn-group { flex-wrap: wrap; }
+
+  /* En acciones de formularios, cada botón tiene espacio real. */
+  .jv-form-actions > .btn,
+  .jv-form-actions > a.btn,
+  .jv-page-actions > .btn,
+  .jv-page-actions > a.btn,
+  .page-actions > .btn,
+  .page-actions > a.btn {
+    flex: 1 1 140px;
+  }
+
+  /* Filtros: una columna salvo controles muy cortos. */
+  form[method="get"] .row > [class*="col-md-"],
+  form[method="get"] .row > [class*="col-lg-"] { width: 100%; }
+
+  /* Tablas no convertibles conservan scroll suave. */
+  .table-responsive, .jv-table-scroll {
+    margin-left: 0;
+    margin-right: 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  table:not(.jv-mobile-table) { max-width: 100%; }
+
+  /* Modales utilizables casi a pantalla completa. */
+  .modal-dialog { margin: .55rem .6rem calc(.7rem + var(--jv25-safe-bottom)) !important; }
+  .modal-content { max-height: calc(100dvh - 1.2rem - var(--jv25-safe-bottom)); }
+  .modal-body { overflow-y: auto; }
+  .modal-footer > .btn, .modal-footer > a.btn { flex: 1 1 125px; }
+
+  /* Navegación trabajador: siempre completa y legible. */
+  .bottom-nav { padding-bottom: calc(7px + var(--jv25-safe-bottom)) !important; }
+  .bottom-nav-panel { max-width: calc(100vw - 14px) !important; }
+  .bottom-nav-links {
+    grid-template-columns: repeat(6, minmax(52px, 1fr)) !important;
+    gap: 3px !important;
+    overflow: visible !important;
+  }
+  .nav-item-app {
+    min-width: 0 !important;
+    min-height: 55px !important;
+    padding: 6px 2px !important;
+    font-size: .58rem !important;
+  }
+  .nav-item-app i { font-size: 1.08rem !important; }
+  .nav-item-app span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+
+  /* Admin: navegación completa mediante scroll táctil, sin comprimir etiquetas. */
+  body.app-body .bottom-nav-inner { overflow-x: auto !important; overscroll-behavior-x: contain; }
+  body.app-body .bottom-nav .nav-row { min-width: max-content !important; }
+  body.app-body .bottom-nav .nav-row > .btn { min-width: 88px !important; }
+
+  .spacer-bottom { height: calc(90px + var(--jv25-safe-bottom)) !important; }
+
+  /* Elementos de detalle: dos columnas pasan a una si son muy densos. */
+  .detail-grid, .summary-grid, .stats-grid { grid-template-columns: 1fr !important; }
+
+  /* Dropdowns dentro del viewport. */
+  .dropdown-menu { max-width: calc(100vw - 20px) !important; }
+}
+
+@media (max-width: 389.98px) {
+  .brand-title { max-width: 125px !important; }
+  .nav-item-app { font-size: .54rem !important; }
+  .nav-item-app i { font-size: 1rem !important; }
+  .bottom-nav-panel { padding-left: 4px !important; padding-right: 4px !important; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; }
+}
+
+/* JVAQUA ERP v1.4.1 — Restauración de scroll nativo global.
+   La página completa debe desplazarse con rueda/trackpad y con un solo dedo.
+   Evita scroll anidado accidental en los contenedores principales. */
+html {
+  height: auto !important;
+  min-height: 100% !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  overscroll-behavior-y: auto !important;
+  touch-action: auto !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+body,
+body.app-body {
+  position: static !important;
+  width: 100% !important;
+  height: auto !important;
+  min-height: 100vh !important;
+  overflow-y: visible !important;
+  overflow-x: hidden !important;
+  overscroll-behavior-y: auto !important;
+  touch-action: pan-y pinch-zoom !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+.app-shell,
+.page-content,
+.app-content,
+main.page-content,
+main.app-content {
+  height: auto !important;
+  max-height: none !important;
+  overflow-y: visible !important;
+  overscroll-behavior-y: auto !important;
+  touch-action: pan-y pinch-zoom !important;
+}
+
+/* No bloquear el gesto vertical cuando empieza sobre contenido interactivo. */
+.card,
+.card-body,
+.card-header,
+.card-footer,
+form,
+.row,
+[class*="col-"],
+.alert,
+.list-group,
+.list-group-item,
+.table-responsive,
+.jv-table-scroll {
+  touch-action: pan-y pinch-zoom;
+}
+
+/* Controles siguen siendo táctiles, pero permiten que un arrastre vertical
+   iniciado sobre ellos continúe desplazando la página cuando el navegador
+   lo soporte. */
+.form-control,
+.form-select,
+.btn,
+a,
+button,
+input,
+select,
+textarea,
+label {
+  touch-action: manipulation;
+}
+
+/* Los únicos scrolls internos deliberados son horizontales o modales. */
+@media (max-width: 767.98px) {
+  .bottom-nav-inner,
+  body.app-body .bottom-nav-inner,
+  .table-responsive,
+  .jv-table-scroll {
+    overscroll-behavior-y: auto !important;
+  }
+}

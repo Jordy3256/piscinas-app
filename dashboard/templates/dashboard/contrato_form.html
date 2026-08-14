@@ -175,6 +175,46 @@
 
         <div class="cf-card mb-3">
           <div class="cf-card-header">
+            <div class="cf-card-title">📍 Planificación de visita</div>
+            <div class="cf-card-subtitle">Datos opcionales para sugerir al técnico una ruta práctica. No obligan a seguir un orden.</div>
+          </div>
+          <div class="cf-card-body">
+            <div class="row g-3">
+              <div class="col-md-4">
+                <label class="form-label" for="tipo_horario_visita">Horario de visita</label>
+                <select class="form-select" id="tipo_horario_visita" name="tipo_horario_visita">
+                  {% for valor, etiqueta in horarios_visita %}<option value="{{ valor }}" {% if datos_formulario.tipo_horario_visita == valor %}selected{% endif %}>{{ etiqueta }}</option>{% endfor %}
+                </select>
+              </div>
+              <div class="col-md-4 route-time route-fixed">
+                <label class="form-label" for="hora_visita_fija">Hora fija</label>
+                <input type="time" class="form-control" id="hora_visita_fija" name="hora_visita_fija" value="{{ datos_formulario.hora_visita_fija }}">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label" for="duracion_estimada_minutos">Duración estimada</label>
+                <div class="input-group"><input type="number" min="10" max="480" step="5" class="form-control" id="duracion_estimada_minutos" name="duracion_estimada_minutos" value="{{ datos_formulario.duracion_estimada_minutos|default:30 }}"><span class="input-group-text">min</span></div>
+              </div>
+              <div class="col-md-4 route-time route-window">
+                <label class="form-label" for="ventana_visita_desde">Ventana desde</label>
+                <input type="time" class="form-control" id="ventana_visita_desde" name="ventana_visita_desde" value="{{ datos_formulario.ventana_visita_desde }}">
+              </div>
+              <div class="col-md-4 route-time route-window">
+                <label class="form-label" for="ventana_visita_hasta">Ventana hasta</label>
+                <input type="time" class="form-control" id="ventana_visita_hasta" name="ventana_visita_hasta" value="{{ datos_formulario.ventana_visita_hasta }}">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label" for="prioridad_visita">Prioridad</label>
+                <select class="form-select" id="prioridad_visita" name="prioridad_visita">
+                  {% for valor, etiqueta in prioridades_visita %}<option value="{{ valor }}" {% if datos_formulario.prioridad_visita == valor %}selected{% endif %}>{{ etiqueta }}</option>{% endfor %}
+                </select>
+              </div>
+              <div class="col-12"><div class="cf-note">La ruta es una ayuda opcional. Primero respeta horas fijas y ventanas; luego prioriza y ordena las visitas libres según la ubicación disponible.</div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="cf-card mb-3">
+          <div class="cf-card-header">
             <div class="cf-card-title">📅 Periodo y condiciones comerciales</div>
             <div class="cf-card-subtitle">Separa el periodo del servicio, la condición comercial y las fechas reales de cobro.</div>
           </div>
@@ -354,6 +394,21 @@
 {% block extra_js %}
 <script>
   document.addEventListener("DOMContentLoaded", function () {
+    const tipoHorarioVisita = document.getElementById("tipo_horario_visita");
+    function actualizarHorarioRuta(){
+      const tipo = tipoHorarioVisita ? tipoHorarioVisita.value : "libre";
+      document.querySelectorAll(".route-fixed").forEach(el => el.style.display = tipo === "fijo" ? "block" : "none");
+      document.querySelectorAll(".route-window").forEach(el => el.style.display = tipo === "ventana" ? "block" : "none");
+      const fijo = document.getElementById("hora_visita_fija");
+      const desde = document.getElementById("ventana_visita_desde");
+      const hasta = document.getElementById("ventana_visita_hasta");
+      if(fijo) fijo.required = tipo === "fijo";
+      if(desde) desde.required = tipo === "ventana";
+      if(hasta) hasta.required = tipo === "ventana";
+    }
+    if(tipoHorarioVisita) tipoHorarioVisita.addEventListener("change", actualizarHorarioRuta);
+    actualizarHorarioRuta();
+
     const frecuenciaSelect = document.getElementById("frecuencia");
     const frecuenciaContainer = document.getElementById("frecuencia-personalizada-container");
     const frecuenciaInput = document.getElementById("frecuencia_personalizada");

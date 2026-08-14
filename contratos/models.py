@@ -160,6 +160,32 @@ class Contrato(models.Model):
         blank=True,
         help_text="Cuando JVAQUA proporciona químicos, indica dónde se almacenan.",
     )
+    HORARIO_VISITA_CHOICES = [
+        ("libre", "Horario libre"),
+        ("fijo", "Hora fija"),
+        ("ventana", "Ventana horaria"),
+    ]
+
+    PRIORIDAD_VISITA_CHOICES = [
+        ("normal", "Normal"),
+        ("alta", "Alta"),
+    ]
+
+    tipo_horario_visita = models.CharField(
+        max_length=20, choices=HORARIO_VISITA_CHOICES, default="libre",
+        help_text="Restricción horaria usada únicamente para sugerir la ruta diaria al técnico.",
+    )
+    hora_visita_fija = models.TimeField(null=True, blank=True)
+    ventana_visita_desde = models.TimeField(null=True, blank=True)
+    ventana_visita_hasta = models.TimeField(null=True, blank=True)
+    duracion_estimada_minutos = models.PositiveSmallIntegerField(
+        default=30, validators=[MinValueValidator(10), MaxValueValidator(480)],
+        help_text="Duración orientativa del mantenimiento para planificar la ruta.",
+    )
+    prioridad_visita = models.CharField(
+        max_length=10, choices=PRIORIDAD_VISITA_CHOICES, default="normal"
+    )
+
     responsable_reposicion = models.ForeignKey(
         Trabajador,
         on_delete=models.SET_NULL,

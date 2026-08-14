@@ -21,7 +21,7 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.templatetags.static import static
 from django.utils import timezone
-from django.utils.dateparse import parse_date
+from django.utils.dateparse import parse_date, parse_time
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_http_methods, require_GET
 
@@ -2652,6 +2652,27 @@ def dashboard_view(request):
             .order_by("fecha", "hora", "id")[:12]
         )
 
+        # Ruta sugerida: se limita al día visible y es siempre opcional.
+        ruta_fecha = fecha_seleccionada or hoy
+        ruta_mantenimientos = []
+        for m in mantenimientos_hoy:
+            c = m.contrato
+            ruta_mantenimientos.append({
+                "id": m.id,
+                "cliente": str(m.cliente),
+                "direccion": m.cliente.direccion or "",
+                "maps": m.cliente.enlace_google_maps or "",
+                "estado": m.estado,
+                "tipo_horario": c.tipo_horario_visita or "libre",
+                "hora_fija": c.hora_visita_fija.strftime("%H:%M") if c.hora_visita_fija else "",
+                "ventana_desde": c.ventana_visita_desde.strftime("%H:%M") if c.ventana_visita_desde else "",
+                "ventana_hasta": c.ventana_visita_hasta.strftime("%H:%M") if c.ventana_visita_hasta else "",
+                "duracion": c.duracion_estimada_minutos or 30,
+                "prioridad": c.prioridad_visita or "normal",
+                "telefono": m.cliente.telefono or "",
+            })
+        ruta_total_minutos = sum(x["duracion"] for x in ruta_mantenimientos if x["estado"] != "realizado")
+
         ctx = {
             **base_ctx,
             "modo": "trabajador",
@@ -2678,6 +2699,12 @@ def dashboard_view(request):
             "ordenes_hoy": ordenes_hoy,
             "ordenes_atrasadas": ordenes_atrasadas,
             "ordenes_proximas": ordenes_proximas,
+            "ruta_fecha": ruta_fecha,
+            "ruta_mantenimientos_json": json.dumps(ruta_mantenimientos, ensure_ascii=False),
+            "ruta_total_minutos": ruta_total_minutos,
+            "ruta_total_visitas": len(ruta_mantenimientos),
+            "ruta_pendientes": len([x for x in ruta_mantenimientos if x["estado"] != "realizado"]),
+            "ruta_completadas": len([x for x in ruta_mantenimientos if x["estado"] == "realizado"]),
             "es_admin": False,
         }
         return render(request, "dashboard/dashboard_trabajador.html", ctx)
@@ -6550,6 +6577,15 @@ def _validar_datos_contrato(request):
     quimicos_proveedor = (request.POST.get("quimicos_proveedor") or "jvaqua").strip()
     quimicos_almacenamiento = (request.POST.get("quimicos_almacenamiento") or "trabajador").strip()
     responsable_reposicion_id = (request.POST.get("responsable_reposicion") or "").strip()
+    tipo_horario_visita = (request.POST.get("tipo_horario_visita") or "libre").strip()
+    hora_visita_fija = (request.POST.get("hora_visita_fija") or "").strip()
+    ventana_visita_desde = (request.POST.get("ventana_visita_desde") or "").strip()
+    ventana_visita_hasta = (request.POST.get("ventana_visita_hasta") or "").strip()
+    prioridad_visita = (request.POST.get("prioridad_visita") or "normal").strip()
+    try:
+        duracion_estimada_minutos = int(request.POST.get("duracion_estimada_minutos") or 30)
+    except (TypeError, ValueError):
+        duracion_estimada_minutos = 30
     errores = []
 
     cliente = Cliente.objects.filter(pk=int(cliente_id)).first() if cliente_id.isdigit() else None
@@ -6620,6 +6656,23 @@ def _validar_datos_contrato(request):
     fecha_inicio = parse_date(fecha_inicio_str)
     if not fecha_inicio: errores.append("Debes seleccionar una fecha de inicio válida.")
 
+    hora_visita_fija_obj = parse_time(hora_visita_fija) if hora_visita_fija else None
+    ventana_visita_desde_obj = parse_time(ventana_visita_desde) if ventana_visita_desde else None
+    ventana_visita_hasta_obj = parse_time(ventana_visita_hasta) if ventana_visita_hasta else None
+    if tipo_horario_visita not in {"libre", "fijo", "ventana"}:
+        errores.append("Selecciona un tipo de horario de visita válido.")
+    if prioridad_visita not in {"normal", "alta"}:
+        errores.append("Selecciona una prioridad de visita válida.")
+    if not 10 <= duracion_estimada_minutos <= 480:
+        errores.append("La duración estimada debe estar entre 10 y 480 minutos.")
+    if tipo_horario_visita == "fijo" and not hora_visita_fija_obj:
+        errores.append("Indica una hora fija de visita válida.")
+    if tipo_horario_visita == "ventana":
+        if not ventana_visita_desde_obj or not ventana_visita_hasta_obj:
+            errores.append("Indica el inicio y fin válidos de la ventana horaria.")
+        elif ventana_visita_desde_obj >= ventana_visita_hasta_obj:
+            errores.append("La hora final de la ventana debe ser posterior a la inicial.")
+
     return {
         "errores": errores, "cliente": cliente, "frecuencia": frecuencia,
         "frecuencia_personalizada": frecuencia_personalizada, "forma_pago": forma_pago,
@@ -6635,6 +6688,12 @@ def _validar_datos_contrato(request):
         "quimicos_almacenamiento": quimicos_almacenamiento,
         "responsable_reposicion": responsable_reposicion,
         "responsable_reposicion_id": responsable_reposicion_id,
+        "tipo_horario_visita": tipo_horario_visita,
+        "hora_visita_fija": hora_visita_fija_obj if tipo_horario_visita == "fijo" else None,
+        "ventana_visita_desde": ventana_visita_desde_obj if tipo_horario_visita == "ventana" else None,
+        "ventana_visita_hasta": ventana_visita_hasta_obj if tipo_horario_visita == "ventana" else None,
+        "duracion_estimada_minutos": duracion_estimada_minutos,
+        "prioridad_visita": prioridad_visita,
         **campos_enteros,
     }
 
@@ -6990,6 +7049,12 @@ def contrato_crear_view(request):
         "quimicos_proveedor": "jvaqua",
         "quimicos_almacenamiento": "trabajador",
         "responsable_reposicion_id": "",
+        "tipo_horario_visita": "libre",
+        "hora_visita_fija": "",
+        "ventana_visita_desde": "",
+        "ventana_visita_hasta": "",
+        "duracion_estimada_minutos": 30,
+        "prioridad_visita": "normal",
     }
 
     if request.method == "POST":
@@ -7025,6 +7090,12 @@ def contrato_crear_view(request):
             "quimicos_proveedor": validacion["quimicos_proveedor"],
             "quimicos_almacenamiento": validacion["quimicos_almacenamiento"],
             "responsable_reposicion_id": validacion["responsable_reposicion_id"],
+            "tipo_horario_visita": validacion["tipo_horario_visita"],
+            "hora_visita_fija": validacion["hora_visita_fija"] or "",
+            "ventana_visita_desde": validacion["ventana_visita_desde"] or "",
+            "ventana_visita_hasta": validacion["ventana_visita_hasta"] or "",
+            "duracion_estimada_minutos": validacion["duracion_estimada_minutos"],
+            "prioridad_visita": validacion["prioridad_visita"],
         }
 
         if validacion["errores"]:
@@ -7065,6 +7136,12 @@ def contrato_crear_view(request):
                 quimicos_proveedor=validacion["quimicos_proveedor"],
                 quimicos_almacenamiento=validacion["quimicos_almacenamiento"],
                 responsable_reposicion=validacion["responsable_reposicion"],
+                tipo_horario_visita=validacion["tipo_horario_visita"],
+                hora_visita_fija=validacion["hora_visita_fija"],
+                ventana_visita_desde=validacion["ventana_visita_desde"],
+                ventana_visita_hasta=validacion["ventana_visita_hasta"],
+                duracion_estimada_minutos=validacion["duracion_estimada_minutos"],
+                prioridad_visita=validacion["prioridad_visita"],
             )
 
             resultado_programacion = generar_mantenimientos_contrato(contrato)
@@ -7102,6 +7179,8 @@ def contrato_crear_view(request):
             "momentos_facturacion": Contrato.MOMENTO_FACTURACION_CHOICES,
             "quimicos_proveedores": Contrato.QUIMICOS_PROVEEDOR_CHOICES,
             "quimicos_almacenamientos": Contrato.QUIMICOS_ALMACENAMIENTO_CHOICES,
+            "horarios_visita": Contrato.HORARIO_VISITA_CHOICES,
+            "prioridades_visita": Contrato.PRIORIDAD_VISITA_CHOICES,
             "trabajadores": trabajadores,
             "dias_semana": DIAS_SEMANA.items(),
             "dias_mes": range(1, 32),
@@ -7169,6 +7248,12 @@ def contrato_editar_view(request, pk):
         "quimicos_proveedor": contrato.quimicos_proveedor,
         "quimicos_almacenamiento": contrato.quimicos_almacenamiento,
         "responsable_reposicion_id": str(contrato.responsable_reposicion_id or ""),
+        "tipo_horario_visita": contrato.tipo_horario_visita,
+        "hora_visita_fija": contrato.hora_visita_fija.strftime("%H:%M") if contrato.hora_visita_fija else "",
+        "ventana_visita_desde": contrato.ventana_visita_desde.strftime("%H:%M") if contrato.ventana_visita_desde else "",
+        "ventana_visita_hasta": contrato.ventana_visita_hasta.strftime("%H:%M") if contrato.ventana_visita_hasta else "",
+        "duracion_estimada_minutos": contrato.duracion_estimada_minutos,
+        "prioridad_visita": contrato.prioridad_visita,
     }
 
     if request.method == "POST":
@@ -7204,6 +7289,12 @@ def contrato_editar_view(request, pk):
             "quimicos_proveedor": validacion["quimicos_proveedor"],
             "quimicos_almacenamiento": validacion["quimicos_almacenamiento"],
             "responsable_reposicion_id": validacion["responsable_reposicion_id"],
+            "tipo_horario_visita": validacion["tipo_horario_visita"],
+            "hora_visita_fija": validacion["hora_visita_fija"] or "",
+            "ventana_visita_desde": validacion["ventana_visita_desde"] or "",
+            "ventana_visita_hasta": validacion["ventana_visita_hasta"] or "",
+            "duracion_estimada_minutos": validacion["duracion_estimada_minutos"],
+            "prioridad_visita": validacion["prioridad_visita"],
         }
 
         if validacion["errores"]:
@@ -7236,6 +7327,12 @@ def contrato_editar_view(request, pk):
             contrato.quimicos_proveedor = validacion["quimicos_proveedor"]
             contrato.quimicos_almacenamiento = validacion["quimicos_almacenamiento"]
             contrato.responsable_reposicion = validacion["responsable_reposicion"]
+            contrato.tipo_horario_visita = validacion["tipo_horario_visita"]
+            contrato.hora_visita_fija = validacion["hora_visita_fija"]
+            contrato.ventana_visita_desde = validacion["ventana_visita_desde"]
+            contrato.ventana_visita_hasta = validacion["ventana_visita_hasta"]
+            contrato.duracion_estimada_minutos = validacion["duracion_estimada_minutos"]
+            contrato.prioridad_visita = validacion["prioridad_visita"]
             contrato.save()
 
             if contrato.activo and contrato.generacion_automatica:
@@ -7278,6 +7375,8 @@ def contrato_editar_view(request, pk):
             "momentos_facturacion": Contrato.MOMENTO_FACTURACION_CHOICES,
             "quimicos_proveedores": Contrato.QUIMICOS_PROVEEDOR_CHOICES,
             "quimicos_almacenamientos": Contrato.QUIMICOS_ALMACENAMIENTO_CHOICES,
+            "horarios_visita": Contrato.HORARIO_VISITA_CHOICES,
+            "prioridades_visita": Contrato.PRIORIDAD_VISITA_CHOICES,
             "trabajadores": trabajadores,
             "dias_semana": DIAS_SEMANA.items(),
             "dias_mes": range(1, 32),

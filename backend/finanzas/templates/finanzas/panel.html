@@ -1,0 +1,116 @@
+{% extends "dashboard/base_admin.html" %}
+{% load humanize %}
+{% block title %}Centro financiero{% endblock %}
+{% block top_title %}💰 Finanzas{% endblock %}
+{% block content %}
+<style>
+  .fin-shell{display:grid;gap:18px}.fin-hero{padding:22px;border:1px solid var(--jv-border);border-radius:24px;background:linear-gradient(135deg,#102d58,#0b5ed7 58%,#00a6c7);color:#fff;box-shadow:var(--jv-shadow)}
+  .fin-hero-row{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap}.fin-hero h1{font-size:clamp(1.35rem,3vw,2rem);font-weight:900;margin:0 0 6px}.fin-hero p{margin:0;color:rgba(255,255,255,.78)}
+  .fin-actions{display:flex;gap:9px;flex-wrap:wrap}.fin-actions .btn{border-radius:14px;font-weight:800;padding:10px 14px}.fin-filter{display:flex;gap:8px;align-items:end;flex-wrap:wrap;background:rgba(255,255,255,.12);padding:10px;border-radius:16px}.fin-filter label{font-size:.72rem;font-weight:800;display:block;margin-bottom:3px}.fin-filter input{min-width:90px;border:0;border-radius:10px;padding:8px 10px}
+  .fin-block-title{display:flex;align-items:end;justify-content:space-between;gap:12px}.fin-block-title h2{margin:0;font-size:1.05rem;font-weight:950}.fin-block-title p{margin:3px 0 0;color:var(--jv-muted);font-size:.8rem}
+  .fin-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.fin-grid.four{grid-template-columns:repeat(4,minmax(0,1fr))}.fin-card{background:#fff;border:1px solid var(--jv-border);border-radius:20px;padding:18px;box-shadow:var(--jv-shadow-sm);min-width:0}.fin-card.real{border-top:4px solid #198754}.fin-card.projected{border-top:4px solid #0b5ed7}.fin-card.pending{border-top:4px solid #f0ad4e}
+  .fin-label{font-size:.76rem;text-transform:uppercase;letter-spacing:.055em;color:var(--jv-muted);font-weight:900}.fin-value{font-size:clamp(1.45rem,3vw,2.15rem);line-height:1.05;font-weight:950;margin:8px 0}.fin-meta{font-size:.78rem;color:var(--jv-muted)}.fin-up{color:#198754}.fin-down{color:#dc3545}
+  .fin-main{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(300px,.85fr);gap:14px}.fin-section-title{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px}.fin-section-title h2{font-size:1rem;font-weight:900;margin:0}.fin-list{display:grid;gap:9px}.fin-item{display:flex;align-items:center;gap:12px;padding:12px;border:1px solid #edf0f4;border-radius:15px}.fin-dot{width:42px;height:42px;border-radius:13px;display:grid;place-items:center;font-size:1.1rem;flex:0 0 auto}.dot-in{background:#eaf8f0}.dot-out{background:#fff0f1}.dot-warn{background:#fff6df}.fin-item-main{min-width:0;flex:1}.fin-item-title{font-weight:850}.fin-item-sub{font-size:.76rem;color:var(--jv-muted)}.fin-amount{font-weight:950;text-align:right}.badge-fin{display:inline-flex;padding:5px 9px;border-radius:999px;font-size:.68rem;font-weight:900}.st-pagado,.st-pagada{background:#e8f7ef;color:#157347}.st-parcial{background:#fff3cd;color:#8a6500}.st-pendiente{background:#e7f1ff;color:#0a58ca}.st-vencido,.st-vencida{background:#fde8ea;color:#b02a37}.st-anulado,.st-anulada{background:#eceff3;color:#5f6875}
+  .fin-progress-row{margin-bottom:13px}.fin-progress-head{display:flex;justify-content:space-between;gap:10px;font-size:.78rem;font-weight:800;margin-bottom:6px}.fin-progress{height:10px;background:#edf1f6;border-radius:999px;overflow:hidden}.fin-progress span{display:block;height:100%;background:linear-gradient(90deg,#0b5ed7,#00a6c7);border-radius:999px}.fin-progress.pay span{background:linear-gradient(90deg,#f0ad4e,#ff7b54)}
+  .priority-card{border-left:4px solid #dc3545}.priority-item{transition:.18s ease}.priority-item:hover{transform:translateY(-1px);border-color:#cbd8ea}.priority-icon{font-size:1.25rem}.flow-arrow{text-align:center;color:#8a96a8;font-weight:900}.fin-empty{padding:26px;text-align:center;color:var(--jv-muted)}
+  .summary-strip{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;gap:10px;align-items:center}.summary-strip .metric{text-align:center;padding:12px;border-radius:16px;background:#f7f9fc}.summary-strip .metric strong{display:block;font-size:1.35rem}.summary-strip .arrow{font-size:1.25rem;color:#8a96a8}
+  @media(max-width:1050px){.fin-grid,.fin-grid.four{grid-template-columns:repeat(2,minmax(0,1fr))}.fin-main{grid-template-columns:1fr}}
+  @media(max-width:600px){.fin-shell{gap:12px}.fin-hero{padding:17px;border-radius:19px}.fin-actions{display:grid;grid-template-columns:1fr 1fr;width:100%}.fin-actions .btn{width:100%;font-size:.82rem}.fin-filter{width:100%;display:grid;grid-template-columns:1fr 1fr auto}.fin-filter input{width:100%;min-width:0}.fin-grid,.fin-grid.four{grid-template-columns:1fr 1fr;gap:10px}.fin-card{padding:14px;border-radius:17px}.fin-value{font-size:1.35rem}.fin-main{gap:10px}.fin-item{padding:10px;gap:9px}.fin-dot{width:36px;height:36px}.fin-item-title{font-size:.85rem}.fin-amount{font-size:.88rem}.summary-strip{grid-template-columns:1fr}.summary-strip .arrow{transform:rotate(90deg);text-align:center}}
+</style>
+<div class="fin-shell">
+  <section class="fin-hero">
+    <div class="fin-hero-row">
+      <div><h1>Centro financiero inteligente</h1><p>Compara lo realmente cobrado y pagado con todo lo proyectado para el mes.</p></div>
+      <div class="fin-actions">
+        <a class="btn btn-light" href="{% url 'finanzas_ingreso_nuevo' %}">＋ Ingreso</a>
+        <a class="btn btn-outline-light" href="{% url 'finanzas_egreso_nuevo' %}">− Egreso</a>
+        <a class="btn btn-outline-light" href="{% url 'finanzas_cartera' %}">Cartera</a>
+        <a class="btn btn-outline-light" href="{% url 'finanzas_nomina' %}">Nómina</a>
+        <a class="btn btn-outline-light" href="{% url 'finanzas_movimientos' %}">Movimientos</a>
+      </div>
+    </div>
+    <form class="fin-filter mt-3" method="get">
+      <div><label>AÑO</label><input type="number" name="anio" value="{{ anio }}" min="2020" max="2100"></div>
+      <div><label>MES</label><input type="number" name="mes" value="{{ mes }}" min="1" max="12"></div>
+      <button class="btn btn-light" type="submit">Aplicar</button>
+    </form>
+  </section>
+
+  <div class="fin-block-title"><div><h2>Estado real</h2><p>Dinero efectivamente cobrado y pagado durante el mes.</p></div></div>
+  <section class="fin-grid">
+    <article class="fin-card real"><div class="fin-label">Ingresos cobrados</div><div class="fin-value fin-up">${{ ingresos_cobrados|floatformat:2|intcomma }}</div><div class="fin-meta {% if variacion_ingresos >= 0 %}fin-up{% else %}fin-down{% endif %}">{{ variacion_ingresos|floatformat:1 }}% frente al mes anterior</div></article>
+    <article class="fin-card real"><div class="fin-label">Egresos pagados</div><div class="fin-value fin-down">${{ egresos_pagados|floatformat:2|intcomma }}</div><div class="fin-meta {% if variacion_egresos <= 0 %}fin-up{% else %}fin-down{% endif %}">{{ variacion_egresos|floatformat:1 }}% frente al mes anterior</div></article>
+    <article class="fin-card real"><div class="fin-label">Utilidad real</div><div class="fin-value {% if utilidad_real < 0 %}fin-down{% else %}fin-up{% endif %}">${{ utilidad_real|floatformat:2|intcomma }}</div><div class="fin-meta">Ingresos cobrados menos egresos pagados</div></article>
+  </section>
+
+  <div class="fin-block-title"><div><h2>Proyección del mes</h2><p>Incluye todas las cuentas por cobrar, nómina y gastos previstos aunque todavía no se hayan ejecutado.</p></div></div>
+  <section class="fin-grid">
+    <article class="fin-card projected"><div class="fin-label">Ingresos esperados</div><div class="fin-value text-primary">${{ ingresos_esperados|floatformat:2|intcomma }}</div><div class="fin-meta">Facturación del periodo + ingresos manuales</div></article>
+    <article class="fin-card projected"><div class="fin-label">Egresos previstos</div><div class="fin-value text-primary">${{ egresos_previstos|floatformat:2|intcomma }}</div><div class="fin-meta">Nómina + gastos no vinculados a nómina</div></article>
+    <article class="fin-card projected"><div class="fin-label">Resultado proyectado</div><div class="fin-value {% if resultado_proyectado < 0 %}fin-down{% else %}fin-up{% endif %}">${{ resultado_proyectado|floatformat:2|intcomma }}</div><div class="fin-meta">Margen proyectado: {{ margen_proyectado|floatformat:1 }}%</div></article>
+  </section>
+
+  <article class="fin-card">
+    <div class="fin-section-title"><h2>Flujo de caja esperado</h2></div>
+    <div class="summary-strip">
+      <div class="metric"><span class="fin-label">Ingresar</span><strong class="fin-up">${{ ingresos_esperados|floatformat:2|intcomma }}</strong></div>
+      <div class="arrow">→</div>
+      <div class="metric"><span class="fin-label">Gastar</span><strong class="fin-down">${{ egresos_previstos|floatformat:2|intcomma }}</strong></div>
+      <div class="arrow">→</div>
+      <div class="metric"><span class="fin-label">Resultado</span><strong class="{% if resultado_proyectado < 0 %}fin-down{% else %}fin-up{% endif %}">${{ resultado_proyectado|floatformat:2|intcomma }}</strong></div>
+    </div>
+  </article>
+
+  <div class="fin-block-title"><div><h2>Gestión pendiente</h2><p>Lo que falta cobrar y pagar para completar la proyección.</p></div></div>
+  <section class="fin-grid four">
+    <article class="fin-card pending"><div class="fin-label">Por cobrar</div><div class="fin-value text-primary">${{ por_cobrar|floatformat:2|intcomma }}</div><div class="fin-meta">Saldo pendiente de clientes</div></article>
+    <article class="fin-card pending"><div class="fin-label">Por pagar</div><div class="fin-value text-warning">${{ por_pagar|floatformat:2|intcomma }}</div><div class="fin-meta">Nómina y demás obligaciones pendientes</div></article>
+    <article class="fin-card"><div class="fin-label">Cumplimiento de cobranza</div><div class="fin-value">{{ cumplimiento_cobranza|floatformat:1 }}%</div><div class="fin-progress"><span style="width:{{ cumplimiento_cobranza|floatformat:0 }}%"></span></div><div class="fin-meta mt-2">Cobrado frente a lo esperado</div></article>
+    <article class="fin-card"><div class="fin-label">Cumplimiento de pagos</div><div class="fin-value">{{ cumplimiento_pagos|floatformat:1 }}%</div><div class="fin-progress pay"><span style="width:{{ cumplimiento_pagos|floatformat:0 }}%"></span></div><div class="fin-meta mt-2">Pagado frente a lo previsto</div></article>
+  </section>
+
+  <section class="fin-main">
+    <article class="fin-card priority-card">
+      <div class="fin-section-title"><h2>Prioridades financieras</h2><span class="badge bg-danger">{{ prioridades|length }}</span></div>
+      <div class="fin-list">
+        {% for item in prioridades %}
+          <a class="fin-item priority-item text-decoration-none text-reset" href="{{ item.url }}">
+            <div class="priority-icon">{{ item.icono }}</div>
+            <div class="fin-item-main"><div class="fin-item-title">{{ item.titulo }}</div><div class="fin-item-sub">{{ item.detalle }}</div></div>
+            <div>›</div>
+          </a>
+        {% empty %}<div class="fin-empty">✅ No hay acciones financieras urgentes para este momento.</div>{% endfor %}
+      </div>
+    </article>
+
+    <div class="d-grid gap-3">
+      <article class="fin-card">
+        <div class="fin-section-title"><h2>Salud financiera</h2></div>
+        <div class="fin-list">
+          <a class="fin-item text-decoration-none text-reset" href="{% url 'finanzas_cartera' %}?estado=vencida"><div class="fin-dot dot-out">!</div><div class="fin-item-main"><div class="fin-item-title">Cobros vencidos</div><div class="fin-item-sub">Saldos fuera de fecha</div></div><strong class="fin-down">{{ total_cobros_vencidos }}</strong></a>
+          <a class="fin-item text-decoration-none text-reset" href="{% url 'finanzas_cartera' %}"><div class="fin-dot dot-warn">$</div><div class="fin-item-main"><div class="fin-item-title">Cobros para hoy</div><div class="fin-item-sub">Gestiones disponibles</div></div><strong>{{ total_cobros_hoy }}</strong></a>
+          <a class="fin-item text-decoration-none text-reset" href="{% url 'finanzas_facturas' %}"><div class="fin-dot dot-warn">📄</div><div class="fin-item-main"><div class="fin-item-title">Facturas por emitir</div><div class="fin-item-sub">Programación vencida o de hoy</div></div><strong>{{ total_facturas_por_emitir }}</strong></a>
+          <a class="fin-item text-decoration-none text-reset" href="{% url 'finanzas_nomina' %}?anio={{ anio }}&mes={{ mes }}"><div class="fin-dot dot-warn">👷</div><div class="fin-item-main"><div class="fin-item-title">Nómina por pagar</div><div class="fin-item-sub">Fechas programadas cumplidas</div></div><strong>{{ total_nomina_hoy }}</strong></a>
+        </div>
+      </article>
+      <article class="fin-card">
+        <div class="fin-section-title"><h2>Egresos pagados por categoría</h2></div>
+        {% for item in categorias %}<div class="fin-progress-row"><div class="fin-progress-head"><span>{{ item.label }}</span><span>${{ item.total_categoria|floatformat:2 }}</span></div><div class="fin-progress"><span style="width:{{ item.porcentaje }}%"></span></div></div>{% empty %}<div class="fin-empty">Sin egresos pagados.</div>{% endfor %}
+      </article>
+    </div>
+  </section>
+
+  <article class="fin-card">
+    <div class="fin-section-title"><h2>Últimos movimientos reales</h2><a href="{% url 'finanzas_movimientos' %}" class="btn btn-sm btn-outline-primary">Ver todos</a></div>
+    <div class="fin-list">
+      {% for item in ultimos %}
+        <div class="fin-item">
+          <div class="fin-dot {% if item.tipo == 'ingreso' %}dot-in{% else %}dot-out{% endif %}">{% if item.tipo == 'ingreso' %}↗{% else %}↘{% endif %}</div>
+          <div class="fin-item-main"><div class="fin-item-title">{{ item.obj.concepto|default:"Movimiento" }}</div><div class="fin-item-sub">{{ item.fecha|date:"d/m/Y" }} · {% if item.tipo == 'ingreso' %}{{ item.obj.cliente|default:"Ingreso manual" }}{% else %}{{ item.obj.get_categoria_display|default:"Egreso" }}{% endif %}</div></div>
+          <div><div class="fin-amount {% if item.tipo == 'ingreso' %}fin-up{% else %}fin-down{% endif %}">{% if item.tipo == 'ingreso' %}+{% else %}-{% endif %}${{ item.obj.total|floatformat:2 }}</div><span class="badge-fin st-{{ item.obj.estado_visual }}">{{ item.obj.get_estado_display }}</span></div>
+        </div>
+      {% empty %}<div class="fin-empty">Todavía no existen movimientos en este periodo.</div>{% endfor %}
+    </div>
+  </article>
+</div>
+{% endblock %}

@@ -1,0 +1,249 @@
+{% extends "dashboard/base_admin.html" %}
+
+{% block title %}Contrato de {{ contrato.cliente.nombre }}{% endblock %}
+{% block top_title %}📄 Detalle del contrato{% endblock %}
+
+{% block top_actions %}
+  <a class="btn btn-primary btn-sm" href="/dashboard/contratos/{{ contrato.id }}/editar/">✏️ Editar</a>
+  <a class="btn btn-outline-secondary btn-sm" href="/dashboard/contratos/">Contratos</a>
+  <a class="btn btn-outline-danger btn-sm" href="/logout/">Salir</a>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+  .contract-detail-page{
+    --cd-primary:#0f766e;--cd-primary-dark:#115e59;--cd-ink:#0f172a;
+    --cd-muted:#64748b;--cd-line:#e2e8f0;--cd-soft:#f8fafc
+  }
+  .contract-detail-page .cd-hero{
+    position:relative;overflow:hidden;border-radius:24px;padding:28px;margin-bottom:22px;color:#fff;
+    background:linear-gradient(135deg,#0f172a 0%,#0f766e 68%,#14b8a6 100%);
+    box-shadow:0 24px 60px rgba(15,23,42,.18)
+  }
+  .contract-detail-page .cd-hero:after{content:"";position:absolute;width:300px;height:300px;border-radius:50%;background:rgba(255,255,255,.08);right:-90px;top:-130px}
+  .contract-detail-page .cd-title{font-size:clamp(1.75rem,3vw,2.5rem);font-weight:800;margin:0}
+  .contract-detail-page .cd-meta{opacity:.84;margin-top:.45rem}
+  .contract-detail-page .cd-status{display:inline-flex;align-items:center;gap:7px;padding:.48rem .78rem;border-radius:999px;font-size:.8rem;font-weight:800}
+  .contract-detail-page .cd-status-active{background:rgba(220,252,231,.95);color:#166534}
+  .contract-detail-page .cd-status-inactive{background:rgba(241,245,249,.95);color:#475569}
+  .contract-detail-page .cd-card{
+    border:1px solid var(--cd-line);border-radius:20px;background:#fff;
+    box-shadow:0 14px 40px rgba(15,23,42,.06);overflow:hidden;height:100%
+  }
+  .contract-detail-page .cd-card-header{padding:18px 20px;background:linear-gradient(180deg,#fff,#fbfdff);border-bottom:1px solid #edf2f7}
+  .contract-detail-page .cd-card-title{font-weight:800;color:#0f172a}
+  .contract-detail-page .cd-card-body{padding:20px}
+  .contract-detail-page .detail-label{font-size:.76rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#64748b;margin-bottom:4px}
+  .contract-detail-page .detail-value{font-weight:700;color:#0f172a;word-break:break-word}
+  .contract-detail-page .contract-price{font-size:2.3rem;font-weight:800;color:#0f766e;line-height:1}
+  .contract-detail-page .cd-kpi{
+    border:1px solid var(--cd-line);border-radius:18px;background:#fff;
+    box-shadow:0 12px 34px rgba(15,23,42,.055);height:100%;transition:.18s ease
+  }
+  .contract-detail-page .cd-kpi:hover{transform:translateY(-3px)}
+  .contract-detail-page .cd-kpi-body{padding:18px}
+  .contract-detail-page .cd-kpi-label{font-size:.76rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#64748b}
+  .contract-detail-page .cd-kpi-value{font-size:1.75rem;font-weight:800;color:#0f172a;margin-top:8px}
+  .contract-detail-page .cd-actions{display:flex;gap:10px;flex-wrap:wrap}
+  .contract-detail-page .btn{border-radius:12px;font-weight:700}
+  .contract-detail-page .cd-table thead th{
+    background:#f8fafc;color:#475569;border-bottom:1px solid #e2e8f0;
+    font-size:.76rem;text-transform:uppercase;letter-spacing:.05em;padding:14px 16px
+  }
+  .contract-detail-page .cd-table tbody td{padding:15px 16px;border-color:#eef2f7}
+  .contract-detail-page .cd-badge{
+    display:inline-flex;align-items:center;padding:.4rem .65rem;border-radius:999px;font-size:.75rem;font-weight:800
+  }
+  .contract-detail-page .cd-mobile-item{border:1px solid #e2e8f0;border-radius:17px;padding:16px;background:#fff}
+  .contract-detail-page .list-group-item{padding:16px 20px;border-color:#edf2f7}
+  .contract-detail-page .list-group-item:hover{background:#fbfefe}
+  @media(max-width:767.98px){.contract-detail-page .cd-hero{padding:22px}.contract-detail-page .cd-card-body{padding:17px}}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="contract-detail-page">
+
+  <section class="cd-hero">
+    <div class="row align-items-center g-3 position-relative" style="z-index:2">
+      <div class="col-12 col-lg">
+        <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
+          <h1 class="cd-title">{{ contrato.cliente.nombre }}</h1>
+          {% if contrato.activo %}
+            <span class="cd-status cd-status-active">● Contrato activo</span>
+          {% else %}
+            <span class="cd-status cd-status-inactive">● Contrato inactivo</span>
+          {% endif %}
+        </div>
+        <div class="cd-meta">Contrato #{{ contrato.id }} · Inicio: {{ contrato.fecha_inicio|date:"d/m/Y" }}</div>
+      </div>
+      <div class="col-12 col-lg-auto">
+        <div class="d-flex gap-2 flex-wrap">
+          <a class="btn btn-light" href="/dashboard/contratos/">← Volver</a>
+          <a class="btn btn-warning" href="/dashboard/contratos/{{ contrato.id }}/editar/">✏️ Editar contrato</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="row g-3 mb-3">
+    <div class="col-12 col-lg-7">
+      <div class="cd-card">
+        <div class="cd-card-header"><div class="cd-card-title">👤 Información del cliente</div></div>
+        <div class="cd-card-body">
+          <div class="row g-4">
+            <div class="col-12 col-md-6"><div class="detail-label">Nombre</div><div class="detail-value">{{ contrato.cliente.nombre }}</div></div>
+            <div class="col-12 col-md-6"><div class="detail-label">Teléfono</div><div class="detail-value">{% if contrato.cliente.telefono %}<a href="tel:{{ contrato.cliente.telefono }}" class="text-decoration-none">{{ contrato.cliente.telefono }}</a>{% else %}<span class="text-muted">No registrado</span>{% endif %}</div></div>
+            <div class="col-12 col-md-6"><div class="detail-label">Correo electrónico</div><div class="detail-value">{% if contrato.cliente.email %}<a href="mailto:{{ contrato.cliente.email }}" class="text-decoration-none">{{ contrato.cliente.email }}</a>{% else %}<span class="text-muted">No registrado</span>{% endif %}</div></div>
+            <div class="col-12 col-md-6"><div class="detail-label">Estado del cliente</div><div class="detail-value">{% if contrato.cliente.activo %}<span class="text-success">● Cliente activo</span>{% else %}<span class="text-secondary">● Cliente inactivo</span>{% endif %}</div></div>
+            <div class="col-12"><div class="detail-label">Dirección</div><div class="detail-value">{% if contrato.cliente.direccion %}{{ contrato.cliente.direccion|linebreaksbr }}{% else %}<span class="text-muted">No registrada</span>{% endif %}</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-lg-5">
+      <div class="cd-card">
+        <div class="cd-card-header"><div class="cd-card-title">📄 Información del contrato</div></div>
+        <div class="cd-card-body">
+          <div class="detail-label">Precio mensual</div>
+          <div class="contract-price">${{ contrato.precio_mensual|floatformat:2 }}</div>
+          <hr class="my-4">
+          <div class="row g-3">
+            <div class="col-12"><div class="detail-label">Frecuencia</div><div class="detail-value">{{ contrato.frecuencia_completa }}</div></div>
+            <div class="col-12"><div class="detail-label">Forma de pago</div><div class="detail-value">{{ contrato.forma_pago_completa }}</div></div>
+            <div class="col-6"><div class="detail-label">Fecha de inicio</div><div class="detail-value">{{ contrato.fecha_inicio|date:"d/m/Y" }}</div></div>
+            <div class="col-6"><div class="detail-label">Estado</div><div class="detail-value">{% if contrato.activo %}<span class="cd-status cd-status-active">Activo</span>{% else %}<span class="cd-status cd-status-inactive">Inactivo</span>{% endif %}</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-6 col-xl-3"><div class="cd-kpi"><div class="cd-kpi-body"><div class="cd-kpi-label">Mantenimientos</div><div class="cd-kpi-value">{{ total_mantenimientos }}</div><div class="small text-muted mt-1">Total registrados</div></div></div></div>
+    <div class="col-6 col-xl-3"><div class="cd-kpi"><div class="cd-kpi-body"><div class="cd-kpi-label">Realizados</div><div class="cd-kpi-value text-success">{{ total_realizados }}</div><div class="small text-muted mt-1">Servicios completados</div></div></div></div>
+    <div class="col-6 col-xl-3"><div class="cd-kpi"><div class="cd-kpi-body"><div class="cd-kpi-label">Pendientes</div><div class="cd-kpi-value text-warning">{{ total_pendientes }}</div><div class="small text-muted mt-1">Por completar</div></div></div></div>
+    <div class="col-6 col-xl-3"><div class="cd-kpi"><div class="cd-kpi-body"><div class="cd-kpi-label">Atrasados</div><div class="cd-kpi-value text-danger">{{ total_atrasados }}</div><div class="small text-muted mt-1">Requieren atención</div></div></div></div>
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-12 col-md-4"><div class="cd-kpi"><div class="cd-kpi-body"><div class="cd-kpi-label">Total facturado</div><div class="cd-kpi-value">${{ total_facturado|floatformat:2 }}</div></div></div></div>
+    <div class="col-12 col-md-4"><div class="cd-kpi"><div class="cd-kpi-body"><div class="cd-kpi-label">Total pagado</div><div class="cd-kpi-value text-success">${{ total_pagado|floatformat:2 }}</div></div></div></div>
+    <div class="col-12 col-md-4"><div class="cd-kpi"><div class="cd-kpi-body"><div class="cd-kpi-label">Saldo pendiente</div><div class="cd-kpi-value text-danger">${{ total_pendiente|floatformat:2 }}</div></div></div></div>
+  </div>
+
+  <div class="cd-card mb-3">
+    <div class="cd-card-header">
+      <div class="cd-card-title">⚡ Acciones rápidas</div>
+      <div class="small text-muted mt-1">Accesos relacionados con este contrato.</div>
+    </div>
+    <div class="cd-card-body">
+      <div class="cd-actions">
+        <a class="btn btn-primary" href="/dashboard/contratos/{{ contrato.id }}/editar/">✏️ Editar contrato</a>
+        <a class="btn btn-outline-primary" href="/dashboard/mantenimientos/historial/?q={{ contrato.cliente.nombre|urlencode }}">🛠 Ver mantenimientos</a>
+        <a class="btn btn-outline-secondary" href="/dashboard/finanzas/facturas/">🧾 Ver facturas</a>
+        <form method="post" action="/dashboard/contratos/{{ contrato.id }}/toggle/" class="d-inline">
+          {% csrf_token %}
+          <input type="hidden" name="next" value="/dashboard/contratos/{{ contrato.id }}/">
+          {% if contrato.activo %}
+            <button type="submit" class="btn btn-outline-danger" onclick="return confirm('¿Deseas desactivar este contrato?');">⏸ Desactivar contrato</button>
+          {% else %}
+            <button type="submit" class="btn btn-outline-success" onclick="return confirm('¿Deseas activar este contrato?');">▶ Activar contrato</button>
+          {% endif %}
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-12 col-xl-7">
+      <div class="cd-card">
+        <div class="cd-card-header">
+          <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">
+            <div><div class="cd-card-title">🛠 Mantenimientos recientes</div><div class="small text-muted mt-1">Últimos servicios asociados al contrato.</div></div>
+            <a class="btn btn-sm btn-outline-primary" href="/dashboard/mantenimientos/historial/?q={{ contrato.cliente.nombre|urlencode }}">Ver historial</a>
+          </div>
+        </div>
+        {% if mantenimientos_recientes %}
+          <div class="table-responsive d-none d-md-block">
+            <table class="table cd-table mb-0">
+              <thead><tr><th>Fecha</th><th>Estado</th><th>Técnicos</th><th class="text-end">Acción</th></tr></thead>
+              <tbody>
+                {% for mantenimiento in mantenimientos_recientes %}
+                  <tr>
+                    <td>{{ mantenimiento.fecha|date:"d/m/Y" }}</td>
+                    <td>
+                      {% if mantenimiento.estado == "realizado" %}<span class="badge text-bg-success">Realizado</span>
+                      {% elif mantenimiento.estado == "pendiente" %}<span class="badge text-bg-warning">Pendiente</span>
+                      {% elif mantenimiento.estado == "cancelado" %}<span class="badge text-bg-secondary">Cancelado</span>
+                      {% else %}<span class="badge text-bg-light">{{ mantenimiento.get_estado_display|default:mantenimiento.estado }}</span>{% endif %}
+                    </td>
+                    <td>{% for trabajador in mantenimiento.trabajadores.all %}<span class="badge text-bg-light">{{ trabajador }}</span>{% empty %}<span class="text-muted small">Sin asignar</span>{% endfor %}</td>
+                    <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="/dashboard/mantenimientos/{{ mantenimiento.id }}/">Ver</a></td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="d-md-none p-3">
+            <div class="d-grid gap-3">
+              {% for mantenimiento in mantenimientos_recientes %}
+                <div class="cd-mobile-item">
+                  <div class="d-flex justify-content-between align-items-start gap-2">
+                    <div><div class="small text-muted">Fecha</div><div class="fw-bold">{{ mantenimiento.fecha|date:"d/m/Y" }}</div></div>
+                    {% if mantenimiento.estado == "realizado" %}<span class="badge text-bg-success">Realizado</span>
+                    {% elif mantenimiento.estado == "pendiente" %}<span class="badge text-bg-warning">Pendiente</span>
+                    {% else %}<span class="badge text-bg-secondary">{{ mantenimiento.get_estado_display|default:mantenimiento.estado }}</span>{% endif %}
+                  </div>
+                  <div class="mt-3"><div class="small text-muted mb-1">Técnicos</div>{% for trabajador in mantenimiento.trabajadores.all %}<span class="badge text-bg-light">{{ trabajador }}</span>{% empty %}<span class="small text-muted">Sin técnicos asignados</span>{% endfor %}</div>
+                  <div class="d-grid mt-3"><a class="btn btn-outline-primary" href="/dashboard/mantenimientos/{{ mantenimiento.id }}/">Ver mantenimiento</a></div>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+        {% else %}
+          <div class="p-5 text-center"><div class="fs-1 mb-2">🛠</div><div class="fw-bold">No existen mantenimientos</div><div class="text-muted">Este contrato todavía no tiene mantenimientos registrados.</div></div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="col-12 col-xl-5">
+      <div class="cd-card">
+        <div class="cd-card-header">
+          <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">
+            <div><div class="cd-card-title">🧾 Facturas recientes</div><div class="small text-muted mt-1">Últimas facturas vinculadas al contrato.</div></div>
+            <a class="btn btn-sm btn-outline-primary" href="/dashboard/finanzas/facturas/">Ver todas</a>
+          </div>
+        </div>
+        {% if facturas %}
+          <div class="list-group list-group-flush">
+            {% for factura in facturas %}
+              <a href="/dashboard/finanzas/facturas/{{ factura.id }}/" class="list-group-item list-group-item-action">
+                <div class="d-flex justify-content-between align-items-start gap-3">
+                  <div>
+                    <div class="fw-semibold">Factura #{{ factura.id }}</div>
+                    <div class="small text-muted">{% if factura.periodo_mes and factura.periodo_anio %}Periodo: {{ factura.periodo_mes }}/{{ factura.periodo_anio }}{% elif factura.fecha %}{{ factura.fecha|date:"d/m/Y" }}{% endif %}</div>
+                  </div>
+                  <div class="text-end">
+                    <div class="fw-bold">${{ factura.total|floatformat:2 }}</div>
+                    <div class="mt-1">
+                      {% if factura.estado == "pagada" %}<span class="badge text-bg-success">Pagada</span>
+                      {% elif factura.estado == "vencida" %}<span class="badge text-bg-danger">Vencida</span>
+                      {% elif factura.estado == "anulada" %}<span class="badge text-bg-secondary">Anulada</span>
+                      {% else %}<span class="badge text-bg-warning">{{ factura.get_estado_display|default:factura.estado }}</span>{% endif %}
+                    </div>
+                  </div>
+                </div>
+              </a>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="p-5 text-center"><div class="fs-1 mb-2">🧾</div><div class="fw-bold">No existen facturas</div><div class="text-muted">Todavía no se han generado facturas para este contrato.</div></div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

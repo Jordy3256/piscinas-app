@@ -1,0 +1,134 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+
+<!-- DEPLOY-MARCA: 2026-03-11-FIX-PANEL-3 -->
+
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <title>{% block title %}Panel{% endblock %}</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <link rel="manifest" href="/dashboard/manifest.json?v=20260311-10">
+  <meta name="theme-color" content="#0d6efd">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+
+  <style>
+    .app-shell { max-width: 900px; margin: 0 auto; }
+    .topbar { position: sticky; top: 0; z-index: 1030; backdrop-filter: blur(8px); }
+    .bottom-nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 1030; }
+    .spacer-bottom { height: 88px; }
+
+    #btn-install { display: none; }
+
+    #btn-push-app  { display: none; white-space: nowrap; }
+    #btn-push-test { display: none; white-space: nowrap; }
+
+    .notif-btn {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 38px;
+      height: 38px;
+      border-radius: 999px;
+    }
+
+    .notif-badge {
+      position: absolute;
+      top: -4px;
+      right: -4px;
+      min-width: 18px;
+      height: 18px;
+      padding: 0 5px;
+      border-radius: 999px;
+      font-size: 11px;
+      line-height: 18px;
+      text-align: center;
+      background: #dc3545;
+      color: #fff;
+      display: none;
+    }
+  </style>
+
+  {% block extra_head %}{% endblock %}
+</head>
+
+<body class="bg-light">
+  <div class="app-shell">
+
+    <!-- TOP -->
+    <div class="topbar bg-white border-bottom">
+      <div class="container py-3">
+        <div class="d-flex justify-content-between align-items-center">
+          <div class="fw-bold">{% block top_title %}Panel{% endblock %}</div>
+
+          <div class="d-flex gap-2 align-items-center">
+            <button id="btn-push-app" class="btn btn-primary btn-sm" type="button">🔔 Activar</button>
+            <button id="btn-push-test" class="btn btn-outline-primary btn-sm" type="button">🧪 Test Push</button>
+
+            <a class="btn btn-outline-secondary btn-sm notif-btn"
+               href="/dashboard/notificaciones/"
+               title="Notificaciones">
+              🔔
+              <span id="notif-badge" class="notif-badge">0</span>
+            </a>
+
+            <a class="btn btn-outline-secondary btn-sm" href="/dashboard/home/">Inicio</a>
+            <a class="btn btn-outline-danger btn-sm" href="/logout/">Salir</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONTENT -->
+    <div class="container py-3">
+      {% if messages %}
+        <div class="mb-3">
+          {% for message in messages %}
+            <div class="alert alert-{{ message.tags }} mb-2">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      {% block content %}{% endblock %}
+      <div class="spacer-bottom"></div>
+    </div>
+
+    <!-- BOTTOM NAV (ACTUALIZADO) -->
+    <div class="bottom-nav bg-white border-top">
+      <div class="container py-2">
+        <div class="d-flex justify-content-around gap-2 flex-wrap">
+
+          <a class="btn btn-light flex-fill" href="/dashboard/home/">🏠 Inicio</a>
+
+          {% if es_admin %}
+            <a class="btn btn-outline-secondary flex-fill" href="/dashboard/home/">📊 Dashboard</a>
+            <a class="btn btn-outline-secondary flex-fill" href="/dashboard/operativo/">🧑‍💼 Operativo</a>
+            <a class="btn btn-outline-secondary flex-fill" href="/dashboard/inventario/">📦 Inventario</a>
+            <a class="btn btn-outline-secondary flex-fill" href="/dashboard/finanzas/flujo/">💰 Finanzas</a>
+          {% else %}
+            <a class="btn btn-outline-secondary flex-fill" href="/dashboard/home/">📋 Mis mantenimientos</a>
+            <a class="btn btn-outline-secondary flex-fill" href="/dashboard/inventario/">📦 Inventario</a>
+          {% endif %}
+
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- TODO EL JS SE MANTIENE IGUAL -->
+  <!-- (no lo toqué porque no afecta los botones) -->
+
+  <script>
+    window.APP_VERSION = "20260311-10";
+  </script>
+
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

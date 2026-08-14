@@ -1,0 +1,78 @@
+{% extends "dashboard/base_admin.html" %}
+{% load humanize %}
+{% block title %}Cuentas por cobrar{% endblock %}
+{% block top_title %}💳 Cuentas por cobrar{% endblock %}
+{% block content %}
+<style>
+  .cx-shell{display:grid;gap:16px}.cx-hero,.cx-card{background:#fff;border:1px solid var(--jv-border);border-radius:22px;box-shadow:var(--jv-shadow-sm)}.cx-hero{padding:20px;background:linear-gradient(135deg,#102d58,#0b5ed7);color:#fff}.cx-row{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;flex-wrap:wrap}.cx-actions{display:flex;gap:8px;flex-wrap:wrap}.cx-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.cx-card{padding:16px}.cx-label{font-size:.72rem;color:var(--jv-muted);font-weight:900;text-transform:uppercase}.cx-value{font-size:1.55rem;font-weight:950;margin-top:6px}.cx-filter{display:grid;grid-template-columns:2fr 1fr .7fr .7fr auto;gap:8px}.cx-filter input,.cx-filter select{border:1px solid var(--jv-border);border-radius:12px;padding:10px;width:100%}.cx-table{width:100%;border-collapse:collapse}.cx-table th,.cx-table td{padding:12px;border-bottom:1px solid #edf0f4;text-align:left;vertical-align:middle}.cx-table th{font-size:.72rem;text-transform:uppercase;color:var(--jv-muted)}.cx-badge{display:inline-flex;padding:5px 9px;border-radius:999px;font-size:.7rem;font-weight:900}.pendiente{background:#e7f1ff;color:#0a58ca}.parcial{background:#fff3cd;color:#8a6500}.pagada{background:#e8f7ef;color:#157347}.vencida{background:#fde8ea;color:#b02a37}.anulada{background:#eceff3;color:#5f6875}.cx-progress{height:6px;background:#edf1f6;border-radius:999px;overflow:hidden;margin-top:6px}.cx-progress span{display:block;height:100%;background:#0b5ed7}.cx-mobile{display:none}.cx-generator{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end;margin-top:16px}.cx-generator label{display:grid;gap:5px;font-size:.72rem;font-weight:900;text-transform:uppercase}.cx-generator select,.cx-generator input{border:1px solid rgba(255,255,255,.35);background:#fff;color:#102d58;border-radius:12px;padding:10px 12px;min-width:140px}.cx-preview{border:2px solid #0b5ed7;background:#f7fbff}.cx-preview-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}.cx-preview-item{padding:12px;border-radius:14px;background:#fff;border:1px solid #dce8f7}.cx-preview-item span{display:block;font-size:.7rem;color:var(--jv-muted);font-weight:900;text-transform:uppercase}.cx-preview-item strong{display:block;font-size:1.2rem;margin-top:4px}.cx-confirm{display:flex;justify-content:flex-end;gap:8px;margin-top:14px;flex-wrap:wrap}
+  @media(max-width:900px){.cx-generator{grid-template-columns:1fr 1fr}.cx-generator button{grid-column:1/-1}.cx-preview-grid{grid-template-columns:1fr 1fr}.cx-kpis{grid-template-columns:1fr 1fr}.cx-filter{grid-template-columns:1fr 1fr}.cx-filter .wide{grid-column:1/-1}.cx-desktop{display:none}.cx-mobile{display:grid;gap:10px}.cx-item{padding:14px;border:1px solid #edf0f4;border-radius:16px}.cx-item-head{display:flex;justify-content:space-between;gap:10px}.cx-item strong{display:block}.cx-meta{font-size:.78rem;color:var(--jv-muted);margin-top:4px}}
+</style>
+<div class="cx-shell">
+  <section class="cx-hero">
+    <div class="cx-row">
+      <div><h1 class="h4 fw-bold mb-1">Cuentas por cobrar</h1><p class="mb-0 opacity-75">Mensualidades, abonos, saldos y vencimientos conectados con contratos.</p></div>
+      <div class="cx-actions"><a href="{% url 'flujo_mensual' %}" class="btn btn-outline-light">Panel financiero</a></div>
+    </div>
+    <form method="post" action="{% url 'finanzas_facturas_generar' %}" class="cx-generator">{% csrf_token %}
+      <label>Mes
+        <select name="mes" required>{% for numero,nombre in meses %}<option value="{{ numero }}" {% if mes_generacion == numero %}selected{% endif %}>{{ nombre }}</option>{% endfor %}</select>
+      </label>
+      <label>Año
+        <input type="number" name="anio" value="{{ anio_generacion }}" min="2020" max="2100" required>
+      </label>
+      <button class="btn btn-light fw-bold" name="accion" value="previsualizar" type="submit">Revisar antes de generar</button>
+    </form>
+  </section>
+
+  {% if vista_previa %}
+  <section class="cx-card cx-preview">
+    <div class="cx-row">
+      <div><h2 class="h5 fw-bold mb-1">Vista previa del periodo</h2><p class="text-muted mb-0">Confirma la información antes de crear las cuentas por cobrar.</p></div>
+      <span class="cx-badge pendiente">{{ vista_previa.mes|stringformat:"02d" }}/{{ vista_previa.anio }}</span>
+    </div>
+    <div class="cx-preview-grid mt-3">
+      <div class="cx-preview-item"><span>Contratos facturables</span><strong>{{ vista_previa.contratos_activos }}</strong></div>
+      <div class="cx-preview-item"><span>Mensualidades nuevas</span><strong class="text-primary">{{ vista_previa.nuevas }}</strong></div>
+      <div class="cx-preview-item"><span>Ya existentes</span><strong>{{ vista_previa.existentes }}</strong></div>
+      <div class="cx-preview-item"><span>Valor por generar</span><strong class="text-success">${{ vista_previa.valor_nuevo|floatformat:2|intcomma }}</strong></div>
+      <div class="cx-preview-item"><span>Proyección del periodo</span><strong>${{ vista_previa.valor_total_periodo|floatformat:2|intcomma }}</strong></div>
+    </div>
+    <form method="post" action="{% url 'finanzas_facturas_generar' %}" class="cx-confirm">{% csrf_token %}
+      <input type="hidden" name="anio" value="{{ vista_previa.anio }}"><input type="hidden" name="mes" value="{{ vista_previa.mes }}">
+      <a class="btn btn-outline-secondary" href="{% url 'finanzas_facturas' %}?anio={{ vista_previa.anio }}&mes={{ vista_previa.mes }}">Cancelar</a>
+      {% if vista_previa.nuevas > 0 %}<button class="btn btn-primary fw-bold" name="accion" value="generar" type="submit">Confirmar y generar {{ vista_previa.nuevas }}</button>{% else %}<button class="btn btn-secondary" type="button" disabled>No hay mensualidades nuevas</button>{% endif %}
+    </form>
+  </section>
+  {% endif %}
+
+  <section class="cx-kpis">
+    <article class="cx-card"><div class="cx-label">Facturado</div><div class="cx-value">${{ total_facturado|floatformat:2|intcomma }}</div></article>
+    <article class="cx-card"><div class="cx-label">Cobrado</div><div class="cx-value text-success">${{ total_cobrado|floatformat:2|intcomma }}</div></article>
+    <article class="cx-card"><div class="cx-label">Pendiente</div><div class="cx-value text-primary">${{ total_pendiente|floatformat:2|intcomma }}</div></article>
+    <article class="cx-card"><div class="cx-label">Vencido</div><div class="cx-value text-danger">${{ total_vencido|floatformat:2|intcomma }}</div></article>
+  </section>
+
+  <section class="cx-card">
+    <div class="cx-row mb-3"><div><strong>Listado de cuentas</strong><div class="small text-muted">{{ total_registros }} registro{{ total_registros|pluralize }} encontrado{{ total_registros|pluralize }}</div></div><a class="btn btn-sm btn-outline-primary" href="{% url 'finanzas_facturas' %}">Ver lista completa</a></div>
+    <form method="get" class="cx-filter mb-3">
+      <input class="wide" type="search" name="q" value="{{ q }}" placeholder="Cliente, teléfono o factura">
+      <select name="estado"><option value="">Todos los estados</option>{% for value,label in estados %}<option value="{{ value }}" {% if estado == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+      <input type="number" name="anio" value="{{ anio_filtro }}" min="2020" max="2100" placeholder="Todos">
+      <input type="number" name="mes" value="{{ mes_filtro }}" min="1" max="12" placeholder="Todos">
+      <div class="d-flex gap-2"><button class="btn btn-primary flex-fill" type="submit">Filtrar</button><a class="btn btn-outline-secondary" href="{% url 'finanzas_facturas' %}" title="Mostrar lista completa">Todas</a></div>
+    </form>
+
+    <div class="cx-desktop">
+      <table class="cx-table"><thead><tr><th>Factura</th><th>Cliente</th><th>Periodo</th><th>Vence</th><th>Total</th><th>Cobrado / saldo</th><th>Estado</th><th></th></tr></thead><tbody>
+      {% for factura in page_obj %}<tr>
+        <td><strong>{{ factura.numero }}</strong></td><td>{{ factura.cliente.nombre }}<div class="small text-muted">{{ factura.cliente.telefono }}</div></td><td>{{ factura.periodo_label }}</td><td>{{ factura.fecha_vencimiento|date:"d/m/Y" }}</td><td>${{ factura.total|floatformat:2 }}</td>
+        <td><strong>${{ factura.monto_pagado|floatformat:2 }}</strong> / ${{ factura.saldo|floatformat:2 }}<div class="cx-progress"><span style="width:{{ factura.porcentaje_pagado }}%"></span></div></td>
+        <td><span class="cx-badge {{ factura.estado_visual }}">{{ factura.get_estado_display }}</span></td><td><a href="{% url 'finanzas_factura_detalle' factura.pk %}" class="btn btn-sm btn-outline-primary">Ver</a></td>
+      </tr>{% empty %}<tr><td colspan="8" class="text-center text-muted py-4">No existen cuentas por cobrar para este filtro.</td></tr>{% endfor %}
+      </tbody></table>
+    </div>
+    <div class="cx-mobile">{% for factura in page_obj %}<article class="cx-item"><div class="cx-item-head"><div><strong>{{ factura.cliente.nombre }}</strong><div class="cx-meta">{{ factura.numero }} · {{ factura.periodo_label }}</div></div><span class="cx-badge {{ factura.estado_visual }}">{{ factura.get_estado_display }}</span></div><div class="mt-2 d-flex justify-content-between"><span>Total ${{ factura.total|floatformat:2 }}</span><strong>Saldo ${{ factura.saldo|floatformat:2 }}</strong></div><div class="cx-progress"><span style="width:{{ factura.porcentaje_pagado }}%"></span></div><a href="{% url 'finanzas_factura_detalle' factura.pk %}" class="btn btn-sm btn-outline-primary w-100 mt-3">Ver cuenta</a></article>{% empty %}<div class="text-center text-muted py-4">No existen cuentas por cobrar.</div>{% endfor %}</div>
+    {% if page_obj.has_other_pages %}<nav class="mt-3 d-flex justify-content-center gap-2">{% if page_obj.has_previous %}<a class="btn btn-sm btn-outline-secondary" href="?{{ querystring }}&page={{ page_obj.previous_page_number }}">Anterior</a>{% endif %}<span class="btn btn-sm btn-light">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>{% if page_obj.has_next %}<a class="btn btn-sm btn-outline-secondary" href="?{{ querystring }}&page={{ page_obj.next_page_number }}">Siguiente</a>{% endif %}</nav>{% endif %}
+  </section>
+</div>
+{% endblock %}

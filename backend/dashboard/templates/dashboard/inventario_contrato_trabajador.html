@@ -1,0 +1,37 @@
+{% extends base_template %}
+{% block title %}Inventario en sitio{% endblock %}
+{% block top_title %}🏊 Inventario en sitio{% endblock %}
+{% block content %}
+<style>
+.site-hero{border-radius:22px;padding:1.2rem;background:linear-gradient(135deg,#0f172a,#0c83c8);color:#fff}.site-card{border:1px solid #e5e7eb;border-radius:18px;background:#fff;padding:1rem;height:100%}.site-kpi{font-size:1.45rem;font-weight:900}
+</style>
+<section class="site-hero mb-4"><div class="small opacity-75">Contrato</div><h2 class="fw-bold mb-1">{{ contrato.cliente }}</h2><div class="opacity-75">Productos almacenados en la ubicación del cliente.</div></section>
+
+<div class="row g-3 mb-4">
+{% for inv in stocks %}
+  <div class="col-md-6 col-xl-4"><div class="site-card">
+    <div class="d-flex justify-content-between gap-2"><div><div class="fw-bold">{{ inv.insumo.nombre }}</div><div class="small text-muted">Mínimo {{ inv.stock_minimo|floatformat:3 }} {{ inv.insumo.unidad_corta }}</div></div>{% if inv.estado_stock == 'agotado' %}<span class="badge bg-danger">Agotado</span>{% elif inv.estado_stock == 'critico' %}<span class="badge bg-danger">Crítico</span>{% elif inv.estado_stock == 'proximo' %}<span class="badge bg-warning text-dark">Próximo</span>{% else %}<span class="badge bg-success">Correcto</span>{% endif %}</div>
+    <div class="site-kpi mt-3">{{ inv.stock_estimado|floatformat:3 }} {{ inv.insumo.unidad_corta }}</div>
+    <div class="small text-muted">Existencia estimada · {% if inv.dias_hasta_minimo is not None %}≈ {{ inv.dias_hasta_minimo }} días al mínimo{% else %}sin consumo diario configurado{% endif %}</div>
+    <form method="post" action="{% url 'contrato_inventario_ajustar' contrato.id inv.id %}" class="row g-2 mt-3">{% csrf_token %}
+      <div class="col-7"><input class="form-control" type="number" step="0.001" min="0" name="nueva_existencia" placeholder="Conteo físico" required></div>
+      <div class="col-5 d-grid"><button class="btn btn-outline-secondary">Verificar</button></div>
+      <div class="col-12"><input class="form-control" name="observacion" placeholder="Observación opcional"></div>
+    </form>
+  </div></div>
+{% empty %}<div class="col-12"><div class="alert alert-warning">Administración todavía no ha configurado productos para este contrato.</div></div>{% endfor %}
+</div>
+
+{% if stocks %}
+<div class="site-card mb-4"><h5 class="fw-bold">📦 Registrar reposición desde bodega</h5><p class="text-muted small">Úsalo cuando retires productos de la bodega de JVAQUA y los dejes en este contrato.</p>
+<form method="post" action="{% url 'contrato_inventario_reponer' contrato.id %}" class="row g-2">{% csrf_token %}
+  <div class="col-12 col-md-5"><select class="form-select" name="insumo_id" required><option value="">Producto</option>{% for inv in stocks %}<option value="{{ inv.insumo.id }}">{{ inv.insumo.nombre }}</option>{% endfor %}</select></div>
+  <div class="col-7 col-md-3"><input class="form-control" type="number" step="0.001" min="0.001" name="cantidad" placeholder="Cantidad" required></div>
+  <div class="col-5 col-md-2"><select class="form-select" name="unidad"><option value="base">Base</option><option value="kg">kg</option><option value="g">g</option><option value="l">L</option><option value="ml">ml</option></select></div>
+  <div class="col-12 col-md-2 d-grid"><button class="btn btn-success">Entregado</button></div>
+  <div class="col-12"><input class="form-control" name="observacion" placeholder="Observación / referencia de entrega"></div>
+</form></div>
+{% endif %}
+
+<div class="site-card"><h5 class="fw-bold">🧾 Historial reciente</h5><div class="table-responsive"><table class="table align-middle mb-0"><thead><tr><th>Fecha</th><th>Producto</th><th>Movimiento</th><th>Cantidad</th></tr></thead><tbody>{% for m in movimientos %}<tr><td>{{ m.creado_en|date:'d/m/Y H:i' }}</td><td>{{ m.insumo.nombre }}</td><td>{{ m.get_tipo_display }}</td><td>{{ m.cantidad|floatformat:3 }} {{ m.insumo.unidad_corta }}</td></tr>{% empty %}<tr><td colspan="4" class="text-muted">Sin movimientos registrados.</td></tr>{% endfor %}</tbody></table></div></div>
+{% endblock %}

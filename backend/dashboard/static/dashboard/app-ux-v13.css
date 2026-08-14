@@ -1,0 +1,266 @@
+/* JVAQUA ERP v1.3.0 — Optimización integral
+   Capa visual progresiva. No altera modelos, rutas ni lógica de negocio. */
+:root {
+  --jv-tap: 46px;
+  --jv-gap-xs: .45rem;
+  --jv-gap-sm: .7rem;
+  --jv-gap-md: 1rem;
+  --jv-mobile-edge: 10px;
+  --jv-safe-top: env(safe-area-inset-top, 0px);
+  --jv-safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+html { scroll-padding-top: 96px; }
+body { overflow-x: hidden; }
+main, .page-content, .app-content, .container, .container-fluid { min-width: 0; }
+
+/* Navegación contextual */
+.jv-backbar {
+  min-height: 44px;
+  padding: .18rem 0;
+}
+.jv-back-btn {
+  flex: 0 0 auto;
+  min-width: var(--jv-tap) !important;
+  min-height: 42px !important;
+}
+.jv-breadcrumb {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Controles uniformes y accesibles */
+button, .btn, a.btn, input, select, textarea { touch-action: manipulation; }
+.form-control, .form-select, .input-group-text {
+  min-height: var(--jv-tap);
+}
+.btn:not(.btn-sm) { min-height: 42px; }
+.btn-sm { min-height: 38px; }
+.form-check-input { min-width: 1.2em; min-height: 1.2em; }
+
+/* Encabezados y barras de acciones */
+.jv-page-heading,
+.page-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--jv-gap-md);
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+.jv-page-actions,
+.page-actions,
+.jv-mobile-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--jv-gap-sm);
+  flex-wrap: wrap;
+}
+
+/* Tablas escritorio */
+.jv-table-scroll, .table-responsive {
+  max-width: 100%;
+  border-radius: 14px;
+  -webkit-overflow-scrolling: touch;
+}
+.jv-table-scroll table, .table-responsive table { margin-bottom: 0; }
+table td, table th { overflow-wrap: anywhere; }
+
+/* Formularios: mensajes y botones consistentes */
+.invalid-feedback, .text-danger.small { line-height: 1.35; }
+form .helptext, form .form-text { line-height: 1.4; }
+.jv-form-actions {
+  display: flex;
+  gap: var(--jv-gap-sm);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* Estado ocupado sin cambiar el ancho del botón */
+.jv-submit-busy { position: relative; pointer-events: none; opacity: .76; }
+.jv-submit-busy .jv-submit-label { visibility: hidden; }
+.jv-submit-busy::after {
+  content: "";
+  position: absolute;
+  width: 1rem;
+  height: 1rem;
+  inset: 50% auto auto 50%;
+  margin: -.5rem 0 0 -.5rem;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 999px;
+  animation: jv13spin .65s linear infinite;
+}
+@keyframes jv13spin { to { transform: rotate(360deg); } }
+
+/* Navegación inferior: no comprimir ni saltar líneas de forma irregular */
+.bottom-nav { padding-bottom: var(--jv-safe-bottom); }
+.bottom-nav-inner, .bottom-nav-panel { overflow: hidden; }
+.bottom-nav .nav-row,
+.bottom-nav .bottom-nav-links {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.bottom-nav .nav-row::-webkit-scrollbar,
+.bottom-nav .bottom-nav-links::-webkit-scrollbar { display: none; }
+.bottom-nav .nav-row > *,
+.bottom-nav .bottom-nav-links > * { flex-shrink: 0; }
+
+/* Elementos largos */
+.badge { max-width: 100%; }
+.dropdown-menu { max-width: calc(100vw - 20px); }
+.modal-content { overflow-wrap: anywhere; }
+
+@media (max-width: 767.98px) {
+  :root { --jv-tap: 48px; }
+
+  .container, .container-fluid {
+    --bs-gutter-x: 1rem;
+  }
+  .page-content, .app-content {
+    padding-left: var(--jv-mobile-edge) !important;
+    padding-right: var(--jv-mobile-edge) !important;
+  }
+
+  .topbar {
+    padding-left: 7px !important;
+    padding-right: 7px !important;
+  }
+  .topbar-inner, .topbar-panel { max-width: calc(100vw - 14px); }
+  .topbar-actions, .top-actions { gap: 5px !important; }
+  .topbar-actions .topbar-text-action span:not(.action-icon) { display: none; }
+  .topbar-actions .topbar-text-action,
+  .top-icon-btn, .notif-btn {
+    min-width: 42px !important;
+    min-height: 42px !important;
+    padding-left: .55rem !important;
+    padding-right: .55rem !important;
+  }
+
+  .jv-backbar {
+    position: sticky;
+    top: 82px;
+    z-index: 1015;
+    margin: 0 calc(var(--jv-mobile-edge) * -1) .75rem;
+    padding: .45rem var(--jv-mobile-edge);
+    background: rgba(243, 246, 250, .92);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(21, 34, 56, .06);
+  }
+  body:not(.app-body) .jv-backbar { background: rgba(248, 251, 255, .92); }
+  .jv-breadcrumb { display: block !important; font-size: .76rem !important; }
+
+  .card { border-radius: 17px !important; }
+  .card-header, .card-body, .card-footer { padding-left: 1rem !important; padding-right: 1rem !important; }
+
+  .jv-page-actions > *, .page-actions > *, .jv-mobile-actions > * {
+    flex: 1 1 145px;
+  }
+  .jv-form-actions > .btn, .jv-form-actions > a.btn {
+    flex: 1 1 145px;
+  }
+
+  /* Tablas legibles como tarjetas. Agregado automáticamente por JS. */
+  table.jv-mobile-table {
+    width: 100% !important;
+    min-width: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+  }
+  table.jv-mobile-table thead {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
+    white-space: nowrap !important;
+    border: 0 !important;
+  }
+  table.jv-mobile-table tbody,
+  table.jv-mobile-table tr,
+  table.jv-mobile-table td {
+    display: block;
+    width: 100%;
+  }
+  table.jv-mobile-table tbody { display: grid; gap: .75rem; }
+  table.jv-mobile-table tr {
+    overflow: hidden;
+    border: 1px solid var(--jv-border, rgba(16,35,63,.09));
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 5px 16px rgba(21,34,56,.055);
+  }
+  table.jv-mobile-table tr.jv-empty-row { padding: 1rem; }
+  table.jv-mobile-table td {
+    display: grid;
+    grid-template-columns: minmax(105px, 38%) minmax(0, 1fr);
+    gap: .7rem;
+    align-items: center;
+    min-height: 44px;
+    padding: .68rem .85rem !important;
+    border: 0 !important;
+    border-bottom: 1px solid rgba(21,34,56,.065) !important;
+    text-align: right !important;
+    white-space: normal !important;
+  }
+  table.jv-mobile-table td:last-child { border-bottom: 0 !important; }
+  table.jv-mobile-table td::before {
+    content: attr(data-jv-label);
+    color: var(--jv-muted, #6f7b8a);
+    font-size: .73rem;
+    font-weight: 800;
+    letter-spacing: .035em;
+    line-height: 1.2;
+    text-align: left;
+    text-transform: uppercase;
+  }
+  table.jv-mobile-table td[data-jv-label=""],
+  table.jv-mobile-table td[colspan] {
+    display: block;
+    text-align: left !important;
+  }
+  table.jv-mobile-table td[data-jv-label=""]::before,
+  table.jv-mobile-table td[colspan]::before { display: none; }
+  table.jv-mobile-table td .btn-group,
+  table.jv-mobile-table td .d-flex {
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+  table.jv-mobile-table td .btn { min-height: 38px; }
+
+  /* Las tablas marcadas para scroll conservan su comportamiento original. */
+  table[data-jv-table-mode="scroll"] { min-width: 680px !important; }
+
+  .pagination { justify-content: center; flex-wrap: wrap; gap: .25rem; }
+  .pagination .page-link {
+    min-width: 42px;
+    min-height: 42px;
+    display: grid;
+    place-items: center;
+    border-radius: 11px !important;
+  }
+
+  .modal-dialog { margin: .55rem .65rem calc(.7rem + var(--jv-safe-bottom)); }
+  .modal-footer { gap: .5rem; }
+  .modal-footer > * { flex: 1 1 130px; margin: 0 !important; }
+}
+
+@media (max-width: 389.98px) {
+  .brand-title { max-width: 125px !important; }
+  .jv-breadcrumb { max-width: calc(100vw - 78px); }
+  table.jv-mobile-table td {
+    grid-template-columns: 1fr;
+    gap: .3rem;
+    text-align: left !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jv-submit-busy::after { animation-duration: 1.2s; }
+}

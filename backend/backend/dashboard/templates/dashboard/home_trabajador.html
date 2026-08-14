@@ -1,0 +1,118 @@
+{% extends "dashboard/base_trabajador.html" %}
+
+{% block title %}Inicio Trabajador{% endblock %}
+{% block top_title %}Inicio{% endblock %}
+
+{% block content %}
+<style>
+  .worker-home{display:grid;gap:1rem}
+  .worker-hero{position:relative;overflow:hidden;border:0;border-radius:26px;color:#fff;background:radial-gradient(circle at 92% 10%,rgba(255,255,255,.18),transparent 11rem),linear-gradient(135deg,#073b82 0%,#0b5ed7 58%,#0b8fc4 100%);box-shadow:0 20px 46px rgba(11,94,215,.24)}
+  .worker-hero::before{content:"";position:absolute;width:190px;height:190px;right:-62px;bottom:-95px;border-radius:50%;background:rgba(255,255,255,.09)}
+  .worker-hero::after{content:"";position:absolute;width:95px;height:95px;right:78px;top:-42px;border-radius:50%;background:rgba(255,255,255,.08)}
+  .worker-hero-content{position:relative;z-index:1;padding:1.35rem}
+  .worker-hero-label{display:inline-flex;align-items:center;gap:.45rem;margin-bottom:.8rem;padding:.42rem .72rem;border:1px solid rgba(255,255,255,.2);border-radius:999px;background:rgba(255,255,255,.13);font-size:.72rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase}
+  .worker-hero-title{margin:0;font-size:clamp(1.45rem,5vw,2rem);font-weight:900;line-height:1.08}
+  .worker-hero-text{max-width:520px;margin:.65rem 0 0;color:rgba(255,255,255,.78);font-size:.95rem;line-height:1.5}
+  .worker-hero-status{display:flex;flex-wrap:wrap;gap:.65rem;margin-top:1.15rem}
+  .worker-status-pill{display:inline-flex;align-items:center;gap:.45rem;padding:.52rem .72rem;border-radius:13px;color:#fff;background:rgba(255,255,255,.13);border:1px solid rgba(255,255,255,.17);font-size:.78rem;font-weight:700}
+  .worker-section-head{display:flex;align-items:end;justify-content:space-between;gap:1rem;padding:.15rem .15rem 0}
+  .worker-section-kicker{margin-bottom:.18rem;color:#0b5ed7;font-size:.7rem;font-weight:900;letter-spacing:.09em;text-transform:uppercase}
+  .worker-section-title{margin:0;color:#10233f;font-size:1.08rem;font-weight:900}
+  .worker-section-note{color:#7b8ba1;font-size:.78rem;font-weight:600}
+  .worker-access-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:1rem}
+  .worker-access-link{display:block;color:inherit}
+  .worker-access-card{position:relative;overflow:hidden;height:100%;min-height:205px;border:1px solid rgba(16,35,63,.07);border-radius:24px;background:rgba(255,255,255,.96);box-shadow:0 12px 30px rgba(20,54,94,.10);transition:transform .2s ease,box-shadow .2s ease,border-color .2s ease}
+  .worker-access-card:hover{transform:translateY(-4px);border-color:rgba(11,94,215,.15);box-shadow:0 20px 44px rgba(20,54,94,.16)}
+  .worker-access-card:active{transform:scale(.985)}
+  .worker-access-card::after{content:"";position:absolute;width:125px;height:125px;right:-58px;bottom:-62px;border-radius:50%;opacity:.55}
+  .worker-access-card.maintenance::after{background:#e8f2ff}
+  .worker-access-card.calculator::after{background:#e8fbf3}
+  .worker-access-body{position:relative;z-index:1;height:100%;display:flex;flex-direction:column;padding:1.15rem}
+  .worker-access-top{display:flex;align-items:flex-start;gap:.95rem}
+  .worker-access-icon{width:58px;height:58px;flex:0 0 58px;display:grid;place-items:center;border-radius:18px;font-size:1.5rem;box-shadow:inset 0 1px 0 rgba(255,255,255,.6)}
+  .worker-access-icon.maintenance{color:#0b5ed7;background:linear-gradient(145deg,#edf5ff,#dbeaff)}
+  .worker-access-icon.calculator{color:#14865d;background:linear-gradient(145deg,#effcf6,#d9f5e8)}
+  .worker-access-title{margin:.1rem 0 .35rem;color:#10233f;font-size:1.04rem;font-weight:900;line-height:1.2}
+  .worker-access-text{margin:0;color:#718198;font-size:.88rem;line-height:1.48}
+  .worker-access-footer{display:flex;align-items:center;justify-content:space-between;gap:.8rem;margin-top:auto;padding-top:1.1rem}
+  .worker-access-meta{display:inline-flex;align-items:center;gap:.45rem;color:#7a8ba2;font-size:.76rem;font-weight:700}
+  .worker-access-action{width:42px;height:42px;display:grid;place-items:center;flex:0 0 42px;border-radius:14px;color:#fff;font-size:1rem;box-shadow:0 9px 19px rgba(0,0,0,.13);transition:transform .2s ease}
+  .worker-access-card:hover .worker-access-action{transform:translateX(3px)}
+  .worker-access-action.primary{background:linear-gradient(135deg,#0b5ed7,#0c83bd)}
+  .worker-access-action.success{background:linear-gradient(135deg,#169c68,#20bd7c)}
+  .worker-tip{display:flex;align-items:flex-start;gap:.85rem;padding:1rem;border:1px solid rgba(242,169,0,.15);border-radius:20px;background:linear-gradient(135deg,#fffdf7,#fff8e7);box-shadow:0 9px 24px rgba(91,70,22,.06)}
+  .worker-tip-icon{width:42px;height:42px;flex:0 0 42px;display:grid;place-items:center;border-radius:14px;color:#9b6a00;background:#fff0be;font-size:1.05rem}
+  .worker-tip-title{margin-bottom:.2rem;color:#5d4a1c;font-size:.85rem;font-weight:900}
+  .worker-tip-text{margin:0;color:#887141;font-size:.79rem;line-height:1.45}
+  @media(min-width:768px){.worker-access-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.worker-hero-content{padding:1.7rem}.worker-access-body{padding:1.3rem}}
+  @media(max-width:575.98px){.worker-home{gap:.9rem}.worker-hero{border-radius:22px}.worker-hero-content{padding:1.15rem}.worker-hero-title{font-size:1.38rem}.worker-hero-text{font-size:.87rem}.worker-status-pill{font-size:.71rem}.worker-access-card{min-height:190px;border-radius:21px}.worker-access-icon{width:52px;height:52px;flex-basis:52px;border-radius:16px}.worker-access-title{font-size:.98rem}.worker-access-text{font-size:.82rem}.worker-section-note{display:none}}
+</style>
+
+<div class="worker-home">
+  <section class="worker-hero">
+    <div class="worker-hero-content">
+      <div class="worker-hero-label"><i class="bi bi-droplet-half"></i>Panel operativo</div>
+      <h1 class="worker-hero-title">Todo lo que necesitas para tu jornada</h1>
+      <p class="worker-hero-text">Accede rápidamente a tus mantenimientos asignados y a las herramientas técnicas de JVAQUA.</p>
+      <div class="worker-hero-status">
+        <span class="worker-status-pill"><i class="bi bi-phone"></i>Optimizado para móvil</span>
+        <span class="worker-status-pill"><i class="bi bi-cloud-check"></i>Sistema actualizado</span>
+      </div>
+    </div>
+  </section>
+
+  <div class="worker-section-head">
+    <div>
+      <div class="worker-section-kicker">Accesos rápidos</div>
+      <h2 class="worker-section-title">¿Qué deseas realizar?</h2>
+    </div>
+    <div class="worker-section-note">Selecciona una opción</div>
+  </div>
+
+  <div class="worker-access-grid">
+    <a class="worker-access-link" href="/dashboard/home/">
+      <article class="worker-access-card maintenance">
+        <div class="worker-access-body">
+          <div class="worker-access-top">
+            <div class="worker-access-icon maintenance"><i class="bi bi-card-checklist"></i></div>
+            <div>
+              <h3 class="worker-access-title">Mis mantenimientos</h3>
+              <p class="worker-access-text">Consulta los trabajos de hoy, los atrasados y los próximos mantenimientos asignados.</p>
+            </div>
+          </div>
+          <div class="worker-access-footer">
+            <span class="worker-access-meta"><i class="bi bi-calendar2-check"></i>Ver agenda de trabajo</span>
+            <span class="worker-access-action primary"><i class="bi bi-arrow-right"></i></span>
+          </div>
+        </div>
+      </article>
+    </a>
+
+    <a class="worker-access-link" href="{% url 'calculadora_quimicos' %}">
+      <article class="worker-access-card calculator">
+        <div class="worker-access-body">
+          <div class="worker-access-top">
+            <div class="worker-access-icon calculator"><i class="bi bi-calculator-fill"></i></div>
+            <div>
+              <h3 class="worker-access-title">Calculadora inteligente</h3>
+              <p class="worker-access-text">Calcula el volumen de la piscina y obtén una orientación para el tratamiento químico.</p>
+            </div>
+          </div>
+          <div class="worker-access-footer">
+            <span class="worker-access-meta"><i class="bi bi-beaker"></i>Herramienta técnica</span>
+            <span class="worker-access-action success"><i class="bi bi-arrow-right"></i></span>
+          </div>
+        </div>
+      </article>
+    </a>
+  </div>
+
+  <aside class="worker-tip">
+    <div class="worker-tip-icon"><i class="bi bi-lightbulb-fill"></i></div>
+    <div>
+      <div class="worker-tip-title">Recomendación de uso</div>
+      <p class="worker-tip-text">Revisa siempre tu agenda antes de iniciar la jornada y verifica que las notificaciones estén activadas.</p>
+    </div>
+  </aside>
+</div>
+{% endblock %}

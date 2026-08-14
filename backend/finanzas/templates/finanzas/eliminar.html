@@ -1,0 +1,4 @@
+{% extends "dashboard/base_admin.html" %}
+{% block title %}Eliminar movimiento{% endblock %}
+{% block top_title %}Eliminar movimiento{% endblock %}
+{% block content %}<div class="card border-0 shadow-sm mx-auto" style="max-width:620px;border-radius:22px"><div class="card-body p-4 p-md-5 text-center"><div style="font-size:3rem">⚠️</div><h1 class="h4 fw-bold mt-2">¿Eliminar este movimiento?</h1><p class="text-muted">{{ obj }}. Esta acción no se puede deshacer.</p><form method="post" class="d-flex gap-2 justify-content-center">{% csrf_token %}<a href="{% url 'finanzas_movimientos' %}" class="btn btn-outline-secondary">Cancelar</a><button class="btn btn-danger" type="submit">Sí, eliminar</button></form></div></div>{% endblock %}

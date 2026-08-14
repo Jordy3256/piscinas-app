@@ -1,0 +1,20 @@
+{% extends "dashboard/base_trabajador.html" %}
+{% block title %}Mis Órdenes{% endblock %}
+{% block top_title %}🛠 Mis órdenes de trabajo{% endblock %}
+{% block content %}
+<div class="card border-0 shadow-sm mb-3" style="border-radius:18px;overflow:hidden;">
+  <div class="card-body p-2">
+    <div class="nav nav-pills nav-fill gap-2" aria-label="Trabajo asignado">
+      <a class="nav-link fw-bold" href="/dashboard/home/"><i class="bi bi-calendar-check me-1"></i>Mantenimientos</a>
+      <a class="nav-link active fw-bold" href="{% url 'ordenes_trabajo:mis_ordenes' %}"><i class="bi bi-tools me-1"></i>Órdenes de trabajo</a>
+    </div>
+  </div>
+</div>
+<style>.mo-card{border:1px solid #e2e8f0;border-radius:18px;background:#fff;box-shadow:0 9px 25px rgba(15,23,42,.06);padding:15px}.mo-title{font-weight:900;color:#0f172a}.mo-meta{font-size:.8rem;color:#64748b}</style>
+<div class="d-grid gap-3"><div class="card border-0 rounded-4 shadow-sm"><div class="card-body"><h1 class="h4 fw-bold mb-1">Trabajos adicionales</h1><p class="text-muted mb-0">Visitas extraordinarias y trabajos puntuales asignados por administración.</p></div></div>
+{% for titulo, lista, clase in sections %}{% endfor %}
+<section><h2 class="h6 fw-bold mb-2">Hoy</h2><div class="d-grid gap-2">{% for o in hoy_ordenes %}<a href="{% url 'ordenes_trabajo:detalle' o.pk %}" class="text-reset text-decoration-none"><div class="mo-card"><div class="d-flex justify-content-between gap-2"><div><div class="mo-title">{{ o.tipo.icono }} {{ o.nombre_contacto }}</div><div class="mo-meta">{{ o.tipo.nombre }}{% if o.hora %} · {{ o.hora|time:"H:i" }}{% endif %}</div></div><span class="badge {% if o.estado == 'completada' %}text-bg-success{% elif o.estado == 'en_proceso' %}text-bg-info{% else %}text-bg-warning{% endif %}">{{ o.get_estado_display }}</span></div></div></a>{% empty %}<div class="text-muted small">No tienes órdenes adicionales para hoy.</div>{% endfor %}</div></section>
+{% if atrasadas %}<section><h2 class="h6 fw-bold text-danger mb-2">Atrasadas</h2><div class="d-grid gap-2">{% for o in atrasadas %}<a href="{% url 'ordenes_trabajo:detalle' o.pk %}" class="text-reset text-decoration-none"><div class="mo-card border-danger"><div class="mo-title">{{ o.tipo.icono }} {{ o.nombre_contacto }}</div><div class="mo-meta">{{ o.fecha|date:"d/m/Y" }} · {{ o.tipo.nombre }}</div></div></a>{% endfor %}</div></section>{% endif %}
+{% if proximas %}<section><h2 class="h6 fw-bold mb-2">Próximas</h2><div class="d-grid gap-2">{% for o in proximas %}<a href="{% url 'ordenes_trabajo:detalle' o.pk %}" class="text-reset text-decoration-none"><div class="mo-card"><div class="mo-title">{{ o.tipo.icono }} {{ o.nombre_contacto }}</div><div class="mo-meta">{{ o.fecha|date:"d/m/Y" }}{% if o.hora %} · {{ o.hora|time:"H:i" }}{% endif %} · {{ o.tipo.nombre }}</div></div></a>{% endfor %}</div></section>{% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,118 @@
+## v2.1.0 — Dashboard Ejecutivo Inteligente
+- Nuevo centro de control ejecutivo.
+- Prioridades, salud empresarial, finanzas, operación, inventario, contratos, rentabilidad base y Asistente Técnico.
+
+# JVAQUA ERP v1.4.0 — Sprint 2.5
+
+- Navegación del trabajador unificada en el detalle de mantenimiento y edición de consumos.
+- Mi Inventario reemplaza cualquier acceso administrativo en vistas del trabajador.
+- Base visual Mobile First compartida por administración y trabajadores.
+- Mejoras globales de formularios, tablas, tarjetas, filtros, modales, cabeceras y acciones táctiles.
+- Prevención de zoom involuntario en iOS mediante controles de 16px.
+- Mejor manejo de áreas seguras y navegación inferior en dispositivos móviles.
+- Acciones principales adaptadas para pantallas pequeñas sin modificar lógica de negocio.
+
+# Changelog
+
+## 1.3.9 — Asistente Técnico Inteligente JVAQUA v1.0
+
+- La antigua Calculadora Inteligente evoluciona a un Asistente Técnico independiente.
+- Diagnóstico automático a partir de volumen, pH, cloro, estado del agua y tipo de piscina.
+- Protocolos diferenciados para mantenimiento normal, turbidez ligera y choque/floculación.
+- Incorporadas reglas operativas JVAQUA para sulfato de aluminio, cloro granulado, alguicida, metasilicato, Cal P24, tricloro y reductor de pH.
+- Floculación recomendada por 24 horas para agua muy turbia o verde.
+- Historial propio del asistente, sin modificar Inventario, Mantenimientos, Finanzas ni Contratos.
+- Seguimiento automático desde 24 horas después del cálculo, con hasta tres recordatorios separados por 24 horas mientras siga pendiente.
+- Registro de resultado exitoso, parcial o fallido, fallos detectados, mediciones finales, acciones posteriores y foto opcional.
+- Biblioteca Técnica JVAQUA y casos destacados para capacitación.
+- Panel administrativo con tasa de éxito, rendimiento por protocolo, tipo de piscina, estado inicial y rango de volumen.
+- Detección de patrones que sugiere revisar protocolos con baja tasa de éxito, sin cambiar reglas automáticamente.
+- Motor de recomendaciones versionado; administración puede publicar una nueva versión o reactivar una anterior.
+- Compatibilidad: la URL de la Calculadora anterior redirige al nuevo Asistente Técnico.
+
+## 1.3.7 — Centro Logístico
+
+- Catálogo maestro de productos administrable directamente desde el ERP.
+- Crear, editar, activar, desactivar y eliminar productos con protección del historial.
+- Ficha completa por producto con código, categoría, marca, modelo, descripción, stock, costos y usos permitidos.
+- Códigos internos automáticos para productos existentes y nuevos.
+- Gestión de presentaciones comerciales desde la ficha del producto.
+- Bitácora/Kardex visual por producto con compras, entregas, consumos, devoluciones, ventas y ajustes.
+- Centro Logístico con indicadores de valor de inventario, compras, ventas, consumo y stock crítico.
+- Registro opcional de lote, fabricación y vencimiento en compras.
+- Página independiente Mi Inventario para trabajadores, optimizada para móvil y en modo consulta.
+- Visualización de stock disponible, consumo del mes, última entrega y movimientos personales.
+- Solicitudes de reposición sin modificar existencias y alertas al administrador.
+- Reportes PDF de productos críticos, consumo por trabajador y consumo por contrato.
+- Ventas de insumos conservadas e integradas con el nuevo Centro Logístico.
+
+## 1.3.6 — Mantenimiento Unificado
+
+- Inspección, limpieza, productos utilizados, fotografías y validación se registran desde un solo flujo.
+- Eliminado el bloque duplicado de tratamiento químico; el consumo se registra desde Inventario.
+- Se mantienen las tres fotografías obligatorias y el guardado como borrador.
+
+## 1.3.5 — Inventario Inteligente
+
+- Nuevo inventario general con stock decimal y unidad base en kg para químicos.
+- Inventario independiente por trabajador.
+- Entregas y devoluciones entre bodega general y técnicos.
+- Compras con actualización de costo promedio y egreso automático.
+- Ventas conservadas e integradas con el nuevo stock decimal e ingreso financiero.
+- Registro de consumos desde cada mantenimiento en gramos, kilogramos o unidades.
+- Conversión automática de gramos a kilogramos.
+- Descuento automático del inventario del técnico y validación de stock insuficiente.
+- Costo químico por mantenimiento usando el costo promedio real del producto.
+- Kardex completo por producto y movimientos por trabajador.
+- Catálogo multicategoría y presentaciones comerciales.
+- PDFs de inventario general, trabajador, Kardex, movimientos, compras y ventas.
+- Nueva pestaña Mi inventario dentro de Mi Cuenta del trabajador.
+
+## 1.3.4 — Nómina profesional y periodos de servicio
+
+- El trabajador puede descargar su PDF mensual de nómina desde Mi Cuenta.
+- Cada obligación de nómina conserva las fechas históricas de inicio y fin del servicio.
+- Los periodos de servicio aparecen en la nómina administrativa, el detalle, Mi Cuenta y los PDFs.
+- Los comprobantes consolidados incluyen el periodo real de cada contrato.
+- Los contratos modificados posteriormente no alteran los periodos históricos ya guardados.
+
+## 1.3.2 — Centro de Acciones Inteligente
+
+- Nuevo escritorio operativo para administradores.
+- Prioridades de cobro, facturación, nómina y mantenimientos.
+- Acciones rápidas con acceso directo a cada flujo.
+- Resumen diario y actividad reciente.
+- Integración con las alertas financieras existentes.
+- Diseño responsive para computadora y móvil.
+
+# Historial de cambios
+
+## 1.3.0 — Optimización Integral, Sprint 1
+
+### Mejoras
+- Nueva capa global de experiencia móvil para administración, trabajadores y vistas generales.
+- Tablas compatibles convertidas automáticamente en tarjetas legibles en teléfonos.
+- Botón Volver reforzado, con destino seguro por módulo y sin listeners duplicados.
+- Breadcrumb más claro y visible también en móvil.
+- Controles táctiles, formularios, modales, paginación y navegación inferior optimizados.
+- Conservación del contexto del navegador y la posición de desplazamiento al regresar.
+- Indicador de envío de formularios unificado para evitar dobles registros.
+
+### Compatibilidad
+- No cambia modelos, migraciones, URLs ni reglas de negocio.
+- Mantiene Contratos, Cartera, Nómina, Mantenimientos, Inventario y notificaciones.
+
+## v1.3.8 — Información operativa del cliente
+- Tarjeta de cliente en detalle de mantenimiento.
+- Acceso rápido a WhatsApp con nombre dinámico del técnico.
+- Navegación por Google Maps/dirección.
+- Registro interno del uso del acceso de WhatsApp.
+
+## 2.0.0 — Identidad Visual JVAQUA ERP
+- Nuevo login corporativo JVAQUA, responsive para escritorio y móvil.
+- Design System global mediante `jvaqua-theme.css`.
+- Paleta, superficies, formularios, botones, tarjetas y estados visuales unificados.
+- Branding PWA actualizado a JVAQUA ERP.
+- Nuevas páginas corporativas 403, 404 y 500.
+- Microtransiciones respetando `prefers-reduced-motion`.
+- Sin cambios en modelos ni lógica de negocio.
