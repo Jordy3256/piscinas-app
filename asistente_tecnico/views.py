@@ -823,6 +823,13 @@ def academia_publica_view(request):
         qs = qs.filter(modulo_curso=modulo)
 
     grupos_curso = []
+    recientes = [x.contenido for x in ConsultaContenidoAcademia.objects.filter(
+        user=request.user, contenido__estado="aprobado"
+    ).select_related("contenido")[:6]]
+    favoritos = [x.contenido for x in FavoritoContenidoAcademia.objects.filter(
+        user=request.user, contenido__estado="aprobado"
+    ).select_related("contenido")[:6]]
+
     if modo == "aprender":
         lista = list(qs.exclude(modulo_curso=""))
         lista.sort(key=lambda x: (rango_modulo.get(x.modulo_curso, 999), x.orden_curso, x.orden, x.titulo.lower()))
@@ -851,6 +858,7 @@ def academia_publica_view(request):
         "completadas_ids": completadas_ids,
         "curso_total": curso_total, "curso_completadas": curso_completadas,
         "curso_porcentaje": curso_porcentaje, "continuar": continuar,
+        "recientes": recientes, "favoritos": favoritos,
         "es_admin": _es_admin(request.user), "consejo": _consejo_del_dia(),
     })
 
