@@ -65,6 +65,34 @@ def _actualizar_recordatorios(user):
         pass
 
 
+def _academia_relacionada_con_diagnostico(resultado, limite=6):
+    """Conecta Resolver con contenido oficial sin convertir la Academia en requisito."""
+    if not resultado:
+        return []
+    tipo = (resultado.get("tipo_tratamiento") or "").lower()
+    diagnostico = (resultado.get("diagnostico") or "").lower()
+    resumen = (resultado.get("resumen") or "").lower()
+    texto = f"{tipo} {diagnostico} {resumen}"
+
+    modulos = {"fundamentos"}
+    terminos = []
+    if "floc" in texto or "verde" in texto or "turb" in texto:
+        modulos.update({"problemas", "productos", "mantenimiento"})
+        terminos += ["floc", "sulfato", "verde", "turb"]
+    if "ph" in texto:
+        modulos.add("quimica"); terminos += ["ph", "metasilicato", "reductor"]
+    if "cloro" in texto or "desinf" in texto:
+        modulos.update({"quimica", "productos"}); terminos += ["cloro", "tricloro"]
+    if "filtr" in texto or "circul" in texto:
+        modulos.update({"equipos", "preventivo"}); terminos += ["filtro", "bomba", "circul"]
+
+    qs = ContenidoAcademia.objects.filter(estado="aprobado").exclude(acceso="suscriptor")
+    filtro = Q(modulo_curso__in=modulos)
+    for termino in terminos:
+        filtro |= Q(titulo__icontains=termino) | Q(etiquetas__icontains=termino) | Q(resumen__icontains=termino)
+    return list(qs.filter(filtro).order_by("orden_curso", "orden", "titulo").distinct()[:limite])
+
+
 @login_required
 @require_http_methods(["GET", "POST"])
 def asistente_inicio_view(request):
@@ -149,6 +177,7 @@ def asistente_inicio_view(request):
         "estado_choices": CasoAsistenteTecnico.ESTADO_AGUA_CHOICES,
         "tipo_choices": CasoAsistenteTecnico.TIPO_PISCINA_CHOICES,
         "es_admin": _es_admin(request.user),
+        "articulos_relacionados": _academia_relacionada_con_diagnostico(resultado),
     })
 
 
