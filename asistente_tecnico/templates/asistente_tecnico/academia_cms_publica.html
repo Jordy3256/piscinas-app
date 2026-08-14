@@ -1,88 +1,51 @@
-{% extends base_template %}{% block title %}Academia JVAQUA{% endblock %}{% block top_title %}🎓 Academia JVAQUA{% endblock %}
+{% extends base_template %}{% load static %}{% block title %}Academia JVAQUA{% endblock %}{% block top_title %}🎓 Academia JVAQUA{% endblock %}
 {% block content %}
-<style>
-.aj-wrap{max-width:1200px;margin:auto}.aj-hero{background:linear-gradient(135deg,#07559e,#0c88c9);color:#fff;border-radius:26px;padding:24px}.aj-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:15px}.aj-card{border:1px solid #e7edf5;border-radius:20px;background:#fff;box-shadow:0 8px 24px #10233f0d;overflow:hidden;text-decoration:none;color:inherit;transition:.18s ease}.aj-card:hover{transform:translateY(-2px);box-shadow:0 12px 30px #10233f18}.aj-img{width:100%;aspect-ratio:16/9;object-fit:cover;background:#edf5fb}.aj-body{padding:17px}.official{background:#e8f7ef;color:#147448;border-radius:99px;padding:4px 9px;font-size:.72rem;font-weight:800}.mode-btn{border-radius:14px;padding:10px 18px;font-weight:700}.aj-module{margin:28px 0 12px}.aj-module-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.aj-progress-small{min-width:180px}.aj-continue{border:0;border-radius:20px;background:linear-gradient(135deg,#f2f8ff,#eef9f6);padding:18px;box-shadow:0 8px 22px #10233f0b}.aj-tip{border:1px solid #dfeefc;background:#f7fbff;border-radius:18px;padding:16px}.aj-empty{border-radius:20px}.aj-module-title{font-weight:800;margin:0}.aj-module-meta{font-size:.82rem;color:#6c757d}@media(max-width:850px){.aj-grid{grid-template-columns:1fr}.aj-hero{padding:20px}.aj-progress-small{min-width:100%}}
-</style>
+<link rel="stylesheet" href="{% static 'asistente_tecnico/academia/academia-v2.css' %}?v=20260814-1">
 <div class="aj-wrap">
-  <div class="aj-hero mb-3">
-    <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
-      <div>
-        <div class="small opacity-75">Academia JVAQUA</div>
-        <h2 class="fw-bold mb-2">{% if modo == 'aprender' %}🎓 Aprender{% else %}📚 Consultar{% endif %}</h2>
-        <p class="mb-0 opacity-90">{% if modo == 'aprender' %}Sigue el curso en orden o abre cualquier tema que necesites reforzar.{% else %}Encuentra rápidamente productos, procedimientos y equipos cuando necesites recordar cómo funcionan o cómo se utilizan.{% endif %}</p>
+  <section class="aj-hero mb-3">
+    <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap position-relative" style="z-index:1">
+      <div style="max-width:760px">
+        <div class="aj-hero-kicker">Academia JVAQUA · Aprende a entender tu piscina</div>
+        <h2 class="fw-bold mt-2 mb-2">{% if modo == 'aprender' %}Aprende paso a paso{% else %}Encuentra la respuesta que necesitas{% endif %}</h2>
+        <p class="mb-0 opacity-90">{% if modo == 'aprender' %}Avanza por módulos, guarda tu progreso y vuelve a cualquier tema cuando necesites reforzarlo.{% else %}Consulta productos, procedimientos y equipos con explicaciones claras, referencias visuales y recomendaciones prácticas.{% endif %}</p>
       </div>
-      <a class="btn btn-outline-light" href="{% url 'asistente_tecnico:centro_conocimiento' %}">← Academia</a>
+      <a class="btn btn-outline-light" href="{% url 'asistente_tecnico:centro_conocimiento' %}">← Volver</a>
     </div>
-  </div>
+  </section>
 
-  <div class="d-flex gap-2 mb-3 flex-wrap">
-    <a class="btn mode-btn {% if modo == 'aprender' %}btn-primary{% else %}btn-outline-primary{% endif %}" href="?modo=aprender">🎓 Aprender</a>
-    <a class="btn mode-btn {% if modo != 'aprender' %}btn-primary{% else %}btn-outline-primary{% endif %}" href="?modo=consultar">📚 Consultar</a>
-    <a class="btn mode-btn btn-outline-dark" href="{% url 'asistente_tecnico:inicio' %}">🤖 Resolver con Asistente</a>
+  <div class="aj-modebar">
+    <a class="aj-mode {% if modo == 'aprender' %}active{% endif %}" href="?modo=aprender"><span class="aj-mode-icon">🎓</span><span><strong>Aprender</strong><small class="d-block text-muted">Curso guiado y progreso</small></span></a>
+    <a class="aj-mode {% if modo != 'aprender' %}active{% endif %}" href="?modo=consultar"><span class="aj-mode-icon">📚</span><span><strong>Consultar</strong><small class="d-block text-muted">Biblioteca rápida</small></span></a>
+    <a class="aj-mode" href="{% url 'asistente_tecnico:inicio' %}"><span class="aj-mode-icon">🤖</span><span><strong>Resolver</strong><small class="d-block text-muted">Asistente inteligente</small></span></a>
   </div>
 
   {% if modo == 'aprender' %}
-    <div class="card border-0 shadow-sm p-3 mb-3" style="border-radius:18px">
-      <div class="d-flex justify-content-between"><strong>Tu progreso general</strong><strong>{{ curso_porcentaje }}%</strong></div>
-      <div class="progress mt-2" style="height:9px"><div class="progress-bar" style="width:{{ curso_porcentaje }}%"></div></div>
-      <div class="small text-muted mt-2">{{ curso_completadas }} de {{ curso_total }} temas completados</div>
-    </div>
-    {% if continuar %}
-      <div class="aj-continue mb-3">
-        <div class="small text-primary fw-bold">CONTINUAR CURSO</div>
-        <div class="d-flex justify-content-between align-items-center gap-3 flex-wrap mt-1">
-          <div><h5 class="fw-bold mb-1">{{ continuar.titulo }}</h5><div class="text-muted small">{{ continuar.get_modulo_curso_display }} · {{ continuar.tiempo_lectura_min }} min</div></div>
-          <a class="btn btn-success" href="{% url 'asistente_tecnico:academia_contenido_detalle' continuar.slug %}">Continuar →</a>
-        </div>
+    <div class="aj-course-summary mb-3">
+      <div class="aj-ring" style="--p:{{ curso_porcentaje }}"><div class="text-center"><strong>{{ curso_porcentaje }}%</strong><small>completado</small></div></div>
+      <div>
+        <div class="small text-primary fw-bold">TU CURSO</div>
+        <h4 class="fw-bold mb-1">Mantenimiento y cuidado profesional de piscinas</h4>
+        <div class="text-muted">{{ curso_completadas }} de {{ curso_total }} temas completados. Puedes seguir el orden recomendado o abrir cualquier tema.</div>
+        {% if continuar %}<div class="aj-continue mt-3"><div class="small text-primary fw-bold">CONTINUAR DONDE QUEDASTE</div><div class="d-flex justify-content-between align-items-center gap-3 flex-wrap mt-1"><div><strong>{{ continuar.titulo }}</strong><div class="text-muted small">{{ continuar.get_modulo_curso_display }} · {{ continuar.tiempo_lectura_min }} min</div></div><a class="btn btn-success" href="{% url 'asistente_tecnico:academia_contenido_detalle' continuar.slug %}">Continuar →</a></div></div>{% endif %}
       </div>
-    {% endif %}
+    </div>
   {% elif consejo %}
-    <div class="aj-tip mb-3"><div class="small text-primary fw-bold">💡 CONSEJO TÉCNICO</div><strong>{{ consejo.titulo }}</strong><div class="small mt-1">{{ consejo.texto }}</div></div>
+    <div class="aj-tip mb-3"><div class="small text-primary fw-bold">💡 CONSEJO TÉCNICO DEL DÍA</div><strong>{{ consejo.titulo }}</strong><div class="small mt-1">{{ consejo.texto }}</div></div>
   {% endif %}
 
-  <form class="card border-0 shadow-sm p-3 mb-4" method="get" style="border-radius:20px">
+  <form class="aj-search mb-4" method="get">
     <input type="hidden" name="modo" value="{{ modo }}">
     <div class="row g-2">
-      <div class="col-md-6"><input class="form-control" name="q" value="{{ q }}" placeholder="Buscar: cloro, pH, retrolavado, bomba..."></div>
-      {% if modo == 'aprender' %}
-        <div class="col-md-4"><select class="form-select" name="modulo"><option value="">Todos los módulos</option>{% for v,l in modulos %}<option value="{{ v }}" {% if modulo == v %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
-      {% else %}
-        <div class="col-md-4"><select class="form-select" name="tipo"><option value="">Todo el conocimiento</option>{% for v,l in tipos %}<option value="{{ v }}" {% if tipo == v %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
-      {% endif %}
-      <div class="col-md-2"><button class="btn btn-primary w-100">Buscar</button></div>
+      <div class="col-md-6"><input class="form-control" name="q" value="{{ q }}" placeholder="🔎 Buscar cloro, pH, bomba, retrolavado, agua verde..."></div>
+      {% if modo == 'aprender' %}<div class="col-md-4"><select class="form-select" name="modulo"><option value="">Todos los módulos</option>{% for v,l in modulos %}<option value="{{ v }}" {% if modulo == v %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>{% else %}<div class="col-md-4"><select class="form-select" name="tipo"><option value="">Todo el conocimiento</option>{% for v,l in tipos %}<option value="{{ v }}" {% if tipo == v %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>{% endif %}
+      <div class="col-md-2"><button class="btn btn-primary w-100 h-100">Buscar</button></div>
     </div>
   </form>
 
   {% if modo == 'aprender' %}
-    {% for grupo in grupos_curso %}
-      <section class="aj-module">
-        <div class="aj-module-head mb-3">
-          <div><h4 class="aj-module-title">{{ grupo.nombre }}</h4><div class="aj-module-meta">{{ grupo.completados }} de {{ grupo.total }} temas aprendidos</div></div>
-          <div class="aj-progress-small"><div class="progress" style="height:7px"><div class="progress-bar" style="width:{{ grupo.porcentaje }}%"></div></div></div>
-        </div>
-        <div class="aj-grid">
-          {% for c in grupo.contenidos %}
-            <a class="aj-card" href="{% url 'asistente_tecnico:academia_contenido_detalle' c.slug %}">
-              {% if c.imagen_principal %}<img class="aj-img" src="{{ c.imagen_principal.url }}" alt="{{ c.titulo }}">{% else %}<div class="aj-img d-flex align-items-center justify-content-center fs-1">{% if c.tipo == 'biblioteca' %}📚{% elif c.tipo == 'procedimiento' %}🔧{% else %}⚙️{% endif %}</div>{% endif %}
-              <div class="aj-body"><div class="d-flex justify-content-between gap-2"><div class="small text-primary fw-bold">{{ c.get_tipo_display }}</div>{% if c.pk in completadas_ids %}<span class="official">✓ Aprendido</span>{% else %}<span class="official">✓ Oficial</span>{% endif %}</div><h5 class="fw-bold mt-2">{{ c.titulo }}</h5><div class="text-muted small">{{ c.resumen }}</div><div class="small mt-3">{{ c.get_nivel_display }} · {{ c.tiempo_lectura_min }} min</div></div>
-            </a>
-          {% endfor %}
-        </div>
-      </section>
-    {% empty %}
-      <div class="card p-4 border-0 shadow-sm aj-empty"><strong>No encontramos temas con esos filtros.</strong><div class="text-muted">Prueba otra búsqueda o muestra todos los módulos.</div></div>
-    {% endfor %}
+    {% for grupo in grupos_curso %}<section class="aj-module"><div class="aj-module-head mb-3"><div><h4 class="aj-module-title">{{ grupo.nombre }}</h4><div class="aj-module-meta">{{ grupo.completados }} de {{ grupo.total }} temas aprendidos</div></div><div class="aj-progress-small"><div class="progress" style="height:7px"><div class="progress-bar" style="width:{{ grupo.porcentaje }}%"></div></div></div></div><div class="aj-grid">{% for c in grupo.contenidos %}<a class="aj-card" href="{% url 'asistente_tecnico:academia_contenido_detalle' c.slug %}">{% if c.imagen_principal %}<img class="aj-visual" src="{{ c.imagen_principal.url }}" alt="{{ c.titulo }}">{% else %}<img class="aj-visual" src="{% static c.visual_asset %}" alt="Ilustración de {{ c.titulo }}">{% endif %}<div class="aj-card-overlay"><span class="aj-pill">{{ c.get_tipo_display }}</span>{% if c.pk in completadas_ids %}<span class="aj-pill">✓ Aprendido</span>{% endif %}</div><div class="aj-body"><h5 class="fw-bold mb-2">{{ c.titulo }}</h5><div class="text-muted small">{{ c.resumen }}</div><div class="aj-card-footer"><span>{{ c.get_nivel_display }} · {{ c.tiempo_lectura_min }} min</span><span class="aj-official">✓ Oficial</span></div></div></a>{% endfor %}</div></section>{% empty %}<div class="card p-4 border-0 shadow-sm aj-empty"><strong>No encontramos temas con esos filtros.</strong><div class="text-muted">Prueba otra búsqueda o muestra todos los módulos.</div></div>{% endfor %}
   {% else %}
-    <div class="aj-grid">
-      {% for c in contenidos %}
-        <a class="aj-card" href="{% url 'asistente_tecnico:academia_contenido_detalle' c.slug %}">
-          {% if c.imagen_principal %}<img class="aj-img" src="{{ c.imagen_principal.url }}" alt="{{ c.titulo }}">{% else %}<div class="aj-img d-flex align-items-center justify-content-center fs-1">{% if c.tipo == 'biblioteca' %}📚{% elif c.tipo == 'procedimiento' %}🔧{% else %}⚙️{% endif %}</div>{% endif %}
-          <div class="aj-body"><div class="d-flex justify-content-between gap-2"><div class="small text-primary fw-bold">{{ c.get_tipo_display }}</div><span class="official">✓ Oficial</span></div><h5 class="fw-bold mt-2">{{ c.titulo }}</h5><div class="text-muted small">{{ c.resumen }}</div><div class="small mt-3">{{ c.get_nivel_display }} · {{ c.tiempo_lectura_min }} min</div></div>
-        </a>
-      {% empty %}
-        <div class="card p-4 border-0 shadow-sm aj-empty"><strong>No encontramos contenido.</strong><div class="text-muted">Prueba otra palabra o categoría.</div></div>
-      {% endfor %}
-    </div>
+    <div class="aj-grid">{% for c in contenidos %}<a class="aj-card" href="{% url 'asistente_tecnico:academia_contenido_detalle' c.slug %}">{% if c.imagen_principal %}<img class="aj-visual" src="{{ c.imagen_principal.url }}" alt="{{ c.titulo }}">{% else %}<img class="aj-visual" src="{% static c.visual_asset %}" alt="Ilustración de {{ c.titulo }}">{% endif %}<div class="aj-card-overlay"><span class="aj-pill">{{ c.get_tipo_display }}</span></div><div class="aj-body"><h5 class="fw-bold mb-2">{{ c.titulo }}</h5><div class="text-muted small">{{ c.resumen }}</div><div class="aj-card-footer"><span>{{ c.get_nivel_display }} · {{ c.tiempo_lectura_min }} min</span><span class="aj-official">✓ Oficial</span></div></div></a>{% empty %}<div class="card p-4 border-0 shadow-sm aj-empty"><strong>No encontramos contenido.</strong><div class="text-muted">Prueba otra palabra o categoría.</div></div>{% endfor %}</div>
   {% endif %}
 </div>
 {% endblock %}

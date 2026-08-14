@@ -337,6 +337,30 @@ class ContenidoAcademia(models.Model):
     def es_oficial(self):
         return self.estado == "aprobado"
 
+    @property
+    def visual_asset(self):
+        """Ilustración editorial de respaldo cuando el CMS no tiene una foto cargada."""
+        slug = (self.slug or "").lower()
+        modulo = (self.modulo_curso or "").lower()
+        tipo = (self.tipo or "").lower()
+
+        reglas = [
+            (("ph" in slug) or ("alcalinidad" in slug) or ("dureza" in slug) or ("cianur" in slug), "asistente_tecnico/academia/water-balance.svg"),
+            (("cloro" in slug) or ("tricloro" in slug) or ("alguicida" in slug) or ("sulfato" in slug) or ("quim" in modulo), "asistente_tecnico/academia/chemistry.svg"),
+            (("bomba" in slug) or ("cebado" in slug), "asistente_tecnico/academia/pump.svg"),
+            (("filtro" in slug) or ("arena" in slug) or ("retrolavado" in slug), "asistente_tecnico/academia/filter.svg"),
+            (("multivalvula" in slug) or ("valvula" in slug), "asistente_tecnico/academia/multiport.svg"),
+            (("verde" in slug) or ("turbia" in slug) or ("flocul" in slug), "asistente_tecnico/academia/water-recovery.svg"),
+            (("seguridad" in slug) or (modulo == "seguridad"), "asistente_tecnico/academia/safety.svg"),
+            (("calor" in slug) or ("calef" in slug), "asistente_tecnico/academia/heat-pump.svg"),
+            ((tipo == "equipo") or (modulo == "equipos"), "asistente_tecnico/academia/equipment.svg"),
+            ((tipo == "procedimiento") or (modulo in {"mantenimiento", "preventivo", "estandar"}), "asistente_tecnico/academia/maintenance.svg"),
+        ]
+        for coincide, asset in reglas:
+            if coincide:
+                return asset
+        return "asistente_tecnico/academia/pool-flow.svg"
+
 
 class ImagenContenidoAcademia(models.Model):
     contenido = models.ForeignKey(ContenidoAcademia, on_delete=models.CASCADE, related_name="galeria")
