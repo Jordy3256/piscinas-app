@@ -287,7 +287,8 @@ class ContenidoAcademia(models.Model):
         ("fundamentos", "1. Fundamentos"), ("quimica", "2. Química del agua"),
         ("productos", "3. Productos químicos"), ("mantenimiento", "4. Mantenimiento"),
         ("problemas", "5. Problemas del agua"), ("equipos", "6. Equipos"),
-        ("preventivo", "7. Mantenimiento preventivo"), ("avanzado", "8. Conocimiento avanzado"),
+        ("preventivo", "7. Mantenimiento preventivo"), ("seguridad", "8. Seguridad"),
+        ("estandar", "9. Estándar JVAQUA"), ("avanzado", "10. Conocimiento avanzado"),
     ]
     tipo = models.CharField(max_length=20, choices=TIPOS, db_index=True)
     codigo = models.CharField(max_length=40, unique=True)

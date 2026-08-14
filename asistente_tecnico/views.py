@@ -785,49 +785,115 @@ def academia_cms_imagen_eliminar_view(request, pk):
 def academia_publica_view(request):
     if not (_es_trabajador(request.user) or _es_admin(request.user)):
         return HttpResponseForbidden("No autorizado")
-    qs = ContenidoAcademia.objects.filter(estado="aprobado")
+
+    visibles = ContenidoAcademia.objects.filter(estado="aprobado")
     if not _es_admin(request.user):
-        qs = qs.exclude(acceso="suscriptor")
+        visibles = visibles.exclude(acceso="suscriptor")
+
     q = (request.GET.get("q") or "").strip()
     tipo = (request.GET.get("tipo") or "").strip()
     modo = (request.GET.get("modo") or "consultar").strip()
     modulo = (request.GET.get("modulo") or "").strip()
+
+    completadas_ids = set(
+        ProgresoContenidoAcademia.objects.filter(user=request.user, completado=True)
+        .values_list("contenido_id", flat=True)
+    )
+
+    # El progreso siempre representa el curso completo visible para el usuario,
+    # independientemente de los filtros de búsqueda que esté usando.
+    curso_base = list(visibles.exclude(modulo_curso="").order_by("orden", "titulo"))
+    rango_modulo = {codigo: i for i, (codigo, _nombre) in enumerate(ContenidoAcademia.MODULOS_CURSO)}
+    curso_base.sort(key=lambda x: (rango_modulo.get(x.modulo_curso, 999), x.orden_curso, x.orden, x.titulo.lower()))
+    curso_total = len(curso_base)
+    curso_completadas = sum(1 for c in curso_base if c.pk in completadas_ids)
+    curso_porcentaje = round((curso_completadas / curso_total) * 100) if curso_total else 0
+    continuar = next((c for c in curso_base if c.pk not in completadas_ids), None)
+
+    qs = visibles
     if q:
-        qs = qs.filter(Q(titulo__icontains=q) | Q(resumen__icontains=q) | Q(etiquetas__icontains=q) | Q(contenido__icontains=q) | Q(procedimiento__icontains=q) | Q(fallas_frecuentes__icontains=q))
-    if tipo: qs = qs.filter(tipo=tipo)
-    if modulo: qs = qs.filter(modulo_curso=modulo)
-    completadas_ids = set(ProgresoContenidoAcademia.objects.filter(user=request.user, completado=True).values_list("contenido_id", flat=True))
+        qs = qs.filter(
+            Q(titulo__icontains=q) | Q(resumen__icontains=q) | Q(etiquetas__icontains=q) |
+            Q(contenido__icontains=q) | Q(procedimiento__icontains=q) |
+            Q(fallas_frecuentes__icontains=q)
+        )
+    if tipo:
+        qs = qs.filter(tipo=tipo)
+    if modulo:
+        qs = qs.filter(modulo_curso=modulo)
+
+    grupos_curso = []
     if modo == "aprender":
-        qs = qs.exclude(modulo_curso="").order_by("modulo_curso", "orden_curso", "orden", "titulo")
-        total = qs.count(); hechas = sum(1 for pk in qs.values_list("pk", flat=True) if pk in completadas_ids)
-        progreso = round((hechas / total) * 100) if total else 0
+        lista = list(qs.exclude(modulo_curso=""))
+        lista.sort(key=lambda x: (rango_modulo.get(x.modulo_curso, 999), x.orden_curso, x.orden, x.titulo.lower()))
+        for codigo, nombre in ContenidoAcademia.MODULOS_CURSO:
+            contenidos_modulo = [c for c in lista if c.modulo_curso == codigo]
+            if contenidos_modulo:
+                hechos = sum(1 for c in contenidos_modulo if c.pk in completadas_ids)
+                grupos_curso.append({
+                    "codigo": codigo,
+                    "nombre": nombre,
+                    "contenidos": contenidos_modulo,
+                    "total": len(contenidos_modulo),
+                    "completados": hechos,
+                    "porcentaje": round((hechos / len(contenidos_modulo)) * 100) if contenidos_modulo else 0,
+                })
+        contenidos = lista
     else:
-        total = hechas = progreso = 0
+        contenidos = list(qs.order_by("tipo", "orden", "titulo")[:200])
+
     return render(request, "asistente_tecnico/academia_cms_publica.html", {
-        "base_template": _base_template(request.user), "contenidos": qs[:200], "q": q, "tipo": tipo, "modo": modo,
-        "modulo": modulo, "tipos": ContenidoAcademia.TIPOS, "modulos": ContenidoAcademia.MODULOS_CURSO,
-        "completadas_ids": completadas_ids, "curso_total": total, "curso_completadas": hechas, "curso_porcentaje": progreso,
+        "base_template": _base_template(request.user),
+        "contenidos": contenidos,
+        "grupos_curso": grupos_curso,
+        "q": q, "tipo": tipo, "modo": modo, "modulo": modulo,
+        "tipos": ContenidoAcademia.TIPOS, "modulos": ContenidoAcademia.MODULOS_CURSO,
+        "completadas_ids": completadas_ids,
+        "curso_total": curso_total, "curso_completadas": curso_completadas,
+        "curso_porcentaje": curso_porcentaje, "continuar": continuar,
         "es_admin": _es_admin(request.user), "consejo": _consejo_del_dia(),
     })
-
 
 @login_required
 def academia_contenido_detalle_view(request, slug):
     if not (_es_trabajador(request.user) or _es_admin(request.user)):
         return HttpResponseForbidden("No autorizado")
     filtros = {"slug": slug}
-    if not _es_admin(request.user): filtros["estado"] = "aprobado"
-    obj = get_object_or_404(ContenidoAcademia.objects.prefetch_related("relacionados", "galeria"), **filtros)
+    if not _es_admin(request.user):
+        filtros["estado"] = "aprobado"
+    obj = get_object_or_404(
+        ContenidoAcademia.objects.prefetch_related("relacionados", "galeria"), **filtros
+    )
     if not _es_admin(request.user) and obj.acceso == "suscriptor":
         return HttpResponseForbidden("Contenido no disponible para este perfil")
-    ConsultaContenidoAcademia.objects.update_or_create(user=request.user, contenido=obj, defaults={"consultado_en": timezone.now()})
-    completado = ProgresoContenidoAcademia.objects.filter(user=request.user, contenido=obj, completado=True).exists()
-    favorito = FavoritoContenidoAcademia.objects.filter(user=request.user, contenido=obj).exists()
-    return render(request, "asistente_tecnico/academia_contenido_detalle.html", {
-        "base_template":_base_template(request.user), "obj":obj, "es_admin":_es_admin(request.user),
-        "completado": completado, "favorito": favorito,
-    })
 
+    ConsultaContenidoAcademia.objects.update_or_create(
+        user=request.user, contenido=obj, defaults={"consultado_en": timezone.now()}
+    )
+    completado = ProgresoContenidoAcademia.objects.filter(
+        user=request.user, contenido=obj, completado=True
+    ).exists()
+    favorito = FavoritoContenidoAcademia.objects.filter(user=request.user, contenido=obj).exists()
+
+    siguiente = None
+    if obj.modulo_curso:
+        visibles = ContenidoAcademia.objects.filter(estado="aprobado").exclude(modulo_curso="")
+        if not _es_admin(request.user):
+            visibles = visibles.exclude(acceso="suscriptor")
+        lista = list(visibles)
+        rango_modulo = {codigo: i for i, (codigo, _nombre) in enumerate(ContenidoAcademia.MODULOS_CURSO)}
+        lista.sort(key=lambda x: (rango_modulo.get(x.modulo_curso, 999), x.orden_curso, x.orden, x.titulo.lower()))
+        ids = [c.pk for c in lista]
+        if obj.pk in ids:
+            idx = ids.index(obj.pk)
+            if idx + 1 < len(lista):
+                siguiente = lista[idx + 1]
+
+    return render(request, "asistente_tecnico/academia_contenido_detalle.html", {
+        "base_template": _base_template(request.user), "obj": obj,
+        "es_admin": _es_admin(request.user), "completado": completado,
+        "favorito": favorito, "siguiente": siguiente,
+    })
 
 @login_required
 @require_http_methods(["POST"])
