@@ -3,81 +3,205 @@
 {% block top_title %}🧠 Asistente Técnico Inteligente{% endblock %}
 {% block content %}
 <style>
-  .ati-wrap{max-width:1100px;margin:auto}.ati-hero{background:linear-gradient(135deg,#0b3b66,#0d6efd);color:#fff;border-radius:24px;padding:24px;margin-bottom:20px}.ati-card{border:1px solid #e6eaf0;border-radius:20px;background:#fff;box-shadow:0 8px 24px rgba(16,24,40,.06)}.ati-section{padding:20px}.ati-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.ati-input{border-radius:14px;min-height:48px}.ati-badge{display:inline-flex;align-items:center;padding:7px 12px;border-radius:999px;font-weight:700}.pri-alta{background:#fee2e2;color:#991b1b}.pri-media{background:#fef3c7;color:#92400e}.pri-baja{background:#dcfce7;color:#166534}.step{display:flex;gap:12px;padding:14px 0;border-bottom:1px solid #eef1f5}.step:last-child{border-bottom:0}.step-num{width:34px;height:34px;display:grid;place-items:center;border-radius:50%;background:#e8f1ff;color:#0d6efd;font-weight:800;flex:none}.prod{padding:14px;border:1px solid #e7ecf2;border-radius:16px;margin-bottom:10px}.ati-nav{display:flex;gap:8px;flex-wrap:wrap}.ati-warning{background:#fff7ed;border:1px solid #fed7aa;border-radius:14px;padding:12px 14px}.explain{font-size:.92rem;color:#667085}.photo-note{font-size:.82rem;color:#667085}.volume-helper{background:#f8fbff;border:1px solid #d8e8ff;border-radius:18px;padding:16px}.volume-toggle{display:flex;gap:8px;flex-wrap:wrap}.volume-toggle .btn{border-radius:999px}.volume-panel{margin-top:14px}@media(max-width:720px){.ati-grid{grid-template-columns:1fr}.ati-hero{border-radius:18px;padding:18px}.ati-section{padding:16px}}
+  :root{
+    --ati-ink:#0f2742;--ati-muted:#6b7b8f;--ati-blue:#0d6efd;--ati-blue2:#0b84d8;
+    --ati-cyan:#19b5d8;--ati-soft:#f5f9fe;--ati-line:#dfe8f3;--ati-green:#0f9f6e;
+    --ati-shadow:0 18px 50px rgba(20,56,92,.10);--ati-shadow-sm:0 8px 24px rgba(20,56,92,.07)
+  }
+  .ati-wrap{max-width:1180px;margin:0 auto;padding-bottom:22px;color:var(--ati-ink)}
+  .ati-hero{position:relative;overflow:hidden;background:linear-gradient(130deg,#072f55 0%,#075ea5 48%,#0c87c8 100%);color:#fff;border-radius:28px;padding:28px;margin-bottom:20px;box-shadow:0 20px 50px rgba(4,70,122,.20)}
+  .ati-hero:before,.ati-hero:after{content:"";position:absolute;border-radius:50%;pointer-events:none}
+  .ati-hero:before{width:260px;height:260px;right:-90px;top:-130px;background:rgba(255,255,255,.10)}
+  .ati-hero:after{width:160px;height:160px;right:120px;bottom:-120px;background:rgba(44,221,255,.14)}
+  .ati-hero-content{position:relative;z-index:2}
+  .ati-eyebrow{display:inline-flex;align-items:center;gap:8px;padding:7px 11px;border:1px solid rgba(255,255,255,.20);border-radius:999px;background:rgba(255,255,255,.10);font-size:.78rem;font-weight:800;letter-spacing:.03em;margin-bottom:12px}
+  .ati-hero h2{font-size:clamp(1.55rem,3vw,2.2rem);letter-spacing:-.035em}
+  .ati-hero p{max-width:720px;line-height:1.55}
+  .ati-nav{display:flex;gap:8px;flex-wrap:wrap}.ati-nav .btn{border-radius:12px;font-weight:700;padding:.55rem .85rem}
+  .ati-mini-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:20px;position:relative;z-index:2}
+  .ati-mini{border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.09);backdrop-filter:blur(8px);border-radius:16px;padding:12px 14px}
+  .ati-mini strong{display:block;font-size:.95rem}.ati-mini span{font-size:.77rem;opacity:.78}
+
+  .ati-card{border:1px solid var(--ati-line);border-radius:24px;background:#fff;box-shadow:var(--ati-shadow-sm)}
+  .ati-section{padding:22px}.ati-section-title{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:18px}
+  .ati-kicker{color:var(--ati-blue);font-size:.73rem;font-weight:900;letter-spacing:.09em;text-transform:uppercase;margin-bottom:5px}
+  .ati-section h4,.ati-section h5{letter-spacing:-.02em}
+  .ati-subtitle{color:var(--ati-muted);font-size:.93rem;line-height:1.5}
+  .ati-badge{display:inline-flex;align-items:center;gap:7px;padding:8px 12px;border-radius:999px;font-weight:800;font-size:.78rem;white-space:nowrap}
+  .pri-alta{background:#fff0f0;color:#a11c28;border:1px solid #ffd1d7}.pri-media{background:#fff7e6;color:#9a6100;border:1px solid #ffe0a8}.pri-baja{background:#ecfbf4;color:#087653;border:1px solid #c9f0df}
+
+  .ati-form-shell{background:linear-gradient(180deg,#fbfdff,#f6faff);border:1px solid #e2edf8;border-radius:20px;padding:18px}
+  .ati-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.ati-grid-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+  .ati-field{background:#fff;border:1px solid #e1e9f2;border-radius:17px;padding:12px 13px;transition:.2s ease}.ati-field:focus-within{border-color:#8bc5ff;box-shadow:0 0 0 4px rgba(13,110,253,.08);transform:translateY(-1px)}
+  .ati-field .form-label{font-size:.82rem;margin-bottom:6px;color:#40546c}.ati-field .form-control,.ati-field .form-select{border:0!important;box-shadow:none!important;padding:.35rem .15rem;background:transparent;font-weight:700;color:var(--ati-ink)}
+  .ati-field .input-group-text{border:0;background:transparent;color:#7890aa;font-weight:700;padding-right:.1rem}
+  .photo-note{font-size:.78rem;color:var(--ati-muted)}
+
+  .volume-helper{background:#fff;border:1px solid #dce9f8;border-radius:20px;padding:16px;margin-bottom:16px;box-shadow:0 7px 18px rgba(44,93,143,.04)}
+  .volume-toggle{display:flex;gap:6px;flex-wrap:wrap;background:#f1f6fc;padding:5px;border-radius:14px}.volume-toggle .btn{border:0;border-radius:10px!important;color:#49647f;font-weight:800}.volume-toggle .btn-check:checked+.btn{background:#fff;color:var(--ati-blue);box-shadow:0 4px 12px rgba(34,83,130,.11)}
+  .volume-panel{margin-top:14px}.volume-result{background:linear-gradient(135deg,#ecf6ff,#f2fbff);border:1px solid #cfe6ff;border-radius:14px;padding:12px 14px;color:#0759a1}
+
+  .ati-primary{border:0;border-radius:16px;background:linear-gradient(135deg,#0d6efd,#0788cf);box-shadow:0 12px 24px rgba(13,110,253,.20);font-weight:800;transition:.18s ease}.ati-primary:hover{transform:translateY(-1px);box-shadow:0 16px 28px rgba(13,110,253,.26)}
+  .ati-trust{display:flex;align-items:center;justify-content:center;gap:7px;color:#78899d;font-size:.77rem;margin-top:10px}
+
+  .ati-flow{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:0 0 18px}.ati-flow-item{position:relative;text-align:center;padding:10px 6px;border-radius:14px;background:#f7faff;border:1px solid #e4edf7;color:#6a7d91;font-size:.72rem;font-weight:800}.ati-flow-item.active{background:#eaf4ff;border-color:#b9d9ff;color:#0b65bd}.ati-flow-num{display:grid;place-items:center;margin:0 auto 5px;width:26px;height:26px;border-radius:50%;background:#fff;border:1px solid currentColor;font-size:.75rem}
+
+  .ati-result-head{background:linear-gradient(180deg,#f8fbff,#fff);border-bottom:1px solid #e5edf6;border-radius:24px 24px 0 0;padding:20px 22px}.ati-result-body{padding:22px}
+  .ati-metric{height:100%;padding:14px;border-radius:17px;background:#f7faff;border:1px solid #e5edf6}.ati-metric small{display:block;color:#7b8ca0;font-weight:700;margin-bottom:3px}.ati-metric strong{font-size:1.08rem}
+  .ati-block-title{display:flex;align-items:center;gap:10px;margin-bottom:10px}.ati-block-icon{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;background:#e9f3ff;color:#0b6ed0;font-size:1rem;flex:none}
+  .step{position:relative;display:flex;gap:13px;padding:13px 0}.step:not(:last-child):after{content:"";position:absolute;left:18px;top:46px;bottom:-2px;width:2px;background:#e5edf5}.step-num{width:38px;height:38px;display:grid;place-items:center;border-radius:12px;background:linear-gradient(135deg,#eaf4ff,#f3f9ff);border:1px solid #cae1fb;color:#0b68c4;font-weight:900;flex:none;z-index:1}.step .text-muted{font-size:.91rem;line-height:1.45}
+  .prod{padding:15px;border:1px solid #e2eaf3;border-radius:18px;margin-bottom:10px;background:linear-gradient(180deg,#fff,#fbfdff);transition:.18s ease}.prod:hover{border-color:#c8ddf3;box-shadow:0 8px 20px rgba(40,78,118,.06)}
+  .prod-dose{padding:7px 10px;border-radius:10px;background:#eaf4ff;color:#075ead;font-weight:900;white-space:nowrap}
+  .ati-warning{background:#fff8ec;border:1px solid #ffe2ad;border-left:4px solid #f2aa2e;border-radius:14px;padding:12px 14px;color:#704b0e}
+  .ati-info{background:#eef8ff;border:1px solid #cde7fb;border-radius:15px;padding:14px;color:#245a7c}
+  .explain{font-size:.9rem;color:#687b90}
+  .ati-related{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.ati-related a{display:block;text-decoration:none;color:inherit}.ati-related-card{height:100%;padding:15px;border:1px solid #e0e9f3;border-radius:17px;background:#fff;transition:.18s ease}.ati-related-card:hover{transform:translateY(-2px);border-color:#bcd9f7;box-shadow:0 10px 20px rgba(40,83,127,.08)}
+  .ati-recent{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:13px 0;border-top:1px solid #edf1f5;text-decoration:none;color:inherit}.ati-recent:hover .ati-recent-title{color:var(--ati-blue)}
+
+  @media(max-width:860px){.ati-mini-grid{grid-template-columns:1fr}.ati-flow{grid-template-columns:repeat(5,minmax(95px,1fr));overflow-x:auto;padding-bottom:5px}.ati-related{grid-template-columns:1fr}}
+  @media(max-width:720px){.ati-wrap{padding:0 1px 18px}.ati-grid,.ati-grid-3{grid-template-columns:1fr}.ati-hero{border-radius:20px;padding:20px}.ati-section{padding:16px}.ati-card{border-radius:20px}.ati-result-head{border-radius:20px 20px 0 0;padding:17px}.ati-result-body{padding:17px}.volume-toggle{width:100%}.volume-toggle .btn{flex:1}.ati-nav{width:100%}.ati-nav .btn{flex:1}.prod .d-flex{align-items:flex-start}.prod-dose{font-size:.8rem}.ati-flow-item{min-width:95px}.ati-hero p{font-size:.9rem}}
 </style>
 <div class="ati-wrap">
   <div class="ati-hero">
-    <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
-      <div><div class="small opacity-75 mb-1">Motor {{ motor.version }}</div><h2 class="fw-bold mb-2">Asistente Técnico Inteligente JVAQUA</h2><p class="mb-0 opacity-90">Cuéntale al sistema cómo está tu piscina. Resolver analiza los datos, calcula las cantidades cuando corresponde y te guía paso a paso con el método técnico JVAQUA.</p></div>
-      <div class="ati-nav"><a class="btn btn-light btn-sm" href="{% url 'asistente_tecnico:historial' %}">Historial</a><a class="btn btn-outline-light btn-sm" href="{% url 'asistente_tecnico:academia_cms' %}">Academia JVAQUA</a>{% if es_admin %}<a class="btn btn-warning btn-sm" href="{% url 'asistente_tecnico:admin' %}">Administración</a>{% endif %}</div>
+    <div class="ati-hero-content">
+      <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+        <div>
+          <div class="ati-eyebrow"><i class="bi bi-stars"></i> Motor {{ motor.version }} · Inteligencia técnica JVAQUA</div>
+          <h2 class="fw-bold mb-2">Asistente Técnico Inteligente</h2>
+          <p class="mb-0 opacity-90">Describe el estado de tu piscina y obtén un diagnóstico estructurado, cantidades orientativas, procedimiento y verificación en una sola experiencia.</p>
+        </div>
+        <div class="ati-nav">
+          <a class="btn btn-light btn-sm" href="{% url 'asistente_tecnico:historial' %}"><i class="bi bi-clock-history me-1"></i> Historial</a>
+          <a class="btn btn-outline-light btn-sm" href="{% url 'asistente_tecnico:academia_cms' %}"><i class="bi bi-mortarboard me-1"></i> Academia</a>
+          {% if es_admin %}<a class="btn btn-warning btn-sm" href="{% url 'asistente_tecnico:admin' %}"><i class="bi bi-sliders me-1"></i> Administración</a>{% endif %}
+        </div>
+      </div>
+      <div class="ati-mini-grid">
+        <div class="ati-mini"><strong><i class="bi bi-activity me-1"></i> Diagnóstico guiado</strong><span>Interpreta pH, cloro, volumen y estado del agua.</span></div>
+        <div class="ati-mini"><strong><i class="bi bi-beaker me-1"></i> Cantidades integradas</strong><span>Las fórmulas viven dentro del mismo Asistente.</span></div>
+        <div class="ati-mini"><strong><i class="bi bi-shield-check me-1"></i> Método JVAQUA</strong><span>Procedimiento, seguridad y verificación final.</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ati-card mb-4">
+    <div class="ati-section">
+      <div class="ati-section-title">
+        <div>
+          <div class="ati-kicker">Resolver</div>
+          <h4 class="fw-bold mb-1">Cuéntame cómo está tu piscina</h4>
+          <div class="ati-subtitle">Ingresa únicamente los datos que puedes medir. El Asistente organiza el análisis y te devuelve un plan técnico claro.</div>
+        </div>
+        <span class="ati-badge pri-baja"><i class="bi bi-lightning-charge-fill"></i> Disponible siempre</span>
+      </div>
+
+      <div class="ati-flow" aria-label="Flujo del Asistente">
+        <div class="ati-flow-item active"><span class="ati-flow-num">1</span>Datos</div>
+        <div class="ati-flow-item"><span class="ati-flow-num">2</span>Diagnóstico</div>
+        <div class="ati-flow-item"><span class="ati-flow-num">3</span>Acción</div>
+        <div class="ati-flow-item"><span class="ati-flow-num">4</span>Cantidades</div>
+        <div class="ati-flow-item"><span class="ati-flow-num">5</span>Verificación</div>
+      </div>
+
+      <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div class="volume-helper">
+          <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+            <div>
+              <label class="form-label fw-bold mb-1"><i class="bi bi-bounding-box-circles me-1 text-primary"></i> Volumen de la piscina</label>
+              <div class="small text-muted">Ingresa los m³ o deja que el sistema los calcule con las medidas.</div>
+            </div>
+            <div class="volume-toggle" role="group" aria-label="Método de volumen">
+              <input class="btn-check" type="radio" name="metodo_volumen" id="metodoDimensiones" value="dimensiones" {% if request.POST.metodo_volumen == 'dimensiones' %}checked{% endif %}>
+              <label class="btn btn-sm" for="metodoDimensiones"><i class="bi bi-rulers me-1"></i> Por medidas</label>
+              <input class="btn-check" type="radio" name="metodo_volumen" id="metodoVolumen" value="volumen" {% if request.POST.metodo_volumen != 'dimensiones' %}checked{% endif %}>
+              <label class="btn btn-sm" for="metodoVolumen"><i class="bi bi-water me-1"></i> Ya sé los m³</label>
+            </div>
+          </div>
+
+          <div id="dimensionFields" class="volume-panel {% if request.POST.metodo_volumen != 'dimensiones' %}d-none{% endif %}">
+            <div class="ati-grid">
+              <div class="ati-field"><label class="form-label fw-semibold">Largo</label><div class="input-group"><input class="form-control dimension-input" type="number" step="0.01" min="0.01" name="largo_m" value="{{ request.POST.largo_m }}" placeholder="Ej.: 6"><span class="input-group-text">m</span></div></div>
+              <div class="ati-field"><label class="form-label fw-semibold">Ancho</label><div class="input-group"><input class="form-control dimension-input" type="number" step="0.01" min="0.01" name="ancho_m" value="{{ request.POST.ancho_m }}" placeholder="Ej.: 3"><span class="input-group-text">m</span></div></div>
+              <div class="ati-field"><label class="form-label fw-semibold">Profundidad promedio</label><div class="input-group"><input class="form-control dimension-input" type="number" step="0.01" min="0.01" name="profundidad_m" value="{{ request.POST.profundidad_m }}" placeholder="Ej.: 1.50"><span class="input-group-text">m</span></div></div>
+              <div><label class="form-label fw-semibold small text-muted">Volumen calculado</label><div class="volume-result"><div class="small opacity-75">Resultado automático</div><strong id="volumePreview" class="fs-5">0.00 m³</strong></div></div>
+            </div>
+            <div class="small text-muted mt-2"><i class="bi bi-info-circle me-1"></i> Cálculo: largo × ancho × profundidad promedio.</div>
+          </div>
+
+          <div id="volumeField" class="volume-panel {% if request.POST.metodo_volumen == 'dimensiones' %}d-none{% endif %}">
+            <div class="ati-field"><label class="form-label fw-semibold">Metros cúbicos</label><div class="input-group"><input class="form-control" type="number" step="0.01" min="0.01" name="volumen_m3" value="{{ request.POST.volumen_m3 }}" placeholder="Ej.: 27"><span class="input-group-text">m³</span></div></div>
+          </div>
+        </div>
+
+        <div class="ati-form-shell">
+          <div class="ati-grid">
+            <div class="ati-field"><label class="form-label fw-semibold"><i class="bi bi-droplet-half me-1 text-primary"></i> pH actual</label><input class="form-control" type="number" step="0.01" min="0" max="14" name="ph" required value="{{ request.POST.ph }}" placeholder="Ej.: 7.4"></div>
+            <div class="ati-field"><label class="form-label fw-semibold"><i class="bi bi-shield-plus me-1 text-primary"></i> Cloro actual</label><div class="input-group"><input class="form-control" type="number" step="0.01" min="0" max="20" name="cloro" required value="{{ request.POST.cloro }}" placeholder="Ej.: 1.5"><span class="input-group-text">ppm</span></div></div>
+            <div class="ati-field"><label class="form-label fw-semibold"><i class="bi bi-water me-1 text-primary"></i> Estado del agua</label><select class="form-select" name="estado_agua" required><option value="">Seleccionar</option>{% for value,label in estado_choices %}<option value="{{ value }}" {% if request.POST.estado_agua == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+            <div class="ati-field"><label class="form-label fw-semibold"><i class="bi bi-house-heart me-1 text-primary"></i> Tipo de piscina / uso</label><select class="form-select" name="tipo_piscina" required><option value="">Seleccionar</option>{% for value,label in tipo_choices %}<option value="{{ value }}" {% if request.POST.tipo_piscina == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+            <div class="ati-field"><label class="form-label fw-semibold"><i class="bi bi-camera me-1 text-primary"></i> Foto inicial <span class="text-muted fw-normal">(opcional)</span></label><input class="form-control" type="file" name="foto_inicial" accept="image/*"><div class="photo-note mt-1">Se guarda únicamente en el historial del Asistente.</div></div>
+          </div>
+        </div>
+
+        <button class="btn btn-primary ati-primary w-100 mt-4 py-3" type="submit"><i class="bi bi-stars me-2"></i> Analizar y resolver mi piscina</button>
+        <div class="ati-trust"><i class="bi bi-shield-check"></i> Recomendación técnica orientativa. Confirma siempre con nuevas mediciones.</div>
+      </form>
+    </div>
+  </div>
+
+  {% if resultado %}
+  <div class="ati-flow mb-3" aria-label="Resultado del diagnóstico">
+    <div class="ati-flow-item active"><span class="ati-flow-num">1</span>Diagnóstico</div>
+    <div class="ati-flow-item active"><span class="ati-flow-num">2</span>Acción</div>
+    <div class="ati-flow-item active"><span class="ati-flow-num">3</span>Cantidades</div>
+    <div class="ati-flow-item active"><span class="ati-flow-num">4</span>Verificación</div>
+    <div class="ati-flow-item active"><span class="ati-flow-num">5</span>Aprende</div>
+  </div>
+
+  <div class="ati-card mb-4">
+    <div class="ati-result-head">
+      <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+        <div><div class="ati-kicker">Caso #{{ caso.pk }} · Diagnóstico</div><h4 class="fw-bold mb-1">{{ resultado.diagnostico }}</h4><div class="ati-subtitle">{{ resultado.resumen }}</div></div>
+        <span class="ati-badge pri-{{ resultado.prioridad|lower }}"><i class="bi bi-flag-fill"></i> Prioridad {{ resultado.prioridad|title }}</span>
+      </div>
+    </div>
+    <div class="ati-result-body">
+      <div class="ati-grid-3 mb-4">
+        <div class="ati-metric"><small>Volumen</small><strong>{{ caso.volumen_m3 }} m³</strong></div>
+        <div class="ati-metric"><small>pH inicial</small><strong>{{ caso.ph_inicial }}</strong></div>
+        <div class="ati-metric"><small>Cloro inicial</small><strong>{{ caso.cloro_inicial }} ppm</strong></div>
+      </div>
+
+      <div class="ati-block-title"><div class="ati-block-icon"><i class="bi bi-activity"></i></div><div><div class="ati-kicker">1 · Diagnóstico</div><h5 class="fw-bold mb-0">Qué está ocurriendo</h5></div></div>
+      <div class="ati-subtitle mb-4">{{ resultado.resumen }}</div>
+
+      <div class="ati-block-title"><div class="ati-block-icon"><i class="bi bi-list-check"></i></div><div><div class="ati-kicker">2 · Acción</div><h5 class="fw-bold mb-0">Qué hacer ahora</h5></div></div>
+      {% for paso in resultado.protocolo %}<div class="step"><div class="step-num">{{ paso.paso }}</div><div><div class="fw-bold">{{ paso.titulo }}</div><div class="text-muted">{{ paso.detalle }}</div></div></div>{% endfor %}
     </div>
   </div>
 
   <div class="ati-card mb-4"><div class="ati-section">
-    <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-3"><div><div class="text-primary small fw-bold text-uppercase">Resolver</div><h4 class="fw-bold mb-1">¿Qué está pasando con tu piscina?</h4><div class="text-muted">Ingresa lo que puedes medir. El Asistente se encarga del diagnóstico, cálculos y orden del procedimiento.</div></div><span class="ati-badge pri-baja">Disponible siempre</span></div>
-    <form method="post" enctype="multipart/form-data">
-      {% csrf_token %}
-      <div class="volume-helper mb-3">
-        <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
-          <div>
-            <label class="form-label fw-bold mb-1">Volumen de la piscina</label>
-            <div class="small text-muted">Puedes ingresar los m³ directamente o calcularlos con las medidas.</div>
-          </div>
-          <div class="volume-toggle" role="group" aria-label="Método de volumen">
-            <input class="btn-check" type="radio" name="metodo_volumen" id="metodoDimensiones" value="dimensiones" {% if request.POST.metodo_volumen == 'dimensiones' %}checked{% endif %}>
-            <label class="btn btn-outline-primary btn-sm" for="metodoDimensiones">📐 Calcular por medidas</label>
-            <input class="btn-check" type="radio" name="metodo_volumen" id="metodoVolumen" value="volumen" {% if request.POST.metodo_volumen != 'dimensiones' %}checked{% endif %}>
-            <label class="btn btn-outline-primary btn-sm" for="metodoVolumen">🌊 Ya conozco los m³</label>
-          </div>
-        </div>
-
-        <div id="dimensionFields" class="volume-panel {% if request.POST.metodo_volumen != 'dimensiones' %}d-none{% endif %}">
-          <div class="ati-grid">
-            <div><label class="form-label fw-semibold">Largo</label><div class="input-group"><input class="form-control ati-input dimension-input" type="number" step="0.01" min="0.01" name="largo_m" value="{{ request.POST.largo_m }}" placeholder="Ej.: 6"><span class="input-group-text">m</span></div></div>
-            <div><label class="form-label fw-semibold">Ancho</label><div class="input-group"><input class="form-control ati-input dimension-input" type="number" step="0.01" min="0.01" name="ancho_m" value="{{ request.POST.ancho_m }}" placeholder="Ej.: 3"><span class="input-group-text">m</span></div></div>
-            <div><label class="form-label fw-semibold">Profundidad promedio</label><div class="input-group"><input class="form-control ati-input dimension-input" type="number" step="0.01" min="0.01" name="profundidad_m" value="{{ request.POST.profundidad_m }}" placeholder="Ej.: 1.50"><span class="input-group-text">m</span></div></div>
-            <div><label class="form-label fw-semibold">Volumen calculado</label><div class="alert alert-primary mb-0 py-2"><strong id="volumePreview">0.00 m³</strong></div></div>
-          </div>
-          <div class="small text-muted mt-2">Cálculo: largo × ancho × profundidad promedio.</div>
-        </div>
-
-        <div id="volumeField" class="volume-panel {% if request.POST.metodo_volumen == 'dimensiones' %}d-none{% endif %}">
-          <label class="form-label fw-semibold">Metros cúbicos</label>
-          <div class="input-group"><input class="form-control ati-input" type="number" step="0.01" min="0.01" name="volumen_m3" value="{{ request.POST.volumen_m3 }}" placeholder="Ej.: 27"><span class="input-group-text">m³</span></div>
-        </div>
-      </div>
-
-      <div class="ati-grid">
-        <div><label class="form-label fw-semibold">pH actual</label><input class="form-control ati-input" type="number" step="0.01" min="0" max="14" name="ph" required value="{{ request.POST.ph }}"></div>
-        <div><label class="form-label fw-semibold">Cloro actual</label><div class="input-group"><input class="form-control ati-input" type="number" step="0.01" min="0" max="20" name="cloro" required value="{{ request.POST.cloro }}"><span class="input-group-text">ppm</span></div></div>
-        <div><label class="form-label fw-semibold">Estado del agua</label><select class="form-select ati-input" name="estado_agua" required><option value="">Seleccionar</option>{% for value,label in estado_choices %}<option value="{{ value }}" {% if request.POST.estado_agua == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
-        <div><label class="form-label fw-semibold">Tipo de piscina / uso</label><select class="form-select ati-input" name="tipo_piscina" required><option value="">Seleccionar</option>{% for value,label in tipo_choices %}<option value="{{ value }}" {% if request.POST.tipo_piscina == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
-        <div><label class="form-label fw-semibold">Foto inicial <span class="text-muted fw-normal">(opcional)</span></label><input class="form-control ati-input" type="file" name="foto_inicial" accept="image/*"><div class="photo-note mt-1">Solo se guarda en el historial del Asistente Técnico.</div></div>
-      </div>
-      <button class="btn btn-primary w-100 mt-4 py-3 fw-bold" type="submit"><i class="bi bi-stars me-2"></i>Resolver mi piscina</button><div class="text-center small text-muted mt-2">La recomendación se genera con las reglas técnicas configuradas en JVAQUA y siempre debe confirmarse con nuevas mediciones.</div>
-    </form>
+    <div class="ati-block-title"><div class="ati-block-icon"><i class="bi bi-beaker"></i></div><div><div class="ati-kicker">3 · Cantidades</div><h5 class="fw-bold mb-0">Productos y dosis orientativas</h5></div></div>
+    <p class="ati-subtitle mb-3">Las cantidades ya forman parte del diagnóstico: no necesitas una calculadora separada.</p>
+    {% for p in resultado.productos_sugeridos %}<div class="prod"><div class="d-flex justify-content-between gap-3"><div><div class="fw-bold">{{ p.nombre }}</div><div class="text-muted small">{{ p.motivo }}</div></div><div class="prod-dose">{{ p.cantidad }} {{ p.unidad }}</div></div>{% if p.clave and resultado.explicaciones %}<details class="mt-2"><summary class="small fw-semibold text-primary">¿Por qué se recomienda?</summary><div class="explain mt-2">{% for key,texto in resultado.explicaciones.items %}{% if key == p.clave %}{{ texto }}{% endif %}{% endfor %}</div></details>{% endif %}</div>{% empty %}<div class="text-muted">No se requiere añadir un producto específico según los datos ingresados.</div>{% endfor %}
   </div></div>
 
-  {% if resultado %}
   <div class="ati-card mb-4"><div class="ati-section">
-    <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-3"><div><div class="text-muted small">Caso #{{ caso.pk }}</div><h4 class="fw-bold mb-1">{{ resultado.diagnostico }}</h4><div class="text-muted">{{ resultado.resumen }}</div></div><span class="ati-badge pri-{{ resultado.prioridad|lower }}">Prioridad {{ resultado.prioridad|title }}</span></div>
-    <div class="row g-2 mb-4"><div class="col-4"><div class="p-3 bg-light rounded-4"><small class="text-muted">Volumen</small><div class="fw-bold">{{ caso.volumen_m3 }} m³</div></div></div><div class="col-4"><div class="p-3 bg-light rounded-4"><small class="text-muted">pH</small><div class="fw-bold">{{ caso.ph_inicial }}</div></div></div><div class="col-4"><div class="p-3 bg-light rounded-4"><small class="text-muted">Cloro</small><div class="fw-bold">{{ caso.cloro_inicial }} ppm</div></div></div></div>
-    <div class="mb-3"><div class="text-primary small fw-bold text-uppercase">1 · Diagnóstico</div><h5 class="fw-bold mb-1">Qué está ocurriendo</h5><div class="text-muted">{{ resultado.resumen }}</div></div><div class="text-primary small fw-bold text-uppercase mt-4">2 · Acción</div><h5 class="fw-bold">Qué hacer ahora</h5>
-    {% for paso in resultado.protocolo %}<div class="step"><div class="step-num">{{ paso.paso }}</div><div><div class="fw-bold">{{ paso.titulo }}</div><div class="text-muted">{{ paso.detalle }}</div></div></div>{% endfor %}
+    <div class="ati-block-title"><div class="ati-block-icon"><i class="bi bi-shield-check"></i></div><div><div class="ati-kicker">4 · Verificación</div><h5 class="fw-bold mb-0">Seguridad y qué comprobar después</h5></div></div>
+    {% for w in resultado.advertencias %}<div class="ati-warning mb-2"><i class="bi bi-exclamation-triangle-fill me-2"></i>{{ w }}</div>{% endfor %}
+    <div class="ati-info mt-3"><i class="bi bi-clock-history me-2"></i><strong>Seguimiento:</strong> el sistema te preguntará aproximadamente dentro de 24 horas cómo terminó el tratamiento. Esto alimenta únicamente el historial del Asistente.</div>
   </div></div>
 
-  <div class="ati-card mb-4"><div class="ati-section"><div class="text-primary small fw-bold text-uppercase">3 · Cantidades</div><h5 class="fw-bold mb-1">Productos y dosis orientativas</h5><p class="text-muted small mb-3">Las cantidades forman parte del mismo diagnóstico: ya no necesitas una calculadora separada.</p>{% for p in resultado.productos_sugeridos %}<div class="prod"><div class="d-flex justify-content-between gap-3"><div><div class="fw-bold">{{ p.nombre }}</div><div class="text-muted small">{{ p.motivo }}</div></div><div class="text-end fw-bold text-primary">{{ p.cantidad }} {{ p.unidad }}</div></div>{% if p.clave and resultado.explicaciones %}<details class="mt-2"><summary class="small fw-semibold text-primary">¿Por qué se recomienda?</summary><div class="explain mt-2">{% for key,texto in resultado.explicaciones.items %}{% if key == p.clave %}{{ texto }}{% endif %}{% endfor %}</div></details>{% endif %}</div>{% empty %}<div class="text-muted">No se requiere añadir un producto específico según los datos ingresados.</div>{% endfor %}</div></div>
-
-  <div class="ati-card mb-4"><div class="ati-section"><div class="text-primary small fw-bold text-uppercase">4 · Verificación</div><h5 class="fw-bold mb-3">Seguridad, seguimiento y qué comprobar después</h5>{% for w in resultado.advertencias %}<div class="ati-warning mb-2"><i class="bi bi-exclamation-triangle me-2"></i>{{ w }}</div>{% endfor %}<div class="alert alert-info mt-3 mb-0"><strong>Seguimiento:</strong> el sistema te preguntará aproximadamente dentro de 24 horas cómo terminó el tratamiento. La respuesta solo alimenta el historial del asistente y no modifica otros módulos.</div></div></div>
   {% if articulos_relacionados %}
   <div class="ati-card mb-4"><div class="ati-section">
-    <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-3"><div><div class="text-primary small fw-bold text-uppercase">5 · Aprende por qué</div><h5 class="fw-bold mb-1">Contenido relacionado de la Academia</h5><div class="text-muted small">Resolver te indica qué hacer; estas fichas te ayudan a comprender el procedimiento y evitar errores.</div></div><a class="btn btn-sm btn-outline-primary" href="{% url 'asistente_tecnico:academia_cms' %}?modo=consultar">Abrir biblioteca</a></div>
-    <div class="row g-2">{% for articulo in articulos_relacionados %}<div class="col-md-6"><a class="text-decoration-none text-dark" href="{% url 'asistente_tecnico:academia_contenido_detalle' articulo.slug %}"><div class="p-3 border rounded-4 h-100"><div class="small text-primary fw-bold">{{ articulo.get_modulo_curso_display|default:articulo.get_tipo_display }}</div><div class="fw-bold mt-1">{{ articulo.titulo }}</div><div class="small text-muted mt-1">{{ articulo.resumen|truncatechars:120 }}</div></div></a></div>{% endfor %}</div>
+    <div class="ati-section-title"><div><div class="ati-kicker">5 · Aprende por qué</div><h5 class="fw-bold mb-1">Contenido relacionado de la Academia</h5><div class="ati-subtitle">Resolver te indica qué hacer; estas fichas te ayudan a comprender el procedimiento y evitar errores.</div></div><a class="btn btn-sm btn-outline-primary rounded-pill" href="{% url 'asistente_tecnico:academia_cms' %}?modo=consultar"><i class="bi bi-book me-1"></i> Abrir biblioteca</a></div>
+    <div class="ati-related">{% for articulo in articulos_relacionados %}<a href="{% url 'asistente_tecnico:academia_contenido_detalle' articulo.slug %}"><div class="ati-related-card"><div class="ati-kicker">{{ articulo.get_modulo_curso_display|default:articulo.get_tipo_display }}</div><div class="fw-bold mt-1">{{ articulo.titulo }}</div><div class="small text-muted mt-1">{{ articulo.resumen|truncatechars:120 }}</div></div></a>{% endfor %}</div>
   </div></div>
   {% endif %}
   {% endif %}
 
-  {% if recientes %}<div class="ati-card"><div class="ati-section"><div class="d-flex justify-content-between align-items-center"><h5 class="fw-bold mb-3">Diagnósticos recientes</h5><a href="{% url 'asistente_tecnico:historial' %}" class="btn btn-sm btn-outline-primary">Ver todos</a></div>{% for item in recientes %}<a href="{% url 'asistente_tecnico:caso_detalle' item.pk %}" class="d-flex justify-content-between align-items-center text-decoration-none text-dark py-3 border-top"><div><div class="fw-semibold">{{ item.diagnostico }}</div><small class="text-muted">{{ item.creado_en|date:'d/m/Y H:i' }} · {{ item.volumen_m3 }} m³ · {{ item.get_estado_agua_display }}</small></div><span class="badge {% if item.resultado == 'exitoso' %}text-bg-success{% elif item.resultado == 'fallido' %}text-bg-danger{% elif item.resultado == 'parcial' %}text-bg-warning{% else %}text-bg-secondary{% endif %}">{{ item.get_resultado_display }}</span></a>{% endfor %}</div></div>{% endif %}
+  {% if recientes %}<div class="ati-card"><div class="ati-section"><div class="ati-section-title mb-2"><div><div class="ati-kicker">Tu actividad</div><h5 class="fw-bold mb-0">Diagnósticos recientes</h5></div><a href="{% url 'asistente_tecnico:historial' %}" class="btn btn-sm btn-outline-primary rounded-pill">Ver todos</a></div>{% for item in recientes %}<a href="{% url 'asistente_tecnico:caso_detalle' item.pk %}" class="ati-recent"><div><div class="ati-recent-title fw-semibold">{{ item.diagnostico }}</div><small class="text-muted">{{ item.creado_en|date:'d/m/Y H:i' }} · {{ item.volumen_m3 }} m³ · {{ item.get_estado_agua_display }}</small></div><span class="badge {% if item.resultado == 'exitoso' %}text-bg-success{% elif item.resultado == 'fallido' %}text-bg-danger{% elif item.resultado == 'parcial' %}text-bg-warning{% else %}text-bg-secondary{% endif %}">{{ item.get_resultado_display }}</span></a>{% endfor %}</div></div>{% endif %}
 </div>
 <script>
 (function(){
