@@ -960,27 +960,23 @@
     </div>
     <div class="progress mt-3" style="height:8px"><div class="progress-bar bg-success" role="progressbar" style="width:{% widthratio ruta_completadas ruta_total_visitas 100 %}%"></div></div>
     <div class="d-grid d-sm-flex gap-2 mt-3">
-      <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#rutaHoyModal" id="btnVerRuta"><i class="bi bi-sign-turn-right-fill me-1"></i> Ver ruta sugerida</button>
+      <button type="button" class="btn btn-primary" id="btnVerRuta"><i class="bi bi-sign-turn-right-fill me-1"></i> Ver ruta sugerida</button>
       <button type="button" class="btn btn-outline-secondary" id="btnRecalcularRuta"><i class="bi bi-arrow-repeat me-1"></i> Recalcular desde mi ubicación</button>
     </div>
   </div>
 </div>
 
-<div class="modal fade" id="rutaHoyModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-scrollable modal-fullscreen-sm-down modal-lg">
-    <div class="modal-content border-0">
-      <div class="modal-header">
-        <div><h5 class="modal-title fw-bold">📍 Ruta sugerida</h5><div class="small text-muted">{{ ruta_fecha|date:"d/m/Y" }} · Puedes cambiar el orden cuando quieras.</div></div>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <div class="alert alert-info py-2 small" id="routeStatus">Calculando el orden sugerido…</div>
-        <div id="routeList" class="vstack gap-2"></div>
-      </div>
-      <div class="modal-footer d-grid d-sm-flex">
-        <button class="btn btn-outline-secondary" type="button" id="routeRefresh">Recalcular</button>
-        <a class="btn btn-primary disabled" id="routeOpenAll" target="_blank" rel="noopener"><i class="bi bi-map me-1"></i>Abrir ruta en Google Maps</a>
-      </div>
+<div class="card shadow-sm mb-3 border-0 d-none" id="rutaHoyPanel" style="border-radius:18px;">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+      <div><h5 class="fw-bold mb-1">📍 Ruta sugerida</h5><div class="small text-muted">{{ ruta_fecha|date:"d/m/Y" }} · Puedes cambiar el orden cuando quieras.</div></div>
+      <button type="button" class="btn-close" id="routeClose" aria-label="Cerrar"></button>
+    </div>
+    <div class="alert alert-info py-2 small" id="routeStatus">Calculando el orden sugerido…</div>
+    <div id="routeList" class="vstack gap-2"></div>
+    <div class="d-grid d-sm-flex gap-2 mt-3">
+      <button class="btn btn-outline-secondary" type="button" id="routeRefresh">Recalcular</button>
+      <a class="btn btn-primary disabled" id="routeOpenAll" target="_blank" rel="noopener"><i class="bi bi-map me-1"></i>Abrir ruta en Google Maps</a>
     </div>
   </div>
 </div>
@@ -1491,9 +1487,17 @@
     if(status){const located=ordered.filter(x=>x._c&&x.estado!=='realizado').length;status.textContent=origin?'Ruta recalculada desde tu ubicación actual. '+located+' visita(s) con coordenadas detectadas.':'Ruta sugerida según horarios y prioridad. Activa tu ubicación para optimizar también por cercanía.'}
   }
   function locate(){if(!navigator.geolocation){optimize();return}if(status)status.textContent='Obteniendo tu ubicación para calcular la ruta…';navigator.geolocation.getCurrentPosition(p=>{origin={lat:p.coords.latitude,lng:p.coords.longitude};optimize()},()=>{origin=null;optimize()},{enableHighAccuracy:true,timeout:7000,maximumAge:300000})}
-  document.getElementById('btnVerRuta')?.addEventListener('click',()=>{if(!ordered.length)locate()});
-  document.getElementById('btnRecalcularRuta')?.addEventListener('click',()=>{locate();bootstrap.Modal.getOrCreateInstance(document.getElementById('rutaHoyModal')).show()});
+  const routePanel=document.getElementById('rutaHoyPanel');
+  function openRoute(){
+    routePanel?.classList.remove('d-none');
+    routePanel?.scrollIntoView({behavior:'smooth', block:'start'});
+    if(!ordered.length) locate();
+  }
+  function closeRoute(){ routePanel?.classList.add('d-none'); }
+  document.getElementById('btnVerRuta')?.addEventListener('click',openRoute);
+  document.getElementById('btnRecalcularRuta')?.addEventListener('click',()=>{openRoute();locate()});
   document.getElementById('routeRefresh')?.addEventListener('click',locate);
+  document.getElementById('routeClose')?.addEventListener('click',closeRoute);
   optimize();
 })();
 </script>
