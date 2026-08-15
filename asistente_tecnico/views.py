@@ -12,7 +12,7 @@ from django.views.decorators.http import require_http_methods
 
 from trabajadores.models import Trabajador
 from .engine import DEFAULT_RULES, calcular_recomendacion
-from .models import CasoAsistenteTecnico, MotorRecomendacion, ContenidoAcademia, ProgresoContenidoAcademia, FavoritoContenidoAcademia, ConsultaContenidoAcademia
+from .models import CasoAsistenteTecnico, MotorRecomendacion, ContenidoAcademia, ProgresoContenidoAcademia, FavoritoContenidoAcademia, ConsultaContenidoAcademia, PerfilSuscriptor, PiscinaSuscriptor
 from .services import generar_recordatorios_seguimiento
 
 
@@ -30,6 +30,20 @@ def _es_trabajador(user):
         return False
     grupos = {g.name.strip().lower() for g in user.groups.all()}
     return "trabajadores" in grupos or "trabajador" in grupos
+
+
+def _suscriptor(user):
+    if not user.is_authenticated:
+        return None
+    try:
+        perfil = user.perfil_suscriptor
+        return perfil if perfil.tiene_acceso else None
+    except PerfilSuscriptor.DoesNotExist:
+        return None
+
+
+def _es_suscriptor(user):
+    return _suscriptor(user) is not None
 
 
 def _trabajador(user):
@@ -53,7 +67,11 @@ def _motor_activo():
 
 
 def _base_template(user):
-    return "dashboard/base_admin.html" if _es_admin(user) else "dashboard/base_trabajador.html"
+    if _es_admin(user):
+        return "dashboard/base_admin.html"
+    if _es_suscriptor(user):
+        return "asistente_tecnico/base_suscriptor.html"
+    return "dashboard/base_trabajador.html"
 
 
 def _actualizar_recordatorios(user):
@@ -812,11 +830,13 @@ def academia_cms_imagen_eliminar_view(request, pk):
 
 @login_required
 def academia_publica_view(request):
-    if not (_es_trabajador(request.user) or _es_admin(request.user)):
+    if not (_es_trabajador(request.user) or _es_admin(request.user) or _es_suscriptor(request.user)):
         return HttpResponseForbidden("No autorizado")
 
     visibles = ContenidoAcademia.objects.filter(estado="aprobado")
-    if not _es_admin(request.user):
+    if _es_suscriptor(request.user):
+        visibles = visibles.exclude(acceso="interno")
+    elif not _es_admin(request.user):
         visibles = visibles.exclude(acceso="suscriptor")
 
     q = (request.GET.get("q") or "").strip()
@@ -893,7 +913,7 @@ def academia_publica_view(request):
 
 @login_required
 def academia_contenido_detalle_view(request, slug):
-    if not (_es_trabajador(request.user) or _es_admin(request.user)):
+    if not (_es_trabajador(request.user) or _es_admin(request.user) or _es_suscriptor(request.user)):
         return HttpResponseForbidden("No autorizado")
     filtros = {"slug": slug}
     if not _es_admin(request.user):
@@ -901,7 +921,9 @@ def academia_contenido_detalle_view(request, slug):
     obj = get_object_or_404(
         ContenidoAcademia.objects.prefetch_related("relacionados", "galeria"), **filtros
     )
-    if not _es_admin(request.user) and obj.acceso == "suscriptor":
+    if _es_suscriptor(request.user) and obj.acceso == "interno":
+        return HttpResponseForbidden("Contenido exclusivo del equipo JVAQUA")
+    if not (_es_admin(request.user) or _es_suscriptor(request.user)) and obj.acceso == "suscriptor":
         return HttpResponseForbidden("Contenido no disponible para este perfil")
 
     ConsultaContenidoAcademia.objects.update_or_create(
@@ -915,7 +937,9 @@ def academia_contenido_detalle_view(request, slug):
     siguiente = None
     if obj.modulo_curso:
         visibles = ContenidoAcademia.objects.filter(estado="aprobado").exclude(modulo_curso="")
-        if not _es_admin(request.user):
+        if _es_suscriptor(request.user):
+            visibles = visibles.exclude(acceso="interno")
+        elif not _es_admin(request.user):
             visibles = visibles.exclude(acceso="suscriptor")
         lista = list(visibles)
         rango_modulo = {codigo: i for i, (codigo, _nombre) in enumerate(ContenidoAcademia.MODULOS_CURSO)}
@@ -936,6 +960,8 @@ def academia_contenido_detalle_view(request, slug):
 @require_http_methods(["POST"])
 def academia_contenido_completar_view(request, slug):
     obj = get_object_or_404(ContenidoAcademia, slug=slug, estado="aprobado")
+    if _es_suscriptor(request.user) and obj.acceso == "interno":
+        return HttpResponseForbidden("Contenido exclusivo del equipo JVAQUA")
     ProgresoContenidoAcademia.objects.update_or_create(user=request.user, contenido=obj, defaults={"completado": True, "completado_en": timezone.now()})
     messages.success(request, "Contenido marcado como aprendido.")
     return redirect("asistente_tecnico:academia_contenido_detalle", slug=slug)
@@ -945,6 +971,8 @@ def academia_contenido_completar_view(request, slug):
 @require_http_methods(["POST"])
 def academia_contenido_favorito_view(request, slug):
     obj = get_object_or_404(ContenidoAcademia, slug=slug, estado="aprobado")
+    if _es_suscriptor(request.user) and obj.acceso == "interno":
+        return HttpResponseForbidden("Contenido exclusivo del equipo JVAQUA")
     fav = FavoritoContenidoAcademia.objects.filter(user=request.user, contenido=obj)
     if fav.exists():
         fav.delete(); messages.info(request, "Eliminado de favoritos.")
@@ -1057,3 +1085,70 @@ def academia_pdf_categoria_view(request, tipo):
 def academia_pdf_manual_view(request):
     qs=ContenidoAcademia.objects.filter(estado="aprobado")
     return _pdf_response("Manual_Tecnico_Oficial_JVAQUA.pdf",qs)
+
+@login_required
+def digital_inicio_view(request):
+    perfil = _suscriptor(request.user)
+    if not perfil:
+        return HttpResponseForbidden("Tu acceso a JVAQUA Digital no está activo.")
+    piscinas = perfil.piscinas.filter(activa=True)
+    principal = piscinas.filter(principal=True).first() or piscinas.first()
+    recientes = CasoAsistenteTecnico.objects.filter(user=request.user)[:4]
+    progreso_total = ContenidoAcademia.objects.filter(estado="aprobado").exclude(acceso="interno").exclude(modulo_curso="").count()
+    completados = ProgresoContenidoAcademia.objects.filter(user=request.user, completado=True, contenido__estado="aprobado").exclude(contenido__acceso="interno").count()
+    porcentaje = round(completados * 100 / progreso_total) if progreso_total else 0
+    return render(request, "asistente_tecnico/digital_inicio.html", {"perfil":perfil,"piscinas":piscinas,"principal":principal,"recientes":recientes,"curso_porcentaje":porcentaje,"base_template":"asistente_tecnico/base_suscriptor.html"})
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def digital_piscina_form_view(request, pk=None):
+    perfil = _suscriptor(request.user)
+    if not perfil: return HttpResponseForbidden("No autorizado")
+    obj = get_object_or_404(PiscinaSuscriptor, pk=pk, suscriptor=perfil) if pk else None
+    if request.method == "POST":
+        try:
+            largo = Decimal((request.POST.get("largo_m") or "0").replace(",",".")) if request.POST.get("largo_m") else None
+            ancho = Decimal((request.POST.get("ancho_m") or "0").replace(",",".")) if request.POST.get("ancho_m") else None
+            profundidad = Decimal((request.POST.get("profundidad_m") or "0").replace(",",".")) if request.POST.get("profundidad_m") else None
+            vol_txt=(request.POST.get("volumen_m3") or "").replace(",",".")
+            volumen=Decimal(vol_txt) if vol_txt else ((largo*ancho*profundidad).quantize(Decimal("0.01")) if largo and ancho and profundidad else Decimal("0"))
+            if volumen <= 0: raise ValueError
+        except (InvalidOperation, ValueError):
+            messages.error(request,"Ingresa un volumen válido o las tres dimensiones de la piscina.")
+        else:
+            if obj is None: obj=PiscinaSuscriptor(suscriptor=perfil)
+            obj.nombre=(request.POST.get("nombre") or "Mi piscina").strip()[:100]
+            obj.tipo_piscina=request.POST.get("tipo_piscina") or "residencial"
+            obj.largo_m=largo; obj.ancho_m=ancho; obj.profundidad_m=profundidad; obj.volumen_m3=volumen
+            obj.tipo_filtro=request.POST.get("tipo_filtro") or "otro"; obj.desinfeccion=request.POST.get("desinfeccion") or "otro"
+            obj.notas=(request.POST.get("notas") or "").strip(); obj.principal=request.POST.get("principal")=="on"; obj.save()
+            messages.success(request,"Piscina guardada. El Asistente ya puede usar estos datos.")
+            return redirect("asistente_tecnico:digital_inicio")
+    return render(request,"asistente_tecnico/digital_piscina_form.html",{"obj":obj,"tipo_choices":PiscinaSuscriptor.TIPOS,"filtro_choices":PiscinaSuscriptor.FILTROS,"desinfeccion_choices":PiscinaSuscriptor.DESINFECCION})
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def digital_resolver_view(request):
+    perfil=_suscriptor(request.user)
+    if not perfil: return HttpResponseForbidden("No autorizado")
+    piscinas=perfil.piscinas.filter(activa=True)
+    piscina=None; resultado=None; caso=None
+    pid=request.POST.get("piscina_id") or request.GET.get("piscina")
+    if pid: piscina=piscinas.filter(pk=pid).first()
+    if not piscina: piscina=piscinas.filter(principal=True).first() or piscinas.first()
+    if request.method=="POST":
+        if not piscina:
+            messages.error(request,"Primero registra tu piscina para que pueda calcular las cantidades correctamente.")
+        else:
+            try:
+                ph=Decimal((request.POST.get("ph") or "").replace(",",".")); cloro=Decimal((request.POST.get("cloro") or "").replace(",","."))
+            except InvalidOperation:
+                messages.error(request,"Necesito los valores de pH y cloro para darte una recomendación segura.")
+            else:
+                estado=request.POST.get("estado_agua") or ""
+                if estado not in {x[0] for x in CasoAsistenteTecnico.ESTADO_AGUA_CHOICES}:
+                    messages.error(request,"Selecciona cómo se ve el agua.")
+                else:
+                    motor=_motor_activo(); resultado=calcular_recomendacion(piscina.volumen_m3,ph,cloro,estado,piscina.tipo_piscina,motor.reglas)
+                    caso=CasoAsistenteTecnico.objects.create(user=request.user,motor=motor,volumen_m3=piscina.volumen_m3,ph_inicial=ph,cloro_inicial=cloro,estado_agua=estado,tipo_piscina=piscina.tipo_piscina,diagnostico=resultado["diagnostico"],tipo_tratamiento=resultado["tipo_tratamiento"],prioridad=resultado["prioridad"],resumen=resultado["resumen"],protocolo=resultado["protocolo"],productos_sugeridos=resultado["productos_sugeridos"],explicaciones=resultado["explicaciones"],advertencias=resultado["advertencias"],seguimiento_programado_para=timezone.now()+timedelta(hours=resultado["seguimiento_horas"]))
+    return render(request,"asistente_tecnico/digital_resolver.html",{"piscinas":piscinas,"piscina":piscina,"resultado":resultado,"caso":caso,"estado_choices":CasoAsistenteTecnico.ESTADO_AGUA_CHOICES,"articulos_relacionados":_academia_relacionada_con_diagnostico(resultado)})

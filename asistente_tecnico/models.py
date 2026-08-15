@@ -453,3 +453,65 @@ class ConsultaContenidoAcademia(models.Model):
     class Meta:
         constraints = [models.UniqueConstraint(fields=["user", "contenido"], name="ati_unique_user_content_recent")]
         ordering = ["-consultado_en"]
+
+
+class PerfilSuscriptor(models.Model):
+    ESTADOS = [("prueba", "Prueba"), ("activo", "Activo"), ("pausado", "Pausado"), ("vencido", "Vencido")]
+    PLANES = [("digital", "JVAQUA Digital")]
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="perfil_suscriptor")
+    estado = models.CharField(max_length=20, choices=ESTADOS, default="prueba", db_index=True)
+    plan = models.CharField(max_length=30, choices=PLANES, default="digital")
+    inicio = models.DateField(default=timezone.localdate)
+    prueba_hasta = models.DateField(null=True, blank=True)
+    acceso_hasta = models.DateField(null=True, blank=True)
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Suscriptor JVAQUA Digital"
+        verbose_name_plural = "Suscriptores JVAQUA Digital"
+
+    @property
+    def tiene_acceso(self):
+        hoy = timezone.localdate()
+        if self.estado == "activo":
+            return not self.acceso_hasta or self.acceso_hasta >= hoy
+        if self.estado == "prueba":
+            return not self.prueba_hasta or self.prueba_hasta >= hoy
+        return False
+
+    def __str__(self):
+        return f"{self.user} · {self.get_estado_display()}"
+
+
+class PiscinaSuscriptor(models.Model):
+    TIPOS = CasoAsistenteTecnico.TIPO_PISCINA_CHOICES
+    DESINFECCION = [("cloro", "Cloro"), ("sal", "Cloración salina"), ("otro", "Otro / no lo sé")]
+    FILTROS = [("arena", "Filtro de arena"), ("cartucho", "Filtro de cartucho"), ("otro", "Otro / no lo sé")]
+    suscriptor = models.ForeignKey(PerfilSuscriptor, on_delete=models.CASCADE, related_name="piscinas")
+    nombre = models.CharField(max_length=100, default="Mi piscina")
+    tipo_piscina = models.CharField(max_length=30, choices=TIPOS, default="residencial")
+    largo_m = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)
+    ancho_m = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)
+    profundidad_m = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)
+    volumen_m3 = models.DecimalField(max_digits=9, decimal_places=2)
+    tipo_filtro = models.CharField(max_length=20, choices=FILTROS, default="arena")
+    desinfeccion = models.CharField(max_length=20, choices=DESINFECCION, default="cloro")
+    notas = models.TextField(blank=True, default="")
+    principal = models.BooleanField(default=False, db_index=True)
+    activa = models.BooleanField(default=True, db_index=True)
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-principal", "nombre"]
+        verbose_name = "Piscina de suscriptor"
+        verbose_name_plural = "Piscinas de suscriptores"
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        if self.principal:
+            type(self).objects.filter(suscriptor=self.suscriptor).exclude(pk=self.pk).update(principal=False)
+
+    def __str__(self):
+        return f"{self.suscriptor.user} · {self.nombre}"

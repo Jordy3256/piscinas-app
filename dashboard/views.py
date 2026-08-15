@@ -1041,6 +1041,12 @@ def login_view(request):
         if user is not None:
             login(request, user)
             messages.success(request, "Bienvenido.")
+            if not next_url:
+                try:
+                    if user.perfil_suscriptor.tiene_acceso:
+                        return redirect("/dashboard/asistente/digital/")
+                except Exception:
+                    pass
             return redirect(safe_redirect_target(next_url))
 
         ctx["error"] = "Usuario o contraseña incorrectos"
@@ -1801,6 +1807,11 @@ def inicio_view(request):
         ctx.update(_inicio_trabajador_contexto(request.user))
         return render(request, "dashboard/home_trabajador.html", ctx)
 
+    try:
+        if request.user.perfil_suscriptor.tiene_acceso:
+            return redirect("/dashboard/asistente/digital/")
+    except Exception:
+        pass
     return render(request, "dashboard/no_autorizado.html", status=403)
 
 
