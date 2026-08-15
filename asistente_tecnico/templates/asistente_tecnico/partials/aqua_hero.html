@@ -1,48 +1,9 @@
+{% load static %}
 <div class="aqua-avatar" aria-hidden="true">
-  <div class="aqua-orbit orbit-one"></div>
-  <div class="aqua-orbit orbit-two"></div>
-  <span class="aqua-particle p1">✦</span><span class="aqua-particle p2">✦</span><span class="aqua-particle p3">•</span>
-  <svg class="aqua-svg" viewBox="0 0 260 360" role="img" focusable="false">
-    <defs>
-      <linearGradient id="aquaSuit" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#14b9e8"/><stop offset=".48" stop-color="#087ac2"/><stop offset="1" stop-color="#063b85"/></linearGradient>
-      <linearGradient id="aquaSuitDark" x1="0" x2="1"><stop offset="0" stop-color="#073965"/><stop offset="1" stop-color="#061f49"/></linearGradient>
-      <linearGradient id="aquaCape" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#0a75c6"/><stop offset="1" stop-color="#063270"/></linearGradient>
-      <linearGradient id="aquaSkin" x1="0" x2="1"><stop offset="0" stop-color="#ffd9bb"/><stop offset="1" stop-color="#eeb28a"/></linearGradient>
-      <radialGradient id="aquaGlow"><stop offset="0" stop-color="#71f0ff" stop-opacity=".9"/><stop offset="1" stop-color="#0ba4da" stop-opacity="0"/></radialGradient>
-      <filter id="aquaShadow" x="-40%" y="-40%" width="180%" height="200%"><feDropShadow dx="0" dy="12" stdDeviation="10" flood-color="#031936" flood-opacity=".28"/></filter>
-      <filter id="eyeGlow"><feGaussianBlur stdDeviation="2" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-    </defs>
-    <ellipse cx="130" cy="332" rx="70" ry="16" fill="#041c38" opacity=".18"/>
-    <circle cx="130" cy="150" r="112" fill="url(#aquaGlow)" opacity=".24"/>
-    <g class="aqua-cape-group"><path d="M162 161 C205 177 227 218 224 302 C198 288 175 270 151 248 Z" fill="url(#aquaCape)"/><path d="M168 172 C193 184 208 211 211 258" fill="none" stroke="#2fa9df" stroke-width="5" opacity=".45" stroke-linecap="round"/></g>
-    <g filter="url(#aquaShadow)" class="aqua-character-body">
-      <path d="M79 167 C94 150 112 144 130 144 C153 144 177 153 188 177 L200 265 C179 286 82 286 61 264 L71 185 Z" fill="url(#aquaSuit)"/>
-      <path d="M87 170 C72 181 59 205 51 236 L72 246 C82 221 92 198 101 188 Z" fill="#eefaff"/>
-      <path d="M173 171 C190 183 202 207 209 236 L188 246 C178 219 169 199 158 189 Z" fill="#eefaff"/>
-      <path d="M50 235 C43 247 44 260 54 271 C61 277 69 274 73 267 L78 247 Z" fill="url(#aquaSkin)"/>
-      <path d="M209 235 C216 248 215 260 206 271 C199 278 190 274 186 267 L181 247 Z" fill="url(#aquaSkin)"/>
-      <path d="M92 268 L88 322 L120 322 L126 273 Z" fill="url(#aquaSuitDark)"/>
-      <path d="M135 273 L142 322 L174 322 L168 268 Z" fill="url(#aquaSuitDark)"/>
-      <path d="M83 318 C95 315 109 315 121 319 L119 334 L80 334 Z" fill="#061d3b"/>
-      <path d="M141 319 C153 315 166 315 177 319 L181 334 L143 334 Z" fill="#061d3b"/>
-      <path d="M102 173 C117 184 145 184 160 173 L154 211 C143 222 116 222 106 211 Z" fill="#f9fdff" opacity=".96"/>
-      <circle cx="130" cy="201" r="24" fill="#fff" stroke="#8de7ff" stroke-width="4"/>
-      <path d="M130 183 C121 195 116 201 116 209 C116 219 122 226 130 226 C138 226 145 219 145 210 C145 201 139 195 130 183 Z" fill="#0a9bd5"/>
-      <path d="M130 192 C126 199 123 203 123 208 C123 213 126 216 130 216" fill="none" stroke="#72ecff" stroke-width="3" stroke-linecap="round"/>
-      <rect x="78" y="258" width="105" height="14" rx="7" fill="#062e5e"/><circle cx="130" cy="265" r="11" fill="#dff8ff" stroke="#0b8ac7" stroke-width="3"/><path d="M130 258 C126 263 124 266 124 269 C124 273 127 275 130 275 C134 275 136 272 136 269 C136 265 134 262 130 258 Z" fill="#079bd6"/>
-    </g>
-    <g class="aqua-head-group" filter="url(#aquaShadow)">
-      <path d="M88 73 C91 37 114 20 143 23 C172 26 188 49 181 82 C175 66 165 57 152 53 C130 61 112 61 94 54 Z" fill="#071f3a"/>
-      <path d="M91 66 C82 92 88 124 104 139 C121 155 148 155 165 139 C181 124 187 94 177 68 C166 52 105 50 91 66 Z" fill="url(#aquaSkin)"/>
-      <path d="M88 68 C95 56 105 49 116 46 C113 37 116 28 126 21 C129 32 136 39 148 43 C151 31 158 24 168 21 C166 35 171 43 183 49 C174 52 169 56 166 62 C145 52 114 53 88 68 Z" fill="#082844"/>
-      <path d="M93 83 C108 72 155 71 176 83 L171 111 C157 121 111 121 96 111 Z" fill="url(#aquaSuit)" stroke="#dffaff" stroke-width="4"/>
-      <path d="M101 88 C111 82 121 81 130 86 C126 101 112 105 102 98 Z" fill="#061e3b" opacity=".92"/>
-      <path d="M139 86 C149 81 160 82 169 88 L167 98 C156 105 143 101 139 86 Z" fill="#061e3b" opacity=".92"/>
-      <ellipse class="aqua-eye-svg left-eye" cx="116" cy="93" rx="4.5" ry="6" fill="#6af0ff" filter="url(#eyeGlow)"/>
-      <ellipse class="aqua-eye-svg right-eye" cx="154" cy="93" rx="4.5" ry="6" fill="#6af0ff" filter="url(#eyeGlow)"/>
-      <path d="M121 126 C128 132 139 132 146 126" fill="none" stroke="#9d583f" stroke-width="3" stroke-linecap="round"/>
-      <path d="M130 103 L126 116 L133 117" fill="none" stroke="#c38362" stroke-width="2" stroke-linecap="round"/>
-    </g>
-    <g class="aqua-tool" transform="translate(26 198) rotate(-10)"><rect x="0" y="0" width="9" height="102" rx="4.5" fill="#d9f7ff"/><path d="M-13 -7 H23 V14 C23 24 15 31 5 31 H4 C-6 31 -13 24 -13 14 Z" fill="#0a8dc7" stroke="#d8f9ff" stroke-width="3"/><path d="M-6 3 H16 M-5 9 H15 M-3 15 H13" stroke="#8aeaff" stroke-width="2" opacity=".8"/></g>
-  </svg>
+  <span class="aqua-character-glow"></span>
+  <picture class="aqua-character-picture">
+    <img class="aqua-character-img aqua-character-full" src="{% static 'asistente_tecnico/characters/aqua-hero.png' %}" alt="" loading="eager" decoding="async">
+    <img class="aqua-character-img aqua-character-face" src="{% static 'asistente_tecnico/characters/aqua-avatar.png' %}" alt="" loading="eager" decoding="async">
+  </picture>
+  <span class="aqua-status-dot"></span>
 </div>
