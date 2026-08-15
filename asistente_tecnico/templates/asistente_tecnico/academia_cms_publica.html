@@ -16,7 +16,7 @@
   <div class="aj-modebar">
     <a class="aj-mode {% if modo == 'aprender' %}active{% endif %}" href="?modo=aprender"><span class="aj-mode-icon">🎓</span><span><strong>Aprender</strong><small class="d-block text-muted">Curso guiado y progreso</small></span></a>
     <a class="aj-mode {% if modo != 'aprender' %}active{% endif %}" href="?modo=consultar"><span class="aj-mode-icon">📚</span><span><strong>Consultar</strong><small class="d-block text-muted">Biblioteca rápida</small></span></a>
-    <a class="aj-mode" href="{% url 'asistente_tecnico:inicio' %}"><span class="aj-mode-icon">🤖</span><span><strong>Resolver</strong><small class="d-block text-muted">Asistente inteligente</small></span></a>
+    <a class="aj-mode" href="{% if base_template == 'asistente_tecnico/base_suscriptor.html' %}{% url 'asistente_tecnico:digital_resolver' %}{% else %}{% url 'asistente_tecnico:inicio' %}{% endif %}"><span class="aj-mode-icon">🤖</span><span><strong>Resolver</strong><small class="d-block text-muted">Asistente inteligente</small></span></a>
   </div>
 
   {% if modo == 'aprender' %}

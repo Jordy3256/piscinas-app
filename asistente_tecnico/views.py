@@ -114,6 +114,11 @@ def _academia_relacionada_con_diagnostico(resultado, limite=6):
 @login_required
 @require_http_methods(["GET", "POST"])
 def asistente_inicio_view(request):
+    # Los suscriptores usan el mismo Motor Técnico JVAQUA, pero a través
+    # de la experiencia guiada de JVAQUA Digital. Cualquier enlace antiguo
+    # al Asistente técnico se redirige aquí en lugar de devolver 403.
+    if _es_suscriptor(request.user):
+        return redirect("asistente_tecnico:digital_resolver")
     if not (_es_trabajador(request.user) or _es_admin(request.user)):
         return HttpResponseForbidden("No autorizado")
     _actualizar_recordatorios(request.user)
