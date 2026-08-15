@@ -9,6 +9,8 @@ urlpatterns = [
     path("digital/resolver/", views.digital_resolver_view, name="digital_resolver"),
     path("digital/piscina/nueva/", views.digital_piscina_form_view, name="digital_piscina_nueva"),
     path("digital/piscina/<int:pk>/editar/", views.digital_piscina_form_view, name="digital_piscina_editar"),
+    path("digital/piscina/<int:pk>/plan/", views.digital_plan_mantenimiento_view, name="digital_plan_mantenimiento"),
+    path("digital/piscina/<int:pk>/plan/registrar/", views.digital_registrar_mantenimiento_view, name="digital_registrar_mantenimiento"),
     path("", views.asistente_inicio_view, name="inicio"),
     path("historial/", views.asistente_historial_view, name="historial"),
     # Compatibilidad: la biblioteca antigua redirige conceptualmente a la biblioteca técnica nueva.

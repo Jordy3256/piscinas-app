@@ -457,10 +457,10 @@ class ConsultaContenidoAcademia(models.Model):
 
 class PerfilSuscriptor(models.Model):
     ESTADOS = [("prueba", "Prueba"), ("activo", "Activo"), ("pausado", "Pausado"), ("vencido", "Vencido")]
-    PLANES = [("digital", "JVAQUA Digital")]
+    PLANES = [("basico", "JVAQUA Digital Básico"), ("plus", "JVAQUA Digital Plus")]
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="perfil_suscriptor")
     estado = models.CharField(max_length=20, choices=ESTADOS, default="prueba", db_index=True)
-    plan = models.CharField(max_length=30, choices=PLANES, default="digital")
+    plan = models.CharField(max_length=30, choices=PLANES, default="basico")
     inicio = models.DateField(default=timezone.localdate)
     prueba_hasta = models.DateField(null=True, blank=True)
     acceso_hasta = models.DateField(null=True, blank=True)
@@ -479,6 +479,14 @@ class PerfilSuscriptor(models.Model):
         if self.estado == "prueba":
             return not self.prueba_hasta or self.prueba_hasta >= hoy
         return False
+
+    @property
+    def limite_piscinas(self):
+        return 30 if self.plan == "plus" else 3
+
+    @property
+    def piscinas_disponibles(self):
+        return max(0, self.limite_piscinas - self.piscinas.filter(activa=True).count())
 
     def __str__(self):
         return f"{self.user} · {self.get_estado_display()}"
@@ -515,3 +523,92 @@ class PiscinaSuscriptor(models.Model):
 
     def __str__(self):
         return f"{self.suscriptor.user} · {self.nombre}"
+
+
+class PlanMantenimientoPiscina(models.Model):
+    FRECUENCIAS = [
+        (1, "1 vez por semana"),
+        (2, "2 veces por semana"),
+    ]
+
+    piscina = models.OneToOneField(
+        PiscinaSuscriptor,
+        on_delete=models.CASCADE,
+        related_name="plan_mantenimiento",
+    )
+    frecuencia_semanal = models.PositiveSmallIntegerField(
+        choices=FRECUENCIAS,
+        default=1,
+    )
+    retrolavado_dias = models.PositiveSmallIntegerField(default=15)
+    arena_deteriorada = models.BooleanField(default=False)
+    activo = models.BooleanField(default=True)
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Plan de mantenimiento de piscina"
+        verbose_name_plural = "Planes de mantenimiento de piscinas"
+
+    def __str__(self):
+        return f"{self.piscina} · {self.get_frecuencia_semanal_display()}"
+
+    @property
+    def frecuencia_retrolavado_dias(self):
+        return 7 if self.arena_deteriorada else self.retrolavado_dias
+
+    def rutina_visita(self, visita_numero=1):
+        """Devuelve la rutina base JVAQUA para una piscina residencial normal.
+
+        No fija dosis químicas: el tratamiento depende de las mediciones reales de
+        pH/CL y del estado del agua evaluado por AQUO.
+        """
+        try:
+            visita_numero = int(visita_numero)
+        except (TypeError, ValueError):
+            visita_numero = 1
+
+        if self.frecuencia_semanal == 2 and visita_numero == 1:
+            return [
+                "Medir pH y cloro",
+                "Aspirar en desagüe o filtración solo si es necesario",
+                "Cepillar paredes y piso",
+                "Recoger basura superficial",
+                "Aplicar tratamiento químico solo si las mediciones lo requieren",
+                "Finalizar mantenimiento",
+            ]
+
+        # Visita única semanal o segunda visita de un plan de dos visitas.
+        return [
+            "Medir pH y cloro",
+            "Aspirar en desagüe o filtración obligatoriamente, según convenga",
+            "Cepillar paredes y piso",
+            "Recoger basura superficial",
+            "Limpiar canastilla de skimmer y bomba",
+            "Aplicar tratamiento químico según las mediciones de pH y cloro",
+            "Finalizar mantenimiento",
+        ]
+
+
+class RegistroMantenimientoPiscina(models.Model):
+    piscina = models.ForeignKey(
+        PiscinaSuscriptor,
+        on_delete=models.CASCADE,
+        related_name="mantenimientos_digitales",
+    )
+    fecha = models.DateField(default=timezone.localdate, db_index=True)
+    visita_numero = models.PositiveSmallIntegerField(default=1)
+    ph = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
+    cloro = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    tareas = models.JSONField(default=list, blank=True)
+    observaciones = models.TextField(blank=True, default="")
+    completado = models.BooleanField(default=True)
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-fecha", "-creado_en"]
+        verbose_name = "Mantenimiento JVAQUA Digital"
+        verbose_name_plural = "Mantenimientos JVAQUA Digital"
+
+    def __str__(self):
+        return f"{self.piscina} · {self.fecha} · visita {self.visita_numero}"

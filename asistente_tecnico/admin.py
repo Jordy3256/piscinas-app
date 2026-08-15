@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import MotorRecomendacion, CasoAsistenteTecnico, ContenidoAcademia, ImagenContenidoAcademia, VersionContenidoAcademia, ExperienciaConocimiento, PerfilSuscriptor, PiscinaSuscriptor
+from .models import MotorRecomendacion, CasoAsistenteTecnico, ContenidoAcademia, ImagenContenidoAcademia, VersionContenidoAcademia, ExperienciaConocimiento, PerfilSuscriptor, PiscinaSuscriptor, PlanMantenimientoPiscina, RegistroMantenimientoPiscina
 
 
 @admin.register(MotorRecomendacion)
@@ -43,3 +43,14 @@ class PiscinaSuscriptorAdmin(admin.ModelAdmin):
     list_display=("nombre","suscriptor","volumen_m3","tipo_filtro","desinfeccion","principal","activa")
     list_filter=("tipo_piscina","tipo_filtro","desinfeccion","principal","activa")
     search_fields=("nombre","suscriptor__user__username","suscriptor__user__email")
+
+
+@admin.register(PlanMantenimientoPiscina)
+class PlanMantenimientoPiscinaAdmin(admin.ModelAdmin):
+    list_display=("piscina","frecuencia_semanal","retrolavado_dias","arena_deteriorada","activo")
+    list_filter=("frecuencia_semanal","arena_deteriorada","activo")
+
+@admin.register(RegistroMantenimientoPiscina)
+class RegistroMantenimientoPiscinaAdmin(admin.ModelAdmin):
+    list_display=("piscina","fecha","visita_numero","ph","cloro","completado")
+    list_filter=("fecha","completado")

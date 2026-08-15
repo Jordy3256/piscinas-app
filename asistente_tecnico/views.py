@@ -12,7 +12,7 @@ from django.views.decorators.http import require_http_methods
 
 from trabajadores.models import Trabajador
 from .engine import DEFAULT_RULES, calcular_recomendacion, diagnosticar_problema_tecnico, PROBLEMAS_TECNICOS
-from .models import CasoAsistenteTecnico, MotorRecomendacion, ContenidoAcademia, ProgresoContenidoAcademia, FavoritoContenidoAcademia, ConsultaContenidoAcademia, PerfilSuscriptor, PiscinaSuscriptor
+from .models import CasoAsistenteTecnico, MotorRecomendacion, ContenidoAcademia, ProgresoContenidoAcademia, FavoritoContenidoAcademia, ConsultaContenidoAcademia, PerfilSuscriptor, PiscinaSuscriptor, PlanMantenimientoPiscina, RegistroMantenimientoPiscina
 from .services import generar_recordatorios_seguimiento
 
 
@@ -1102,7 +1102,8 @@ def digital_inicio_view(request):
     progreso_total = ContenidoAcademia.objects.filter(estado="aprobado").exclude(acceso="interno").exclude(modulo_curso="").count()
     completados = ProgresoContenidoAcademia.objects.filter(user=request.user, completado=True, contenido__estado="aprobado").exclude(contenido__acceso="interno").count()
     porcentaje = round(completados * 100 / progreso_total) if progreso_total else 0
-    return render(request, "asistente_tecnico/digital_inicio.html", {"perfil":perfil,"piscinas":piscinas,"principal":principal,"recientes":recientes,"curso_porcentaje":porcentaje,"base_template":"asistente_tecnico/base_suscriptor.html"})
+    plan = PlanMantenimientoPiscina.objects.filter(piscina=principal, activo=True).first() if principal else None
+    return render(request, "asistente_tecnico/digital_inicio.html", {"perfil":perfil,"piscinas":piscinas,"principal":principal,"recientes":recientes,"curso_porcentaje":porcentaje,"plan_mantenimiento":plan,"base_template":"asistente_tecnico/base_suscriptor.html"})
 
 @login_required
 @require_http_methods(["GET", "POST"])
@@ -1121,7 +1122,11 @@ def digital_piscina_form_view(request, pk=None):
         except (InvalidOperation, ValueError):
             messages.error(request,"Ingresa un volumen válido o las tres dimensiones de la piscina.")
         else:
-            if obj is None: obj=PiscinaSuscriptor(suscriptor=perfil)
+            if obj is None:
+                if perfil.piscinas.filter(activa=True).count() >= perfil.limite_piscinas:
+                    messages.error(request, f"Tu plan {perfil.get_plan_display()} permite hasta {perfil.limite_piscinas} piscinas. Cambia a Plus para administrar hasta 30.")
+                    return redirect("asistente_tecnico:digital_inicio")
+                obj=PiscinaSuscriptor(suscriptor=perfil)
             obj.nombre=(request.POST.get("nombre") or "Mi piscina").strip()[:100]
             obj.tipo_piscina=request.POST.get("tipo_piscina") or "residencial"
             obj.largo_m=largo; obj.ancho_m=ancho; obj.profundidad_m=profundidad; obj.volumen_m3=volumen
@@ -1130,6 +1135,44 @@ def digital_piscina_form_view(request, pk=None):
             messages.success(request,"Piscina guardada. El Asistente ya puede usar estos datos.")
             return redirect("asistente_tecnico:digital_inicio")
     return render(request,"asistente_tecnico/digital_piscina_form.html",{"obj":obj,"tipo_choices":PiscinaSuscriptor.TIPOS,"filtro_choices":PiscinaSuscriptor.FILTROS,"desinfeccion_choices":PiscinaSuscriptor.DESINFECCION})
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def digital_plan_mantenimiento_view(request, pk):
+    perfil = _suscriptor(request.user)
+    if not perfil: return HttpResponseForbidden("No autorizado")
+    piscina = get_object_or_404(PiscinaSuscriptor, pk=pk, suscriptor=perfil, activa=True)
+    plan, _ = PlanMantenimientoPiscina.objects.get_or_create(piscina=piscina)
+    if request.method == "POST":
+        try: frecuencia = int(request.POST.get("frecuencia_semanal") or 1)
+        except ValueError: frecuencia = 1
+        plan.frecuencia_semanal = frecuencia if frecuencia in (1,2) else 1
+        plan.arena_deteriorada = request.POST.get("arena_deteriorada") == "on"
+        plan.retrolavado_dias = 15
+        plan.save()
+        messages.success(request, "AQUO actualizó el plan semanal de esta piscina.")
+        return redirect("asistente_tecnico:digital_plan_mantenimiento", pk=piscina.pk)
+    rutinas = [(i, plan.rutina_visita(i)) for i in range(1, plan.frecuencia_semanal + 1)]
+    historial = piscina.mantenimientos_digitales.all()[:8]
+    return render(request, "asistente_tecnico/digital_plan_mantenimiento.html", {"perfil":perfil,"piscina":piscina,"plan":plan,"rutinas":rutinas,"historial":historial})
+
+
+@login_required
+@require_http_methods(["POST"])
+def digital_registrar_mantenimiento_view(request, pk):
+    perfil = _suscriptor(request.user)
+    if not perfil: return HttpResponseForbidden("No autorizado")
+    piscina = get_object_or_404(PiscinaSuscriptor, pk=pk, suscriptor=perfil, activa=True)
+    plan, _ = PlanMantenimientoPiscina.objects.get_or_create(piscina=piscina)
+    try: visita = int(request.POST.get("visita_numero") or 1)
+    except ValueError: visita = 1
+    def dec(name):
+        try: return Decimal((request.POST.get(name) or "").replace(",",".")) if request.POST.get(name) else None
+        except InvalidOperation: return None
+    RegistroMantenimientoPiscina.objects.create(piscina=piscina, visita_numero=visita, ph=dec("ph"), cloro=dec("cloro"), tareas=plan.rutina_visita(visita), observaciones=(request.POST.get("observaciones") or "").strip())
+    messages.success(request, "Mantenimiento registrado en el historial de la piscina.")
+    return redirect("asistente_tecnico:digital_plan_mantenimiento", pk=piscina.pk)
+
 
 @login_required
 @require_http_methods(["GET", "POST"])

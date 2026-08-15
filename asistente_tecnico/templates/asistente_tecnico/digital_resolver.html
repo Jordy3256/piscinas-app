@@ -14,6 +14,7 @@
 .help-link:hover{background:#eaf7fd;color:#086c9f}
 
 .problem-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:0 0 18px 48px}.problem-choice{border:1px solid #dce8f0;background:#fff;border-radius:16px;padding:12px;text-align:left;font-weight:850;color:#29485f;cursor:pointer;transition:.18s;display:flex;gap:9px;align-items:center}.problem-choice:hover,.problem-choice.active{border-color:#1598ca;background:#eefaff;color:#0871aa;transform:translateY(-1px);box-shadow:0 8px 20px rgba(7,120,184,.08)}.problem-choice i{width:31px;height:31px;border-radius:10px;background:#edf7fc;display:grid;place-items:center;color:#0879b7}.detail-box{margin:0 0 18px 48px;padding:15px;border:1px solid #e0eaf1;border-radius:18px;background:#fff}.detail-box textarea{min-height:88px;border-radius:13px}.action-title{font-weight:900;color:#17334a;margin-bottom:3px}.action-detail{color:#63798c;font-size:.9rem;line-height:1.45}.tech-note{border-radius:16px;background:#eef8fd;border:1px solid #d3ebf7;padding:12px 14px;color:#315a73;font-size:.86rem}.aqua-chat-avatar{background:transparent!important;border-color:transparent!important;box-shadow:none!important}.aqua-chat-avatar:after{right:1px!important;bottom:1px!important}.hero-character .aqua-character-picture{-webkit-mask-image:radial-gradient(ellipse 52% 70% at 58% 48%,#000 48%,rgba(0,0,0,.96) 62%,transparent 82%)!important;mask-image:radial-gradient(ellipse 52% 70% at 58% 48%,#000 48%,rgba(0,0,0,.96) 62%,transparent 82%)!important}.hero-character{mix-blend-mode:normal}.hero-character .aqua-avatar{filter:drop-shadow(0 20px 24px rgba(1,32,67,.22))}
+.resolver-nav{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px 48px}.resolver-nav button,.resolver-nav a{border:1px solid #dce8f0;background:#fff;border-radius:12px;padding:8px 11px;font-weight:800;color:#315a73;text-decoration:none}.resolver-nav button:hover,.resolver-nav a:hover{background:#eef8fd;color:#0871aa}@media(max-width:600px){.resolver-nav{margin-left:0}}
 @media(max-width:900px){.chat-layout{grid-template-columns:1fr}.case-card{position:static;order:-1}.chat-body{min-height:430px}}@media(max-width:600px){.entry-choice-grid{grid-template-columns:1fr;margin-left:0}.problem-grid{grid-template-columns:1fr;margin-left:0}.detail-box{margin-left:0}.resolver-shell{margin:-4px}.assistant-head{align-items:flex-start}.assistant-title h1{font-size:1.3rem}.chat-card,.case-card{border-radius:21px}.chat-body{padding:16px}.bubble{max-width:86%;font-size:.91rem}.resolver-choices,.measure-box{margin-left:0}.resolver-choice{padding:9px 11px;font-size:.86rem}.case-meta{grid-template-columns:1fr 1fr}.dose-grid{grid-template-columns:1fr}.desktop-sub{display:none}}
 </style>
 {% endblock %}
@@ -41,6 +42,7 @@
             <button type="button" class="entry-choice" data-entry="agua"><i class="bi bi-droplet-half"></i><span><strong>Es un problema con el agua</strong><small>Color, turbidez, pH, cloro o tratamiento.</small></span></button>
             <button type="button" class="entry-choice" data-entry="otro"><i class="bi bi-tools"></i><span><strong>Es otro problema</strong><small>Bomba, filtro, presión, fugas, calefacción u otros equipos.</small></span></button>
           </div>
+          <div class="resolver-nav"><button type="button" id="backStepBtn" disabled><i class="bi bi-arrow-left me-1"></i>Volver</button><a id="newDiagnosisBtn" href="{% url 'asistente_tecnico:digital_resolver' %}?piscina={{piscina.pk}}"><i class="bi bi-arrow-clockwise me-1"></i>Nuevo diagnóstico</a></div>
 
           <div id="waterConversation" class="d-none">
             <div class="msg-row assistant"><div class="aqua-chat-avatar small">{% include 'asistente_tecnico/partials/aqua_hero.html' %}</div><div class="bubble">Perfecto. Para revisar el agua necesito primero dos datos: <strong>pH</strong> y <strong>cloro libre</strong>. Si no sabes qué son o cómo medirlos, te enseño antes de continuar.</div></div>
@@ -99,46 +101,22 @@
 <script>
 const aquaMiniTemplate=document.getElementById('aquaMiniTemplate')?.innerHTML||'';
 const categoryField=document.getElementById('categoryField'),stateField=document.getElementById('estadoField');
-const entryButtons=document.querySelectorAll('#entryChoices .entry-choice');
-const problemButtons=document.querySelectorAll('#problemChoices .problem-choice');
-const waterBox=document.getElementById('waterConversation'),waterStateBox=document.getElementById('waterStateConversation'),otherBox=document.getElementById('otherConversation'),techBox=document.getElementById('technicalConversation');
-const savedKey='jvaqua_resolver_'+({{piscina.pk|default:"0"}});
-function addUserMessage(afterEl,text){afterEl.insertAdjacentHTML('afterend',`<div class="msg-row user"><div class="bubble">${text}</div></div>`)}
-function saveWaterDraft(){try{sessionStorage.setItem(savedKey,JSON.stringify({entry:'agua',ph:document.getElementById('phInput')?.value||'',cl:document.getElementById('clInput')?.value||'',state:stateField?.value||''}))}catch(e){}}
-entryButtons.forEach(btn=>btn.addEventListener('click',()=>{
-  entryButtons.forEach(x=>{x.classList.remove('active');x.disabled=true});btn.classList.add('active');
-  addUserMessage(btn.closest('.entry-choice-grid'),btn.dataset.entry==='agua'?'Es un problema con el estado del agua.':'Es otro problema de la piscina.');
-  if(btn.dataset.entry==='agua'){categoryField.value='agua';waterBox.classList.remove('d-none');saveWaterDraft();setTimeout(()=>waterBox.scrollIntoView({behavior:'smooth',block:'center'}),80)}
-  else{categoryField.value='';otherBox.classList.remove('d-none');try{sessionStorage.setItem(savedKey,JSON.stringify({entry:'otro'}))}catch(e){};setTimeout(()=>otherBox.scrollIntoView({behavior:'smooth',block:'center'}),80)}
-}));
-document.getElementById('continueWaterBtn')?.addEventListener('click',()=>{
-  const ph=document.getElementById('phInput').value,cl=document.getElementById('clInput').value;
-  if(!ph||!cl){document.getElementById('phInput').focus();return}
-  addUserMessage(document.querySelector('#waterConversation .measure-box'),`pH ${ph} · Cloro ${cl} ppm`);
-  document.getElementById('continueWaterBtn').disabled=true;waterStateBox.classList.remove('d-none');saveWaterDraft();
-  setTimeout(()=>waterStateBox.scrollIntoView({behavior:'smooth',block:'center'}),80)
-});
-const choices=document.querySelectorAll('#waterChoices .resolver-choice');
-choices.forEach(btn=>btn.addEventListener('click',()=>{
-  choices.forEach(x=>{x.classList.remove('active');x.disabled=true});btn.classList.add('active');stateField.value=btn.dataset.value;
-  addUserMessage(document.getElementById('waterChoices'),btn.textContent.trim());document.getElementById('waterAnalyzeBox').classList.remove('d-none');saveWaterDraft();
-  setTimeout(()=>document.getElementById('waterAnalyzeBox').scrollIntoView({behavior:'smooth',block:'center'}),80)
-}));
-problemButtons.forEach(btn=>btn.addEventListener('click',()=>{
-  problemButtons.forEach(x=>{x.classList.remove('active');x.disabled=true});btn.classList.add('active');categoryField.value=btn.dataset.category;
-  addUserMessage(btn.closest('.problem-grid'),btn.textContent.trim());techBox.classList.remove('d-none');
-  try{sessionStorage.setItem(savedKey,JSON.stringify({entry:'otro',category:btn.dataset.category}))}catch(e){}
-  setTimeout(()=>techBox.scrollIntoView({behavior:'smooth',block:'center'}),80)
-}));
-document.querySelectorAll('.academy-help').forEach(a=>a.addEventListener('click',()=>{saveWaterDraft();}));
-(function restoreDraft(){try{const d=JSON.parse(sessionStorage.getItem(savedKey)||'null');if(!d)return;if(d.entry==='agua'){entryButtons.forEach(x=>{x.disabled=true;if(x.dataset.entry==='agua')x.classList.add('active')});waterBox.classList.remove('d-none');categoryField.value='agua';if(d.ph)document.getElementById('phInput').value=d.ph;if(d.cl)document.getElementById('clInput').value=d.cl;if(d.ph&&d.cl)waterStateBox.classList.remove('d-none');if(d.state){stateField.value=d.state;choices.forEach(x=>{x.disabled=true;if(x.dataset.value===d.state)x.classList.add('active')});document.getElementById('waterAnalyzeBox').classList.remove('d-none')}}}catch(e){}})();
-document.getElementById('resolverForm')?.addEventListener('submit',e=>{
-  const technical=categoryField.value!=='agua';
-  if(!technical&&(!stateField.value||!document.getElementById('phInput').value||!document.getElementById('clInput').value)){e.preventDefault();return}
-  if(technical&&!categoryField.value){e.preventDefault();return}
-  try{sessionStorage.removeItem(savedKey)}catch(err){}
-  const b=technical?document.getElementById('technicalAnalyzeBtn'):document.getElementById('analyzeBtn');
-  if(b){b.disabled=true;b.innerHTML='<span class="spinner-border spinner-border-sm me-2"></span>AQUO está analizando…';b.closest(technical?'.detail-box':'#waterAnalyzeBox').insertAdjacentHTML('afterend','<div class="msg-row assistant">'+aquaMiniTemplate+'<div class="bubble"><span class="typing"><i></i><i></i><i></i></span> &nbsp;Estoy analizando la información y siguiendo el diagnóstico más adecuado…</div></div>')}
-});
+const entryButtons=[...document.querySelectorAll('#entryChoices .entry-choice')],problemButtons=[...document.querySelectorAll('#problemChoices .problem-choice')],choices=[...document.querySelectorAll('#waterChoices .resolver-choice')];
+const waterBox=document.getElementById('waterConversation'),waterStateBox=document.getElementById('waterStateConversation'),otherBox=document.getElementById('otherConversation'),techBox=document.getElementById('technicalConversation'),backBtn=document.getElementById('backStepBtn');
+const savedKey='jvaqua_resolver_'+({{piscina.pk|default:"0"}}); let step=0, branch='';
+function addUserMessage(afterEl,text){afterEl.insertAdjacentHTML('afterend',`<div class="msg-row user dynamic-msg"><div class="bubble">${text}</div></div>`)}
+function clearDynamic(){document.querySelectorAll('.dynamic-msg').forEach(x=>x.remove())}
+function setEnabled(nodes,on=true){nodes.forEach(x=>{x.disabled=!on;if(on)x.classList.remove('active')})}
+function hideFrom(n){if(n<=1){waterBox.classList.add('d-none');otherBox.classList.add('d-none')}if(n<=2){waterStateBox.classList.add('d-none');techBox.classList.add('d-none')}if(n<=3)document.getElementById('waterAnalyzeBox')?.classList.add('d-none')}
+function saveDraft(){try{sessionStorage.setItem(savedKey,JSON.stringify({step,branch,category:categoryField?.value||'',ph:document.getElementById('phInput')?.value||'',cl:document.getElementById('clInput')?.value||'',state:stateField?.value||''}))}catch(e){}}
+function updateBack(){if(backBtn)backBtn.disabled=step===0}
+entryButtons.forEach(btn=>btn.addEventListener('click',()=>{clearDynamic();setEnabled(entryButtons,false);btn.classList.add('active');branch=btn.dataset.entry;step=1;addUserMessage(btn.closest('.entry-choice-grid'),branch==='agua'?'Es un problema con el estado del agua.':'Es otro problema de la piscina.');if(branch==='agua'){categoryField.value='agua';waterBox.classList.remove('d-none')}else{categoryField.value='';otherBox.classList.remove('d-none')}updateBack();saveDraft()}));
+document.getElementById('continueWaterBtn')?.addEventListener('click',()=>{const ph=document.getElementById('phInput').value,cl=document.getElementById('clInput').value;if(!ph||!cl){document.getElementById('phInput').focus();return}addUserMessage(document.querySelector('#waterConversation .measure-box'),`pH ${ph} · Cloro ${cl} ppm`);document.getElementById('continueWaterBtn').disabled=true;waterStateBox.classList.remove('d-none');step=2;updateBack();saveDraft()});
+choices.forEach(btn=>btn.addEventListener('click',()=>{setEnabled(choices,false);btn.classList.add('active');stateField.value=btn.dataset.value;addUserMessage(document.getElementById('waterChoices'),btn.textContent.trim());document.getElementById('waterAnalyzeBox').classList.remove('d-none');step=3;updateBack();saveDraft()}));
+problemButtons.forEach(btn=>btn.addEventListener('click',()=>{setEnabled(problemButtons,false);btn.classList.add('active');categoryField.value=btn.dataset.category;addUserMessage(btn.closest('.problem-grid'),btn.textContent.trim());techBox.classList.remove('d-none');step=2;updateBack();saveDraft()}));
+backBtn?.addEventListener('click',()=>{clearDynamic();if(step>=3&&branch==='agua'){step=2;stateField.value='';setEnabled(choices,true);document.getElementById('waterAnalyzeBox').classList.add('d-none')}else if(step===2&&branch==='agua'){step=1;waterStateBox.classList.add('d-none');document.getElementById('continueWaterBtn').disabled=false}else if(step===2&&branch==='otro'){step=1;techBox.classList.add('d-none');categoryField.value='';setEnabled(problemButtons,true)}else if(step===1){step=0;branch='';categoryField.value='agua';hideFrom(1);setEnabled(entryButtons,true)}updateBack();saveDraft()});
+document.getElementById('newDiagnosisBtn')?.addEventListener('click',()=>{try{sessionStorage.removeItem(savedKey)}catch(e){}});document.querySelectorAll('.academy-help').forEach(a=>a.addEventListener('click',saveDraft));
+document.getElementById('resolverForm')?.addEventListener('submit',e=>{const technical=categoryField.value!=='agua';if(!technical&&(!stateField.value||!document.getElementById('phInput').value||!document.getElementById('clInput').value)){e.preventDefault();return}if(technical&&!categoryField.value){e.preventDefault();return}try{sessionStorage.removeItem(savedKey)}catch(err){}const b=technical?document.getElementById('technicalAnalyzeBtn'):document.getElementById('analyzeBtn');if(b){b.disabled=true;b.innerHTML='<span class="spinner-border spinner-border-sm me-2"></span>AQUO está analizando…';}});
+updateBack();
 </script>
 {% endblock %}
