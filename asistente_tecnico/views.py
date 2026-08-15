@@ -11,7 +11,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from trabajadores.models import Trabajador
-from .engine import DEFAULT_RULES, calcular_recomendacion
+from .engine import DEFAULT_RULES, calcular_recomendacion, diagnosticar_problema_tecnico, PROBLEMAS_TECNICOS
 from .models import CasoAsistenteTecnico, MotorRecomendacion, ContenidoAcademia, ProgresoContenidoAcademia, FavoritoContenidoAcademia, ConsultaContenidoAcademia, PerfilSuscriptor, PiscinaSuscriptor
 from .services import generar_recordatorios_seguimiento
 
@@ -1137,18 +1137,22 @@ def digital_resolver_view(request):
     perfil=_suscriptor(request.user)
     if not perfil: return HttpResponseForbidden("No autorizado")
     piscinas=perfil.piscinas.filter(activa=True)
-    piscina=None; resultado=None; caso=None
+    piscina=None; resultado=None; caso=None; categoria_consulta="agua"; detalle_problema=""
     pid=request.POST.get("piscina_id") or request.GET.get("piscina")
     if pid: piscina=piscinas.filter(pk=pid).first()
     if not piscina: piscina=piscinas.filter(principal=True).first() or piscinas.first()
     if request.method=="POST":
+        categoria_consulta=(request.POST.get("categoria_consulta") or "agua").strip()
+        detalle_problema=(request.POST.get("detalle_problema") or "").strip()
         if not piscina:
-            messages.error(request,"Primero registra tu piscina para que pueda calcular las cantidades correctamente.")
+            messages.error(request,"Primero registra tu piscina para personalizar correctamente el diagnóstico.")
+        elif categoria_consulta != "agua":
+            resultado=diagnosticar_problema_tecnico(categoria_consulta, detalle_problema)
         else:
             try:
                 ph=Decimal((request.POST.get("ph") or "").replace(",",".")); cloro=Decimal((request.POST.get("cloro") or "").replace(",","."))
             except InvalidOperation:
-                messages.error(request,"Necesito los valores de pH y cloro para darte una recomendación segura.")
+                messages.error(request,"Necesito los valores de pH y cloro para darte una recomendación química segura.")
             else:
                 estado=request.POST.get("estado_agua") or ""
                 if estado not in {x[0] for x in CasoAsistenteTecnico.ESTADO_AGUA_CHOICES}:
@@ -1156,4 +1160,10 @@ def digital_resolver_view(request):
                 else:
                     motor=_motor_activo(); resultado=calcular_recomendacion(piscina.volumen_m3,ph,cloro,estado,piscina.tipo_piscina,motor.reglas)
                     caso=CasoAsistenteTecnico.objects.create(user=request.user,motor=motor,volumen_m3=piscina.volumen_m3,ph_inicial=ph,cloro_inicial=cloro,estado_agua=estado,tipo_piscina=piscina.tipo_piscina,diagnostico=resultado["diagnostico"],tipo_tratamiento=resultado["tipo_tratamiento"],prioridad=resultado["prioridad"],resumen=resultado["resumen"],protocolo=resultado["protocolo"],productos_sugeridos=resultado["productos_sugeridos"],explicaciones=resultado["explicaciones"],advertencias=resultado["advertencias"],seguimiento_programado_para=timezone.now()+timedelta(hours=resultado["seguimiento_horas"]))
-    return render(request,"asistente_tecnico/digital_resolver.html",{"piscinas":piscinas,"piscina":piscina,"resultado":resultado,"caso":caso,"estado_choices":CasoAsistenteTecnico.ESTADO_AGUA_CHOICES,"articulos_relacionados":_academia_relacionada_con_diagnostico(resultado)})
+    return render(request,"asistente_tecnico/digital_resolver.html",{
+        "piscinas":piscinas,"piscina":piscina,"resultado":resultado,"caso":caso,
+        "estado_choices":CasoAsistenteTecnico.ESTADO_AGUA_CHOICES,
+        "problemas_tecnicos":PROBLEMAS_TECNICOS,
+        "categoria_consulta":categoria_consulta,"detalle_problema":detalle_problema,
+        "articulos_relacionados":_academia_relacionada_con_diagnostico(resultado),
+    })

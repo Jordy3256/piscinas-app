@@ -210,3 +210,154 @@ def calcular_recomendacion(volumen, ph, cloro, estado_agua, tipo_piscina, reglas
         "seguimiento_horas": int(r.get("seguimiento_horas", 24)),
         "reglas_usadas": r,
     }
+
+# --- AQUO 2.0 · diagnósticos técnicos guiados ---------------------------------
+PROBLEMAS_TECNICOS = {
+    "bomba_no_succiona": "La bomba enciende pero no succiona",
+    "bomba_no_enciende": "La bomba no enciende",
+    "presion_alta": "La presión del filtro está alta",
+    "presion_baja": "La presión o el caudal están bajos",
+    "aire_circuito": "Hay aire o burbujas en el circuito",
+    "fuga_agua": "La piscina pierde agua",
+    "filtro_sucio": "El agua no filtra bien",
+    "calentador": "Problema con calefacción / bomba de calor",
+    "clorador_salino": "Problema con clorador salino",
+    "iluminacion": "Problema con iluminación",
+    "manchas_incrustaciones": "Manchas o incrustaciones",
+    "otro": "Otro problema",
+}
+
+
+def diagnosticar_problema_tecnico(categoria, detalle="", respuestas=None):
+    """Orientación segura para problemas no químicos. No sustituye medición eléctrica ni reparación invasiva."""
+    respuestas = respuestas or {}
+    detalle = (detalle or "").strip()
+    base_warn = [
+        "No desmontes equipos presurizados ni abras componentes eléctricos energizados.",
+        "Si detectas olor a quemado, cables calientes, chispas, fuga eléctrica o riesgo para personas, corta la energía desde un punto seguro y solicita revisión profesional.",
+        "Haz una comprobación por vez y conserva la posición original de válvulas antes de cambiarlas.",
+    ]
+    data = {
+        "tipo_tratamiento": "diagnostico_tecnico", "prioridad": "media", "productos_sugeridos": [],
+        "explicaciones": {}, "seguimiento_horas": 0, "advertencias": base_warn,
+    }
+    configs = {
+        "bomba_no_succiona": (
+            "Pérdida de cebado o restricción en succión",
+            "La bomba funciona, pero no consigue mover agua correctamente. Las causas más frecuentes están antes de la bomba: nivel bajo, entrada de aire, canastilla obstruida, válvula cerrada o prefiltro sin agua.",
+            [
+                ("Verifica el nivel de agua", "El agua debe cubrir adecuadamente el skimmer; si está demasiado baja, puede entrar aire."),
+                ("Revisa skimmer y canastilla", "Retira residuos y confirma que la compuerta del skimmer pueda moverse libremente."),
+                ("Comprueba las válvulas de succión", "Confirma que la línea que debe alimentar la bomba esté abierta. No cambies varias válvulas a la vez."),
+                ("Revisa el prefiltro de la bomba", "Con el equipo apagado y sin presión, comprueba que la canastilla esté limpia y que la tapa/sello estén correctamente asentados."),
+                ("Ceba y observa", "Llena el prefiltro según el procedimiento del equipo, cierra correctamente y enciende. Si no recupera caudal o entra aire continuamente, requiere revisión de succión/sellos."),
+            ]),
+        "bomba_no_enciende": (
+            "Falla de alimentación, protección o motor",
+            "Si la bomba no enciende, primero hay que diferenciar un problema de programación/alimentación de una falla eléctrica o mecánica del motor.",
+            [
+                ("Confirma programación y controles", "Verifica que el temporizador o automatización esté ordenando encendido y que no exista un modo OFF."),
+                ("Observa sin desmontar", "Comprueba si hay pantalla, alarma, zumbido, olor extraño o disparo de protección."),
+                ("No intervengas internamente", "Si hay energía disponible pero el motor no arranca, zumba, se calienta o dispara la protección, detén las pruebas y solicita técnico eléctrico/equipos."),
+            ]),
+        "presion_alta": (
+            "Restricción en filtración",
+            "Una presión claramente superior a la presión limpia habitual suele indicar que el filtro o la salida del sistema ofrecen demasiada resistencia.",
+            [
+                ("Compara con la presión habitual", "La referencia útil es la presión del mismo sistema cuando el filtro está limpio."),
+                ("Revisa el retorno", "Confirma que las válvulas de retorno estén en posición correcta y que no exista una obstrucción evidente."),
+                ("Limpia el medio filtrante", "En filtro de arena realiza retrolavado/enjuague cuando corresponda; en cartucho, limpia el elemento siguiendo el fabricante."),
+                ("Vuelve a medir", "Si la presión continúa anormalmente alta después de limpiar, evita forzar el sistema y solicita revisión del filtro/multiválvula/tubería."),
+            ]),
+        "presion_baja": (
+            "Caudal insuficiente o restricción en succión",
+            "Presión y caudal bajos suelen apuntar a falta de agua hacia la bomba, obstrucción antes de ella, entrada de aire o pérdida de rendimiento.",
+            [
+                ("Revisa nivel y skimmer", "Confirma nivel suficiente y elimina residuos de skimmer/canastillas."),
+                ("Observa el prefiltro", "Si ves aire persistente, busca una entrada de aire en tapa, uniones o línea de succión."),
+                ("Comprueba válvulas", "Verifica que las líneas necesarias estén abiertas."),
+                ("Escala si persiste", "Si el circuito está libre y el caudal sigue bajo, puede existir obstrucción interna o problema de impulsor/bomba que requiere revisión técnica."),
+            ]),
+        "aire_circuito": (
+            "Entrada de aire en el lado de succión",
+            "Burbujas persistentes en el prefiltro o retornos suelen indicar que el sistema está aspirando aire antes de la bomba o que el nivel de agua es insuficiente.",
+            [
+                ("Comprueba el nivel", "Evita que el skimmer forme remolino y aspire aire."),
+                ("Revisa tapa y sello del prefiltro", "Con el equipo apagado, limpia superficies de cierre y comprueba que el sello esté correctamente colocado."),
+                ("Revisa uniones y válvulas visibles", "Busca conexiones flojas o señales de entrada de aire sin desmontar la instalación."),
+                ("Observa después del cebado", "Si las burbujas regresan continuamente, solicita prueba específica de la línea de succión."),
+            ]),
+        "fuga_agua": (
+            "Pérdida de agua por confirmar",
+            "Antes de asumir una fuga estructural hay que separar evaporación, salpicaduras y pérdidas asociadas al sistema de filtración.",
+            [
+                ("Marca el nivel", "Registra el nivel y compáralo durante un periodo sin reposición automática."),
+                ("Inspecciona equipos y desagües", "Busca humedad en bomba, filtro, uniones, válvula selectora y línea de desagüe."),
+                ("Compara equipo encendido/apagado", "Si la pérdida cambia mucho según opere la bomba, esa diferencia orienta hacia tubería/equipos."),
+                ("Solicita prueba de fuga", "Si la pérdida es sostenida y supera lo esperable, requiere diagnóstico de estanqueidad; evita romper superficies sin localizar primero la fuga."),
+            ]),
+        "filtro_sucio": (
+            "Filtración insuficiente",
+            "Si el agua no aclara aunque la química sea razonable, hay que comprobar caudal, presión, tiempo de filtración y condición del medio filtrante.",
+            [
+                ("Comprueba circulación", "Confirma que exista caudal perceptible en retornos y que la bomba permanezca cebada."),
+                ("Lee el manómetro", "Compara la presión con el valor habitual del filtro limpio."),
+                ("Limpia el filtro", "Realiza el procedimiento adecuado al tipo de filtro y vuelve a comprobar presión/caudal."),
+                ("Evalúa el medio filtrante", "Si el rendimiento sigue siendo pobre, revisa condición de arena/cartucho y posibles canales, roturas u obstrucciones."),
+            ]),
+        "calentador": (
+            "Calefacción sin rendimiento o con bloqueo",
+            "Una bomba de calor o calentador puede dejar de calentar por falta de flujo, consigna/configuración, condiciones ambientales o una alarma propia del equipo.",
+            [
+                ("Confirma flujo de agua", "Muchos equipos bloquean calefacción cuando el caudal es insuficiente."),
+                ("Revisa consigna y modo", "Comprueba temperatura objetivo, modo de operación y temporización."),
+                ("Registra la alarma", "Si aparece un código, anótalo junto con marca/modelo para consultar el manual correspondiente."),
+                ("No abras el equipo", "Problemas de refrigerante, gas, resistencias o electricidad requieren servicio calificado."),
+            ]),
+        "clorador_salino": (
+            "Producción de cloro insuficiente o alarma del clorador",
+            "El clorador depende de flujo, salinidad, estado de la celda y configuración. Una alarma no significa automáticamente que la celda esté dañada.",
+            [
+                ("Comprueba circulación", "Verifica que exista flujo suficiente y que no haya alarma de FLOW."),
+                ("Revisa salinidad y configuración", "Compara la lectura con el rango indicado por el fabricante del equipo."),
+                ("Inspecciona la celda según manual", "Busca incrustación visible y sigue únicamente el procedimiento de limpieza del fabricante."),
+                ("Mide el agua", "Confirma cloro real con un kit; no dependas solo del porcentaje mostrado por el equipo."),
+            ]),
+        "iluminacion": (
+            "Falla de iluminación que requiere enfoque eléctrico seguro",
+            "La iluminación de piscina combina electricidad y agua. AQUO puede ayudarte a identificar síntomas, pero no debe guiar reparaciones eléctricas internas al propietario.",
+            [
+                ("Identifica el alcance", "Comprueba si falla una sola luminaria o todo el circuito y si el control/automatización responde."),
+                ("No manipules conexiones energizadas", "No abras cajas, nichos, transformadores ni luminarias con energía aplicada."),
+                ("Solicita revisión calificada", "Si la protección dispara, hay humedad, parpadeos anormales o ausencia de alimentación, requiere electricista/técnico de piscina calificado."),
+            ]),
+        "manchas_incrustaciones": (
+            "Depósitos minerales o manchas por identificar",
+            "El color, textura y ubicación ayudan a diferenciar incrustación cálcica, metales y material orgánico. No conviene aplicar ácidos o removedores sin identificar primero la causa.",
+            [
+                ("Describe color y textura", "Indica si es blanca/áspera, marrón/rojiza, verdosa, negra u orgánica y dónde aparece."),
+                ("Mide el agua", "pH y, cuando sea posible, alcalinidad/dureza ayudan a interpretar depósitos minerales."),
+                ("Evita tratamientos agresivos a ciegas", "No apliques ácido concentrado ni productos para metales sin confirmar compatibilidad con el acabado."),
+                ("Documenta con fotografías", "Una imagen del acabado y la mancha permite orientar mejor una revisión profesional."),
+            ]),
+        "otro": (
+            "Caso técnico por precisar",
+            "AQUO necesita algunos detalles adicionales para clasificar correctamente el problema y evitar recomendar una acción que no corresponda.",
+            [
+                ("Describe el síntoma", "Indica qué equipo o parte de la piscina está afectada, qué ocurre y desde cuándo."),
+                ("Indica qué cambió", "Menciona mantenimiento reciente, cortes de energía, lluvias, reparaciones o productos aplicados."),
+                ("Registra señales", "Anota ruidos, alarmas, presión, caudal, fugas o cualquier cambio visible."),
+                ("Evita intervenir si hay riesgo", "Ante electricidad, presión, gas, productos incompatibles o daño estructural, detén la intervención y solicita un profesional."),
+            ]),
+    }
+    diag, resumen, pasos = configs.get(categoria, configs["otro"])
+    if detalle:
+        resumen += f" Información reportada: {detalle[:500]}"
+    data.update({
+        "diagnostico": diag,
+        "resumen": resumen,
+        "protocolo": [{"paso": i, "titulo": t, "detalle": d} for i, (t, d) in enumerate(pasos, 1)],
+    })
+    if categoria in {"bomba_no_enciende", "iluminacion"}:
+        data["prioridad"] = "alta"
+    return data
