@@ -58,22 +58,80 @@
   .ati-related{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.ati-related a{display:block;text-decoration:none;color:inherit}.ati-related-card{height:100%;padding:15px;border:1px solid #e0e9f3;border-radius:17px;background:#fff;transition:.18s ease}.ati-related-card:hover{transform:translateY(-2px);border-color:#bcd9f7;box-shadow:0 10px 20px rgba(40,83,127,.08)}
   .ati-recent{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:13px 0;border-top:1px solid #edf1f5;text-decoration:none;color:inherit}.ati-recent:hover .ati-recent-title{color:var(--ati-blue)}
 
-  @media(max-width:860px){.ati-mini-grid{grid-template-columns:1fr}.ati-flow{grid-template-columns:repeat(5,minmax(95px,1fr));overflow-x:auto;padding-bottom:5px}.ati-related{grid-template-columns:1fr}}
-  @media(max-width:720px){.ati-wrap{padding:0 1px 18px}.ati-grid,.ati-grid-3{grid-template-columns:1fr}.ati-hero{border-radius:20px;padding:20px}.ati-section{padding:16px}.ati-card{border-radius:20px}.ati-result-head{border-radius:20px 20px 0 0;padding:17px}.ati-result-body{padding:17px}.volume-toggle{width:100%}.volume-toggle .btn{flex:1}.ati-nav{width:100%}.ati-nav .btn{flex:1}.prod .d-flex{align-items:flex-start}.prod-dose{font-size:.8rem}.ati-flow-item{min-width:95px}.ati-hero p{font-size:.9rem}}
+  .ati-hero-layout{display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:22px;align-items:center}
+  .ati-assistant-stage{position:relative;min-height:210px;display:grid;place-items:center}
+  .ati-orbit{position:absolute;width:205px;height:205px;border-radius:50%;border:1px solid rgba(255,255,255,.18);box-shadow:inset 0 0 40px rgba(97,227,255,.08);animation:atiOrbit 9s linear infinite}
+  .ati-orbit:before,.ati-orbit:after{content:"";position:absolute;border-radius:50%;background:#70efff;box-shadow:0 0 16px #70efff}
+  .ati-orbit:before{width:7px;height:7px;top:20px;left:36px}.ati-orbit:after{width:5px;height:5px;right:28px;bottom:34px}
+  .ati-bot{position:relative;width:138px;height:154px;filter:drop-shadow(0 18px 28px rgba(0,13,39,.25));animation:atiFloat 3.8s ease-in-out infinite}
+  .ati-bot-halo{position:absolute;inset:16px 20px 14px;border-radius:50%;background:radial-gradient(circle,rgba(77,231,255,.32),rgba(77,231,255,0) 68%);filter:blur(5px)}
+  .ati-bot svg{position:relative;z-index:2;width:100%;height:100%;overflow:visible}
+  .ati-bot-eye{transform-origin:center;animation:atiBlink 5.5s infinite}
+  .ati-bot-core{animation:atiCore 2.2s ease-in-out infinite}
+  .ati-bot-status{position:absolute;right:-6px;top:13px;z-index:4;width:33px;height:33px;border-radius:50%;display:grid;place-items:center;background:#fff;color:#0d7acc;box-shadow:0 8px 22px rgba(0,30,70,.24);font-size:.9rem}
+  .ati-speech{position:absolute;right:-8px;bottom:3px;z-index:5;width:205px;padding:10px 12px;border-radius:14px 14px 4px 14px;background:rgba(255,255,255,.96);color:#17334e;box-shadow:0 12px 30px rgba(0,29,63,.18);font-size:.75rem;line-height:1.35;font-weight:700}
+  .ati-speech small{display:block;color:#6d8093;font-weight:600;margin-top:3px}
+  .ati-assistant-chip{display:flex;align-items:center;gap:12px;padding:12px 14px;margin-bottom:16px;border:1px solid #dceafa;border-radius:18px;background:linear-gradient(135deg,#f5fbff,#f9fdff);box-shadow:0 6px 18px rgba(30,88,143,.05)}
+  .ati-assistant-avatar{width:48px;height:48px;border-radius:15px;background:linear-gradient(135deg,#0d6efd,#15b5d7);display:grid;place-items:center;box-shadow:0 8px 20px rgba(13,110,253,.18);flex:none}
+  .ati-assistant-avatar svg{width:36px;height:36px}.ati-assistant-avatar .ati-bot-eye{animation:atiBlink 5.5s infinite}
+  .ati-assistant-copy strong{display:block;font-size:.9rem}.ati-assistant-copy span{display:block;color:#6c8095;font-size:.8rem;line-height:1.4;margin-top:2px}
+  .ati-is-analyzing .ati-bot{animation:atiThinking 1.05s ease-in-out infinite}.ati-is-analyzing .ati-bot-core{animation:atiCoreFast .7s ease-in-out infinite}.ati-is-analyzing .ati-bot-status{color:#7a46d8}.ati-is-analyzing .ati-orbit{animation-duration:2.4s}
+  .ati-is-analyzing .ati-primary{opacity:.82;pointer-events:none}.ati-is-analyzing .ati-primary i{animation:atiSpin 1s linear infinite}
+  @keyframes atiFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}
+  @keyframes atiThinking{0%,100%{transform:translateY(0) rotate(-1deg)}50%{transform:translateY(-6px) rotate(1deg)}}
+  @keyframes atiOrbit{to{transform:rotate(360deg)}}
+  @keyframes atiBlink{0%,44%,48%,100%{transform:scaleY(1)}46%{transform:scaleY(.12)}}
+  @keyframes atiCore{0%,100%{opacity:.68}50%{opacity:1;filter:drop-shadow(0 0 6px #68efff)}}
+  @keyframes atiCoreFast{0%,100%{opacity:.5}50%{opacity:1;filter:drop-shadow(0 0 10px #8e74ff)}}
+  @keyframes atiSpin{to{transform:rotate(360deg)}}
+
+  @media(max-width:860px){.ati-hero-layout{grid-template-columns:1fr}.ati-assistant-stage{min-height:180px}.ati-speech{right:calc(50% - 112px);bottom:-2px}.ati-mini-grid{grid-template-columns:1fr}.ati-flow{grid-template-columns:repeat(5,minmax(95px,1fr));overflow-x:auto;padding-bottom:5px}.ati-related{grid-template-columns:1fr}}
+  @media(max-width:720px){.ati-assistant-stage{min-height:164px}.ati-orbit{width:170px;height:170px}.ati-bot{width:116px;height:132px}.ati-speech{width:180px;font-size:.7rem}.ati-wrap{padding:0 1px 18px}.ati-grid,.ati-grid-3{grid-template-columns:1fr}.ati-hero{border-radius:20px;padding:20px}.ati-section{padding:16px}.ati-card{border-radius:20px}.ati-result-head{border-radius:20px 20px 0 0;padding:17px}.ati-result-body{padding:17px}.volume-toggle{width:100%}.volume-toggle .btn{flex:1}.ati-nav{width:100%}.ati-nav .btn{flex:1}.prod .d-flex{align-items:flex-start}.prod-dose{font-size:.8rem}.ati-flow-item{min-width:95px}.ati-hero p{font-size:.9rem}}
 </style>
 <div class="ati-wrap">
   <div class="ati-hero">
     <div class="ati-hero-content">
-      <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+      <div class="ati-hero-layout">
         <div>
-          <div class="ati-eyebrow"><i class="bi bi-stars"></i> Motor {{ motor.version }} · Inteligencia técnica JVAQUA</div>
-          <h2 class="fw-bold mb-2">Asistente Técnico Inteligente</h2>
-          <p class="mb-0 opacity-90">Describe el estado de tu piscina y obtén un diagnóstico estructurado, cantidades orientativas, procedimiento y verificación en una sola experiencia.</p>
+          <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+            <div>
+              <div class="ati-eyebrow"><i class="bi bi-stars"></i> Motor {{ motor.version }} · Inteligencia técnica JVAQUA</div>
+              <h2 class="fw-bold mb-2">Asistente Técnico Inteligente</h2>
+              <p class="mb-0 opacity-90">Describe el estado de tu piscina y obtén un diagnóstico estructurado, cantidades orientativas, procedimiento y verificación en una sola experiencia.</p>
+            </div>
+            <div class="ati-nav">
+              <a class="btn btn-light btn-sm" href="{% url 'asistente_tecnico:historial' %}"><i class="bi bi-clock-history me-1"></i> Historial</a>
+              <a class="btn btn-outline-light btn-sm" href="{% url 'asistente_tecnico:academia_cms' %}"><i class="bi bi-mortarboard me-1"></i> Academia</a>
+              {% if es_admin %}<a class="btn btn-warning btn-sm" href="{% url 'asistente_tecnico:admin' %}"><i class="bi bi-sliders me-1"></i> Administración</a>{% endif %}
+            </div>
+          </div>
         </div>
-        <div class="ati-nav">
-          <a class="btn btn-light btn-sm" href="{% url 'asistente_tecnico:historial' %}"><i class="bi bi-clock-history me-1"></i> Historial</a>
-          <a class="btn btn-outline-light btn-sm" href="{% url 'asistente_tecnico:academia_cms' %}"><i class="bi bi-mortarboard me-1"></i> Academia</a>
-          {% if es_admin %}<a class="btn btn-warning btn-sm" href="{% url 'asistente_tecnico:admin' %}"><i class="bi bi-sliders me-1"></i> Administración</a>{% endif %}
+        <div class="ati-assistant-stage" aria-label="Asistente JVAQUA">
+          <div class="ati-orbit"></div>
+          <div class="ati-bot">
+            <div class="ati-bot-halo"></div>
+            <svg viewBox="0 0 150 170" role="img" aria-label="Robot técnico JVAQUA">
+              <defs>
+                <linearGradient id="atiBody" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#f8fdff"/><stop offset="1" stop-color="#bcecff"/></linearGradient>
+                <linearGradient id="atiVisor" x1="0" x2="1"><stop offset="0" stop-color="#061f3b"/><stop offset="1" stop-color="#0b4168"/></linearGradient>
+                <linearGradient id="atiAccent" x1="0" x2="1"><stop offset="0" stop-color="#55f0ff"/><stop offset="1" stop-color="#64ffb7"/></linearGradient>
+              </defs>
+              <path d="M75 16v13" stroke="#78f2ff" stroke-width="5" stroke-linecap="round"/>
+              <circle cx="75" cy="12" r="5" fill="#72f3ff"/>
+              <rect x="28" y="27" width="94" height="72" rx="30" fill="url(#atiBody)" stroke="rgba(255,255,255,.8)" stroke-width="3"/>
+              <rect x="39" y="39" width="72" height="45" rx="19" fill="url(#atiVisor)"/>
+              <g class="ati-bot-eye"><circle cx="61" cy="61" r="6" fill="#6effdc"/><circle cx="89" cy="61" r="6" fill="#6effdc"/></g>
+              <path d="M65 74c6 5 14 5 20 0" fill="none" stroke="#6effdc" stroke-width="3.2" stroke-linecap="round"/>
+              <path d="M47 96c4 10 11 15 28 15s24-5 28-15" fill="#dff8ff"/>
+              <rect x="39" y="103" width="72" height="50" rx="25" fill="url(#atiBody)" stroke="rgba(255,255,255,.75)" stroke-width="3"/>
+              <circle class="ati-bot-core" cx="75" cy="126" r="10" fill="url(#atiAccent)"/>
+              <path d="M37 113c-15 4-21 15-19 28" fill="none" stroke="#dff8ff" stroke-width="10" stroke-linecap="round"/>
+              <path d="M113 113c15 4 21 15 19 28" fill="none" stroke="#dff8ff" stroke-width="10" stroke-linecap="round"/>
+              <circle cx="18" cy="143" r="7" fill="#77edff"/><circle cx="132" cy="143" r="7" fill="#77edff"/>
+            </svg>
+            <div class="ati-bot-status"><i class="bi {% if resultado %}bi-check2-circle{% else %}bi-stars{% endif %}"></i></div>
+          </div>
+          <div class="ati-speech" id="atiSpeech">{% if resultado %}Diagnóstico listo. Ya organicé el plan para tu piscina.<small>Revisa cada paso y verifica nuevamente al finalizar.</small>{% else %}Hola, soy tu Asistente JVAQUA.<small>Ingresa los datos de tu piscina y analizamos el caso juntos.</small>{% endif %}</div>
         </div>
       </div>
       <div class="ati-mini-grid">
@@ -103,7 +161,14 @@
         <div class="ati-flow-item"><span class="ati-flow-num">5</span>Verificación</div>
       </div>
 
-      <form method="post" enctype="multipart/form-data">
+      <div class="ati-assistant-chip">
+        <div class="ati-assistant-avatar">
+          <svg viewBox="0 0 52 52" aria-hidden="true"><rect x="7" y="10" width="38" height="29" rx="13" fill="#e8fbff"/><rect x="12" y="15" width="28" height="18" rx="8" fill="#08395c"/><g class="ati-bot-eye"><circle cx="21" cy="24" r="2.6" fill="#70ffdc"/><circle cx="31" cy="24" r="2.6" fill="#70ffdc"/></g><path d="M23 29c2 1.5 4 1.5 6 0" stroke="#70ffdc" stroke-width="1.8" fill="none" stroke-linecap="round"/><path d="M26 10V6" stroke="#dffcff" stroke-width="2.3" stroke-linecap="round"/><circle cx="26" cy="5" r="2" fill="#7bf5ff"/></svg>
+        </div>
+        <div class="ati-assistant-copy"><strong>Empecemos por lo esencial</strong><span>No necesitas saber de química. Dame volumen, pH, cloro y cómo se ve el agua; yo organizo el resto.</span></div>
+      </div>
+
+      <form method="post" enctype="multipart/form-data" id="atiDiagnosisForm">
         {% csrf_token %}
         <div class="volume-helper">
           <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
@@ -232,6 +297,20 @@
   volumeRadio.addEventListener('change', updateMode);
   dimensionInputs.forEach(function(el){ el.addEventListener('input', updatePreview); });
   updateMode();
+
+  const form = document.getElementById('atiDiagnosisForm');
+  const speech = document.getElementById('atiSpeech');
+  if (form){
+    form.addEventListener('submit', function(){
+      document.body.classList.add('ati-is-analyzing');
+      if (speech){ speech.innerHTML = 'Estoy analizando tu piscina…<small>Revisando parámetros, estado del agua y método JVAQUA.</small>'; }
+      const btn = form.querySelector('button[type="submit"]');
+      if (btn){
+        btn.innerHTML = '<i class="bi bi-arrow-repeat me-2"></i> Analizando tu piscina…';
+        btn.setAttribute('aria-busy','true');
+      }
+    });
+  }
 })();
 </script>
 {% endblock %}
