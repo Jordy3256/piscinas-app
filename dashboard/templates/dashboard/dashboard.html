@@ -46,6 +46,13 @@
     </div>
   </section>
 
+  <section class="exec-card mb-3"><div class="exec-card-body"><form method="get" class="d-flex flex-wrap align-items-end gap-2"><div><div class="exec-kicker mb-1">Vista territorial</div><select name="ciudad" class="form-select" onchange="this.form.submit()"><option value="">🌎 Todas las ciudades</option>{% for c in ciudades_dashboard %}<option value="{{ c.id }}" {% if ciudad_dashboard == c.id|stringformat:'s' %}selected{% endif %}>📍 {{ c.nombre }}</option>{% endfor %}</select></div><div class="ms-auto text-end"><div class="small text-muted">Analizando</div><strong>{{ ciudad_obj.nombre|default:"JVAQUA nacional" }}</strong></div></form></div></section>
+
+  <div class="exec-grid kpis mb-3"><div class="exec-card kpi"><div class="exec-card-body"><div class="icon">📈</div><div class="label">Altas este mes</div><div class="value">{{ altas_mes_bi }}</div><div class="foot">Nuevos contratos del período</div></div></div><div class="exec-card kpi"><div class="exec-card-body"><div class="icon">📉</div><div class="label">Contratos perdidos</div><div class="value">{{ contratos_perdidos_mes }}</div><div class="foot">${{ facturacion_perdida_mes|floatformat:2 }} / mes perdido</div></div></div><div class="exec-card kpi"><div class="exec-card-body"><div class="icon">⚡</div><div class="label">Crecimiento neto</div><div class="value {% if crecimiento_neto_bi >= 0 %}profit-positive{% else %}profit-negative{% endif %}">{% if crecimiento_neto_bi > 0 %}+{% endif %}{{ crecimiento_neto_bi }}</div><div class="foot">Altas menos bajas</div></div></div><div class="exec-card kpi"><div class="exec-card-body"><div class="icon">🏆</div><div class="label">Mejor contribución</div><div class="value" style="font-size:1.25rem">{{ mejor_ciudad.nombre|default:"—" }}</div><div class="foot">{% if mejor_ciudad %}${{ mejor_ciudad.utilidad|floatformat:0 }} utilidad base · {{ mejor_ciudad.margen }}% margen{% endif %}</div></div></div></div>
+
+  <div class="exec-grid equal mb-3"><section class="exec-card"><div class="exec-card-head"><div class="exec-card-title">💰 Evolución financiera · 12 meses</div></div><div class="chart-wrap"><canvas id="biFinanceChart"></canvas></div></section><section class="exec-card"><div class="exec-card-head"><div class="exec-card-title">📄 Evolución de contratos</div></div><div class="chart-wrap"><canvas id="biContractsChart"></canvas></div></section></div>
+  {% if not ciudad_obj %}<div class="exec-grid two mb-3"><section class="exec-card"><div class="exec-card-head"><div class="exec-card-title">🏙️ Rentabilidad por ciudad</div></div><div class="chart-wrap"><canvas id="biCitiesChart"></canvas></div></section><section class="exec-card"><div class="exec-card-head"><div class="exec-card-title">Ranking territorial</div></div><div class="exec-card-body pt-2"><div class="simple-list">{% for c in ranking_ciudades|slice:":8" %}<div class="simple-row"><div class="simple-main"><div class="simple-title">{{ forloop.counter }}. {{ c.nombre }}</div><div class="simple-meta">{{ c.contratos }} contratos · ticket ${{ c.ticket|floatformat:2 }} · margen {{ c.margen }}%</div></div><div class="simple-val">${{ c.utilidad|floatformat:0 }}<div class="simple-meta">utilidad base</div></div></div>{% empty %}<div class="empty-state">Aún no hay ciudades con contratos activos.</div>{% endfor %}</div></div></section></div>{% endif %}
+
   <div class="exec-grid kpis">
     <div class="exec-card kpi"><div class="exec-card-body"><div class="icon">💰</div><div class="label">Ingresos del mes</div><div class="value">${{ resumen_mes_actual.ingresos|floatformat:2 }}</div><div class="foot">{{ tendencia_ingresos_mes }} {{ variacion_ingresos_mes }}% vs. mes anterior</div></div></div>
     <div class="exec-card kpi"><div class="exec-card-body"><div class="icon">📅</div><div class="label">Mantenimientos hoy</div><div class="value">{{ total_mantenimientos_hoy }}</div><div class="foot">{{ realizados_hoy }} realizados · {{ pendientes_hoy }} pendientes</div></div></div>
@@ -164,6 +171,14 @@
 </div>
 
 <script>
+(function(){
+  if(!window.Chart) return;
+  const fin={{ grafico_bi_finanzas|safe }}, con={{ grafico_bi_contratos|safe }}, ciu={{ grafico_bi_ciudades|safe }};
+  const common={responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{position:'bottom'}}};
+  const f=document.getElementById('biFinanceChart'); if(f)new Chart(f,{type:'line',data:{labels:fin.labels,datasets:[{label:'Ingresos',data:fin.ingresos,tension:.32},{label:'Egresos',data:fin.egresos,tension:.32},{label:'Utilidad',data:fin.utilidad,tension:.32}]},options:common});
+  const c=document.getElementById('biContractsChart'); if(c)new Chart(c,{type:'line',data:{labels:con.labels,datasets:[{label:'Contratos activos',data:con.activos,tension:.32},{label:'Altas',data:con.altas,tension:.32},{label:'Bajas',data:con.bajas,tension:.32}]},options:common});
+  const x=document.getElementById('biCitiesChart'); if(x)new Chart(x,{type:'bar',data:{labels:ciu.labels,datasets:[{label:'Utilidad base $',data:ciu.utilidad},{label:'Margen %',data:ciu.margen}]},options:common});
+})();
 (function(){
   const finance = {{ grafico_tendencia_financiera|safe }};
   const el = document.getElementById('financeChart');

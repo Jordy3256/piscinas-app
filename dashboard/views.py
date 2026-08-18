@@ -50,7 +50,7 @@ from finanzas.models import (
     LotePagoTrabajador,
     AnticipoTrabajador,
 )
-from clientes.models import Cliente
+from clientes.models import Cliente, Ciudad
 from contratos.models import Contrato
 from ordenes_trabajo.models import OrdenTrabajo
 from contratos.programacion import (
@@ -1900,13 +1900,17 @@ def trabajadores_list_view(request):
         return render(request, "dashboard/no_autorizado.html", status=403)
     hoy = timezone.localdate()
     inicio_mes = hoy.replace(day=1)
-    trabajadores = list(Trabajador.objects.select_related("user").order_by("-activo", "user__first_name", "user__username"))
+    ciudad_id = (request.GET.get("ciudad") or "").strip()
+    trabajadores_qs = Trabajador.objects.select_related("user", "ciudad_principal").prefetch_related("ciudades_habilitadas").order_by("-activo", "user__first_name", "user__username")
+    if ciudad_id.isdigit():
+        trabajadores_qs = trabajadores_qs.filter(Q(ciudad_principal_id=ciudad_id) | Q(ciudades_habilitadas__id=ciudad_id)).distinct()
+    trabajadores = list(trabajadores_qs)
     for t in trabajadores:
         t.mantenimientos_mes = Mantenimiento.objects.filter(trabajadores=t, fecha__gte=inicio_mes, fecha__lte=hoy, estado="realizado").count()
         t.ordenes_mes = OrdenTrabajo.objects.filter(trabajador=t, fecha__gte=inicio_mes, fecha__lte=hoy, estado="completada").count()
         t.inventario_productos_count = InventarioTrabajador.objects.filter(trabajador=t, stock__gt=0).count()
         t.pagos_mes = PagoTrabajador.objects.filter(obligacion__trabajador=t, activo=True, fecha__gte=inicio_mes, fecha__lte=hoy).aggregate(total=Sum("monto"))["total"] or Decimal("0.00")
-    return render(request, "dashboard/trabajadores_list.html", {"trabajadores": trabajadores, "hoy": hoy})
+    return render(request, "dashboard/trabajadores_list.html", {"trabajadores": trabajadores, "hoy": hoy, "ciudades": Ciudad.objects.filter(activa=True), "ciudad_id": ciudad_id})
 
 
 def _rango_trabajador_request(request):
@@ -2649,6 +2653,70 @@ def dashboard_view(request):
             if respondidos:
                 asistente_tasa_exito = round((asistente_exitosos_mes / respondidos) * 100, 1)
 
+        # Inteligencia empresarial territorial v3.7
+        ciudad_dashboard = (request.GET.get("ciudad") or "").strip()
+        ciudades_dashboard = list(Ciudad.objects.filter(activa=True).order_by("orden", "nombre"))
+        ciudad_obj = Ciudad.objects.filter(pk=ciudad_dashboard).first() if ciudad_dashboard.isdigit() else None
+        contratos_bi = Contrato.objects.select_related("cliente", "cliente__ciudad_ref")
+        ingresos_bi = Ingreso.objects.all()
+        egresos_bi = Egreso.objects.all()
+        if ciudad_obj:
+            contratos_bi = contratos_bi.filter(cliente__ciudad_ref=ciudad_obj)
+            ingresos_bi = ingresos_bi.filter(Q(cliente__ciudad_ref=ciudad_obj) | Q(contrato__cliente__ciudad_ref=ciudad_obj) | Q(ciudad__iexact=ciudad_obj.nombre)).distinct()
+            egresos_bi = egresos_bi.filter(Q(mantenimiento__cliente__ciudad_ref=ciudad_obj) | Q(ciudad_proyecto__iexact=ciudad_obj.nombre)).distinct()
+        meses_bi=[]
+        base_mes=hoy.replace(day=1)
+        for offset in range(11,-1,-1):
+            idx=base_mes.year*12+(base_mes.month-1)-offset; yy=idx//12; mm=idx%12+1
+            ini=date(yy,mm,1); fin=date(yy,mm,monthrange(yy,mm)[1])
+            ing=ingresos_bi.filter(fecha__range=(ini,fin)).aggregate(v=Sum("total"))["v"] or Decimal("0")
+            egr=egresos_bi.filter(fecha__range=(ini,fin),aprobado=True).aggregate(v=Sum("total"))["v"] or Decimal("0")
+            activos=contratos_bi.filter(fecha_inicio__lte=fin).filter(Q(activo=True)|Q(fecha_baja__isnull=False)).filter(Q(fecha_baja__isnull=True)|Q(fecha_baja__gt=fin)).count()
+            altas=contratos_bi.filter(fecha_inicio__range=(ini,fin)).count()
+            bajas=contratos_bi.filter(fecha_baja__range=(ini,fin)).count()
+            meses_bi.append({"label":ini.strftime("%b %y"),"ingresos":float(ing),"egresos":float(egr),"utilidad":float(ing-egr),"activos":activos,"altas":altas,"bajas":bajas})
+        inicio_actual=base_mes; fin_actual=date(hoy.year,hoy.month,monthrange(hoy.year,hoy.month)[1])
+        bajas_mes_qs=contratos_bi.filter(fecha_baja__range=(inicio_actual,fin_actual))
+        contratos_perdidos_mes=bajas_mes_qs.count()
+        facturacion_perdida_mes=bajas_mes_qs.aggregate(v=Sum("precio_mensual"))["v"] or Decimal("0")
+        altas_mes_bi=contratos_bi.filter(fecha_inicio__range=(inicio_actual,fin_actual)).count()
+        crecimiento_neto_bi=altas_mes_bi-contratos_perdidos_mes
+        ranking_ciudades=[]
+        for ciudad in ciudades_dashboard:
+            cqs=Contrato.objects.filter(cliente__ciudad_ref=ciudad,activo=True)
+            ingreso_mensual=cqs.aggregate(v=Sum("precio_mensual"))["v"] or Decimal("0")
+            tecnico=cqs.aggregate(v=Sum("valor_tecnico_mensual"))["v"] or Decimal("0")
+            utilidad_base=ingreso_mensual-tecnico
+            ranking_ciudades.append({"id":ciudad.id,"nombre":ciudad.nombre,"contratos":cqs.count(),"ingreso":float(ingreso_mensual),"utilidad":float(utilidad_base),"margen":round(float(utilidad_base/ingreso_mensual*100),1) if ingreso_mensual else 0,"ticket":round(float(ingreso_mensual/cqs.count()),2) if cqs.count() else 0})
+        ranking_ciudades.sort(key=lambda x:x["utilidad"],reverse=True)
+        mejor_ciudad = ranking_ciudades[0] if ranking_ciudades else None
+        motivos_baja_bi=list(bajas_mes_qs.values("motivo_baja").annotate(total=Count("id")).order_by("-total"))
+        grafico_bi_finanzas=json.dumps({"labels":[x["label"] for x in meses_bi],"ingresos":[x["ingresos"] for x in meses_bi],"egresos":[x["egresos"] for x in meses_bi],"utilidad":[x["utilidad"] for x in meses_bi]})
+        grafico_bi_contratos=json.dumps({"labels":[x["label"] for x in meses_bi],"activos":[x["activos"] for x in meses_bi],"altas":[x["altas"] for x in meses_bi],"bajas":[x["bajas"] for x in meses_bi]})
+        grafico_bi_ciudades=json.dumps({"labels":[x["nombre"] for x in ranking_ciudades],"utilidad":[x["utilidad"] for x in ranking_ciudades],"margen":[x["margen"] for x in ranking_ciudades]})
+
+        # Cuando se selecciona una ciudad, los KPI ejecutivos principales también se sectorizan.
+        if ciudad_obj:
+            m_hoy = Mantenimiento.objects.filter(fecha=hoy, cliente__ciudad_ref=ciudad_obj)
+            total_mantenimientos_hoy = m_hoy.count()
+            realizados_hoy = m_hoy.filter(estado="realizado").count()
+            pendientes_hoy = m_hoy.filter(estado="pendiente").count()
+            cumplimiento_hoy = round((realizados_hoy / total_mantenimientos_hoy) * 100, 1) if total_mantenimientos_hoy else 0
+            total_contratos_activos = contratos_bi.filter(activo=True).count()
+            clientes_nuevos_mes = Cliente.objects.filter(ciudad_ref=ciudad_obj, fecha_registro__date__range=(primer_dia_mes_actual, ultimo_dia_mes_actual)).count()
+            ingreso_contratos_proyectado = contratos_bi.filter(activo=True).aggregate(v=Sum("precio_mensual"))["v"] or Decimal("0")
+            nomina_contratos_proyectada = contratos_bi.filter(activo=True).aggregate(v=Sum("valor_tecnico_mensual"))["v"] or Decimal("0")
+            margen_operativo_base = ingreso_contratos_proyectado - nomina_contratos_proyectada
+            ing_actual = ingresos_bi.filter(fecha__range=(primer_dia_mes_actual, ultimo_dia_mes_actual)).aggregate(v=Sum("total"))["v"] or Decimal("0")
+            egr_actual = egresos_bi.filter(fecha__range=(primer_dia_mes_actual, ultimo_dia_mes_actual), aprobado=True).aggregate(v=Sum("total"))["v"] or Decimal("0")
+            ing_ant = ingresos_bi.filter(fecha__range=(primer_dia_mes_anterior, ultimo_dia_mes_anterior)).aggregate(v=Sum("total"))["v"] or Decimal("0")
+            egr_ant = egresos_bi.filter(fecha__range=(primer_dia_mes_anterior, ultimo_dia_mes_anterior), aprobado=True).aggregate(v=Sum("total"))["v"] or Decimal("0")
+            resumen_mes_actual = {"ingresos": ing_actual, "egresos": egr_actual, "balance": ing_actual-egr_actual}
+            resumen_mes_anterior = {"ingresos": ing_ant, "egresos": egr_ant, "balance": ing_ant-egr_ant}
+            variacion_ingresos_mes = _variacion_porcentual(ing_actual, ing_ant)
+            variacion_egresos_mes = _variacion_porcentual(egr_actual, egr_ant)
+            variacion_balance_mes = _variacion_porcentual(ing_actual-egr_actual, ing_ant-egr_ant)
+
         # Salud general: un resumen accionable, no un sustituto de los datos.
         senales_criticas = 0
         senales_atencion = 0
@@ -2772,6 +2840,11 @@ def dashboard_view(request):
             "asistente_pendientes": asistente_pendientes,
             "asistente_tasa_exito": asistente_tasa_exito,
             "salud_empresa": salud_empresa,
+            "ciudades_dashboard": ciudades_dashboard, "ciudad_dashboard": ciudad_dashboard, "ciudad_obj": ciudad_obj,
+            "grafico_bi_finanzas": grafico_bi_finanzas, "grafico_bi_contratos": grafico_bi_contratos, "grafico_bi_ciudades": grafico_bi_ciudades,
+            "contratos_perdidos_mes": contratos_perdidos_mes, "facturacion_perdida_mes": facturacion_perdida_mes,
+            "altas_mes_bi": altas_mes_bi, "crecimiento_neto_bi": crecimiento_neto_bi, "ranking_ciudades": ranking_ciudades,
+            "mejor_ciudad": mejor_ciudad, "motivos_baja_bi": motivos_baja_bi,
             "es_admin": True,
         }
         return render(request, "dashboard/dashboard.html", ctx)
@@ -7024,7 +7097,8 @@ def cliente_list_view(request):
 
     q = (request.GET.get("q") or "").strip()
     estado = (request.GET.get("estado") or "").strip().lower()
-    clientes = Cliente.objects.annotate(
+    ciudad_id = (request.GET.get("ciudad") or "").strip()
+    clientes = Cliente.objects.select_related("ciudad_ref").annotate(
         total_contratos=Count("contratos", distinct=True),
         contratos_activos=Count(
             "contratos",
@@ -7042,6 +7116,8 @@ def cliente_list_view(request):
             | models.Q(sector_urbanizacion__icontains=q)
             | models.Q(direccion__icontains=q)
         )
+    if ciudad_id.isdigit():
+        clientes = clientes.filter(ciudad_ref_id=ciudad_id)
     if estado == "activo":
         clientes = clientes.filter(activo=True)
     elif estado == "inactivo":
@@ -7061,6 +7137,8 @@ def cliente_list_view(request):
         "page_obj": page_obj,
         "q": q,
         "estado": estado,
+        "ciudad_id": ciudad_id,
+        "ciudades": Ciudad.objects.filter(activa=True),
         "total_clientes": total_clientes,
         "total_activos": total_activos,
         "con_contrato": con_contrato,
@@ -7222,6 +7300,7 @@ def contrato_list_view(request):
     frecuencia = (
         request.GET.get("frecuencia") or ""
     ).strip()
+    ciudad_id = (request.GET.get("ciudad") or "").strip()
 
     contratos = (
         Contrato.objects
@@ -7243,6 +7322,9 @@ def contrato_list_view(request):
             | models.Q(frecuencia_personalizada__icontains=q)
             | models.Q(forma_pago_personalizada__icontains=q)
         )
+
+    if ciudad_id.isdigit():
+        contratos = contratos.filter(cliente__ciudad_ref_id=ciudad_id)
 
     if estado == "activo":
         contratos = contratos.filter(activo=True)
@@ -7281,6 +7363,8 @@ def contrato_list_view(request):
             "q": q,
             "estado": estado,
             "frecuencia": frecuencia,
+            "ciudad_id": ciudad_id,
+            "ciudades": Ciudad.objects.filter(activa=True),
             "frecuencias": Contrato.FRECUENCIA_CHOICES,
             "total_contratos": total_contratos,
             "total_activos": total_activos,
@@ -7971,8 +8055,20 @@ def contrato_toggle_view(request, pk):
 
     contrato = get_object_or_404(Contrato, pk=pk)
 
+    if contrato.activo and request.POST.get("confirmar_baja") != "1":
+        return render(request, "dashboard/contrato_confirmar_baja.html", {"contrato": contrato, "motivos": Contrato.MOTIVO_BAJA_CHOICES, "next": request.POST.get("next", "")})
+
     contrato.activo = not contrato.activo
-    contrato.save(update_fields=["activo"])
+    if not contrato.activo:
+        contrato.fecha_baja = timezone.localdate()
+        contrato.motivo_baja = (request.POST.get("motivo_baja") or "no_especificado").strip()
+        contrato.motivo_baja_detalle = (request.POST.get("motivo_baja_detalle") or "").strip()[:250]
+        contrato.save(update_fields=["activo", "fecha_baja", "motivo_baja", "motivo_baja_detalle"])
+    else:
+        contrato.fecha_baja = None
+        contrato.motivo_baja = ""
+        contrato.motivo_baja_detalle = ""
+        contrato.save(update_fields=["activo", "fecha_baja", "motivo_baja", "motivo_baja_detalle"])
 
     if contrato.activo and contrato.generacion_automatica:
         generar_mantenimientos_contrato(contrato, reconciliar=True)

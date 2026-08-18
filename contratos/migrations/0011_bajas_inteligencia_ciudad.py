@@ -1,0 +1,4 @@
+from django.db import migrations, models
+class Migration(migrations.Migration):
+ dependencies=[("contratos","0010_planificacion_rutas")]
+ operations=[migrations.AddField(model_name="contrato",name="fecha_baja",field=models.DateField(blank=True,db_index=True,null=True)),migrations.AddField(model_name="contrato",name="motivo_baja",field=models.CharField(blank=True,choices=[("precio","Precio"),("mudanza_venta","Cliente vendió o se mudó"),("piscina_fuera_uso","Piscina fuera de uso"),("mala_experiencia","Mala experiencia"),("cambio_proveedor","Cambio de proveedor"),("mantenimiento_propio","Cliente realizará mantenimiento propio"),("morosidad","Morosidad"),("servicio_temporal","Servicio temporal finalizado"),("otro","Otro"),("no_especificado","No especificado")],default="",max_length=30)),migrations.AddField(model_name="contrato",name="motivo_baja_detalle",field=models.CharField(blank=True,default="",max_length=250))]

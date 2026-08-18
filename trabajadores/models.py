@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
+from clientes.models import Ciudad
 
 
 class Trabajador(models.Model):
@@ -9,6 +10,8 @@ class Trabajador(models.Model):
         verbose_name = "Trabajador"
         verbose_name_plural = "Trabajadores"
     telefono = models.CharField(max_length=20)
+    ciudad_principal = models.ForeignKey(Ciudad, on_delete=models.SET_NULL, null=True, blank=True, related_name="trabajadores_principales")
+    ciudades_habilitadas = models.ManyToManyField(Ciudad, blank=True, related_name="trabajadores_habilitados")
     activo = models.BooleanField(default=True)
 
     FORMA_PAGO_CHOICES = [

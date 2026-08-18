@@ -143,9 +143,13 @@
   <div class="cp-panel mb-3">
     <div class="cp-panel-body">
       <form method="get" class="row g-3 align-items-end">
-        <div class="col-12 col-lg-5">
+        <div class="col-12 col-lg-4">
           <label class="form-label">Buscar</label>
           <input type="text" name="q" value="{{ q }}" class="form-control" placeholder="Cliente, teléfono, correo o dato personalizado">
+        </div>
+        <div class="col-6 col-lg-2">
+          <label class="form-label">Ciudad</label>
+          <select name="ciudad" class="form-select"><option value="">Todas</option>{% for c in ciudades %}<option value="{{ c.id }}" {% if ciudad_id == c.id|stringformat:'s' %}selected{% endif %}>{{ c.nombre }}</option>{% endfor %}</select>
         </div>
         <div class="col-6 col-lg-2">
           <label class="form-label">Estado</label>
@@ -155,7 +159,7 @@
             <option value="inactivo" {% if estado == "inactivo" %}selected{% endif %}>Inactivos</option>
           </select>
         </div>
-        <div class="col-6 col-lg-3">
+        <div class="col-6 col-lg-2">
           <label class="form-label">Frecuencia</label>
           <select name="frecuencia" class="form-select">
             <option value="">Todas</option>
@@ -167,7 +171,7 @@
         <div class="col-12 col-lg-2">
           <div class="d-grid gap-2">
             <button type="submit" class="btn btn-outline-primary">🔎 Filtrar</button>
-            {% if q or estado or frecuencia %}
+            {% if q or estado or frecuencia or ciudad_id %}
               <a class="btn btn-outline-secondary" href="/dashboard/contratos/">Limpiar</a>
             {% endif %}
           </div>

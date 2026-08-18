@@ -145,6 +145,21 @@ class Contrato(models.Model):
     generacion_automatica = models.BooleanField(default=True)
     programado_hasta = models.DateField(null=True, blank=True)
     activo = models.BooleanField(default=True)
+    MOTIVO_BAJA_CHOICES = [
+        ("precio", "Precio"),
+        ("mudanza_venta", "Cliente vendió o se mudó"),
+        ("piscina_fuera_uso", "Piscina fuera de uso"),
+        ("mala_experiencia", "Mala experiencia"),
+        ("cambio_proveedor", "Cambio de proveedor"),
+        ("mantenimiento_propio", "Cliente realizará mantenimiento propio"),
+        ("morosidad", "Morosidad"),
+        ("servicio_temporal", "Servicio temporal finalizado"),
+        ("otro", "Otro"),
+        ("no_especificado", "No especificado"),
+    ]
+    fecha_baja = models.DateField(null=True, blank=True, db_index=True)
+    motivo_baja = models.CharField(max_length=30, choices=MOTIVO_BAJA_CHOICES, blank=True, default="")
+    motivo_baja_detalle = models.CharField(max_length=250, blank=True, default="")
 
     # Gestión logística de químicos por contrato.
     quimicos_proveedor = models.CharField(
