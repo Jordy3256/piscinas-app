@@ -33,6 +33,7 @@ from .views import (
     ruta_resolver_coordenadas_view,
     dashboard_view,
     calculadora_quimicos_view,
+    cotizador_inteligente_admin_view,
     mi_cuenta_trabajador_view,
 
     # Clientes y contratos
@@ -255,6 +256,7 @@ urlpatterns = [
         inicio_view,
         name="inicio",
     ),
+    path("herramientas/cotizador-inteligente/", cotizador_inteligente_admin_view, name="cotizador_inteligente_admin"),
     path(
         "herramientas/calculadora-quimicos/",
         calculadora_quimicos_view,

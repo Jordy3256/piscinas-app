@@ -210,6 +210,18 @@ class Contrato(models.Model):
         help_text="Responsable principal de reponer el inventario en sitio. Si se deja vacío, se usa el técnico designado.",
     )
 
+    # Ficha técnica opcional de la piscina.
+    piscina_largo_m = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)
+    piscina_ancho_m = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)
+    piscina_profundidad_min_m = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)
+    piscina_profundidad_max_m = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)
+    piscina_volumen_m3 = models.DecimalField(max_digits=9, decimal_places=2, null=True, blank=True)
+    piscina_tipo = models.CharField(max_length=80, blank=True, default="")
+    piscina_uso = models.CharField(max_length=80, blank=True, default="")
+    piscina_filtracion = models.CharField(max_length=100, blank=True, default="")
+    piscina_desinfeccion = models.CharField(max_length=100, blank=True, default="")
+    piscina_observaciones = models.TextField(blank=True, default="")
+
     def ingreso_mensual(self):
         return self.precio_mensual
 
@@ -361,3 +373,49 @@ class Contrato(models.Model):
         verbose_name = "Contrato"
         verbose_name_plural = "Contratos"
         ordering = ["-activo", "cliente__nombre", "id"]
+
+
+class EquipamientoContrato(models.Model):
+    contrato = models.ForeignKey(Contrato, on_delete=models.CASCADE, related_name="equipamientos")
+    nombre = models.CharField(max_length=150)
+    costo_jvaqua = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    valor_mensual_adicional = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    fecha_entrega = models.DateField(null=True, blank=True)
+    estado = models.CharField(max_length=80, blank=True, default="")
+    debe_devolverse = models.BooleanField(default=True)
+    activo = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"{self.nombre} · {self.contrato}"
+
+
+class CotizacionMantenimiento(models.Model):
+    FRECUENCIA_CHOICES = Contrato.FRECUENCIA_CHOICES
+    creada_en = models.DateTimeField(auto_now_add=True)
+    creada_por = models.ForeignKey("auth.User", on_delete=models.SET_NULL, null=True, blank=True)
+    ciudad = models.ForeignKey("clientes.Ciudad", on_delete=models.SET_NULL, null=True, blank=True)
+    cliente_referencia = models.ForeignKey("clientes.Cliente", on_delete=models.SET_NULL, null=True, blank=True)
+    nombre_referencia = models.CharField(max_length=150, blank=True, default="")
+    largo_m = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)
+    ancho_m = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)
+    profundidad_m = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)
+    volumen_m3 = models.DecimalField(max_digits=9, decimal_places=2, null=True, blank=True)
+    frecuencia = models.CharField(max_length=30, choices=FRECUENCIA_CHOICES)
+    quimicos_incluidos = models.BooleanField(default=True)
+    equipamiento_mensual = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    ajuste_especial_mensual = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    observaciones = models.TextField(blank=True, default="")
+    contratos_similares = models.PositiveIntegerField(default=0)
+    promedio_mercado_interno = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    costo_quimico_estimado = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    pago_tecnico_minimo = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    pago_tecnico_recomendado = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    pago_tecnico_maximo = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    precio_minimo = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    precio_recomendado = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    precio_objetivo = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    utilidad_estimada = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    margen_estimado = models.DecimalField(max_digits=6, decimal_places=2, default=0)
+
+    def __str__(self):
+        return f"Cotización #{self.pk or 'nueva'} · {self.nombre_referencia or self.ciudad or 'Piscina'}"

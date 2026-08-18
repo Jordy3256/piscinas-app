@@ -51,7 +51,7 @@ from finanzas.models import (
     AnticipoTrabajador,
 )
 from clientes.models import Cliente, Ciudad
-from contratos.models import Contrato
+from contratos.models import Contrato, CotizacionMantenimiento, EquipamientoContrato
 from ordenes_trabajo.models import OrdenTrabajo
 from contratos.programacion import (
     DIAS_SEMANA,
@@ -4636,7 +4636,7 @@ def generar_facturas_automaticas(anio=None, mes=None):
     existentes = 0
     errores = []
 
-    from contratos.models import Contrato
+    from contratos.models import Contrato, CotizacionMantenimiento, EquipamientoContrato
 
     contratos = Contrato.objects.select_related("cliente").all().order_by("id")
 
@@ -7376,6 +7376,23 @@ def contrato_list_view(request):
     )
 
 
+def _aplicar_ficha_tecnica_contrato(contrato, request):
+    decimales = ("piscina_largo_m", "piscina_ancho_m", "piscina_profundidad_min_m", "piscina_profundidad_max_m", "piscina_volumen_m3")
+    for campo in decimales:
+        valor = (request.POST.get(campo) or "").strip().replace(",", ".")
+        try:
+            setattr(contrato, campo, Decimal(valor) if valor else None)
+        except Exception:
+            setattr(contrato, campo, None)
+    for campo in ("piscina_tipo", "piscina_uso", "piscina_filtracion", "piscina_desinfeccion", "piscina_observaciones"):
+        setattr(contrato, campo, (request.POST.get(campo) or "").strip())
+    if not contrato.piscina_volumen_m3 and contrato.piscina_largo_m and contrato.piscina_ancho_m:
+        profundidades = [x for x in (contrato.piscina_profundidad_min_m, contrato.piscina_profundidad_max_m) if x]
+        if profundidades:
+            prom = sum(profundidades, Decimal("0")) / len(profundidades)
+            contrato.piscina_volumen_m3 = (contrato.piscina_largo_m * contrato.piscina_ancho_m * prom).quantize(Decimal("0.01"))
+
+
 @login_required
 def contrato_crear_view(request):
     if not es_admin(request.user):
@@ -7470,6 +7487,7 @@ def contrato_crear_view(request):
             "ventana_visita_hasta": validacion["ventana_visita_hasta"] or "",
             "duracion_estimada_minutos": validacion["duracion_estimada_minutos"],
             "prioridad_visita": validacion["prioridad_visita"],
+            **{campo: request.POST.get(campo, "") for campo in ("piscina_largo_m","piscina_ancho_m","piscina_profundidad_min_m","piscina_profundidad_max_m","piscina_volumen_m3","piscina_tipo","piscina_uso","piscina_filtracion","piscina_desinfeccion","piscina_observaciones")},
         }
 
         if validacion["errores"]:
@@ -7517,6 +7535,8 @@ def contrato_crear_view(request):
                 duracion_estimada_minutos=validacion["duracion_estimada_minutos"],
                 prioridad_visita=validacion["prioridad_visita"],
             )
+            _aplicar_ficha_tecnica_contrato(contrato, request)
+            contrato.save()
 
             resultado_programacion = generar_mantenimientos_contrato(contrato)
 
@@ -7628,6 +7648,14 @@ def contrato_editar_view(request, pk):
         "ventana_visita_hasta": contrato.ventana_visita_hasta.strftime("%H:%M") if contrato.ventana_visita_hasta else "",
         "duracion_estimada_minutos": contrato.duracion_estimada_minutos,
         "prioridad_visita": contrato.prioridad_visita,
+        "piscina_largo_m": contrato.piscina_largo_m or "",
+        "piscina_ancho_m": contrato.piscina_ancho_m or "",
+        "piscina_profundidad_min_m": contrato.piscina_profundidad_min_m or "",
+        "piscina_profundidad_max_m": contrato.piscina_profundidad_max_m or "",
+        "piscina_volumen_m3": contrato.piscina_volumen_m3 or "",
+        "piscina_tipo": contrato.piscina_tipo, "piscina_uso": contrato.piscina_uso,
+        "piscina_filtracion": contrato.piscina_filtracion, "piscina_desinfeccion": contrato.piscina_desinfeccion,
+        "piscina_observaciones": contrato.piscina_observaciones,
     }
 
     if request.method == "POST":
@@ -7669,6 +7697,7 @@ def contrato_editar_view(request, pk):
             "ventana_visita_hasta": validacion["ventana_visita_hasta"] or "",
             "duracion_estimada_minutos": validacion["duracion_estimada_minutos"],
             "prioridad_visita": validacion["prioridad_visita"],
+            **{campo: request.POST.get(campo, "") for campo in ("piscina_largo_m","piscina_ancho_m","piscina_profundidad_min_m","piscina_profundidad_max_m","piscina_volumen_m3","piscina_tipo","piscina_uso","piscina_filtracion","piscina_desinfeccion","piscina_observaciones")},
         }
 
         if validacion["errores"]:
@@ -7707,6 +7736,7 @@ def contrato_editar_view(request, pk):
             contrato.ventana_visita_hasta = validacion["ventana_visita_hasta"]
             contrato.duracion_estimada_minutos = validacion["duracion_estimada_minutos"]
             contrato.prioridad_visita = validacion["prioridad_visita"]
+            _aplicar_ficha_tecnica_contrato(contrato, request)
             contrato.save()
 
             if contrato.activo and contrato.generacion_automatica:
@@ -8102,3 +8132,69 @@ def contrato_toggle_view(request, pk):
             f"/dashboard/contratos/{contrato.pk}/",
         )
     )
+
+def _dec_cotizador(valor, defecto="0"):
+    try:
+        return Decimal(str(valor or defecto).replace(",", "."))
+    except Exception:
+        return Decimal(defecto)
+
+
+def _calcular_cotizacion_mantenimiento(datos):
+    ciudad = datos.get("ciudad")
+    frecuencia = datos.get("frecuencia") or "1_semanal"
+    volumen = datos.get("volumen") or Decimal("0")
+    similares = Contrato.objects.filter(activo=True, frecuencia=frecuencia)
+    if ciudad:
+        similares = similares.filter(cliente__ciudad_ref=ciudad)
+    vals = list(similares.values_list("precio_mensual", "valor_tecnico_mensual"))
+    n = len(vals)
+    if vals:
+        prom_precio = sum((x[0] or Decimal("0") for x in vals), Decimal("0")) / n
+        prom_tecnico = sum((x[1] or Decimal("0") for x in vals), Decimal("0")) / n
+    else:
+        bases={"quincenal":Decimal("45"),"1_semanal":Decimal("55"),"2_semanales":Decimal("80"),"3_semanales":Decimal("120"),"personalizado":Decimal("80")}
+        prom_precio=bases.get(frecuencia,Decimal("55")); prom_tecnico=prom_precio*Decimal("0.35")
+    # Ajuste moderado por volumen respecto de una piscina residencial de 25 m3.
+    factor=Decimal("1")
+    if volumen>0:
+        factor=max(Decimal("0.85"),min(Decimal("1.65"),Decimal("0.75")+(volumen/Decimal("100"))))
+    base=(prom_precio*factor).quantize(Decimal("0.01"))
+    tecnico_rec=(prom_tecnico*factor).quantize(Decimal("0.01"))
+    tecnico_min=(tecnico_rec*Decimal("0.90")).quantize(Decimal("0.01"))
+    tecnico_max=(tecnico_rec*Decimal("1.15")).quantize(Decimal("0.01"))
+    # Estimación química basada en consumos históricos recientes de contratos comparables.
+    desde=timezone.localdate()-timedelta(days=90)
+    usos=UsoInsumo.objects.filter(mantenimiento__contrato__in=similares,mantenimiento__fecha__gte=desde)
+    total_q=usos.aggregate(t=Sum("costo_total"))["t"] or Decimal("0")
+    costo_q=(total_q/Decimal(max(n,1))/Decimal("3")).quantize(Decimal("0.01")) if datos.get("quimicos_incluidos") else Decimal("0")
+    if datos.get("quimicos_incluidos") and costo_q<=0:
+        costo_q=(base*Decimal("0.16")).quantize(Decimal("0.01"))
+    equipo=datos.get("equipamiento") or Decimal("0"); ajuste=datos.get("ajuste") or Decimal("0")
+    costo_directo=tecnico_rec+costo_q+equipo
+    minimo=max(base+equipo+ajuste,(costo_directo/Decimal("0.75"))+ajuste).quantize(Decimal("0.01"))
+    recomendado=max(base+equipo+ajuste,(costo_directo/Decimal("0.65"))+ajuste).quantize(Decimal("0.01"))
+    objetivo=max(recomendado,(costo_directo/Decimal("0.60"))+ajuste).quantize(Decimal("0.01"))
+    utilidad=(recomendado-costo_directo).quantize(Decimal("0.01"))
+    margen=((utilidad/recomendado)*100).quantize(Decimal("0.01")) if recomendado else Decimal("0")
+    return {"contratos_similares":n,"promedio":prom_precio.quantize(Decimal("0.01")),"costo_quimico":costo_q,"tecnico_min":tecnico_min,"tecnico_rec":tecnico_rec,"tecnico_max":tecnico_max,"precio_min":minimo,"precio_rec":recomendado,"precio_obj":objetivo,"utilidad":utilidad,"margen":margen}
+
+@login_required
+def cotizador_inteligente_admin_view(request):
+    if not es_admin(request.user):
+        return render(request,"dashboard/no_autorizado.html",status=403)
+    ciudades=Ciudad.objects.filter(activa=True).order_by("orden","nombre")
+    resultado=None; guardada=None
+    datos={"frecuencia":"1_semanal","quimicos_incluidos":True}
+    if request.method=="POST":
+        ciudad=Ciudad.objects.filter(pk=request.POST.get("ciudad")).first()
+        largo=_dec_cotizador(request.POST.get("largo")); ancho=_dec_cotizador(request.POST.get("ancho")); prof=_dec_cotizador(request.POST.get("profundidad"))
+        volumen=_dec_cotizador(request.POST.get("volumen"))
+        if volumen<=0 and largo>0 and ancho>0 and prof>0: volumen=(largo*ancho*prof).quantize(Decimal("0.01"))
+        datos={"ciudad":ciudad,"nombre":(request.POST.get("nombre_referencia") or "").strip(),"largo":largo or None,"ancho":ancho or None,"profundidad":prof or None,"volumen":volumen or None,"frecuencia":request.POST.get("frecuencia") or "1_semanal","quimicos_incluidos":request.POST.get("quimicos_incluidos")=="on","equipamiento":_dec_cotizador(request.POST.get("equipamiento_mensual")),"ajuste":_dec_cotizador(request.POST.get("ajuste_especial_mensual")),"observaciones":(request.POST.get("observaciones") or "").strip()}
+        resultado=_calcular_cotizacion_mantenimiento(datos)
+        if request.POST.get("accion")=="guardar":
+            guardada=CotizacionMantenimiento.objects.create(creada_por=request.user,ciudad=ciudad,nombre_referencia=datos["nombre"],largo_m=datos["largo"],ancho_m=datos["ancho"],profundidad_m=datos["profundidad"],volumen_m3=datos["volumen"],frecuencia=datos["frecuencia"],quimicos_incluidos=datos["quimicos_incluidos"],equipamiento_mensual=datos["equipamiento"],ajuste_especial_mensual=datos["ajuste"],observaciones=datos["observaciones"],contratos_similares=resultado["contratos_similares"],promedio_mercado_interno=resultado["promedio"],costo_quimico_estimado=resultado["costo_quimico"],pago_tecnico_minimo=resultado["tecnico_min"],pago_tecnico_recomendado=resultado["tecnico_rec"],pago_tecnico_maximo=resultado["tecnico_max"],precio_minimo=resultado["precio_min"],precio_recomendado=resultado["precio_rec"],precio_objetivo=resultado["precio_obj"],utilidad_estimada=resultado["utilidad"],margen_estimado=resultado["margen"])
+            messages.success(request,f"Cotización #{guardada.pk} guardada correctamente.")
+    recientes=CotizacionMantenimiento.objects.select_related("ciudad").order_by("-creada_en")[:8]
+    return render(request,"dashboard/cotizador_inteligente_admin.html",{"ciudades":ciudades,"frecuencias":Contrato.FRECUENCIA_CHOICES,"datos":datos,"resultado":resultado,"guardada":guardada,"recientes":recientes})
