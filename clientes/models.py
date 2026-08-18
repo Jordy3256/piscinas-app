@@ -9,6 +9,8 @@ class Cliente(models.Model):
     sector_urbanizacion = models.CharField(max_length=150, blank=True, default="")
     direccion = models.TextField()
     enlace_google_maps = models.URLField(max_length=500, blank=True, default="")
+    latitud = models.DecimalField(max_digits=9, decimal_places=6, blank=True, null=True)
+    longitud = models.DecimalField(max_digits=9, decimal_places=6, blank=True, null=True)
     activo = models.BooleanField(default=True)
     fecha_registro = models.DateTimeField(auto_now_add=True)
 

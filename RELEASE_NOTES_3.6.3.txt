@@ -1,0 +1,19 @@
+JVAQUA v3.6.3 — Rutas GPS persistentes
+
+Cambios:
+- Guarda latitud y longitud reales en cada cliente.
+- Usa primero coordenadas persistentes para optimizar rutas.
+- Intenta extraer coordenadas de enlaces de Google Maps, incluidos enlaces redirigidos.
+- Si no encuentra coordenadas en el enlace, usa Google Geocoding API con dirección + sector + ciudad.
+- Las coordenadas obtenidas se guardan para no tener que resolverlas en cada jornada.
+- Google Routes sigue calculando tiempos reales por carretera y horarios.
+- Las visitas sin GPS solo muestran advertencia después de intentar resolver su ubicación.
+
+Requisito:
+- GOOGLE_MAPS_API_KEY debe tener habilitadas Routes API y Geocoding API.
+
+Instalación:
+python manage.py migrate
+python manage.py check
+python manage.py makemigrations --check --dry-run
+python manage.py collectstatic --noinput

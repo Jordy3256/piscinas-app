@@ -30,6 +30,7 @@ from .views import (
     inicio_view,
     home_view,
     ruta_matriz_google_view,
+    ruta_resolver_coordenadas_view,
     dashboard_view,
     calculadora_quimicos_view,
     mi_cuenta_trabajador_view,
@@ -151,6 +152,7 @@ urlpatterns = [
     ),
 
     path("ruta/matriz-google/", ruta_matriz_google_view, name="ruta_matriz_google"),
+    path("ruta/resolver-coordenadas/", ruta_resolver_coordenadas_view, name="ruta_resolver_coordenadas"),
 
     # ======================
     # Push

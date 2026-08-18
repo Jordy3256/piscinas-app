@@ -4,11 +4,12 @@ import logging
 import os
 import urllib.request
 import urllib.error
+import re
 from collections import defaultdict
 from decimal import Decimal
 from datetime import date, timedelta
 from calendar import monthrange, monthcalendar
-from urllib.parse import quote
+from urllib.parse import quote, urlencode, unquote
 
 from django.conf import settings
 from django.contrib import messages
@@ -2034,7 +2035,106 @@ def trabajador_expediente_pdf_view(request, pk):
 # -------------------
 # /dashboard/home/ = pantalla REAL por rol
 # -------------------
+
+
+def _extraer_coordenadas_maps(url):
+    """Extrae coordenadas de enlaces de Google Maps, incluyendo enlaces redirigidos."""
+    if not url:
+        return None
+    candidatos = [str(url).strip()]
+    # Los enlaces maps.app.goo.gl suelen ocultar las coordenadas tras una redirección.
+    if "goo.gl" in candidatos[0] or "maps.app" in candidatos[0]:
+        try:
+            req = urllib.request.Request(candidatos[0], method="HEAD", headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=6) as response:
+                candidatos.append(response.geturl())
+        except Exception:
+            try:
+                req = urllib.request.Request(candidatos[0], headers={"User-Agent": "Mozilla/5.0"})
+                with urllib.request.urlopen(req, timeout=6) as response:
+                    candidatos.append(response.geturl())
+            except Exception:
+                pass
+    patrones = [
+        re.compile(r"@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)"),
+        re.compile(r"[?&](?:q|query|destination)=(-?\d+(?:\.\d+)?)(?:%2C|,)(-?\d+(?:\.\d+)?)", re.I),
+        re.compile(r"!3d(-?\d+(?:\.\d+)?).*?!4d(-?\d+(?:\.\d+)?)", re.I),
+    ]
+    for candidato in candidatos:
+        texto = unquote(candidato)
+        for patron in patrones:
+            m = patron.search(texto)
+            if m:
+                lat, lng = float(m.group(1)), float(m.group(2))
+                if -90 <= lat <= 90 and -180 <= lng <= 180:
+                    return lat, lng
+    return None
+
+
+def _geocodificar_cliente_google(cliente, api_key):
+    """Obtiene y persiste coordenadas. Primero usa Maps; después Geocoding API."""
+    coords = _extraer_coordenadas_maps(cliente.enlace_google_maps)
+    fuente = "enlace"
+    if not coords and api_key:
+        partes = [cliente.direccion, cliente.sector_urbanizacion, cliente.ciudad, "Ecuador"]
+        address = ", ".join(str(x).strip() for x in partes if str(x or "").strip())
+        if address:
+            url = "https://maps.googleapis.com/maps/api/geocode/json?" + urlencode({
+                "address": address,
+                "key": api_key,
+                "region": "ec",
+            })
+            try:
+                req = urllib.request.Request(url, headers={"User-Agent": "JVAQUA-ERP/1.0"})
+                with urllib.request.urlopen(req, timeout=8) as response:
+                    data = json.loads(response.read().decode("utf-8") or "{}")
+                results = data.get("results") or []
+                if data.get("status") == "OK" and results:
+                    loc = results[0].get("geometry", {}).get("location", {})
+                    lat, lng = float(loc["lat"]), float(loc["lng"])
+                    coords = (lat, lng)
+                    fuente = "geocoding"
+            except Exception as exc:
+                logger.warning("No se pudo geocodificar cliente %s: %s", cliente.pk, exc)
+    if coords:
+        cliente.latitud, cliente.longitud = coords
+        cliente.save(update_fields=["latitud", "longitud"])
+        return {"lat": coords[0], "lng": coords[1], "fuente": fuente}
+    return None
+
+
 @login_required
+@require_http_methods(["POST"])
+def ruta_resolver_coordenadas_view(request):
+    """Resuelve GPS faltantes de clientes de la jornada y los guarda permanentemente."""
+    if not (es_trabajador(request.user) or es_admin(request.user)):
+        return JsonResponse({"ok": False, "error": "No autorizado."}, status=403)
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+        ids = [int(x) for x in (payload.get("cliente_ids") or [])][:30]
+    except Exception:
+        return JsonResponse({"ok": False, "error": "Solicitud inválida."}, status=400)
+
+    api_key = os.environ.get("GOOGLE_MAPS_API_KEY", "").strip()
+    clientes = Cliente.objects.filter(pk__in=ids)
+    resultados = {}
+    for cliente in clientes:
+        if cliente.latitud is not None and cliente.longitud is not None:
+            resultados[str(cliente.pk)] = {"lat": float(cliente.latitud), "lng": float(cliente.longitud), "fuente": "guardada"}
+            continue
+        resolved = _geocodificar_cliente_google(cliente, api_key)
+        if resolved:
+            resultados[str(cliente.pk)] = resolved
+
+    return JsonResponse({
+        "ok": True,
+        "coords": resultados,
+        "resueltos": len(resultados),
+        "solicitados": len(ids),
+        "geocoding_habilitado": bool(api_key),
+    })
+
+
 @login_required
 @require_http_methods(["POST"])
 def ruta_matriz_google_view(request):
@@ -2754,6 +2854,9 @@ def dashboard_view(request):
                 "cliente": str(m.cliente),
                 "direccion": m.cliente.direccion or "",
                 "maps": m.cliente.enlace_google_maps or "",
+                "cliente_id": m.cliente_id,
+                "lat": float(m.cliente.latitud) if m.cliente.latitud is not None else None,
+                "lng": float(m.cliente.longitud) if m.cliente.longitud is not None else None,
                 "estado": m.estado,
                 "tipo_horario": c.tipo_horario_visita or "libre",
                 "hora_fija": c.hora_visita_fija.strftime("%H:%M") if c.hora_visita_fija else "",
