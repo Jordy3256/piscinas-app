@@ -2071,16 +2071,70 @@ def _extraer_coordenadas_maps(url):
     return None
 
 
-def _geocodificar_cliente_google(cliente, api_key):
-    """Obtiene y persiste coordenadas. Primero usa Maps; después Geocoding API."""
-    coords = _extraer_coordenadas_maps(cliente.enlace_google_maps)
-    fuente = "enlace"
+def _extraer_coordenadas_texto(*valores):
+    """Acepta coordenadas escritas manualmente como -2.12345,-79.98765."""
+    patron = re.compile(r"(?<!\d)(-?\d{1,2}(?:\.\d+)?)\s*[,;\s]\s*(-?\d{1,3}(?:\.\d+)?)(?!\d)")
+    for valor in valores:
+        texto = unquote(str(valor or "").strip())
+        if not texto:
+            continue
+        m = patron.search(texto)
+        if not m:
+            continue
+        try:
+            lat, lng = float(m.group(1)), float(m.group(2))
+        except (TypeError, ValueError):
+            continue
+        if -90 <= lat <= 90 and -180 <= lng <= 180:
+            return lat, lng
+    return None
+
+
+def _es_plus_code(texto):
+    texto = str(texto or "").strip().upper()
+    # Soporta códigos cortos como Q4C4+H7G Guayaquil y códigos globales.
+    return bool(re.search(r"\b[23456789CFGHJMPQRVWX]{4,8}\+[23456789CFGHJMPQRVWX]{2,3}\b", texto))
+
+
+def _geocodificar_cliente_google(cliente, api_key, forzar=False):
+    """Obtiene y persiste GPS con prioridad: manual > Maps > Plus Code/dirección."""
+    if not forzar and cliente.latitud is not None and cliente.longitud is not None:
+        return {"lat": float(cliente.latitud), "lng": float(cliente.longitud), "fuente": "guardada"}
+
+    # 1) Coordenadas pegadas directamente en dirección/sector/enlace.
+    coords = _extraer_coordenadas_texto(
+        cliente.enlace_google_maps, cliente.direccion, cliente.sector_urbanizacion
+    )
+    fuente = "coordenadas"
+
+    # 2) Coordenadas contenidas dentro de una URL de Google Maps.
+    if not coords:
+        coords = _extraer_coordenadas_maps(cliente.enlace_google_maps)
+        fuente = "enlace"
+
+    # 3) Google Geocoding. Los Plus Codes se consultan primero sin mezclar la
+    # dirección postal para evitar que Google intente interpretar el '+' como texto.
     if not coords and api_key:
+        consultas = []
+        campos = [cliente.direccion, cliente.sector_urbanizacion, cliente.enlace_google_maps]
+        for campo in campos:
+            if _es_plus_code(campo):
+                plus = str(campo).strip()
+                if cliente.ciudad and cliente.ciudad.lower() not in plus.lower():
+                    plus = f"{plus}, {cliente.ciudad}"
+                consultas.append((plus, "plus_code"))
         partes = [cliente.direccion, cliente.sector_urbanizacion, cliente.ciudad, "Ecuador"]
         address = ", ".join(str(x).strip() for x in partes if str(x or "").strip())
         if address:
+            consultas.append((address, "geocoding"))
+
+        vistos = set()
+        for consulta, tipo in consultas:
+            if consulta in vistos:
+                continue
+            vistos.add(consulta)
             url = "https://maps.googleapis.com/maps/api/geocode/json?" + urlencode({
-                "address": address,
+                "address": consulta,
                 "key": api_key,
                 "region": "ec",
             })
@@ -2093,9 +2147,12 @@ def _geocodificar_cliente_google(cliente, api_key):
                     loc = results[0].get("geometry", {}).get("location", {})
                     lat, lng = float(loc["lat"]), float(loc["lng"])
                     coords = (lat, lng)
-                    fuente = "geocoding"
+                    fuente = tipo
+                    break
+                logger.info("Geocoding cliente %s (%s): %s", cliente.pk, tipo, data.get("status"))
             except Exception as exc:
-                logger.warning("No se pudo geocodificar cliente %s: %s", cliente.pk, exc)
+                logger.warning("No se pudo geocodificar cliente %s (%s): %s", cliente.pk, tipo, exc)
+
     if coords:
         cliente.latitud, cliente.longitud = coords
         cliente.save(update_fields=["latitud", "longitud"])
@@ -6907,6 +6964,8 @@ def _datos_cliente_desde_request(request):
         "sector_urbanizacion": (request.POST.get("sector_urbanizacion") or "").strip(),
         "direccion": (request.POST.get("direccion") or "").strip(),
         "enlace_google_maps": (request.POST.get("enlace_google_maps") or "").strip(),
+        "latitud": (request.POST.get("latitud") or "").strip() or None,
+        "longitud": (request.POST.get("longitud") or "").strip() or None,
     }
 
 
@@ -6921,6 +6980,19 @@ def _validar_cliente(datos, cliente_actual=None):
     ):
         if not datos.get(campo):
             errores.append(f"{etiqueta} es obligatorio.")
+
+    for campo, etiqueta, minimo, maximo in (
+        ("latitud", "latitud", -90, 90),
+        ("longitud", "longitud", -180, 180),
+    ):
+        valor = datos.get(campo)
+        if valor not in (None, ""):
+            try:
+                numero = float(str(valor).replace(",", "."))
+                if not minimo <= numero <= maximo:
+                    errores.append(f"La {etiqueta} está fuera del rango válido.")
+            except ValueError:
+                errores.append(f"La {etiqueta} debe ser un número válido.")
 
     telefono_normalizado = _normalizar_telefono_cliente(datos.get("telefono"))
     if datos.get("telefono") and len(telefono_normalizado) < 7:
@@ -7006,6 +7078,7 @@ def cliente_crear_view(request):
     datos = {
         "nombre": "", "telefono": "", "email": "", "ciudad": "",
         "sector_urbanizacion": "", "direccion": "", "enlace_google_maps": "",
+        "latitud": "", "longitud": "",
     }
     if request.method == "POST":
         datos = _datos_cliente_desde_request(request)
@@ -7044,6 +7117,8 @@ def cliente_editar_view(request, pk):
         "sector_urbanizacion": cliente.sector_urbanizacion,
         "direccion": cliente.direccion,
         "enlace_google_maps": cliente.enlace_google_maps,
+        "latitud": cliente.latitud if cliente.latitud is not None else "",
+        "longitud": cliente.longitud if cliente.longitud is not None else "",
     }
     if request.method == "POST":
         datos = _datos_cliente_desde_request(request)
@@ -7067,6 +7142,26 @@ def cliente_editar_view(request, pk):
     return render(request, "dashboard/cliente_form.html", {
         "modo": "editar", "cliente": cliente, "datos": datos, "es_admin": True,
     })
+
+
+@login_required
+@require_http_methods(["POST"])
+def cliente_resolver_gps_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    cliente = get_object_or_404(Cliente, pk=pk)
+    # Si existen coordenadas manuales válidas, se respetan. Para recalcular,
+    # el administrador puede borrarlas en Editar cliente y luego usar este botón.
+    api_key = os.environ.get("GOOGLE_MAPS_API_KEY", "").strip()
+    if cliente.latitud is not None and cliente.longitud is not None:
+        messages.success(request, f"GPS ya verificado: {cliente.latitud}, {cliente.longitud}.")
+        return redirect(f"/dashboard/clientes/{cliente.pk}/")
+    resultado = _geocodificar_cliente_google(cliente, api_key, forzar=True)
+    if resultado:
+        messages.success(request, f"GPS verificado: {resultado['lat']:.6f}, {resultado['lng']:.6f} ({resultado['fuente']}).")
+    else:
+        messages.error(request, "No fue posible resolver el GPS. Puedes pegar latitud y longitud manualmente en Editar cliente.")
+    return redirect(f"/dashboard/clientes/{cliente.pk}/")
 
 
 @login_required

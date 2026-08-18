@@ -40,6 +40,7 @@ from .views import (
     cliente_crear_view,
     cliente_editar_view,
     cliente_detalle_view,
+    cliente_resolver_gps_view,
     cliente_crear_rapido_view,
     contrato_list_view,
     contrato_crear_view,
@@ -269,6 +270,7 @@ urlpatterns = [
     path("clientes/crear-rapido/", cliente_crear_rapido_view, name="cliente_crear_rapido"),
     path("clientes/<int:pk>/", cliente_detalle_view, name="cliente_detalle"),
     path("clientes/<int:pk>/editar/", cliente_editar_view, name="cliente_editar"),
+    path("clientes/<int:pk>/resolver-gps/", cliente_resolver_gps_view, name="cliente_resolver_gps"),
 
     # ======================
     # Contratos
