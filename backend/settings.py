@@ -152,6 +152,13 @@ INSTALLED_APPS = [
     "dashboard.apps.DashboardConfig",
 ]
 
+
+# Almacenamiento persistente de fotografías en producción.
+# Si CLOUDINARY_URL está configurado, Django usa Cloudinary para MEDIA.
+CLOUDINARY_URL = (os.environ.get("CLOUDINARY_URL") or "").strip()
+if CLOUDINARY_URL:
+    INSTALLED_APPS += ["cloudinary", "cloudinary_storage"]
+
 # =========================
 # MIDDLEWARE
 # =========================
@@ -250,6 +257,16 @@ else:
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+
+if CLOUDINARY_URL:
+    STORAGES = {
+        "default": {
+            "BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage",
+        },
+        "staticfiles": {
+            "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage" if not DEBUG else "django.contrib.staticfiles.storage.StaticFilesStorage",
+        },
+    }
 
 # =========================
 # LOGIN

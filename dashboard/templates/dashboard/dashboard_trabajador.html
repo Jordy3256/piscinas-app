@@ -890,7 +890,7 @@
   </div>
 </section>
 
-<div class="card shadow-sm mb-3 worker-view-card">
+<div class="card shadow-sm mb-3 worker-view-card worker-planning-panel d-none">
   <div class="card-body">
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
       <div>
@@ -939,6 +939,12 @@
   </div>
 </div>
 
+<div class="d-grid d-sm-flex gap-2 mb-3">
+  <button type="button" class="btn btn-outline-primary worker-more-btn" id="toggleWorkerPlanning">
+    <i class="bi bi-calendar3 me-1"></i> Ver calendario y programación
+  </button>
+</div>
+
 <style>
 .route-today-card{border-radius:18px;background:linear-gradient(145deg,#fff,#f7fbff)}
 .route-kpi{border:1px solid #e9ecef;border-radius:14px;padding:.7rem .8rem;background:#fff;display:flex;flex-direction:column}.route-kpi span{font-size:.75rem;color:#6c757d}.route-kpi strong{font-size:1rem}
@@ -983,7 +989,7 @@
 {% endif %}
 
 {% if vista_actual == "agenda" %}
-  <div class="card shadow-sm mb-4 worker-calendar-card">
+  <div class="card shadow-sm mb-4 worker-calendar-card worker-planning-panel d-none">
     <div class="card-body">
 
       <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
@@ -1088,7 +1094,7 @@
     </div>
   </div>
 {% else %}
-  <div class="card shadow-sm mb-4 worker-calendar-card">
+  <div class="card shadow-sm mb-4 worker-calendar-card worker-planning-panel d-none">
     <div class="card-body">
       <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
         <div class="worker-calendar-heading">
@@ -1422,6 +1428,22 @@
     </div>
   {% endif %}
 {% endif %}
+
+<script>
+(function(){
+  const btn=document.getElementById('toggleWorkerPlanning');
+  const panels=[...document.querySelectorAll('.worker-planning-panel')];
+  if(!btn||!panels.length)return;
+  btn.addEventListener('click',()=>{
+    const opening=panels.some(x=>x.classList.contains('d-none'));
+    panels.forEach(x=>x.classList.toggle('d-none',!opening));
+    btn.innerHTML=opening
+      ? '<i class="bi bi-chevron-up me-1"></i> Ocultar calendario y programación'
+      : '<i class="bi bi-calendar3 me-1"></i> Ver calendario y programación';
+    if(opening) panels[0].scrollIntoView({behavior:'smooth',block:'start'});
+  });
+})();
+</script>
 
 <script>
 (function(){

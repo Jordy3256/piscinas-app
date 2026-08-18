@@ -696,7 +696,7 @@
   </div>
 </div>
 
-<div class="card shadow-sm mb-3 op-card-compact">
+<div class="card shadow-sm mb-3 op-card-compact admin-planning-panel d-none">
   <div class="card-body">
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
       <div>
@@ -716,6 +716,15 @@
       </div>
     </div>
   </div>
+</div>
+
+<div class="d-grid d-md-flex gap-2 mb-3">
+  <button type="button" class="btn btn-outline-primary" id="toggleAdminPlanning">
+    <i class="bi bi-calendar3 me-1"></i> Ver programación / calendario
+  </button>
+  <a class="btn btn-outline-secondary" href="/dashboard/mantenimientos/historial/">
+    <i class="bi bi-clock-history me-1"></i> Historial completo
+  </a>
 </div>
 
 <div class="row g-2 mb-3">
@@ -773,7 +782,7 @@
 {% endif %}
 
 {% if vista_actual == "agenda" %}
-  <div class="card shadow-sm mb-3 mobile-op-card op-card-compact">
+  <div class="card shadow-sm mb-3 mobile-op-card op-card-compact admin-planning-panel d-none">
     <div class="card-body">
       <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
         <div class="op-calendar-heading">
@@ -1040,7 +1049,7 @@
   </div>
 {% endif %}
 
-<div class="card shadow-sm mb-3 mobile-op-card op-card-compact">
+<div class="card shadow-sm mb-3 mobile-op-card op-card-compact admin-planning-panel d-none">
   <div class="card-body">
     <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
       <div class="op-section-title">👷 Resumen por trabajador</div>
@@ -1310,3 +1319,17 @@
 </div>
 
 {% endblock %}
+<script>
+(function(){
+  const btn=document.getElementById('toggleAdminPlanning');
+  const panels=[...document.querySelectorAll('.admin-planning-panel')];
+  if(!btn||!panels.length)return;
+  btn.addEventListener('click',()=>{
+    const opening=panels.some(x=>x.classList.contains('d-none'));
+    panels.forEach(x=>x.classList.toggle('d-none',!opening));
+    btn.innerHTML=opening
+      ? '<i class="bi bi-chevron-up me-1"></i> Ocultar programación'
+      : '<i class="bi bi-calendar3 me-1"></i> Ver programación / calendario';
+  });
+})();
+</script>
