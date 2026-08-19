@@ -5,7 +5,7 @@ from decimal import Decimal
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
-from clientes.models import Cliente
+from clientes.models import Cliente, Ciudad
 from trabajadores.models import Trabajador
 
 
@@ -75,6 +75,16 @@ class Contrato(models.Model):
     ]
 
     cliente = models.ForeignKey(Cliente, on_delete=models.CASCADE, related_name="contratos")
+
+    # Ubicación propia de la piscina/contrato. Los campos del cliente se conservan
+    # temporalmente como compatibilidad, pero ya no son la fuente principal.
+    ciudad_ref = models.ForeignKey(Ciudad, on_delete=models.SET_NULL, null=True, blank=True, related_name="contratos")
+    ciudad = models.CharField(max_length=100, blank=True, default="")
+    sector_urbanizacion = models.CharField(max_length=150, blank=True, default="")
+    direccion = models.TextField(blank=True, default="")
+    enlace_google_maps = models.URLField(max_length=500, blank=True, default="")
+    latitud = models.DecimalField(max_digits=9, decimal_places=6, blank=True, null=True)
+    longitud = models.DecimalField(max_digits=9, decimal_places=6, blank=True, null=True)
     tipo = models.CharField(max_length=20, choices=TIPO_CHOICES)
     frecuencia = models.CharField(max_length=30, choices=FRECUENCIA_CHOICES, blank=True, default="")
     frecuencia_personalizada = models.CharField(max_length=150, blank=True, default="")
@@ -339,6 +349,17 @@ class Contrato(models.Model):
             self.tipo = equivalencias[self.frecuencia]
 
     def save(self, *args, **kwargs):
+        self.ciudad = (self.ciudad or "").strip()
+        self.sector_urbanizacion = (self.sector_urbanizacion or "").strip()
+        self.direccion = (self.direccion or "").strip()
+        self.enlace_google_maps = (self.enlace_google_maps or "").strip()
+        if self.ciudad_ref_id:
+            self.ciudad = self.ciudad_ref.nombre
+        elif self.ciudad:
+            ciudad_obj = Ciudad.objects.filter(nombre__iexact=self.ciudad).first()
+            if ciudad_obj:
+                self.ciudad_ref = ciudad_obj
+                self.ciudad = ciudad_obj.nombre
         self.frecuencia_personalizada = (self.frecuencia_personalizada or "").strip()
         self.forma_pago_personalizada = (self.forma_pago_personalizada or "").strip()
         self.programacion_cobro_personalizada = (self.programacion_cobro_personalizada or "").strip()

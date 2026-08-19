@@ -1504,16 +1504,18 @@
         ? {lat:Number(x.lat),lng:Number(x.lng)}
         : coords(x.maps);
     });
-    const missing=stops.filter(x=>x.estado!=='realizado'&&!x._c&&x.cliente_id).map(x=>x.cliente_id);
-    if(!missing.length) return;
+    const missingStops=stops.filter(x=>x.estado!=='realizado'&&!x._c);
+    const missing=[...new Set(missingStops.filter(x=>x.cliente_id).map(x=>x.cliente_id))];
+    const missingContracts=[...new Set(missingStops.filter(x=>x.contrato_id).map(x=>x.contrato_id))];
+    if(!missing.length&&!missingContracts.length) return;
     if(status)status.textContent='Verificando ubicaciones GPS de las piscinas…';
     try{
       const token=document.querySelector('[name=csrfmiddlewaretoken]')?.value || (document.cookie.match(/(?:^|; )csrftoken=([^;]+)/)||[])[1] || '';
-      const r=await fetch('/dashboard/ruta/resolver-coordenadas/',{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':decodeURIComponent(token)},body:JSON.stringify({cliente_ids:missing})});
+      const r=await fetch('/dashboard/ruta/resolver-coordenadas/',{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':decodeURIComponent(token)},body:JSON.stringify({cliente_ids:missing,contrato_ids:missingContracts})});
       const data=await r.json();
       if(data.ok&&data.coords){
         stops.forEach(x=>{
-          const c=data.coords[String(x.cliente_id)];
+          const c=data.coords['contrato:'+String(x.contrato_id)] || data.coords[String(x.cliente_id)];
           if(c){x._c={lat:Number(c.lat),lng:Number(c.lng)};x.lat=c.lat;x.lng=c.lng;}
         });
       }

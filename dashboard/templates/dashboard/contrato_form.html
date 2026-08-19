@@ -112,6 +112,19 @@
         </div>
 
         <div class="cf-card mb-3">
+          <div class="cf-card-header"><div class="cf-card-title">📍 Ubicación de esta piscina</div><div class="cf-card-subtitle">La ubicación pertenece al contrato. Así un mismo cliente puede tener varias piscinas en direcciones diferentes sin afectar rutas ni GPS.</div></div>
+          <div class="cf-card-body"><div class="row g-3">
+            <div class="col-md-4"><label class="form-label">Ciudad</label><select name="ciudad_ref" class="form-select"><option value="">Seleccionar</option>{% for c in ciudades %}<option value="{{ c.id }}" {% if datos_formulario.ciudad_ref_id|stringformat:'s' == c.id|stringformat:'s' %}selected{% endif %}>{{ c.nombre }}</option>{% endfor %}</select></div>
+            <div class="col-md-8"><label class="form-label">Sector / urbanización</label><input name="sector_urbanizacion" class="form-control" value="{{ datos_formulario.sector_urbanizacion|default:'' }}"></div>
+            <div class="col-12"><label class="form-label">Dirección</label><textarea name="direccion" class="form-control" rows="2">{{ datos_formulario.direccion|default:'' }}</textarea></div>
+            <div class="col-12"><label class="form-label">Google Maps</label><input name="enlace_google_maps" class="form-control" value="{{ datos_formulario.enlace_google_maps|default:'' }}" placeholder="https://maps.google.com/..."></div>
+            <div class="col-md-6"><label class="form-label">Latitud <span class="text-muted fw-normal">(opcional)</span></label><input type="number" step="0.000001" name="latitud" class="form-control" value="{{ datos_formulario.latitud|default:'' }}"></div>
+            <div class="col-md-6"><label class="form-label">Longitud <span class="text-muted fw-normal">(opcional)</span></label><input type="number" step="0.000001" name="longitud" class="form-control" value="{{ datos_formulario.longitud|default:'' }}"></div>
+            <div class="col-12"><div class="cf-note">Los contratos existentes reciben automáticamente la dirección y GPS actuales del cliente durante la migración. No necesitas volver a ingresarlos.</div></div>
+          </div></div>
+        </div>
+
+        <div class="cf-card mb-3">
           <div class="cf-card-header">
             <div class="cf-card-title">📅 Frecuencia del servicio</div>
             <div class="cf-card-subtitle">Define cuántas visitas se realizarán durante el contrato.</div>

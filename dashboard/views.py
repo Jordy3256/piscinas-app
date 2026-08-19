@@ -2164,6 +2164,47 @@ def _geocodificar_cliente_google(cliente, api_key, forzar=False):
     return None
 
 
+def _geocodificar_contrato_google(contrato, api_key, forzar=False):
+    """Resuelve GPS de la piscina/contrato sin alterar la ubicación personal del cliente."""
+    if not forzar and contrato.latitud is not None and contrato.longitud is not None:
+        return {"lat": float(contrato.latitud), "lng": float(contrato.longitud), "fuente": "guardada"}
+    class Ubicacion:
+        pass
+    u=Ubicacion()
+    for campo in ("latitud","longitud","enlace_google_maps","direccion","sector_urbanizacion","ciudad"):
+        valor=getattr(contrato,campo,None)
+        if valor in (None, ""):
+            valor=getattr(contrato.cliente,campo,None)
+        setattr(u,campo,valor)
+    u.pk=f"contrato-{contrato.pk}"
+    # Misma lógica, sin guardar en Cliente.
+    coords=_extraer_coordenadas_texto(u.enlace_google_maps,u.direccion,u.sector_urbanizacion) or _extraer_coordenadas_maps(u.enlace_google_maps)
+    fuente="coordenadas"
+    if not coords and api_key:
+        consultas=[]
+        for campo in (u.direccion,u.sector_urbanizacion,u.enlace_google_maps):
+            if _es_plus_code(campo):
+                plus=str(campo).strip()
+                if u.ciudad and u.ciudad.lower() not in plus.lower(): plus=f"{plus}, {u.ciudad}"
+                consultas.append((plus,"plus_code"))
+        address=", ".join(str(x).strip() for x in (u.direccion,u.sector_urbanizacion,u.ciudad,"Ecuador") if str(x or "").strip())
+        if address: consultas.append((address,"geocoding"))
+        for consulta,tipo in consultas:
+            url="https://maps.googleapis.com/maps/api/geocode/json?"+urlencode({"address":consulta,"key":api_key,"region":"ec"})
+            try:
+                req=urllib.request.Request(url,headers={"User-Agent":"JVAQUA-ERP/1.0"})
+                with urllib.request.urlopen(req,timeout=8) as response: data=json.loads(response.read().decode("utf-8") or "{}")
+                results=data.get("results") or []
+                if data.get("status")=="OK" and results:
+                    loc=results[0].get("geometry",{}).get("location",{}); coords=(float(loc["lat"]),float(loc["lng"])); fuente=tipo; break
+            except Exception as exc:
+                logger.warning("No se pudo geocodificar contrato %s: %s",contrato.pk,exc)
+    if coords:
+        contrato.latitud,contrato.longitud=coords; contrato.save(update_fields=["latitud","longitud"])
+        return {"lat":coords[0],"lng":coords[1],"fuente":fuente}
+    return None
+
+
 @login_required
 @require_http_methods(["POST"])
 def ruta_resolver_coordenadas_view(request):
@@ -2173,12 +2214,18 @@ def ruta_resolver_coordenadas_view(request):
     try:
         payload = json.loads(request.body.decode("utf-8") or "{}")
         ids = [int(x) for x in (payload.get("cliente_ids") or [])][:30]
+        contrato_ids = [int(x) for x in (payload.get("contrato_ids") or [])][:30]
     except Exception:
         return JsonResponse({"ok": False, "error": "Solicitud inválida."}, status=400)
 
     api_key = os.environ.get("GOOGLE_MAPS_API_KEY", "").strip()
-    clientes = Cliente.objects.filter(pk__in=ids)
+    contratos_ruta = Contrato.objects.filter(pk__in=contrato_ids).select_related("cliente")
     resultados = {}
+    for contrato in contratos_ruta:
+        resolved = _geocodificar_contrato_google(contrato, api_key)
+        if resolved:
+            resultados[f"contrato:{contrato.pk}"] = resolved
+    clientes = Cliente.objects.filter(pk__in=ids)
     for cliente in clientes:
         if cliente.latitud is not None and cliente.longitud is not None:
             resultados[str(cliente.pk)] = {"lat": float(cliente.latitud), "lng": float(cliente.longitud), "fuente": "guardada"}
@@ -2191,7 +2238,7 @@ def ruta_resolver_coordenadas_view(request):
         "ok": True,
         "coords": resultados,
         "resueltos": len(resultados),
-        "solicitados": len(ids),
+        "solicitados": len(ids) + len(contrato_ids),
         "geocoding_habilitado": bool(api_key),
     })
 
@@ -2661,7 +2708,7 @@ def dashboard_view(request):
         ingresos_bi = Ingreso.objects.all()
         egresos_bi = Egreso.objects.all()
         if ciudad_obj:
-            contratos_bi = contratos_bi.filter(cliente__ciudad_ref=ciudad_obj)
+            contratos_bi = contratos_bi.filter(models.Q(ciudad_ref=ciudad_obj) | models.Q(ciudad_ref__isnull=True, cliente__ciudad_ref=ciudad_obj))
             ingresos_bi = ingresos_bi.filter(Q(cliente__ciudad_ref=ciudad_obj) | Q(contrato__cliente__ciudad_ref=ciudad_obj) | Q(ciudad__iexact=ciudad_obj.nombre)).distinct()
             egresos_bi = egresos_bi.filter(Q(mantenimiento__cliente__ciudad_ref=ciudad_obj) | Q(ciudad_proyecto__iexact=ciudad_obj.nombre)).distinct()
         meses_bi=[]
@@ -2683,7 +2730,7 @@ def dashboard_view(request):
         crecimiento_neto_bi=altas_mes_bi-contratos_perdidos_mes
         ranking_ciudades=[]
         for ciudad in ciudades_dashboard:
-            cqs=Contrato.objects.filter(cliente__ciudad_ref=ciudad,activo=True)
+            cqs=Contrato.objects.filter(models.Q(ciudad_ref=ciudad) | models.Q(ciudad_ref__isnull=True, cliente__ciudad_ref=ciudad),activo=True)
             ingreso_mensual=cqs.aggregate(v=Sum("precio_mensual"))["v"] or Decimal("0")
             tecnico=cqs.aggregate(v=Sum("valor_tecnico_mensual"))["v"] or Decimal("0")
             utilidad_base=ingreso_mensual-tecnico
@@ -2697,7 +2744,7 @@ def dashboard_view(request):
 
         # Cuando se selecciona una ciudad, los KPI ejecutivos principales también se sectorizan.
         if ciudad_obj:
-            m_hoy = Mantenimiento.objects.filter(fecha=hoy, cliente__ciudad_ref=ciudad_obj)
+            m_hoy = Mantenimiento.objects.filter(models.Q(contrato__ciudad_ref=ciudad_obj) | models.Q(contrato__ciudad_ref__isnull=True, cliente__ciudad_ref=ciudad_obj), fecha=hoy)
             total_mantenimientos_hoy = m_hoy.count()
             realizados_hoy = m_hoy.filter(estado="realizado").count()
             pendientes_hoy = m_hoy.filter(estado="pendiente").count()
@@ -2982,11 +3029,12 @@ def dashboard_view(request):
             ruta_mantenimientos.append({
                 "id": m.id,
                 "cliente": str(m.cliente),
-                "direccion": m.cliente.direccion or "",
-                "maps": m.cliente.enlace_google_maps or "",
+                "direccion": c.direccion or m.cliente.direccion or "",
+                "maps": c.enlace_google_maps or m.cliente.enlace_google_maps or "",
                 "cliente_id": m.cliente_id,
-                "lat": float(m.cliente.latitud) if m.cliente.latitud is not None else None,
-                "lng": float(m.cliente.longitud) if m.cliente.longitud is not None else None,
+                "contrato_id": c.id,
+                "lat": float(c.latitud) if c.latitud is not None else (float(m.cliente.latitud) if m.cliente.latitud is not None else None),
+                "lng": float(c.longitud) if c.longitud is not None else (float(m.cliente.longitud) if m.cliente.longitud is not None else None),
                 "estado": m.estado,
                 "tipo_horario": c.tipo_horario_visita or "libre",
                 "hora_fija": c.hora_visita_fija.strftime("%H:%M") if c.hora_visita_fija else "",
@@ -7117,16 +7165,16 @@ def cliente_list_view(request):
             | models.Q(direccion__icontains=q)
         )
     if ciudad_id.isdigit():
-        clientes = clientes.filter(ciudad_ref_id=ciudad_id)
+        clientes = clientes.filter(models.Q(contratos__ciudad_ref_id=ciudad_id) | models.Q(contratos__ciudad_ref__isnull=True, ciudad_ref_id=ciudad_id)).distinct()
     if estado == "activo":
-        clientes = clientes.filter(activo=True)
+        clientes = clientes.filter(contratos_activos__gt=0)
     elif estado == "inactivo":
-        clientes = clientes.filter(activo=False)
+        clientes = clientes.filter(contratos_activos=0)
 
     total_clientes = clientes.count()
-    total_activos = clientes.filter(activo=True).count()
     con_contrato = clientes.filter(contratos_activos__gt=0).count()
-    sin_contrato = clientes.filter(total_contratos=0).count()
+    sin_contrato = clientes.filter(contratos_activos=0).count()
+    total_activos = con_contrato  # compatibilidad de plantilla antigua
 
     paginator = Paginator(clientes, 20)
     page_obj = paginator.get_page(request.GET.get("page"))
@@ -7242,11 +7290,7 @@ def _generar_pdf_clientes_contratos(clientes, titulo, nombre_archivo, subtitulo=
             Paragraph(f"{idx:03d}. {_pdf_texto(cliente.nombre)}", section_style),
             row_table([
                 ("Telefono", cliente.telefono), ("Correo", cliente.email or "No registrado"),
-                ("Ciudad", cliente.ciudad or (cliente.ciudad_ref.nombre if cliente.ciudad_ref else "No registrada")),
-                ("Sector / urbanizacion", cliente.sector_urbanizacion or "No registrado"),
-                ("Direccion", cliente.direccion or "No registrada"),
-                ("Google Maps", cliente.enlace_google_maps or "No registrado"),
-                ("Coordenadas GPS", f"{cliente.latitud}, {cliente.longitud}" if cliente.latitud is not None and cliente.longitud is not None else "No registradas"),
+                ("Ubicaciones", "Ver ubicación específica en cada contrato/piscina"),
                 ("Estado cliente", "Activo" if cliente.activo else "Inactivo"),
             ]),
             Spacer(1, 3*mm),
@@ -7267,6 +7311,11 @@ def _generar_pdf_clientes_contratos(clientes, titulo, nombre_archivo, subtitulo=
                 ("Valor mensual", f"${contrato.precio_mensual:,.2f}"),
                 ("Tecnico designado", tecnico),
                 ("Valor tecnico mensual", f"${contrato.valor_tecnico_mensual:,.2f}"),
+                ("Ciudad / piscina", contrato.ciudad or contrato.cliente.ciudad or "No registrada"),
+                ("Sector", contrato.sector_urbanizacion or contrato.cliente.sector_urbanizacion or "No registrado"),
+                ("Direccion", contrato.direccion or contrato.cliente.direccion or "No registrada"),
+                ("Google Maps", contrato.enlace_google_maps or contrato.cliente.enlace_google_maps or "No registrado"),
+                ("Coordenadas GPS", f"{contrato.latitud}, {contrato.longitud}" if contrato.latitud is not None and contrato.longitud is not None else "No registradas"),
                 ("Quimicos", contrato.get_quimicos_proveedor_display()),
                 ("Almacenamiento quimicos", contrato.get_quimicos_almacenamiento_display() if contrato.quimicos_proveedor == "jvaqua" and contrato.quimicos_almacenamiento else "No aplica"),
                 ("Horario de visita", contrato.get_tipo_horario_visita_display()),
@@ -7314,19 +7363,24 @@ def clientes_contratos_pdf_view(request):
     if not es_admin(request.user):
         return render(request, "dashboard/no_autorizado.html", status=403)
     ciudad_id = (request.GET.get("ciudad") or "").strip()
+    estado_pdf = (request.GET.get("estado") or "activos").strip().lower()
+    contratos_pdf_qs = Contrato.objects.select_related("tecnico_designado__user", "ciudad_ref").prefetch_related("equipamientos").order_by("-activo", "fecha_inicio", "id")
+    if estado_pdf == "activos":
+        contratos_pdf_qs = contratos_pdf_qs.filter(activo=True)
+    elif estado_pdf == "inactivos":
+        contratos_pdf_qs = contratos_pdf_qs.filter(activo=False)
     qs = Cliente.objects.select_related("ciudad_ref").prefetch_related(
-        models.Prefetch(
-            "contratos",
-            queryset=Contrato.objects.select_related("tecnico_designado__user").prefetch_related("equipamientos").order_by("-activo", "fecha_inicio", "id"),
-            to_attr="contratos_pdf",
-        )
+        models.Prefetch("contratos", queryset=contratos_pdf_qs, to_attr="contratos_pdf")
     ).order_by("ciudad", "nombre", "id")
+    if estado_pdf in {"activos", "inactivos"}:
+        filtro_activo = estado_pdf == "activos"
+        qs = qs.filter(contratos__activo=filtro_activo).distinct()
     titulo = "Registro General de Clientes y Contratos"
-    subtitulo = "Todos los clientes y contratos registrados"
+    subtitulo = {"activos":"Solo clientes con contratos activos","inactivos":"Solo clientes sin contratos activos / contratos inactivos","todos":"Todos los clientes y contratos registrados"}.get(estado_pdf,"Todos los clientes y contratos registrados")
     nombre = "registro_general_clientes_contratos.pdf"
     if ciudad_id.isdigit():
         ciudad = get_object_or_404(Ciudad, pk=int(ciudad_id))
-        qs = qs.filter(ciudad_ref=ciudad)
+        qs = qs.filter(models.Q(contratos__ciudad_ref=ciudad) | models.Q(contratos__ciudad_ref__isnull=True, ciudad_ref=ciudad)).distinct()
         titulo = f"Registro de Clientes y Contratos - {ciudad.nombre}"
         subtitulo = f"Expediente administrativo consolidado de {ciudad.nombre}"
         nombre = f"clientes_contratos_{re.sub(r'[^a-zA-Z0-9_-]+', '_', ciudad.nombre.lower())}.pdf"
@@ -7525,7 +7579,7 @@ def contrato_list_view(request):
         )
 
     if ciudad_id.isdigit():
-        contratos = contratos.filter(cliente__ciudad_ref_id=ciudad_id)
+        contratos = contratos.filter(models.Q(ciudad_ref_id=ciudad_id) | models.Q(ciudad_ref__isnull=True, cliente__ciudad_ref_id=ciudad_id))
 
     if estado == "activo":
         contratos = contratos.filter(activo=True)
@@ -7575,6 +7629,39 @@ def contrato_list_view(request):
             "es_admin": True,
         },
     )
+
+
+def _aplicar_ubicacion_contrato(contrato, request, cliente=None):
+    """Guarda ubicación por piscina. En contratos nuevos precarga el legado del cliente."""
+    ciudad_id = (request.POST.get("ciudad_ref") or "").strip()
+    ciudad_obj = Ciudad.objects.filter(pk=int(ciudad_id)).first() if ciudad_id.isdigit() else None
+    contrato.ciudad_ref = ciudad_obj
+    contrato.ciudad = ciudad_obj.nombre if ciudad_obj else (request.POST.get("ciudad") or "").strip()
+    contrato.sector_urbanizacion = (request.POST.get("sector_urbanizacion") or "").strip()
+    contrato.direccion = (request.POST.get("direccion") or "").strip()
+    contrato.enlace_google_maps = (request.POST.get("enlace_google_maps") or "").strip()
+    for campo, minimo, maximo in (("latitud",-90,90),("longitud",-180,180)):
+        raw=(request.POST.get(campo) or "").strip().replace(",", ".")
+        try:
+            val=Decimal(raw) if raw else None
+            if val is not None and not Decimal(str(minimo)) <= val <= Decimal(str(maximo)):
+                val=None
+        except Exception:
+            val=None
+        setattr(contrato,campo,val)
+
+
+def _datos_ubicacion_contrato(contrato=None, cliente=None):
+    fuente=contrato or cliente
+    return {
+        "ciudad_ref_id": str(getattr(fuente,"ciudad_ref_id","") or ""),
+        "ciudad": getattr(fuente,"ciudad","") or "",
+        "sector_urbanizacion": getattr(fuente,"sector_urbanizacion","") or "",
+        "direccion": getattr(fuente,"direccion","") or "",
+        "enlace_google_maps": getattr(fuente,"enlace_google_maps","") or "",
+        "latitud": getattr(fuente,"latitud","") if getattr(fuente,"latitud",None) is not None else "",
+        "longitud": getattr(fuente,"longitud","") if getattr(fuente,"longitud",None) is not None else "",
+    }
 
 
 def _aplicar_ficha_tecnica_contrato(contrato, request):
@@ -7648,6 +7735,8 @@ def contrato_crear_view(request):
         "duracion_estimada_minutos": 30,
         "prioridad_visita": "normal",
     }
+    cliente_precarga = Cliente.objects.filter(pk=datos_formulario["cliente_id"]).first() if str(datos_formulario["cliente_id"]).isdigit() else None
+    datos_formulario.update(_datos_ubicacion_contrato(cliente=cliente_precarga))
 
     if request.method == "POST":
         validacion = _validar_datos_contrato(request)
@@ -7688,6 +7777,7 @@ def contrato_crear_view(request):
             "ventana_visita_hasta": validacion["ventana_visita_hasta"] or "",
             "duracion_estimada_minutos": validacion["duracion_estimada_minutos"],
             "prioridad_visita": validacion["prioridad_visita"],
+            **{campo: request.POST.get(campo, "") for campo in ("ciudad_ref","ciudad","sector_urbanizacion","direccion","enlace_google_maps","latitud","longitud")},
             **{campo: request.POST.get(campo, "") for campo in ("piscina_largo_m","piscina_ancho_m","piscina_profundidad_min_m","piscina_profundidad_max_m","piscina_volumen_m3","piscina_tipo","piscina_uso","piscina_filtracion","piscina_desinfeccion","piscina_observaciones")},
         }
 
@@ -7736,6 +7826,7 @@ def contrato_crear_view(request):
                 duracion_estimada_minutos=validacion["duracion_estimada_minutos"],
                 prioridad_visita=validacion["prioridad_visita"],
             )
+            _aplicar_ubicacion_contrato(contrato, request, validacion["cliente"])
             _aplicar_ficha_tecnica_contrato(contrato, request)
             contrato.save()
 
@@ -7776,6 +7867,7 @@ def contrato_crear_view(request):
             "quimicos_almacenamientos": Contrato.QUIMICOS_ALMACENAMIENTO_CHOICES,
             "horarios_visita": Contrato.HORARIO_VISITA_CHOICES,
             "prioridades_visita": Contrato.PRIORIDAD_VISITA_CHOICES,
+            "ciudades": Ciudad.objects.filter(activa=True),
             "trabajadores": trabajadores,
             "dias_semana": DIAS_SEMANA.items(),
             "dias_mes": range(1, 32),
@@ -7849,6 +7941,7 @@ def contrato_editar_view(request, pk):
         "ventana_visita_hasta": contrato.ventana_visita_hasta.strftime("%H:%M") if contrato.ventana_visita_hasta else "",
         "duracion_estimada_minutos": contrato.duracion_estimada_minutos,
         "prioridad_visita": contrato.prioridad_visita,
+        **_datos_ubicacion_contrato(contrato=contrato),
         "piscina_largo_m": contrato.piscina_largo_m or "",
         "piscina_ancho_m": contrato.piscina_ancho_m or "",
         "piscina_profundidad_min_m": contrato.piscina_profundidad_min_m or "",
@@ -7898,6 +7991,7 @@ def contrato_editar_view(request, pk):
             "ventana_visita_hasta": validacion["ventana_visita_hasta"] or "",
             "duracion_estimada_minutos": validacion["duracion_estimada_minutos"],
             "prioridad_visita": validacion["prioridad_visita"],
+            **{campo: request.POST.get(campo, "") for campo in ("ciudad_ref","ciudad","sector_urbanizacion","direccion","enlace_google_maps","latitud","longitud")},
             **{campo: request.POST.get(campo, "") for campo in ("piscina_largo_m","piscina_ancho_m","piscina_profundidad_min_m","piscina_profundidad_max_m","piscina_volumen_m3","piscina_tipo","piscina_uso","piscina_filtracion","piscina_desinfeccion","piscina_observaciones")},
         }
 
@@ -7937,6 +8031,7 @@ def contrato_editar_view(request, pk):
             contrato.ventana_visita_hasta = validacion["ventana_visita_hasta"]
             contrato.duracion_estimada_minutos = validacion["duracion_estimada_minutos"]
             contrato.prioridad_visita = validacion["prioridad_visita"]
+            _aplicar_ubicacion_contrato(contrato, request, validacion["cliente"])
             _aplicar_ficha_tecnica_contrato(contrato, request)
             contrato.save()
 
@@ -7982,6 +8077,7 @@ def contrato_editar_view(request, pk):
             "quimicos_almacenamientos": Contrato.QUIMICOS_ALMACENAMIENTO_CHOICES,
             "horarios_visita": Contrato.HORARIO_VISITA_CHOICES,
             "prioridades_visita": Contrato.PRIORIDAD_VISITA_CHOICES,
+            "ciudades": Ciudad.objects.filter(activa=True),
             "trabajadores": trabajadores,
             "dias_semana": DIAS_SEMANA.items(),
             "dias_mes": range(1, 32),
