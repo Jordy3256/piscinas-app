@@ -912,6 +912,7 @@ def academia_publica_view(request):
         "completadas_ids": completadas_ids,
         "curso_total": curso_total, "curso_completadas": curso_completadas,
         "curso_porcentaje": curso_porcentaje, "continuar": continuar,
+        "curso_xp": curso_completadas * 40,
         "recientes": recientes, "favoritos": favoritos,
         "es_admin": _es_admin(request.user), "consejo": _consejo_del_dia(),
     })
@@ -958,7 +959,7 @@ def academia_contenido_detalle_view(request, slug):
     return render(request, "asistente_tecnico/academia_contenido_detalle.html", {
         "base_template": _base_template(request.user), "obj": obj,
         "es_admin": _es_admin(request.user), "completado": completado,
-        "favorito": favorito, "siguiente": siguiente,
+        "favorito": favorito, "siguiente": siguiente, "es_curso": request.GET.get("curso") == "1",
     })
 
 @login_required

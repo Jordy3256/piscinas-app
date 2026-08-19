@@ -1,0 +1,27 @@
+JVAQUA v3.10.0 — JVAQUA Digital 2.0 (sin servicios de pago)
+
+AQUO:
+- Campo libre para escribirle directamente.
+- Botón de micrófono cuando el navegador soporta reconocimiento de voz.
+- Mantiene todas las respuestas rápidas y árboles de diagnóstico existentes.
+- Intérprete local por reglas/palabras clave: agua, bomba, presión, aire, fugas,
+  filtro, calefacción, clorador salino, iluminación, manchas.
+- Si no entiende, no inventa: vuelve a Agua / Otro problema.
+- Estados visuales “AQUO está interpretando / analizando” con animación.
+
+CURSO 2.0:
+- Se separa visualmente de Biblioteca.
+- Camino de aprendizaje por niveles y misiones.
+- XP visual (+40 por misión completada).
+- Progreso por nivel y progreso total.
+- Lecciones abiertas desde Curso entran en “modo misión”.
+- Punto de control y continuidad hacia la siguiente misión.
+- Biblioteca conserva su funcionamiento de consulta rápida.
+
+No usa API de IA ni añade servicios de pago.
+No requiere migraciones.
+
+Después de copiar:
+python manage.py check
+python manage.py makemigrations --check --dry-run
+python manage.py collectstatic --noinput

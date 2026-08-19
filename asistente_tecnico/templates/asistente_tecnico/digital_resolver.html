@@ -16,12 +16,15 @@
 .problem-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:0 0 18px 48px}.problem-choice{border:1px solid #dce8f0;background:#fff;border-radius:16px;padding:12px;text-align:left;font-weight:850;color:#29485f;cursor:pointer;transition:.18s;display:flex;gap:9px;align-items:center}.problem-choice:hover,.problem-choice.active{border-color:#1598ca;background:#eefaff;color:#0871aa;transform:translateY(-1px);box-shadow:0 8px 20px rgba(7,120,184,.08)}.problem-choice i{width:31px;height:31px;border-radius:10px;background:#edf7fc;display:grid;place-items:center;color:#0879b7}.detail-box{margin:0 0 18px 48px;padding:15px;border:1px solid #e0eaf1;border-radius:18px;background:#fff}.detail-box textarea{min-height:88px;border-radius:13px}.action-title{font-weight:900;color:#17334a;margin-bottom:3px}.action-detail{color:#63798c;font-size:.9rem;line-height:1.45}.tech-note{border-radius:16px;background:#eef8fd;border:1px solid #d3ebf7;padding:12px 14px;color:#315a73;font-size:.86rem}.aqua-chat-avatar{background:transparent!important;border-color:transparent!important;box-shadow:none!important}.aqua-chat-avatar:after{right:1px!important;bottom:1px!important}.hero-character .aqua-character-picture{-webkit-mask-image:radial-gradient(ellipse 52% 70% at 58% 48%,#000 48%,rgba(0,0,0,.96) 62%,transparent 82%)!important;mask-image:radial-gradient(ellipse 52% 70% at 58% 48%,#000 48%,rgba(0,0,0,.96) 62%,transparent 82%)!important}.hero-character{mix-blend-mode:normal}.hero-character .aqua-avatar{filter:drop-shadow(0 20px 24px rgba(1,32,67,.22))}
 .resolver-nav{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px 48px}.resolver-nav button,.resolver-nav a{border:1px solid #dce8f0;background:#fff;border-radius:12px;padding:8px 11px;font-weight:800;color:#315a73;text-decoration:none}.resolver-nav button:hover,.resolver-nav a:hover{background:#eef8fd;color:#0871aa}@media(max-width:600px){.resolver-nav{margin-left:0}}
 @media(max-width:900px){.chat-layout{grid-template-columns:1fr}.case-card{position:static;order:-1}.chat-body{min-height:430px}}@media(max-width:600px){.entry-choice-grid{grid-template-columns:1fr;margin-left:0}.problem-grid{grid-template-columns:1fr;margin-left:0}.detail-box{margin-left:0}.resolver-shell{margin:-4px}.assistant-head{align-items:flex-start}.assistant-title h1{font-size:1.3rem}.chat-card,.case-card{border-radius:21px}.chat-body{padding:16px}.bubble{max-width:86%;font-size:.91rem}.resolver-choices,.measure-box{margin-left:0}.resolver-choice{padding:9px 11px;font-size:.86rem}.case-meta{grid-template-columns:1fr 1fr}.dose-grid{grid-template-columns:1fr}.desktop-sub{display:none}}
+
+.aquo-compose{gap:9px!important;align-items:center}.aquo-free-input{flex:1;min-width:0;border:1px solid #d9e7f1;background:#f8fbfd;border-radius:18px;padding:12px 15px;outline:none;color:#173d57;font-weight:650}.aquo-free-input:focus{background:#fff;border-color:#75c7e8;box-shadow:0 0 0 4px rgba(8,166,216,.09)}.voice-btn{width:43px;height:43px;border-radius:15px;border:1px solid #d9e7f1;background:#fff;color:#0879b7;display:grid;place-items:center;flex:none}.voice-btn.listening{background:#e9f9ff;color:#075ea5;box-shadow:0 0 0 5px rgba(8,166,216,.11);animation:aquoMic 1.2s infinite}.aquo-compose-hint{padding:0 18px 12px;color:#8091a1;font-size:.72rem;text-align:center}.aquo-thinking{display:flex;gap:5px;align-items:center}.aquo-thinking i{width:7px;height:7px;border-radius:50%;background:#49a9d2;display:block;animation:aquoDot 1.1s infinite}.aquo-thinking i:nth-child(2){animation-delay:.16s}.aquo-thinking i:nth-child(3){animation-delay:.32s}.aquo-thinking span{margin-left:5px;color:#607d91;font-size:.82rem;font-weight:750}@keyframes aquoDot{0%,70%,100%{transform:translateY(0);opacity:.35}35%{transform:translateY(-5px);opacity:1}}@keyframes aquoMic{50%{transform:scale(1.06)}}.aquo-free-note{font-size:.75rem;color:#6f8497;margin-left:58px;margin-top:6px}
+
 </style>
 {% endblock %}
 {% block content %}
 <div class="resolver-shell">
   <div class="assistant-head">
-    <div class="assistant-title"><div class="jd-kicker">RESOLVER</div><h1>Asistente JVAQUA</h1><p>Cuéntame qué pasa y te acompaño paso a paso.</p></div>
+    <div class="assistant-title"><div class="jd-kicker">RESOLVER</div><h1>AQUO · Asistente Inteligente</h1><p>Cuéntame qué pasa y te acompaño paso a paso.</p></div>
     {% if resultado %}<a class="btn btn-light border jd-btn" href="{% url 'asistente_tecnico:digital_resolver' %}{% if piscina %}?piscina={{piscina.pk}}{% endif %}"><i class="bi bi-arrow-clockwise me-1"></i>Nueva consulta</a>{% endif %}
   </div>
   {% if not piscina %}
@@ -76,7 +79,12 @@
           <div id="technicalConversation" class="d-none"><div class="msg-row assistant"><div class="aqua-chat-avatar small">{% include 'asistente_tecnico/partials/aqua_hero.html' %}</div><div class="bubble">Perfecto. Cuéntame <strong>qué ocurre exactamente</strong>, desde cuándo y qué notas en el equipo. AQUO usará esa información para seguir el diagnóstico adecuado.</div></div><div class="detail-box"><label class="small fw-bold mb-2">Describe lo que observas</label><textarea class="form-control" name="detalle_problema" id="detailInput" placeholder="Ej.: la bomba enciende, el prefiltro queda con aire y casi no sale agua por los retornos..."></textarea><div class="tech-note mt-2"><i class="bi bi-shield-check me-1"></i>AQUO prioriza comprobaciones seguras. Si detecta un caso eléctrico, presurizado o invasivo te indicará cuándo detenerte y llamar a un profesional.</div><button class="btn jd-btn jd-btn-primary w-100 mt-3" id="technicalAnalyzeBtn"><i class="bi bi-stars me-2"></i>Analizar el problema</button></div></div>
         {% endif %}
       </div></form>
-      <div class="chat-compose"><div class="compose-pill">El Asistente te hará solo las preguntas necesarias.</div><button class="send-btn" type="button" disabled><i class="bi bi-send-fill"></i></button></div>
+      <div class="chat-compose aquo-compose">
+        <button class="voice-btn" id="voiceBtn" type="button" title="Hablar con AQUO" aria-label="Hablar con AQUO"><i class="bi bi-mic-fill"></i></button>
+        <input class="aquo-free-input" id="aquoFreeInput" type="text" autocomplete="off" placeholder="Escribe o cuéntale a AQUO qué sucede...">
+        <button class="send-btn" id="aquoSendBtn" type="button" title="Enviar"><i class="bi bi-send-fill"></i></button>
+      </div>
+      <div class="aquo-compose-hint" id="voiceHint">También puedes usar las respuestas rápidas de arriba.</div>
     </section>
     <aside class="case-card">
       <div class="jd-kicker">TU PISCINA</div><div class="d-flex justify-content-between align-items-start gap-2 mt-1"><div><h5 class="fw-bold mb-1">{{piscina.nombre}}</h5><small class="text-muted">Datos usados para personalizar el análisis</small></div><a class="small fw-bold text-decoration-none" href="{% url 'asistente_tecnico:digital_piscina_editar' piscina.pk %}">Editar</a></div>
@@ -117,6 +125,41 @@ problemButtons.forEach(btn=>btn.addEventListener('click',()=>{setEnabled(problem
 backBtn?.addEventListener('click',()=>{clearDynamic();if(step>=3&&branch==='agua'){step=2;stateField.value='';setEnabled(choices,true);document.getElementById('waterAnalyzeBox').classList.add('d-none')}else if(step===2&&branch==='agua'){step=1;waterStateBox.classList.add('d-none');document.getElementById('continueWaterBtn').disabled=false}else if(step===2&&branch==='otro'){step=1;techBox.classList.add('d-none');categoryField.value='';setEnabled(problemButtons,true)}else if(step===1){step=0;branch='';categoryField.value='agua';hideFrom(1);setEnabled(entryButtons,true)}updateBack();saveDraft()});
 document.getElementById('newDiagnosisBtn')?.addEventListener('click',()=>{try{sessionStorage.removeItem(savedKey)}catch(e){}});document.querySelectorAll('.academy-help').forEach(a=>a.addEventListener('click',saveDraft));
 document.getElementById('resolverForm')?.addEventListener('submit',e=>{const technical=categoryField.value!=='agua';if(!technical&&(!stateField.value||!document.getElementById('phInput').value||!document.getElementById('clInput').value)){e.preventDefault();return}if(technical&&!categoryField.value){e.preventDefault();return}try{sessionStorage.removeItem(savedKey)}catch(err){}const b=technical?document.getElementById('technicalAnalyzeBtn'):document.getElementById('analyzeBtn');if(b){b.disabled=true;b.innerHTML='<span class="spinner-border spinner-border-sm me-2"></span>AQUO está analizando…';}});
+
+const freeInput=document.getElementById('aquoFreeInput'),sendFree=document.getElementById('aquoSendBtn'),voiceBtn=document.getElementById('voiceBtn'),chatBody=document.getElementById('chatBody');
+function escAquo(v){const d=document.createElement('div');d.textContent=v;return d.innerHTML}
+function aquoThinking(message='AQUO está pensando…'){const row=document.createElement('div');row.className='msg-row assistant dynamic-msg aquo-thinking-row';row.innerHTML=aquaMiniTemplate+`<div class="bubble"><div class="aquo-thinking"><i></i><i></i><i></i><span>${escAquo(message)}</span></div></div>`;chatBody.appendChild(row);row.scrollIntoView({behavior:'smooth',block:'nearest'});return row}
+function clickEntry(kind){const b=entryButtons.find(x=>x.dataset.entry===kind);if(b&&!b.disabled)b.click()}
+function chooseProblem(category){const b=problemButtons.find(x=>x.dataset.category===category);if(b&&!b.disabled)b.click()}
+function interpretAquo(text){
+ const q=text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+ if(/agua verde|verde|turbia|turbidez|ph|cloro|alga|algas|color del agua|agua sucia/.test(q))return {entry:'agua',msg:'Parece un problema relacionado con el estado del agua. Voy a empezar por las mediciones.'};
+ const rules=[
+  [/bomba.*(no prende|no enciende|apagada)|no (prende|enciende).*bomba/,'bomba_no_enciende'],
+  [/(no succiona|no aspira|no ceba|pierde cebado|sin succion)/,'bomba_no_succiona'],
+  [/(presion alta|manometro alto|mucha presion)/,'presion_alta'],
+  [/(presion baja|poca presion|poco caudal|sin fuerza|retornos.*poco)/,'presion_baja'],
+  [/(aire|burbujas)/,'aire_circuito'],[/(fuga|pierde agua|baja.*nivel)/,'fuga_agua'],
+  [/(filtro|filtra mal|filtracion)/,'filtro_sucio'],[/(calentador|calefaccion|bomba de calor)/,'calentador'],
+  [/(salino|clorador)/,'clorador_salino'],[/(luz|luces|iluminacion)/,'iluminacion'],[/(mancha|incrustacion|sarro)/,'manchas_incrustaciones']
+ ];
+ for(const [rx,cat] of rules){if(rx.test(q))return {entry:'otro',category:cat,msg:'Entendí el síntoma. Voy a abrir el diagnóstico que mejor coincide y puedes corregirme con las opciones si hace falta.'}}
+ return {entry:null,msg:'Todavía no tengo suficiente información para clasificarlo con seguridad. ¿Es un problema con el estado del agua o con otra parte de la piscina?'};
+}
+function processFreeText(){
+ const text=(freeInput?.value||'').trim();if(!text)return;
+ const row=document.createElement('div');row.className='msg-row user dynamic-msg';row.innerHTML=`<div class="bubble">${escAquo(text)}</div>`;chatBody.appendChild(row);freeInput.value='';
+ const thinking=aquoThinking('AQUO está interpretando lo que me cuentas…');
+ setTimeout(()=>{thinking.remove();const r=interpretAquo(text);const a=document.createElement('div');a.className='msg-row assistant dynamic-msg';a.innerHTML=aquaMiniTemplate+`<div class="bubble">${escAquo(r.msg)}</div>`;chatBody.appendChild(a);
+   if(r.entry==='agua'){clickEntry('agua')}
+   else if(r.entry==='otro'){clickEntry('otro');setTimeout(()=>{if(r.category)chooseProblem(r.category);if(r.category&&document.getElementById('detailInput'))document.getElementById('detailInput').value=text},120)}
+   a.scrollIntoView({behavior:'smooth',block:'nearest'});
+ },700);
+}
+sendFree?.addEventListener('click',processFreeText);freeInput?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();processFreeText()}});
+const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+if(SpeechRecognition&&voiceBtn){const rec=new SpeechRecognition();rec.lang='es-EC';rec.interimResults=false;rec.maxAlternatives=1;voiceBtn.addEventListener('click',()=>{try{rec.start();voiceBtn.classList.add('listening');document.getElementById('voiceHint').textContent='Escuchando… habla con naturalidad.'}catch(e){}});rec.onresult=e=>{freeInput.value=e.results[0][0].transcript;processFreeText()};rec.onend=()=>{voiceBtn.classList.remove('listening');document.getElementById('voiceHint').textContent='También puedes usar las respuestas rápidas de arriba.'};rec.onerror=rec.onend}else if(voiceBtn){voiceBtn.style.display='none'}
+
 updateBack();
 </script>
 {% endblock %}

@@ -1,6 +1,6 @@
 {% extends base_template %}{% load static %}{% block title %}Academia JVAQUA{% endblock %}{% block top_title %}🎓 Academia JVAQUA{% endblock %}
 {% block content %}
-<link rel="stylesheet" href="{% static 'asistente_tecnico/academia/academia-v2.css' %}?v=20260814-3">
+<link rel="stylesheet" href="{% static 'asistente_tecnico/academia/academia-v2.css' %}?v=20260819-20">
 <div class="aj-wrap">
   <section class="aj-hero mb-3">
     <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap position-relative" style="z-index:1">
@@ -31,7 +31,8 @@
       <div>
         <div class="small text-primary fw-bold">TU CURSO</div>
         <h4 class="fw-bold mb-1">Mantenimiento y cuidado profesional de piscinas</h4>
-        <div class="text-muted">{{ curso_completadas }} de {{ curso_total }} temas completados. Puedes seguir el orden recomendado o abrir cualquier tema.</div>
+        <div class="text-muted">{{ curso_completadas }} de {{ curso_total }} misiones completadas. Avanza por el camino, gana XP y desbloquea el siguiente reto.</div>
+        <div class="aj-xp-row"><span>⚡ <strong>{{ curso_xp }} XP</strong></span><span>🎯 {{ curso_completadas }} misiones</span><span>🏆 {{ curso_porcentaje }}% del curso</span></div>
         {% if continuar %}<div class="aj-continue mt-3"><div class="small text-primary fw-bold">CONTINUAR DONDE QUEDASTE</div><div class="d-flex justify-content-between align-items-center gap-3 flex-wrap mt-1"><div><strong>{{ continuar.titulo }}</strong><div class="text-muted small">{{ continuar.get_modulo_curso_display }} · {{ continuar.tiempo_lectura_min }} min</div></div><a class="btn btn-success" href="{% url 'asistente_tecnico:academia_contenido_detalle' continuar.slug %}">Continuar →</a></div></div>{% endif %}
       </div>
     </div>
@@ -64,7 +65,29 @@
   {% endif %}
 
   {% if modo == 'aprender' %}
-    {% for grupo in grupos_curso %}<section class="aj-module"><div class="aj-module-head mb-3"><div><h4 class="aj-module-title">{{ grupo.nombre }}</h4><div class="aj-module-desc">{% if grupo.codigo == 'fundamentos' %}Comprende cómo funciona una piscina antes de intervenirla.{% elif grupo.codigo == 'quimica' %}Aprende a leer el agua y tomar decisiones basadas en mediciones.{% elif grupo.codigo == 'productos' %}Conoce qué hace cada producto, cuándo usarlo y qué evitar.{% elif grupo.codigo == 'mantenimiento' %}Domina la rutina práctica de limpieza, circulación y tratamiento.{% elif grupo.codigo == 'problemas' %}Identifica síntomas, causas probables y el orden correcto de diagnóstico.{% elif grupo.codigo == 'equipos' %}Entiende bomba, filtro, válvulas y los componentes que mantienen el agua en movimiento.{% elif grupo.codigo == 'preventivo' %}Evita fallas y deterioro con revisiones periódicas bien hechas.{% elif grupo.codigo == 'seguridad' %}Trabaja con químicos y equipos reduciendo riesgos para personas e instalaciones.{% elif grupo.codigo == 'estandar' %}Consulta la forma de trabajo y criterios operativos propios de JVAQUA.{% else %}Integra química, hidráulica y experiencia para resolver casos complejos.{% endif %}</div><div class="aj-module-meta">{{ grupo.completados }} de {{ grupo.total }} temas aprendidos</div></div><div class="aj-progress-small"><strong>{{ grupo.porcentaje }}%</strong><div class="progress" style="height:7px"><div class="progress-bar" style="width:{{ grupo.porcentaje }}%"></div></div></div></div><div class="aj-grid">{% for c in grupo.contenidos %}<a class="aj-card" href="{% url 'asistente_tecnico:academia_contenido_detalle' c.slug %}">{% if c.imagen_principal %}<img class="aj-visual" src="{{ c.imagen_principal.url }}" alt="{{ c.titulo }}">{% else %}<img class="aj-visual" src="{% static c.visual_asset %}" alt="Ilustración de {{ c.titulo }}">{% endif %}<div class="aj-card-overlay"><span class="aj-pill">{{ c.get_tipo_display }}</span>{% if c.pk in completadas_ids %}<span class="aj-pill">✓ Aprendido</span>{% endif %}</div><div class="aj-body"><h5 class="fw-bold mb-2">{{ c.titulo }}</h5><div class="text-muted small">{{ c.resumen }}</div><div class="aj-card-footer"><span>{{ c.get_nivel_display }} · {{ c.tiempo_lectura_min }} min</span><span class="aj-official">✓ Oficial</span></div></div></a>{% endfor %}</div></section>{% empty %}<div class="card p-4 border-0 shadow-sm aj-empty"><strong>No encontramos temas con esos filtros.</strong><div class="text-muted">Prueba otra búsqueda o muestra todos los módulos.</div></div>{% endfor %}
+    <div class="aj-duo-path">
+      {% for grupo in grupos_curso %}
+      <section class="aj-world">
+        <div class="aj-world-head">
+          <div class="aj-world-number">{{ forloop.counter }}</div>
+          <div><div class="aj-eyebrow">NIVEL {{ forloop.counter }}</div><h3>{{ grupo.nombre }}</h3><p>{% if grupo.codigo == 'fundamentos' %}Conoce la piscina y entiende cómo se mueve el agua.{% elif grupo.codigo == 'quimica' %}Aprende a medir, interpretar y equilibrar el agua.{% elif grupo.codigo == 'productos' %}Domina los productos y cuándo utilizarlos.{% elif grupo.codigo == 'mantenimiento' %}Practica la rutina correcta de mantenimiento.{% elif grupo.codigo == 'problemas' %}Entrena tu criterio con problemas reales.{% elif grupo.codigo == 'equipos' %}Comprende bomba, filtro y componentes.{% elif grupo.codigo == 'preventivo' %}Anticípate a fallas y deterioro.{% elif grupo.codigo == 'seguridad' %}Trabaja de forma segura con químicos y equipos.{% elif grupo.codigo == 'estandar' %}Aprende el método operativo JVAQUA.{% else %}Integra todo lo aprendido en casos avanzados.{% endif %}</p></div>
+          <div class="aj-world-progress"><strong>{{ grupo.porcentaje }}%</strong><small>{{ grupo.completados }}/{{ grupo.total }}</small></div>
+        </div>
+        <div class="aj-mission-road">
+          {% for c in grupo.contenidos %}
+          <a class="aj-mission {% if c.pk in completadas_ids %}done{% elif forloop.first %}current{% endif %}" href="{% url 'asistente_tecnico:academia_contenido_detalle' c.slug %}?curso=1">
+            <div class="aj-mission-node">{% if c.pk in completadas_ids %}✓{% else %}{{ forloop.counter }}{% endif %}</div>
+            <div class="aj-mission-card">
+              <div><span class="aj-mission-type">{% if c.pk in completadas_ids %}COMPLETADA{% else %}MISIÓN {{ forloop.counter }}{% endif %}</span><h5>{{ c.titulo }}</h5><p>{{ c.resumen|truncatechars:115 }}</p></div>
+              <div class="aj-mission-reward"><span>⚡ +40 XP</span><small>{{ c.tiempo_lectura_min }} min</small></div>
+            </div>
+          </a>
+          {% endfor %}
+          <div class="aj-level-finish"><span>🏆</span><div><strong>Meta del nivel</strong><small>Completa las {{ grupo.total }} misiones para dominar este bloque.</small></div></div>
+        </div>
+      </section>
+      {% empty %}<div class="card p-4 border-0 shadow-sm aj-empty"><strong>No encontramos misiones con esos filtros.</strong></div>{% endfor %}
+    </div>
   {% else %}
     <div class="aj-grid">{% for c in contenidos %}<a class="aj-card" href="{% url 'asistente_tecnico:academia_contenido_detalle' c.slug %}">{% if c.imagen_principal %}<img class="aj-visual" src="{{ c.imagen_principal.url }}" alt="{{ c.titulo }}">{% else %}<img class="aj-visual" src="{% static c.visual_asset %}" alt="Ilustración de {{ c.titulo }}">{% endif %}<div class="aj-card-overlay"><span class="aj-pill">{{ c.get_tipo_display }}</span></div><div class="aj-body"><h5 class="fw-bold mb-2">{{ c.titulo }}</h5><div class="text-muted small">{{ c.resumen }}</div><div class="aj-card-footer"><span>{{ c.get_nivel_display }} · {{ c.tiempo_lectura_min }} min</span><span class="aj-official">✓ Oficial</span></div></div></a>{% empty %}<div class="card p-4 border-0 shadow-sm aj-empty"><strong>No encontramos contenido.</strong><div class="text-muted">Prueba otra palabra o categoría.</div></div>{% endfor %}</div>
   {% endif %}
