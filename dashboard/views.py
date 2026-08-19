@@ -7148,6 +7148,207 @@ def cliente_list_view(request):
     })
 
 
+
+def _pdf_texto(valor, vacio="No registrado"):
+    from xml.sax.saxutils import escape
+    if valor is None or valor == "":
+        return escape(str(vacio))
+    return escape(str(valor))
+
+
+def _generar_pdf_clientes_contratos(clientes, titulo, nombre_archivo, subtitulo=""):
+    """Genera el expediente maestro de clientes y contratos, sin movimientos operativos/financieros."""
+    from io import BytesIO
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, KeepTogether
+
+    clientes = list(clientes)
+    total_contratos = sum(len(getattr(c, "contratos_pdf", [])) for c in clientes)
+    activos = sum(1 for c in clientes for ct in getattr(c, "contratos_pdf", []) if ct.activo)
+    inactivos = total_contratos - activos
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer, pagesize=A4, rightMargin=14*mm, leftMargin=14*mm,
+        topMargin=18*mm, bottomMargin=16*mm,
+        title=titulo, author="JVAQUA",
+    )
+    styles = getSampleStyleSheet()
+    navy = colors.HexColor("#0F172A")
+    aqua = colors.HexColor("#0F766E")
+    muted = colors.HexColor("#64748B")
+    line = colors.HexColor("#E2E8F0")
+    soft = colors.HexColor("#F8FAFC")
+    title_style = ParagraphStyle("jv_title", parent=styles["Title"], fontName="Helvetica-Bold", fontSize=20, leading=24, textColor=navy, alignment=TA_CENTER, spaceAfter=5)
+    subtitle_style = ParagraphStyle("jv_sub", parent=styles["Normal"], fontSize=9, leading=12, textColor=muted, alignment=TA_CENTER)
+    section_style = ParagraphStyle("jv_section", parent=styles["Heading2"], fontName="Helvetica-Bold", fontSize=13, leading=16, textColor=navy, spaceBefore=4, spaceAfter=7)
+    contract_style = ParagraphStyle("jv_contract", parent=styles["Heading3"], fontName="Helvetica-Bold", fontSize=10.5, leading=13, textColor=aqua, spaceBefore=6, spaceAfter=5)
+    body = ParagraphStyle("jv_body", parent=styles["BodyText"], fontSize=8.3, leading=10.5, textColor=navy)
+    label = ParagraphStyle("jv_label", parent=body, fontName="Helvetica-Bold", textColor=muted)
+    small = ParagraphStyle("jv_small", parent=body, fontSize=7.5, leading=9.5, textColor=muted)
+
+    def P(v, style=body):
+        return Paragraph(_pdf_texto(v), style)
+
+    def row_table(rows, widths=(42*mm, 132*mm)):
+        data=[]
+        for k,v in rows:
+            data.append([Paragraph(_pdf_texto(k), label), Paragraph(_pdf_texto(v), body)])
+        t=Table(data, colWidths=list(widths), hAlign="LEFT")
+        t.setStyle(TableStyle([
+            ("VALIGN",(0,0),(-1,-1),"TOP"),
+            ("BACKGROUND",(0,0),(0,-1),soft),
+            ("GRID",(0,0),(-1,-1),0.35,line),
+            ("LEFTPADDING",(0,0),(-1,-1),6),("RIGHTPADDING",(0,0),(-1,-1),6),
+            ("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4),
+        ]))
+        return t
+
+    def footer(canvas, doc_obj):
+        canvas.saveState()
+        canvas.setStrokeColor(line); canvas.setLineWidth(0.5)
+        canvas.line(14*mm, 11*mm, 196*mm, 11*mm)
+        canvas.setFont("Helvetica", 7.5); canvas.setFillColor(muted)
+        canvas.drawString(14*mm, 7*mm, "JVAQUA - Registro administrativo confidencial")
+        canvas.drawRightString(196*mm, 7*mm, f"Pagina {doc_obj.page}")
+        canvas.restoreState()
+
+    story=[]
+    story.append(Paragraph("JVAQUA", ParagraphStyle("brand", parent=title_style, fontSize=11, leading=14, textColor=aqua)))
+    story.append(Paragraph(_pdf_texto(titulo), title_style))
+    if subtitulo:
+        story.append(Paragraph(_pdf_texto(subtitulo), subtitle_style))
+    story.append(Spacer(1, 5*mm))
+    resumen = Table([
+        [P("Clientes", label), P("Contratos", label), P("Activos", label), P("Inactivos", label)],
+        [P(len(clientes)), P(total_contratos), P(activos), P(inactivos)],
+    ], colWidths=[45*mm]*4)
+    resumen.setStyle(TableStyle([
+        ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#E6FFFB")),
+        ("GRID",(0,0),(-1,-1),0.5,line),("ALIGN",(0,0),(-1,-1),"CENTER"),
+        ("VALIGN",(0,0),(-1,-1),"MIDDLE"),("TOPPADDING",(0,0),(-1,-1),7),("BOTTOMPADDING",(0,0),(-1,-1),7),
+    ]))
+    story.append(resumen)
+    story.append(Spacer(1, 4*mm))
+    story.append(Paragraph(f"Generado: {timezone.localtime().strftime('%d/%m/%Y %H:%M')}", subtitle_style))
+    story.append(PageBreak())
+
+    for idx, cliente in enumerate(clientes, start=1):
+        contratos = getattr(cliente, "contratos_pdf", [])
+        encabezado = [
+            Paragraph(f"{idx:03d}. {_pdf_texto(cliente.nombre)}", section_style),
+            row_table([
+                ("Telefono", cliente.telefono), ("Correo", cliente.email or "No registrado"),
+                ("Ciudad", cliente.ciudad or (cliente.ciudad_ref.nombre if cliente.ciudad_ref else "No registrada")),
+                ("Sector / urbanizacion", cliente.sector_urbanizacion or "No registrado"),
+                ("Direccion", cliente.direccion or "No registrada"),
+                ("Google Maps", cliente.enlace_google_maps or "No registrado"),
+                ("Coordenadas GPS", f"{cliente.latitud}, {cliente.longitud}" if cliente.latitud is not None and cliente.longitud is not None else "No registradas"),
+                ("Estado cliente", "Activo" if cliente.activo else "Inactivo"),
+            ]),
+            Spacer(1, 3*mm),
+        ]
+        story.extend(encabezado)
+        if not contratos:
+            story.append(Paragraph("Sin contratos registrados.", small))
+        for n, contrato in enumerate(contratos, start=1):
+            story.append(Paragraph(f"Contrato {n} - {'ACTIVO' if contrato.activo else 'INACTIVO'}", contract_style))
+            tecnico = "No asignado"
+            if contrato.tecnico_designado:
+                tecnico = str(contrato.tecnico_designado)
+            story.append(row_table([
+                ("Fecha de inicio", contrato.fecha_inicio.strftime("%d/%m/%Y") if contrato.fecha_inicio else "No registrada"),
+                ("Frecuencia", contrato.frecuencia_completa()),
+                ("Dias de visita", contrato.dias_visita_completos()),
+                ("Forma de pago", contrato.forma_pago_completa()),
+                ("Valor mensual", f"${contrato.precio_mensual:,.2f}"),
+                ("Tecnico designado", tecnico),
+                ("Valor tecnico mensual", f"${contrato.valor_tecnico_mensual:,.2f}"),
+                ("Quimicos", contrato.get_quimicos_proveedor_display()),
+                ("Almacenamiento quimicos", contrato.get_quimicos_almacenamiento_display() if contrato.quimicos_proveedor == "jvaqua" and contrato.quimicos_almacenamiento else "No aplica"),
+                ("Horario de visita", contrato.get_tipo_horario_visita_display()),
+                ("Duracion estimada", f"{contrato.duracion_estimada_minutos} min"),
+                ("Prioridad", contrato.get_prioridad_visita_display()),
+                ("Fecha de baja", contrato.fecha_baja.strftime("%d/%m/%Y") if contrato.fecha_baja else "No aplica"),
+                ("Motivo de baja", contrato.get_motivo_baja_display() if contrato.motivo_baja else "No aplica"),
+            ]))
+            ficha = [
+                ("Largo", f"{contrato.piscina_largo_m} m" if contrato.piscina_largo_m is not None else "No registrado"),
+                ("Ancho", f"{contrato.piscina_ancho_m} m" if contrato.piscina_ancho_m is not None else "No registrado"),
+                ("Profundidad min.", f"{contrato.piscina_profundidad_min_m} m" if contrato.piscina_profundidad_min_m is not None else "No registrada"),
+                ("Profundidad max.", f"{contrato.piscina_profundidad_max_m} m" if contrato.piscina_profundidad_max_m is not None else "No registrada"),
+                ("Volumen", f"{contrato.piscina_volumen_m3} m3" if contrato.piscina_volumen_m3 is not None else "No registrado"),
+                ("Tipo de piscina", contrato.piscina_tipo or "No registrado"),
+                ("Uso", contrato.piscina_uso or "No registrado"),
+                ("Filtracion", contrato.piscina_filtracion or "No registrada"),
+                ("Desinfeccion", contrato.piscina_desinfeccion or "No registrada"),
+                ("Observaciones tecnicas", contrato.piscina_observaciones or "Sin observaciones"),
+            ]
+            story.append(Spacer(1, 2*mm)); story.append(Paragraph("Ficha tecnica de la piscina", contract_style)); story.append(row_table(ficha))
+            equipos = list(contrato.equipamientos.all())
+            if equipos:
+                story.append(Spacer(1, 2*mm)); story.append(Paragraph("Equipamiento proporcionado por JVAQUA", contract_style))
+                eq_data=[[P("Equipo",label),P("Adicional mensual",label),P("Entrega",label),P("Estado",label),P("Devolucion",label)]]
+                for e in equipos:
+                    eq_data.append([P(e.nombre),P(f"${e.valor_mensual_adicional:,.2f}"),P(e.fecha_entrega.strftime("%d/%m/%Y") if e.fecha_entrega else "-"),P(e.estado or ("Activo" if e.activo else "Inactivo")),P("Si" if e.debe_devolverse else "No")])
+                et=Table(eq_data,colWidths=[55*mm,30*mm,28*mm,35*mm,27*mm],repeatRows=1)
+                et.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#E6FFFB")),("GRID",(0,0),(-1,-1),0.35,line),("VALIGN",(0,0),(-1,-1),"TOP"),("LEFTPADDING",(0,0),(-1,-1),4),("RIGHTPADDING",(0,0),(-1,-1),4),("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4)]))
+                story.append(et)
+            story.append(Spacer(1, 4*mm))
+        if idx < len(clientes):
+            story.append(PageBreak())
+
+    if not clientes:
+        story.append(Paragraph("No existen clientes para los filtros seleccionados.", body))
+    doc.build(story, onFirstPage=footer, onLaterPages=footer)
+    response = HttpResponse(buffer.getvalue(), content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename="{nombre_archivo}"'
+    return response
+
+
+@login_required
+def clientes_contratos_pdf_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    ciudad_id = (request.GET.get("ciudad") or "").strip()
+    qs = Cliente.objects.select_related("ciudad_ref").prefetch_related(
+        models.Prefetch(
+            "contratos",
+            queryset=Contrato.objects.select_related("tecnico_designado__user").prefetch_related("equipamientos").order_by("-activo", "fecha_inicio", "id"),
+            to_attr="contratos_pdf",
+        )
+    ).order_by("ciudad", "nombre", "id")
+    titulo = "Registro General de Clientes y Contratos"
+    subtitulo = "Todos los clientes y contratos registrados"
+    nombre = "registro_general_clientes_contratos.pdf"
+    if ciudad_id.isdigit():
+        ciudad = get_object_or_404(Ciudad, pk=int(ciudad_id))
+        qs = qs.filter(ciudad_ref=ciudad)
+        titulo = f"Registro de Clientes y Contratos - {ciudad.nombre}"
+        subtitulo = f"Expediente administrativo consolidado de {ciudad.nombre}"
+        nombre = f"clientes_contratos_{re.sub(r'[^a-zA-Z0-9_-]+', '_', ciudad.nombre.lower())}.pdf"
+    return _generar_pdf_clientes_contratos(qs, titulo, nombre, subtitulo)
+
+
+@login_required
+def cliente_contratos_pdf_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    qs = Cliente.objects.filter(pk=pk).select_related("ciudad_ref").prefetch_related(
+        models.Prefetch(
+            "contratos",
+            queryset=Contrato.objects.select_related("tecnico_designado__user").prefetch_related("equipamientos").order_by("-activo", "fecha_inicio", "id"),
+            to_attr="contratos_pdf",
+        )
+    )
+    cliente = get_object_or_404(Cliente, pk=pk)
+    safe = re.sub(r"[^a-zA-Z0-9_-]+", "_", cliente.nombre.lower()).strip("_") or f"cliente_{pk}"
+    return _generar_pdf_clientes_contratos(qs, f"Ficha de Cliente y Contratos - {cliente.nombre}", f"{safe}_contratos.pdf", "Expediente administrativo individual")
+
+
 @login_required
 def cliente_crear_view(request):
     if not es_admin(request.user):

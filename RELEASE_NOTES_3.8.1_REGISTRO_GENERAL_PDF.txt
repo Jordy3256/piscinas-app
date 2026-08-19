@@ -1,0 +1,14 @@
+JVAQUA v3.8.1 - Registro General de Clientes y Contratos PDF
+
+Incluye:
+- PDF maestro con TODOS los clientes y sus contratos relacionados.
+- Resumen de clientes, contratos activos e inactivos.
+- Datos administrativos del cliente.
+- Informacion comercial y operativa del contrato.
+- Ficha tecnica de cada piscina.
+- Equipamiento JVAQUA asociado, cuando exista.
+- Exportacion filtrada por ciudad.
+- Exportacion individual por cliente con todos sus contratos.
+- No incluye mantenimientos, pagos, nomina, fotografias ni movimientos de inventario.
+
+No requiere migraciones.
