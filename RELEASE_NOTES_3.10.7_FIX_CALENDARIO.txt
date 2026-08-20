@@ -1,0 +1,13 @@
+JVAQUA v3.10.7 — Fix Calendario Trabajador
+
+Corrección:
+- El botón "Ver calendario y programación" vuelve a desplegar correctamente la agenda/calendario.
+- Se refuerza el control de apertura/cierre sin depender únicamente del listener anterior.
+- Mantiene Calendario mensual y Agenda semanal.
+- No cambia ninguna lógica de mantenimientos, rutas, filtros ni programación.
+- No requiere migraciones.
+
+Después de copiar:
+python manage.py check
+python manage.py makemigrations --check --dry-run
+python manage.py collectstatic --noinput

@@ -940,7 +940,7 @@
 </div>
 
 <div class="d-grid d-sm-flex gap-2 mb-3">
-  <button type="button" class="btn btn-outline-primary worker-more-btn" id="toggleWorkerPlanning">
+  <button type="button" class="btn btn-outline-primary worker-more-btn" id="toggleWorkerPlanning" aria-expanded="false" onclick="return window.toggleWorkerPlanningPanels ? window.toggleWorkerPlanningPanels() : false;">
     <i class="bi bi-calendar3 me-1"></i> Ver calendario y programación
   </button>
 </div>
@@ -1430,19 +1430,34 @@
 {% endif %}
 
 <script>
-(function(){
-  const btn=document.getElementById('toggleWorkerPlanning');
-  const panels=[...document.querySelectorAll('.worker-planning-panel')];
-  if(!btn||!panels.length)return;
-  btn.addEventListener('click',()=>{
-    const opening=panels.some(x=>x.classList.contains('d-none'));
-    panels.forEach(x=>x.classList.toggle('d-none',!opening));
-    btn.innerHTML=opening
-      ? '<i class="bi bi-chevron-up me-1"></i> Ocultar calendario y programación'
-      : '<i class="bi bi-calendar3 me-1"></i> Ver calendario y programación';
-    if(opening) panels[0].scrollIntoView({behavior:'smooth',block:'start'});
+window.toggleWorkerPlanningPanels = function(){
+  const btn = document.getElementById('toggleWorkerPlanning');
+  const panels = Array.from(document.querySelectorAll('.worker-planning-panel'));
+  if (!btn || !panels.length) return false;
+
+  const opening = panels.every(panel => panel.classList.contains('d-none'));
+  panels.forEach(panel => {
+    panel.classList.toggle('d-none', !opening);
+    panel.hidden = !opening;
   });
-})();
+
+  btn.setAttribute('aria-expanded', opening ? 'true' : 'false');
+  btn.innerHTML = opening
+    ? '<i class="bi bi-chevron-up me-1"></i> Ocultar calendario y programación'
+    : '<i class="bi bi-calendar3 me-1"></i> Ver calendario y programación';
+
+  if (opening) {
+    const target = panels.find(panel => panel.querySelector('.worker-calendar-card, .mini-calendario')) || panels[0];
+    window.setTimeout(() => target.scrollIntoView({behavior:'smooth', block:'start'}), 40);
+  }
+  return false;
+};
+
+document.addEventListener('DOMContentLoaded', function(){
+  document.querySelectorAll('.worker-planning-panel').forEach(panel => {
+    if (panel.classList.contains('d-none')) panel.hidden = true;
+  });
+});
 </script>
 
 <script>
