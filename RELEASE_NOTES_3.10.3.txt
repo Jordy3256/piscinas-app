@@ -1,0 +1,17 @@
+JVAQUA v3.10.3 — Menú trabajador + limpieza de campanas
+
+Cambios:
+- Perfil Trabajador: se agrega Inventario al menú móvil central.
+- El menú trabajador queda: Inicio, Mantenimientos, Asistente, Inventario.
+- Administrador: se elimina el botón duplicado “Activar” y “Test Push”.
+- Trabajador: se elimina el botón duplicado “Activar notificaciones”.
+- Se conserva intacta la campana principal con bandeja, contador e historial.
+- La limpieza aplica tanto en móvil como en escritorio.
+- No se modifican permisos, URLs ni lógica de notificaciones principal.
+
+No requiere migraciones.
+
+Después de copiar:
+python manage.py check
+python manage.py makemigrations --check --dry-run
+python manage.py collectstatic --noinput

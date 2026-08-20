@@ -655,10 +655,6 @@
             <i class="bi bi-phone"></i>
           </button>
 
-          <button id="btn-push" class="btn" type="button" title="Activar notificaciones">
-            <i class="bi bi-bell-fill me-1"></i> Activar
-          </button>
-
           <div class="dropdown">
             <a class="notif-btn dropdown-toggle"
                href="#"
@@ -760,10 +756,11 @@
       </div>
     </nav>
 
-<nav class="mobile-orbit-nav" aria-label="Menú móvil"><div class="mobile-orbit-backdrop"></div><div class="mobile-orbit-items count-3">
+<nav class="mobile-orbit-nav" aria-label="Menú móvil"><div class="mobile-orbit-backdrop"></div><div class="mobile-orbit-items count-4">
 <a class="mobile-orbit-item {% if request.path == '/dashboard/inicio/' %}active{% endif %}" href="/dashboard/inicio/"><span class="orbit-icon"><i class="bi bi-house-door-fill"></i></span><span class="orbit-label">Inicio</span></a>
 <a class="mobile-orbit-item {% if request.path == '/dashboard/home/' or '/mantenimientos/' in request.path or '/dashboard/ordenes/' in request.path %}active{% endif %}" href="/dashboard/home/"><span class="orbit-icon"><i class="bi bi-card-checklist"></i></span><span class="orbit-label">Mantenimientos</span></a>
 <a class="mobile-orbit-item {% if '/dashboard/asistente/' in request.path or 'calculadora' in request.path %}active{% endif %}" href="{% url 'asistente_tecnico:inicio' %}"><span class="orbit-icon"><i class="bi bi-stars"></i></span><span class="orbit-label">Asistente</span></a>
+<a class="mobile-orbit-item {% if '/dashboard/mi-inventario/' in request.path %}active{% endif %}" href="/dashboard/mi-inventario/"><span class="orbit-icon"><i class="bi bi-box-seam-fill"></i></span><span class="orbit-label">Inventario</span></a>
 </div><div class="mobile-orbit-dock"><button class="mobile-orbit-toggle" type="button" aria-label="Abrir menú" aria-expanded="false"><span class="orbit-grid">▦</span><span class="orbit-close">×</span></button></div></nav>
   </div>
 
