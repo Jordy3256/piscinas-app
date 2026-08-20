@@ -549,6 +549,36 @@
       vertical-align: middle;
     }
 
+
+/* JVAQUA v3.10.1 · Navegación móvil orbital */
+.mobile-orbit-nav{display:none}
+@media(max-width:767.98px){
+  .bottom-nav,.jd-bottom{display:none!important}
+  .spacer-bottom{height:calc(94px + env(safe-area-inset-bottom))!important}
+  .mobile-orbit-nav{display:block;position:fixed;inset:0;z-index:1090;pointer-events:none}
+  .mobile-orbit-backdrop{position:absolute;inset:0;background:rgba(7,25,48,.22);backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);opacity:0;transition:opacity .22s ease;pointer-events:none}
+  .mobile-orbit-nav.is-open .mobile-orbit-backdrop{opacity:1;pointer-events:auto}
+  .mobile-orbit-dock{position:absolute;left:50%;bottom:calc(13px + env(safe-area-inset-bottom));width:72px;height:72px;transform:translateX(-50%);pointer-events:auto}
+  .mobile-orbit-toggle{position:absolute;inset:0;display:grid;place-items:center;width:72px;height:72px;padding:0;border:5px solid rgba(255,255,255,.96);border-radius:50%;color:#fff;background:linear-gradient(145deg,#0b6fe8,#0787bf);box-shadow:0 13px 32px rgba(4,77,165,.34),0 0 0 1px rgba(11,94,215,.08);font-size:1.55rem;transition:transform .25s ease,box-shadow .25s ease;z-index:4}
+  .mobile-orbit-toggle:active{transform:scale(.94)}
+  .mobile-orbit-nav.is-open .mobile-orbit-toggle{transform:rotate(45deg);box-shadow:0 16px 38px rgba(4,77,165,.4)}
+  .mobile-orbit-toggle .orbit-close{display:none}
+  .mobile-orbit-nav.is-open .mobile-orbit-toggle .orbit-grid{display:none}
+  .mobile-orbit-nav.is-open .mobile-orbit-toggle .orbit-close{display:block}
+  .mobile-orbit-items{position:absolute;left:50%;bottom:calc(99px + env(safe-area-inset-bottom));width:min(360px,calc(100vw - 24px));height:238px;transform:translateX(-50%);pointer-events:none}
+  .mobile-orbit-item{--x:0px;--y:0px;position:absolute;left:50%;bottom:0;display:flex;align-items:center;gap:7px;min-width:54px;max-width:132px;height:54px;padding:0 12px 0 8px;border:1px solid rgba(218,229,242,.95);border-radius:28px;color:#17314f!important;background:rgba(255,255,255,.98);box-shadow:0 12px 30px rgba(13,42,75,.18);text-decoration:none!important;font-size:.72rem;font-weight:800;white-space:nowrap;opacity:0;transform:translate(-50%,30px) scale(.72);transition:opacity .18s ease,transform .28s cubic-bezier(.2,.85,.3,1.18);pointer-events:none}
+  .mobile-orbit-item .orbit-icon{display:grid;place-items:center;width:38px;height:38px;flex:0 0 38px;border-radius:50%;color:#0b67cf;background:#eaf4ff;font-size:1.08rem}
+  .mobile-orbit-item.active{color:#075eb8!important;border-color:#b9d9ff;background:#f7fbff}
+  .mobile-orbit-item.active .orbit-icon{color:#fff;background:linear-gradient(145deg,#0b6fe8,#0787bf)}
+  .mobile-orbit-nav.is-open .mobile-orbit-item{opacity:1;transform:translate(calc(-50% + var(--x)),var(--y)) scale(1);pointer-events:auto}
+  .mobile-orbit-item:nth-child(1){transition-delay:.02s}.mobile-orbit-item:nth-child(2){transition-delay:.045s}.mobile-orbit-item:nth-child(3){transition-delay:.07s}.mobile-orbit-item:nth-child(4){transition-delay:.095s}.mobile-orbit-item:nth-child(5){transition-delay:.12s}.mobile-orbit-item:nth-child(6){transition-delay:.145s}
+  .mobile-orbit-items.count-4 .mobile-orbit-item:nth-child(1){--x:-112px;--y:-22px}.mobile-orbit-items.count-4 .mobile-orbit-item:nth-child(2){--x:-52px;--y:-101px}.mobile-orbit-items.count-4 .mobile-orbit-item:nth-child(3){--x:52px;--y:-101px}.mobile-orbit-items.count-4 .mobile-orbit-item:nth-child(4){--x:112px;--y:-22px}
+  .mobile-orbit-items.count-5 .mobile-orbit-item:nth-child(1){--x:-128px;--y:-18px}.mobile-orbit-items.count-5 .mobile-orbit-item:nth-child(2){--x:-82px;--y:-96px}.mobile-orbit-items.count-5 .mobile-orbit-item:nth-child(3){--x:0px;--y:-132px}.mobile-orbit-items.count-5 .mobile-orbit-item:nth-child(4){--x:82px;--y:-96px}.mobile-orbit-items.count-5 .mobile-orbit-item:nth-child(5){--x:128px;--y:-18px}
+  .mobile-orbit-items.count-6 .mobile-orbit-item{height:50px;padding-right:10px;font-size:.67rem}.mobile-orbit-items.count-6 .mobile-orbit-item .orbit-icon{width:34px;height:34px;flex-basis:34px}
+  .mobile-orbit-items.count-6 .mobile-orbit-item:nth-child(1){--x:-130px;--y:-15px}.mobile-orbit-items.count-6 .mobile-orbit-item:nth-child(2){--x:-100px;--y:-82px}.mobile-orbit-items.count-6 .mobile-orbit-item:nth-child(3){--x:-39px;--y:-137px}.mobile-orbit-items.count-6 .mobile-orbit-item:nth-child(4){--x:39px;--y:-137px}.mobile-orbit-items.count-6 .mobile-orbit-item:nth-child(5){--x:100px;--y:-82px}.mobile-orbit-items.count-6 .mobile-orbit-item:nth-child(6){--x:130px;--y:-15px}
+}
+@media(max-width:390px){.mobile-orbit-item .orbit-label{display:none}.mobile-orbit-item{width:54px;padding:0 8px;justify-content:center}.mobile-orbit-items.count-6 .mobile-orbit-item{width:48px}.mobile-orbit-items.count-6 .mobile-orbit-item:nth-child(1){--x:-118px}.mobile-orbit-items.count-6 .mobile-orbit-item:nth-child(2){--x:-91px}.mobile-orbit-items.count-6 .mobile-orbit-item:nth-child(5){--x:91px}.mobile-orbit-items.count-6 .mobile-orbit-item:nth-child(6){--x:118px}}
+
     /* Navegación inferior */
     .bottom-nav {
       position: fixed;
@@ -893,9 +923,29 @@
       </div>
     </div>
 
+<nav class="mobile-orbit-nav" aria-label="Menú móvil"><div class="mobile-orbit-backdrop"></div><div class="mobile-orbit-items count-6"><a class="mobile-orbit-item {% if request.path == '/dashboard/inicio/' %}active{% endif %}" href="/dashboard/inicio/"><span class="orbit-icon">🏠</span><span class="orbit-label">Inicio</span></a>
+<a class="mobile-orbit-item {% if request.path == '/dashboard/home/' %}active{% endif %}" href="/dashboard/home/"><span class="orbit-icon">📊</span><span class="orbit-label">Dashboard</span></a>
+<a class="mobile-orbit-item {% if '/dashboard/operativo/' in request.path %}active{% endif %}" href="/dashboard/operativo/"><span class="orbit-icon">🧑‍💼</span><span class="orbit-label">Operativo</span></a>
+<a class="mobile-orbit-item {% if '/dashboard/contratos/' in request.path %}active{% endif %}" href="/dashboard/contratos/"><span class="orbit-icon">📄</span><span class="orbit-label">Contratos</span></a>
+<a class="mobile-orbit-item {% if '/dashboard/inventario/' in request.path %}active{% endif %}" href="/dashboard/inventario/"><span class="orbit-icon">📦</span><span class="orbit-label">Inventario</span></a>
+<a class="mobile-orbit-item {% if '/dashboard/finanzas/' in request.path %}active{% endif %}" href="/dashboard/finanzas/flujo/"><span class="orbit-icon">💰</span><span class="orbit-label">Finanzas</span></a></div><div class="mobile-orbit-dock"><button class="mobile-orbit-toggle" type="button" aria-label="Abrir menú" aria-expanded="false"><span class="orbit-grid">▦</span><span class="orbit-close">×</span></button></div></nav>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+(function(){
+  const nav=document.querySelector('.mobile-orbit-nav');
+  if(!nav)return;
+  const toggle=nav.querySelector('.mobile-orbit-toggle');
+  const backdrop=nav.querySelector('.mobile-orbit-backdrop');
+  const close=()=>{nav.classList.remove('is-open');toggle.setAttribute('aria-expanded','false');document.body.classList.remove('orbit-menu-open')};
+  const open=()=>{nav.classList.add('is-open');toggle.setAttribute('aria-expanded','true');document.body.classList.add('orbit-menu-open')};
+  toggle.addEventListener('click',()=>nav.classList.contains('is-open')?close():open());
+  backdrop.addEventListener('click',close);
+  nav.querySelectorAll('.mobile-orbit-item').forEach(a=>a.addEventListener('click',close));
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')close()});
+})();
+</script>
 
   <script>
     window.APP_VERSION = "20260311-10";

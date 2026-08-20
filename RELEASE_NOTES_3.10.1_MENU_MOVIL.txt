@@ -1,0 +1,21 @@
+JVAQUA v3.10.1 — Menú móvil central desplegable
+
+Cambio exclusivamente de interfaz móvil:
+- Administrador: conserva Inicio, Dashboard, Operativo, Contratos, Inventario y Finanzas.
+- Trabajador: conserva Inicio, Mantenimientos, Calculadora y Notificaciones.
+- JVAQUA Digital / Cliente: conserva Inicio, Aprender, Consultar, Resolver y Salir.
+- En móvil se elimina visualmente la barra inferior fija.
+- Nuevo botón flotante central que despliega las opciones en semicírculo.
+- Tocar fuera, volver a tocar el botón o presionar Escape cierra el menú.
+- La opción activa queda resaltada.
+- Respeta safe-area inferior de iPhone/Android.
+- En pantallas pequeñas prioriza iconos para evitar desbordamientos.
+- Escritorio conserva la navegación existente sin cambios.
+- No cambia URLs, permisos, vistas ni lógica de negocio.
+
+No requiere migraciones.
+
+Después de copiar:
+python manage.py check
+python manage.py makemigrations --check --dry-run
+python manage.py collectstatic --noinput
