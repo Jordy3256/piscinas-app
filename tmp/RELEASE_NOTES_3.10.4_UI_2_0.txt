@@ -1,0 +1,12 @@
+JVAQUA v3.10.4 — UI 2.0 / Fase 1
+
+Actualización exclusivamente visual.
+- Nueva capa visual global para Administrador, Trabajador y JVAQUA Digital.
+- Modernización de superficies, tarjetas, botones, formularios, tablas, modales y estados.
+- Mejora de jerarquía, profundidad, espaciado y responsive.
+- Inicio Administrador, Inicio Trabajador e Inicio Digital reciben mejoras mediante la capa global.
+- Menú móvil orbital se conserva y recibe pulido visual.
+- Escritorio aprovecha mejor el ancho disponible.
+- Respeta prefers-reduced-motion.
+- NO modifica modelos, vistas, URLs, permisos, formularios, cálculos ni lógica de negocio.
+- No requiere migraciones.
