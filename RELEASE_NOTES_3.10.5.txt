@@ -1,0 +1,21 @@
+JVAQUA v3.10.5 — UI 2.0 Hotfix + Rediseño perceptible de Inicios
+
+SOLO DISEÑO. No modifica lógica de negocio.
+
+Correcciones:
+- Restaura y fuerza la navegación inferior fija en escritorio para Administrador y Trabajador.
+- Corrige el encabezado superior del Trabajador: vuelve a fondo sólido azul, legible, sin transparencia opaca.
+- Mantiene intacto el menú orbital móvil.
+
+Rediseño visual perceptible:
+- Inicio Administrador: hero ejecutivo oscuro, acciones rápidas integradas, KPI con mayor jerarquía, módulos y paneles con profundidad y mejor interacción.
+- Inicio Trabajador: cabecera operacional más fuerte, KPI más claros, accesos rápidos con estilo de app y mejor jerarquía visual.
+- Ajustes responsive para móvil y escritorio.
+- Se conserva prefers-reduced-motion.
+
+No requiere migraciones.
+
+Validación:
+python manage.py check
+python manage.py makemigrations --check --dry-run
+python manage.py collectstatic --noinput

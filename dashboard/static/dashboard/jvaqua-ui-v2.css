@@ -18,3 +18,93 @@ body:not(.app-body) .app-shell{position:relative}body:not(.app-body) .topbar-pan
 @media (prefers-reduced-motion:no-preference){.card,.jd-panel,.ac-panel,.wh-card,.wh-kpi{animation:ui2-in .34s ease both}@keyframes ui2-in{from{opacity:.78;transform:translateY(5px)}to{opacity:1;transform:none}}}
 @media(max-width:767.98px){body{font-size:.95rem}.content-area,.main-content,.jd-content{padding-left:12px!important;padding-right:12px!important}.card,.jd-panel,.ac-panel{border-radius:18px!important}.table-responsive{border-radius:18px;border:1px solid var(--ui2-line);background:#fff}.ac-hero,.wh-hero,.home-hero{border-radius:24px!important}.ac-title{font-size:1.75rem!important}.wh-kpis{gap:.6rem!important}.wh-kpi{padding:.82rem!important}.jd-top .jd-shell{margin:7px 8px 0;border-radius:18px}.mobile-orbit-nav{z-index:1090!important}}
 @media(min-width:1200px){.content-area{padding-left:24px!important;padding-right:24px!important}.jd-shell{max-width:1240px!important}}
+
+/* ============================================================
+   JVAQUA UI 2.0 — v3.10.5 HOTFIX + HOME REDESIGN
+   Visual only: restores fixed desktop docks and solid worker header.
+   ============================================================ */
+
+/* Restore the desktop navigation docks exactly as persistent UI. */
+@media (min-width:768px){
+  body.app-body .bottom-nav,
+  body:not(.app-body) .bottom-nav{
+    position:fixed!important;
+    left:0!important;
+    right:0!important;
+    bottom:0!important;
+    z-index:1035!important;
+    transform:none!important;
+  }
+  body.app-body .spacer-bottom{height:88px!important}
+  body:not(.app-body) .spacer-bottom{height:105px!important}
+}
+
+/* Worker header: solid, high-contrast, no glass/translucent appearance. */
+body:not(.app-body) .topbar-panel{
+  background:linear-gradient(135deg,#073b82 0%,#0b5ed7 58%,#0787bf 100%)!important;
+  border-color:rgba(255,255,255,.18)!important;
+  box-shadow:0 14px 34px rgba(6,52,119,.22)!important;
+  color:#fff!important;
+  backdrop-filter:none!important;
+  -webkit-backdrop-filter:none!important;
+}
+body:not(.app-body) .topbar-panel::after{background:linear-gradient(115deg,rgba(255,255,255,.12),transparent 42%)!important}
+body:not(.app-body) .topbar-panel .brand-title,
+body:not(.app-body) .topbar-panel .brand-eyebrow,
+body:not(.app-body) .topbar-panel .text-muted{color:#fff!important}
+
+/* ADMIN HOME — a visibly more executive visual language. */
+.action-center .ac-hero{
+  border:0!important;
+  background:
+    radial-gradient(circle at 86% 16%,rgba(45,211,235,.24),transparent 15rem),
+    radial-gradient(circle at 66% 120%,rgba(32,133,255,.34),transparent 20rem),
+    linear-gradient(128deg,#071d3b 0%,#083d7e 52%,#0879b7 100%)!important;
+  box-shadow:0 24px 60px rgba(7,43,86,.24)!important;
+}
+.action-center .ac-hero:after{content:"";position:absolute;right:-45px;top:-95px;width:280px;height:280px;border:1px solid rgba(255,255,255,.12);border-radius:50%;box-shadow:0 0 0 45px rgba(255,255,255,.035),0 0 0 90px rgba(255,255,255,.02)}
+.action-center .ac-kicker{background:rgba(255,255,255,.12)!important;color:#dff8ff!important;border:1px solid rgba(255,255,255,.14);box-shadow:none!important;backdrop-filter:blur(8px)}
+.action-center .ac-title{color:#fff!important;text-shadow:0 2px 18px rgba(0,0,0,.12)}
+.action-center .ac-subtitle{color:rgba(255,255,255,.75)!important}
+.action-center .ac-total{border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.12)!important;box-shadow:none!important;backdrop-filter:blur(12px)}
+.action-center .ac-quick a{border-color:rgba(255,255,255,.13)!important;background:rgba(255,255,255,.11)!important;color:#fff!important;box-shadow:none!important;backdrop-filter:blur(8px)}
+.action-center .ac-quick a:hover{background:#fff!important;color:#075eb8!important;border-color:#fff!important}
+.action-center .ac-stats{gap:1rem!important}
+.action-center .ac-stat{position:relative;overflow:hidden;padding:1.15rem!important;border:0!important;border-radius:22px!important;background:linear-gradient(150deg,#fff,#f8fbff)!important;box-shadow:0 12px 30px rgba(21,55,91,.085)!important}
+.action-center .ac-stat:before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:linear-gradient(#0b67d4,#14b7d7)}
+.action-center .ac-stat-value{font-size:1.8rem!important;letter-spacing:-.04em}
+.action-center .erp-map{border:0!important;background:linear-gradient(145deg,#fff,#f8fbff)!important;box-shadow:0 16px 38px rgba(21,55,91,.085)!important}
+.action-center .erp-link{border:1px solid #e9f0f7!important;background:#fff!important;box-shadow:0 5px 14px rgba(21,55,91,.035);transition:transform .2s ease,box-shadow .2s ease,border-color .2s ease!important}
+.action-center .erp-link:hover{transform:translateY(-4px)!important;box-shadow:0 16px 30px rgba(21,55,91,.11)!important}
+.action-center .erp-icon{border-radius:14px!important;background:linear-gradient(145deg,#e8f3ff,#eafcff)!important;color:#0869c9}
+.action-center .ac-panel{border:0!important;box-shadow:0 12px 30px rgba(21,55,91,.07)!important}
+.action-center .ac-panel-head{background:linear-gradient(180deg,#fff,#fbfdff)}
+
+/* WORKER HOME — clearer, more app-like and operational. */
+body:not(.app-body) .wh-hero{
+  min-height:150px;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  border:0!important;
+  background:
+    radial-gradient(circle at 88% 20%,rgba(96,226,255,.32),transparent 9rem),
+    linear-gradient(128deg,#052b62 0%,#075db8 58%,#08a2c6 100%)!important;
+  box-shadow:0 24px 52px rgba(7,76,153,.25)!important;
+}
+body:not(.app-body) .wh-hero h2{font-size:clamp(1.65rem,5vw,2.25rem);letter-spacing:-.04em}
+body:not(.app-body) .wh-kpi{position:relative;overflow:hidden;border:0!important;padding:1.05rem!important;background:linear-gradient(150deg,#fff,#f8fbff)!important;box-shadow:0 11px 27px rgba(18,55,91,.075)!important}
+body:not(.app-body) .wh-kpi:before{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:linear-gradient(90deg,#0b67d4,#16b7d4)}
+body:not(.app-body) .wh-kpi .fs-3{letter-spacing:-.05em;color:#0c2f55}
+body:not(.app-body) .wh-card{position:relative;overflow:hidden;border:0!important;background:linear-gradient(145deg,#fff,#f8fbff)!important;box-shadow:0 12px 30px rgba(18,55,91,.075)!important}
+body:not(.app-body) .wh-card:after{content:"→";position:absolute;right:15px;bottom:13px;width:29px;height:29px;display:grid;place-items:center;border-radius:50%;background:#edf6ff;color:#0870c9;font-weight:900;transition:.2s}
+body:not(.app-body) .wh-card:hover:after{transform:translateX(3px);background:#0870c9;color:#fff}
+body:not(.app-body) .wh-card-icon{width:54px!important;height:54px!important;border-radius:17px!important;background:linear-gradient(145deg,#e8f3ff,#e9fbff)!important;box-shadow:inset 0 0 0 1px rgba(8,103,209,.06)}
+body:not(.app-body) .wh-action{border:0!important;background:#fff!important;box-shadow:0 9px 24px rgba(18,55,91,.06)!important}
+body:not(.app-body) .wh-tip{border:1px solid #f4df9d!important;background:linear-gradient(145deg,#fffaf0,#fff6d9)!important;box-shadow:0 9px 24px rgba(119,91,20,.07)}
+
+@media(max-width:767.98px){
+  .action-center .ac-hero{border-radius:25px!important}
+  .action-center .ac-quick a{min-height:50px}
+  body:not(.app-body) .wh-hero{min-height:132px;border-radius:25px!important}
+}
