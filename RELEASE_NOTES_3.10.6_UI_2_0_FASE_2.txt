@@ -1,0 +1,28 @@
+JVAQUA v3.10.6 — UI 2.0 / Fase 2 · Pantallas Operativas
+
+Actualización exclusivamente visual sobre v3.10.5.
+
+Mejoras:
+- Dashboard Ejecutivo: mayor jerarquía en KPIs, gráficas, rankings y tarjetas.
+- Operativo Administrador: tarjetas, KPIs, bloques de trabajadores y mantenimientos más limpios.
+- Clientes/Contratos: cabeceras, indicadores, filtros, fichas y tarjetas más modernas.
+- Trabajador / Mis Mantenimientos: agenda y Ruta Sugerida con mayor protagonismo visual.
+- Detalle de mantenimiento: refinamiento de tarjetas, checklist, estados y barra de guardado.
+- Mi Inventario: mejor jerarquía de stock, tarjetas y estados.
+- Mejoras responsive específicas para móvil.
+- Microinteracciones discretas en escritorio/móvil.
+- Se respeta prefers-reduced-motion.
+- Se incrementa la versión CSS a 3106 para evitar caché.
+
+IMPORTANTE:
+- No se modifican modelos.
+- No se modifican views.
+- No se modifican URLs.
+- No se modifican permisos.
+- No se modifica ninguna lógica de negocio.
+- No requiere migraciones.
+
+Después de copiar:
+python manage.py check
+python manage.py makemigrations --check --dry-run
+python manage.py collectstatic --noinput

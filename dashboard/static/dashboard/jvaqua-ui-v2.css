@@ -108,3 +108,42 @@ body:not(.app-body) .wh-tip{border:1px solid #f4df9d!important;background:linear
   .action-center .ac-quick a{min-height:50px}
   body:not(.app-body) .wh-hero{min-height:132px;border-radius:25px!important}
 }
+
+/* =========================================================
+   JVAQUA UI 2.0 — FASE 2 · Pantallas operativas (v3.10.6)
+   Presentación únicamente. No altera lógica ni estructura.
+   ========================================================= */
+:root{--jv2-ink:#10233f;--jv2-muted:#6e7f95;--jv2-line:rgba(16,35,63,.09);--jv2-soft:#f4f8fc;--jv2-blue:#0b5ed7;--jv2-cyan:#0799cf;--jv2-shadow:0 12px 34px rgba(18,50,88,.09);--jv2-shadow-hover:0 18px 44px rgba(18,50,88,.14)}
+/* shared operational rhythm */
+.exec-card,.cc-card,.cp-card,.op-card-compact,.mobile-op-card,.worker-view-card,.route-today-card,.worker-calendar-card,.premium-card,.client-operational-card,.mi-card{transition:transform .2s ease,box-shadow .2s ease,border-color .2s ease}
+@media (hover:hover){.exec-card:hover,.cc-client:hover,.cp-mobile-card:hover,.mi-card:hover{transform:translateY(-2px);box-shadow:var(--jv2-shadow-hover)!important}}
+.exec-card,.cc-card,.op-card-compact,.mobile-op-card,.worker-view-card,.route-today-card,.worker-calendar-card,.mi-card{border-color:var(--jv2-line)!important;box-shadow:var(--jv2-shadow)!important}
+.form-control,.form-select{border-color:#dbe4ef;box-shadow:none!important}.form-control:focus,.form-select:focus{border-color:#86b7fe;box-shadow:0 0 0 .22rem rgba(13,110,253,.10)!important}
+.btn{transition:transform .15s ease,box-shadow .15s ease}.btn:active{transform:scale(.985)}
+/* Executive dashboard */
+.exec-hero{isolation:isolate}.exec-hero:after{content:"";position:absolute;width:280px;height:280px;right:-90px;top:-130px;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.22),transparent 68%);pointer-events:none;z-index:-1}
+.exec-card.kpi .exec-card-body{position:relative;overflow:hidden}.exec-card.kpi .icon{box-shadow:inset 0 0 0 1px rgba(11,94,215,.08)}
+.exec-card.kpi .value{letter-spacing:-.035em}.chart-wrap{border-radius:16px;background:linear-gradient(180deg,#fff,#fbfdff)}
+.simple-row{border-radius:13px;padding-left:.65rem;padding-right:.65rem;transition:background .15s ease}.simple-row:hover{background:#f6f9fd}
+/* Admin operativo */
+.op-hero{box-shadow:0 20px 48px rgba(6,59,130,.18)!important}.op-hero-title{letter-spacing:-.035em}.op-kpi{border-width:0!important;overflow:hidden}.op-kpi .card-body{position:relative}.op-kpi .card-body:before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:currentColor;opacity:.55}.op-card-compact>.card-body,.mobile-op-card>.card-body{padding:1rem 1.05rem}
+.mobile-worker-cards .card,.op-maint-card .card{border-radius:17px!important;box-shadow:0 6px 18px rgba(18,50,88,.06)}
+/* Clientes */
+.cc-hero{position:relative;overflow:hidden;box-shadow:0 18px 46px rgba(6,59,130,.18)!important}.cc-hero:after{content:"";position:absolute;width:240px;height:240px;right:-70px;top:-110px;border-radius:50%;background:rgba(255,255,255,.09);pointer-events:none}.cc-kpi{position:relative;overflow:hidden}.cc-kpi:before{content:"";position:absolute;inset:0 auto 0 0;width:4px;background:linear-gradient(var(--jv2-blue),var(--jv2-cyan))}.cc-kpi strong{letter-spacing:-.04em}.cc-client{border:1px solid var(--jv2-line)!important}.cc-client hr{border-color:var(--jv2-line);opacity:1}.cc-name{letter-spacing:-.02em}
+/* Contratos */
+.cp-hero{box-shadow:0 18px 46px rgba(6,59,130,.18)!important}.cp-mobile-card{border-color:var(--jv2-line)!important;box-shadow:var(--jv2-shadow)!important}.cp-mobile-card .btn{border-radius:11px}
+/* Worker agenda / route */
+.worker-view-card,.route-today-card,.worker-calendar-card{border-radius:21px!important}.route-today-card{position:relative;overflow:hidden;border:1px solid rgba(11,94,215,.12)!important;background:linear-gradient(135deg,#fff 0%,#f4f9ff 100%)!important}.route-today-card:before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:linear-gradient(#0b5ed7,#0799cf)}.route-kpi{border:1px solid rgba(11,94,215,.09);background:#fff!important;box-shadow:0 5px 15px rgba(18,50,88,.05)}
+#rutaHoyPanel{border:1px solid var(--jv2-line)!important;box-shadow:var(--jv2-shadow)!important}
+/* Maintenance detail */
+.detail-hero{box-shadow:0 20px 50px rgba(6,59,130,.22)!important}.detail-status{backdrop-filter:blur(8px)}.section-box{transition:border-color .18s ease,background .18s ease}.section-box:focus-within{border-color:rgba(11,94,215,.2);background:#fff}.check-option label,.inspection-choice label{transition:transform .12s ease,border-color .16s ease,background .16s ease}.check-option label:active,.inspection-choice label:active{transform:scale(.99)}.save-bar{box-shadow:0 16px 42px rgba(16,35,63,.18)!important}
+/* Worker inventory */
+.mi-hero{position:relative;overflow:hidden}.mi-hero:after{content:"";position:absolute;width:210px;height:210px;right:-70px;top:-110px;border-radius:50%;background:rgba(255,255,255,.11)}.mi-card{border:1px solid var(--jv2-line)!important}.stock-pill{display:inline-flex;align-items:center;gap:.3rem}
+@media(max-width:767.98px){
+ .exec-grid.kpis{grid-template-columns:repeat(2,minmax(0,1fr))!important}.exec-card.kpi .exec-card-body{padding:.9rem}.exec-card.kpi .value{font-size:1.55rem}
+ .cc-hero,.cp-hero,.op-hero,.detail-hero,.mi-hero{border-radius:20px!important}.cc-client{border-radius:18px!important}
+ .op-card-compact>.card-body,.mobile-op-card>.card-body{padding:.85rem}.route-today-card .card-body{padding:1rem}
+ .client-op-actions{width:100%}.client-op-actions .btn{flex:1 1 0}.premium-card,.client-operational-card{border-radius:18px!important}
+ .mi-card .card-body{padding:.95rem}
+}
+@media(prefers-reduced-motion:reduce){.exec-card,.cc-card,.cp-card,.cp-mobile-card,.mi-card,.btn,.check-option label,.inspection-choice label{transition:none!important}}
