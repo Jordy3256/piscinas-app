@@ -1,0 +1,10 @@
+JVAQUA v3.10.2 — Menú móvil central corregido
+
+- Corrige el empaquetado de v3.10.1: ahora Admin y Trabajador reciben el cambio.
+- Conserva exactamente los menús actuales:
+  Admin: Inicio, Dashboard, Operativo, Inventario, Finanzas.
+  Trabajador: Inicio, Mantenimientos, Asistente.
+  Suscriptor: Inicio, Aprender, Consultar, Resolver, Salir.
+- El nombre de cada opción se muestra siempre DEBAJO del icono, en pequeño.
+- Escritorio sin cambios.
+- Sin migraciones ni cambios de lógica.

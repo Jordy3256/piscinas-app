@@ -549,6 +549,39 @@
       vertical-align: middle;
     }
 
+
+/* JVAQUA v3.10.1 · Navegación móvil orbital */
+.mobile-orbit-nav{display:none}
+@media(max-width:767.98px){
+  .bottom-nav,.jd-bottom{display:none!important}
+  .spacer-bottom{height:calc(94px + env(safe-area-inset-bottom))!important}
+  .mobile-orbit-nav{display:block;position:fixed;inset:0;z-index:1090;pointer-events:none}
+  .mobile-orbit-backdrop{position:absolute;inset:0;background:rgba(7,25,48,.22);backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);opacity:0;transition:opacity .22s ease;pointer-events:none}
+  .mobile-orbit-nav.is-open .mobile-orbit-backdrop{opacity:1;pointer-events:auto}
+  .mobile-orbit-dock{position:absolute;left:50%;bottom:calc(13px + env(safe-area-inset-bottom));width:72px;height:72px;transform:translateX(-50%);pointer-events:auto}
+  .mobile-orbit-toggle{position:absolute;inset:0;display:grid;place-items:center;width:72px;height:72px;padding:0;border:5px solid rgba(255,255,255,.96);border-radius:50%;color:#fff;background:linear-gradient(145deg,#0b6fe8,#0787bf);box-shadow:0 13px 32px rgba(4,77,165,.34),0 0 0 1px rgba(11,94,215,.08);font-size:1.55rem;transition:transform .25s ease,box-shadow .25s ease;z-index:4}
+  .mobile-orbit-toggle:active{transform:scale(.94)}
+  .mobile-orbit-nav.is-open .mobile-orbit-toggle{transform:rotate(45deg);box-shadow:0 16px 38px rgba(4,77,165,.4)}
+  .mobile-orbit-toggle .orbit-close{display:none}
+  .mobile-orbit-nav.is-open .mobile-orbit-toggle .orbit-grid{display:none}
+  .mobile-orbit-nav.is-open .mobile-orbit-toggle .orbit-close{display:block}
+  .mobile-orbit-items{position:absolute;left:50%;bottom:calc(99px + env(safe-area-inset-bottom));width:min(360px,calc(100vw - 24px));height:238px;transform:translateX(-50%);pointer-events:none}
+  .mobile-orbit-item{--x:0px;--y:0px;position:absolute;left:50%;bottom:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;width:82px;min-height:72px;padding:0;color:#17314f!important;background:transparent;border:0;text-decoration:none!important;font-size:.64rem;font-weight:800;line-height:1.05;text-align:center;white-space:normal;opacity:0;transform:translate(-50%,30px) scale(.72);transition:opacity .18s ease,transform .28s cubic-bezier(.2,.85,.3,1.18);pointer-events:none}
+  .mobile-orbit-item .orbit-icon{display:grid;place-items:center;width:50px;height:50px;flex:0 0 50px;border:1px solid rgba(218,229,242,.98);border-radius:50%;color:#0b67cf;background:rgba(255,255,255,.98);box-shadow:0 10px 26px rgba(13,42,75,.18);font-size:1.2rem}
+  .mobile-orbit-item .orbit-label{display:block;max-width:82px;padding:3px 7px;border-radius:10px;color:#17314f;background:rgba(255,255,255,.96);box-shadow:0 5px 14px rgba(13,42,75,.10);font-size:.62rem;font-weight:800}
+  .mobile-orbit-item.active .orbit-icon{color:#fff;border-color:#0b77d8;background:linear-gradient(145deg,#0b6fe8,#0787bf);box-shadow:0 11px 28px rgba(4,77,165,.28)}
+  .mobile-orbit-item.active .orbit-label{color:#075eb8;background:#f5faff}
+  .mobile-orbit-nav.is-open .mobile-orbit-item{opacity:1;transform:translate(calc(-50% + var(--x)),var(--y)) scale(1);pointer-events:auto}
+  .mobile-orbit-item:nth-child(1){transition-delay:.02s}.mobile-orbit-item:nth-child(2){transition-delay:.045s}.mobile-orbit-item:nth-child(3){transition-delay:.07s}.mobile-orbit-item:nth-child(4){transition-delay:.095s}.mobile-orbit-item:nth-child(5){transition-delay:.12s}.mobile-orbit-item:nth-child(6){transition-delay:.145s}
+  .mobile-orbit-items.count-3 .mobile-orbit-item:nth-child(1){--x:-100px;--y:-34px}.mobile-orbit-items.count-3 .mobile-orbit-item:nth-child(2){--x:0px;--y:-124px}.mobile-orbit-items.count-3 .mobile-orbit-item:nth-child(3){--x:100px;--y:-34px}
+  .mobile-orbit-items.count-4 .mobile-orbit-item:nth-child(1){--x:-112px;--y:-22px}.mobile-orbit-items.count-4 .mobile-orbit-item:nth-child(2){--x:-52px;--y:-101px}.mobile-orbit-items.count-4 .mobile-orbit-item:nth-child(3){--x:52px;--y:-101px}.mobile-orbit-items.count-4 .mobile-orbit-item:nth-child(4){--x:112px;--y:-22px}
+  .mobile-orbit-items.count-5 .mobile-orbit-item:nth-child(1){--x:-128px;--y:-18px}.mobile-orbit-items.count-5 .mobile-orbit-item:nth-child(2){--x:-82px;--y:-96px}.mobile-orbit-items.count-5 .mobile-orbit-item:nth-child(3){--x:0px;--y:-132px}.mobile-orbit-items.count-5 .mobile-orbit-item:nth-child(4){--x:82px;--y:-96px}.mobile-orbit-items.count-5 .mobile-orbit-item:nth-child(5){--x:128px;--y:-18px}
+  .mobile-orbit-items.count-6 .mobile-orbit-item{height:50px;padding-right:10px;font-size:.67rem}.mobile-orbit-items.count-6 .mobile-orbit-item .orbit-icon{width:34px;height:34px;flex-basis:34px}
+  .mobile-orbit-items.count-6 .mobile-orbit-item:nth-child(1){--x:-130px;--y:-15px}.mobile-orbit-items.count-6 .mobile-orbit-item:nth-child(2){--x:-100px;--y:-82px}.mobile-orbit-items.count-6 .mobile-orbit-item:nth-child(3){--x:-39px;--y:-137px}.mobile-orbit-items.count-6 .mobile-orbit-item:nth-child(4){--x:39px;--y:-137px}.mobile-orbit-items.count-6 .mobile-orbit-item:nth-child(5){--x:100px;--y:-82px}.mobile-orbit-items.count-6 .mobile-orbit-item:nth-child(6){--x:130px;--y:-15px}
+}
+@media(max-width:390px){.mobile-orbit-item{width:72px}.mobile-orbit-item .orbit-label{display:block;max-width:72px;font-size:.58rem;padding:2px 5px}}
+.mobile-orbit-items.count-6 .mobile-orbit-item{width:48px}.mobile-orbit-items.count-6 .mobile-orbit-item:nth-child(1){--x:-118px}.mobile-orbit-items.count-6 .mobile-orbit-item:nth-child(2){--x:-91px}.mobile-orbit-items.count-6 .mobile-orbit-item:nth-child(5){--x:91px}.mobile-orbit-items.count-6 .mobile-orbit-item:nth-child(6){--x:118px}}
+
     /* Navegación inferior */
     .bottom-nav {
       position: fixed;
@@ -727,18 +760,17 @@
       }
 
       .bottom-nav .nav-row {
-        min-width: 0;
-        width: 100%;
+        min-width: 650px;
         flex-wrap: nowrap !important;
       }
 
       .bottom-nav .btn {
-        min-width: 0;
+        min-width: 96px;
         min-height: 50px;
         flex-direction: column;
         gap: 1px;
-        padding: .32rem .22rem;
-        font-size: .66rem;
+        padding: .35rem .5rem;
+        font-size: .72rem;
       }
 
       .bottom-nav .nav-icon {
@@ -771,26 +803,15 @@
         transition-duration: .01ms !important;
       }
     }
-  
-    .jv-backbar{display:flex;align-items:center;gap:.7rem;margin-bottom:1rem}.jv-back-btn{min-width:42px}.jv-breadcrumb{font-size:.84rem;color:#6f7b8a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    @media(max-width:767.98px){.jv-backbar{margin-bottom:.75rem}.jv-breadcrumb{display:none}}
-</style>
+  </style>
 
 
-  <link rel="manifest" href="/dashboard/manifest.json?v=20260808-20">
-  <meta name="theme-color" content="#0757b8">
+  <link rel="manifest" href="/dashboard/manifest.json?v=20260311-10">
+  <meta name="theme-color" content="#0d6efd">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
 
-  <link rel="stylesheet" href="{% static 'dashboard/app-responsive-v2.css' %}?v=20260729-1">
-
-    <link rel="stylesheet" href="{% static 'dashboard/app-ux-v13.css' %}?v=20260802-1">
-
-  <link rel="stylesheet" href="{% static 'dashboard/app-mobile-v26.css' %}?v=20260808-2">
-
-  <link rel="stylesheet" href="{% static 'dashboard/jvaqua-theme.css' %}?v=20260808-20">
-
-{% block extra_head %}{% endblock %}
+  {% block extra_head %}{% endblock %}
 </head>
 
 <body class="app-body">
@@ -872,7 +893,6 @@
         </div>
       {% endif %}
 
-      <div class="jv-backbar" id="jv-backbar"><button type="button" class="btn btn-outline-secondary btn-sm jv-back-btn" id="jv-back-button" aria-label="Volver">← <span class="d-none d-sm-inline">Volver</span></button><div class="jv-breadcrumb" id="jv-breadcrumb"></div></div>
       {% block content %}{% endblock %}
       <div class="spacer-bottom"></div>
     </div>
@@ -883,11 +903,14 @@
           <a class="btn flex-fill {% if request.path == '/dashboard/inicio/' %}nav-active{% endif %}" href="/dashboard/inicio/">
             <span class="nav-icon">🏠</span><span>Inicio</span>
           </a>
-          <a class="btn flex-fill {% if request.path == '/dashboard/' or request.path == '/dashboard/home/' %}nav-active{% endif %}" href="/dashboard/">
+          <a class="btn flex-fill {% if request.path == '/dashboard/home/' %}nav-active{% endif %}" href="/dashboard/home/">
             <span class="nav-icon">📊</span><span>Dashboard</span>
           </a>
-          <a class="btn flex-fill {% if '/dashboard/operativo/' in request.path or '/dashboard/ordenes/' in request.path or '/dashboard/mantenimientos/' in request.path %}nav-active{% endif %}" href="/dashboard/operativo/">
-            <span class="nav-icon">⚙️</span><span>Operativo</span>
+          <a class="btn flex-fill {% if '/dashboard/operativo/' in request.path %}nav-active{% endif %}" href="/dashboard/operativo/">
+            <span class="nav-icon">🧑‍💼</span><span>Operativo</span>
+          </a>
+          <a class="btn flex-fill {% if '/dashboard/contratos/' in request.path %}nav-active{% endif %}" href="/dashboard/contratos/">
+            <span class="nav-icon">📄</span><span>Contratos</span>
           </a>
           <a class="btn flex-fill {% if '/dashboard/inventario/' in request.path %}nav-active{% endif %}" href="/dashboard/inventario/">
             <span class="nav-icon">📦</span><span>Inventario</span>
@@ -895,16 +918,41 @@
           <a class="btn flex-fill {% if '/dashboard/finanzas/' in request.path %}nav-active{% endif %}" href="/dashboard/finanzas/flujo/">
             <span class="nav-icon">💰</span><span>Finanzas</span>
           </a>
+
+          <button id="btn-install" class="btn flex-fill btn-install" type="button">
+            <span class="nav-icon">📲</span><span>Instalar</span>
+          </button>
         </div>
       </div>
     </div>
 
+<nav class="mobile-orbit-nav" aria-label="Menú móvil"><div class="mobile-orbit-backdrop"></div><div class="mobile-orbit-items count-5">
+<a class="mobile-orbit-item {% if request.path == '/dashboard/inicio/' %}active{% endif %}" href="/dashboard/inicio/"><span class="orbit-icon">🏠</span><span class="orbit-label">Inicio</span></a>
+<a class="mobile-orbit-item {% if request.path == '/dashboard/' or request.path == '/dashboard/home/' %}active{% endif %}" href="/dashboard/"><span class="orbit-icon">📊</span><span class="orbit-label">Dashboard</span></a>
+<a class="mobile-orbit-item {% if '/dashboard/operativo/' in request.path or '/dashboard/ordenes/' in request.path or '/dashboard/mantenimientos/' in request.path %}active{% endif %}" href="/dashboard/operativo/"><span class="orbit-icon">⚙️</span><span class="orbit-label">Operativo</span></a>
+<a class="mobile-orbit-item {% if '/dashboard/inventario/' in request.path %}active{% endif %}" href="/dashboard/inventario/"><span class="orbit-icon">📦</span><span class="orbit-label">Inventario</span></a>
+<a class="mobile-orbit-item {% if '/dashboard/finanzas/' in request.path %}active{% endif %}" href="/dashboard/finanzas/flujo/"><span class="orbit-icon">💰</span><span class="orbit-label">Finanzas</span></a>
+</div><div class="mobile-orbit-dock"><button class="mobile-orbit-toggle" type="button" aria-label="Abrir menú" aria-expanded="false"><span class="orbit-grid">▦</span><span class="orbit-close">×</span></button></div></nav>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+(function(){
+  const nav=document.querySelector('.mobile-orbit-nav');
+  if(!nav)return;
+  const toggle=nav.querySelector('.mobile-orbit-toggle');
+  const backdrop=nav.querySelector('.mobile-orbit-backdrop');
+  const close=()=>{nav.classList.remove('is-open');toggle.setAttribute('aria-expanded','false');document.body.classList.remove('orbit-menu-open')};
+  const open=()=>{nav.classList.add('is-open');toggle.setAttribute('aria-expanded','true');document.body.classList.add('orbit-menu-open')};
+  toggle.addEventListener('click',()=>nav.classList.contains('is-open')?close():open());
+  backdrop.addEventListener('click',close);
+  nav.querySelectorAll('.mobile-orbit-item').forEach(a=>a.addEventListener('click',close));
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')close()});
+})();
+</script>
 
   <script>
-    window.APP_VERSION = "20260809-01";
+    window.APP_VERSION = "20260311-10";
   </script>
 
   <script>
@@ -1312,24 +1360,5 @@
   </script>
 
   {% block extra_js %}{% endblock %}
-  <script src="{% static 'dashboard/app-ux-v13.js' %}?v=20260802-1" defer></script>
-
-  <script src="{% static 'dashboard/app-responsive-v2.js' %}?v=20260729-1" defer></script>
-
-
-<script>
-(function(){
-  const btn=document.getElementById('jv-back-button'); const crumb=document.getElementById('jv-breadcrumb');
-  if(!btn) return;
-  const current=window.location.href; const ref=document.referrer;
-  const sameApp=ref && new URL(ref, current).origin===window.location.origin;
-  const fallback=location.pathname.startsWith('/dashboard/finanzas/')?'/dashboard/finanzas/flujo/':location.pathname.startsWith('/dashboard/clientes/')||location.pathname.startsWith('/dashboard/contratos/')?'/dashboard/clientes/':'/dashboard/inicio/';
-  btn.addEventListener('click',()=>{ if(sameApp && ref!==current){ history.back(); } else { location.href=fallback; } });
-  if(crumb){ const parts=location.pathname.split('/').filter(Boolean).map(x=>x.replace(/-/g,' ')); crumb.textContent=parts.map(x=>x.charAt(0).toUpperCase()+x.slice(1)).join(' › '); }
-  document.querySelectorAll('form[method="get"]').forEach(form=>{form.addEventListener('submit',()=>sessionStorage.setItem('jv-last-list',location.href));});
-})();
-</script>
-  <script src="{% static 'dashboard/app-mobile-v26.js' %}?v=20260808-2" defer></script>
-
 </body>
 </html>
