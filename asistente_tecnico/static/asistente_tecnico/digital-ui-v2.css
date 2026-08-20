@@ -1,0 +1,85 @@
+
+/* JVAQUA Digital UI 2.0 · v3.10.8 — capa visual exclusiva suscriptores */
+:root{
+ --jd2-navy:#062a49;--jd2-blue:#0675b9;--jd2-cyan:#10acd6;--jd2-sky:#eaf7fd;
+ --jd2-ink:#102c45;--jd2-muted:#6e8498;--jd2-line:#dbe8f1;--jd2-bg:#f3f8fc;
+ --jd2-shadow:0 18px 45px rgba(18,65,101,.09);--jd2-shadow-hover:0 24px 55px rgba(18,65,101,.15)
+}
+body{background:
+ radial-gradient(circle at 88% 4%,rgba(17,172,214,.10),transparent 25rem),
+ radial-gradient(circle at 4% 34%,rgba(6,117,185,.055),transparent 22rem),
+ var(--jd2-bg)}
+.jd-shell{max-width:1240px}
+.jd-top{background:rgba(248,252,255,.94);border-bottom:1px solid rgba(211,227,239,.9);box-shadow:0 8px 30px rgba(20,62,96,.055)}
+.jd-brand-mark{border-radius:14px;box-shadow:0 10px 25px rgba(6,117,185,.24)}
+.jd-nav{padding:5px;background:#edf5fa;border:1px solid #e0ebf3;border-radius:18px}
+.jd-nav a{padding:.58rem .88rem;border-radius:13px;transition:.18s ease}
+.jd-nav a:hover{background:#fff;box-shadow:0 5px 16px rgba(20,62,96,.08)}
+.jd-nav .jd-resolve{box-shadow:0 8px 18px rgba(6,117,185,.22)}
+.jd-content{padding-top:30px}
+.jd-panel{border:1px solid rgba(211,226,238,.95);border-radius:26px;box-shadow:var(--jd2-shadow);background:rgba(255,255,255,.96)}
+.home-hero{min-height:350px!important;border-radius:34px!important;padding:44px!important;background:
+ radial-gradient(circle at 84% 15%,rgba(74,224,244,.22),transparent 22%),
+ linear-gradient(125deg,#05253f 0%,#075e9f 53%,#0da8d0 120%)!important;
+ box-shadow:0 28px 70px rgba(5,54,94,.25)!important}
+.home-copy h1{font-size:clamp(2.2rem,4.5vw,3.65rem)!important;letter-spacing:-.055em!important}
+.hero-chip{display:inline-flex;align-items:center;gap:7px;padding:7px 11px;border:1px solid rgba(255,255,255,.2);border-radius:999px;background:rgba(255,255,255,.1);backdrop-filter:blur(10px);font-size:.76rem;font-weight:850}
+.hero-primary,.hero-secondary{transition:.18s ease}.hero-primary:hover,.hero-secondary:hover{transform:translateY(-2px)}
+.hero-speech{border-radius:20px 20px 6px 20px!important;box-shadow:0 18px 40px rgba(0,0,0,.18)!important}
+.quick-grid{grid-template-columns:1.12fr 1fr 1fr 1fr!important;gap:14px!important}
+.quick{min-height:220px;padding:22px!important;border-radius:25px!important;display:flex;flex-direction:column}
+.quick h3{font-size:1.12rem!important}.quick p{flex:1}
+.quick-badge{display:inline-flex;align-self:flex-start;font-size:.63rem;font-weight:900;letter-spacing:.08em;padding:5px 8px;border-radius:999px;background:#edf7fc;color:#0877b4;margin-bottom:10px}
+.quick-bg-icon{position:absolute;right:-8px;bottom:-20px;font-size:6.4rem;opacity:.035;transform:rotate(-8deg)}
+.quick-foot{display:flex;justify-content:space-between;align-items:center;margin-top:16px;padding-top:12px;border-top:1px solid #edf2f6;font-size:.77rem;font-weight:850;color:#5c768b}
+.quick.resolve{background:linear-gradient(145deg,#fff,#edf9ff)!important}
+.quick.resolve .quick-foot{color:#0878b8}.quick.learn .quick-ico{background:#eef9f2;color:#18835c}.quick.consult .quick-ico{background:#f2f0ff;color:#6558b4}.quick.pool .quick-ico{background:#eaf8fb;color:#087d9c}
+.pool-card{border-radius:28px!important}.pool-visual{box-shadow:inset 0 0 0 1px #d4ebf5}
+.stat{background:linear-gradient(180deg,#fbfdff,#f6fafc)!important}
+.jd-btn{transition:.18s ease}.jd-btn:hover{transform:translateY(-1px)}
+/* AQUO: sensación de producto conversacional */
+.resolver-shell{max-width:1240px!important}
+.chat-layout{gap:20px!important}
+.chat-card,.case-card{border-color:#d9e7f0!important;border-radius:28px!important;box-shadow:var(--jd2-shadow)!important}
+.chat-top{background:linear-gradient(135deg,#f7fcff,#eef9fd)!important;padding:20px 22px!important}
+.chat-body{background:
+ radial-gradient(circle at 100% 0,rgba(13,168,208,.05),transparent 18rem),
+ linear-gradient(180deg,#fff,#f8fbfd)!important}
+.bot{box-shadow:inset 0 0 0 4px #fff,0 10px 28px rgba(7,94,165,.17)!important}
+.online:before{box-shadow:0 0 0 4px rgba(32,189,122,.11)}
+.assistant .bubble{background:#eef6fb!important;border-color:#dce9f1!important;box-shadow:0 5px 16px rgba(18,65,101,.04)}
+.user .bubble{box-shadow:0 10px 25px rgba(7,126,188,.2)!important}
+.resolver-choice,.entry-choice,.problem-choice{box-shadow:0 5px 14px rgba(18,65,101,.035)}
+.chat-compose{position:sticky;bottom:0;z-index:4;background:rgba(255,255,255,.96)!important;backdrop-filter:blur(12px)}
+.compose-pill{background:#f4f8fb!important;border-color:#d9e6ef!important}
+.case-card{background:linear-gradient(180deg,#fff,#f8fbfd)!important}
+.diagnosis-banner{box-shadow:0 12px 30px rgba(26,130,89,.08)}
+/* Piscinas y plan */
+.plan-hero{border-radius:32px!important;box-shadow:0 22px 55px rgba(6,76,125,.18)}
+.visit,.reg{border-color:#dbe8f1!important;box-shadow:0 8px 24px rgba(18,65,101,.055)}
+.visit{border-radius:24px!important}
+/* móvil: sensación de app nativa */
+@media(max-width:900px){.quick-grid{grid-template-columns:repeat(2,1fr)!important}.home-hero{padding:30px!important}}
+@media(max-width:767.98px){
+ body{background:#f4f8fb}
+ .jd-top{position:sticky;background:rgba(250,253,255,.97)}
+ .jd-content{padding:14px 13px calc(112px + env(safe-area-inset-bottom))!important}
+ .home-hero{min-height:360px!important;padding:25px 22px!important;border-radius:27px!important;margin-bottom:18px!important}
+ .home-copy h1{font-size:2.18rem!important;line-height:1.02}
+ .home-copy p{font-size:.94rem!important;max-width:92%}
+ .hero-actions{display:grid!important;grid-template-columns:1fr;max-width:285px}
+ .hero-primary,.hero-secondary{text-align:center}
+ .quick-grid{grid-template-columns:1fr 1fr!important;gap:11px!important}
+ .quick{min-height:190px;padding:17px!important;border-radius:22px!important}
+ .quick-ico{width:45px!important;height:45px!important;border-radius:15px!important}
+ .quick h3{margin:11px 0 5px!important}.quick p{font-size:.79rem!important;line-height:1.4}
+ .quick-foot{font-size:.69rem;margin-top:10px;padding-top:9px}.quick-bg-icon{font-size:4.8rem}
+ .pool-card{padding:18px!important}
+ .chat-layout{display:block!important}.case-card{position:relative!important;top:auto!important;margin-top:14px}
+ .chat-card{border-radius:24px!important}.chat-body{padding:16px!important;min-height:430px!important}
+ .bubble{max-width:88%!important}.resolver-choices,.entry-choice-grid,.problem-grid,.measure-box,.detail-box{margin-left:0!important}
+ .entry-choice-grid,.problem-grid{grid-template-columns:1fr!important}
+ .assistant-head{align-items:flex-start!important}.assistant-title h1{font-size:1.35rem!important}
+}
+@media(max-width:420px){.quick-grid{grid-template-columns:1fr!important}.quick{min-height:0}.quick p{font-size:.86rem!important}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}

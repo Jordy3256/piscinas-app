@@ -1,0 +1,23 @@
+JVAQUA v3.10.8 — Digital UI 2.0 / Fase 3
+
+Actualización exclusivamente visual sobre v3.10.7.
+
+JVAQUA Digital:
+- Inicio con mayor jerarquía, hero premium y accesos rápidos más dinámicos.
+- AQUO / Resolver con apariencia más conversacional, mejor profundidad visual y composición móvil.
+- Curso con ruta de aprendizaje más diferenciada de la Biblioteca.
+- Biblioteca conserva enfoque de consulta profesional y búsqueda rápida.
+- Plan/Mis Piscinas heredan tarjetas, superficies y controles renovados.
+- Mejoras específicas para móvil para sensación de app nativa.
+- Se conserva el menú móvil orbital.
+- Respeta prefers-reduced-motion.
+- Nueva hoja digital-ui-v2.css versionada para evitar caché.
+
+IMPORTANTE:
+- No modifica modelos, views, URLs, permisos, cálculos ni lógica.
+- No requiere migraciones.
+
+Después de copiar:
+python manage.py check
+python manage.py makemigrations --check --dry-run
+python manage.py collectstatic --noinput

@@ -25,3 +25,43 @@
 
 .course-mission-top{max-width:980px;margin:0 auto 14px;display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center;background:linear-gradient(135deg,#eefaff,#f7fbff);border:1px solid #cce8f5;border-radius:23px;padding:15px 18px}.course-mission-aquo{width:50px;height:50px;border-radius:17px;background:#fff;display:grid;place-items:center;font-size:1.6rem;box-shadow:0 8px 18px rgba(15,78,117,.09)}.course-mission-top h3{font-size:1.05rem;font-weight:900;margin:2px 0}.course-mission-top p{margin:0;color:#6d8395;font-size:.82rem}.course-mission-status{border-radius:999px;background:#fff;border:1px solid #d8e8f2;padding:7px 10px;font-size:.75rem;font-weight:900;color:#0874ad}.course-mode .ad-section{border-radius:22px}.course-mode .ad-section:not(.ad-resolve){transition:.2s}.course-mode .ad-section:not(.ad-resolve):hover{transform:translateY(-2px);box-shadow:0 10px 25px rgba(26,72,107,.07)}.course-checkpoint{display:flex;gap:14px;align-items:flex-start;background:linear-gradient(135deg,#fff9df,#fffdf5);border:1px solid #f2df9c;border-radius:22px;padding:18px;margin:18px 0}.course-check-icon{width:46px;height:46px;border-radius:15px;background:#fff1a9;display:grid;place-items:center;font-size:1.35rem;flex:none}.course-checkpoint h4{font-weight:900;margin:2px 0 5px}.course-checkpoint p{margin:0;color:#746b4c;font-size:.87rem}
 @media(max-width:650px){.course-mission-top{grid-template-columns:auto 1fr}.course-mission-status{grid-column:2;justify-self:start}.course-checkpoint{padding:14px}}
+
+
+/* JVAQUA Digital UI 2.0 · Curso vs Biblioteca */
+.aj-wrap{max-width:1240px}
+.aj-hero{border-radius:32px;background:
+ radial-gradient(circle at 88% 15%,rgba(255,255,255,.13),transparent 16rem),
+ linear-gradient(128deg,#052c51,#086cad 55%,#11a9d4);box-shadow:0 24px 58px rgba(7,85,158,.18)}
+.aj-modebar{gap:10px}.aj-mode{border-radius:20px;box-shadow:0 8px 22px rgba(18,56,87,.05)}
+.aj-mode.active{border-color:#79c7ea;box-shadow:0 10px 26px rgba(7,110,173,.10)}
+/* Curso: ruta tipo aventura, visualmente distinta de una biblioteca */
+.aj-learning-path{position:relative;overflow:hidden;border:1px solid #d7e9f3;border-radius:28px;padding:22px;background:
+ radial-gradient(circle at 95% 0,rgba(15,158,213,.10),transparent 17rem),
+ linear-gradient(135deg,#f8fcff,#eef8fd)}
+.aj-learning-path-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;margin-bottom:18px}
+.aj-path-scroll{display:flex;align-items:flex-start;gap:0;overflow-x:auto;padding:12px 10px 20px;scroll-snap-type:x proximity}
+.aj-path-step{position:relative;min-width:150px;text-align:center;text-decoration:none;color:#49687e;padding:0 14px;scroll-snap-align:center}
+.aj-path-step:before{content:"";position:absolute;height:4px;left:-50%;right:50%;top:25px;background:#d9e8f1;z-index:0}
+.aj-path-step:first-child:before{display:none}
+.aj-path-step span{position:relative;z-index:1;width:52px;height:52px;border-radius:18px;background:#fff;border:2px solid #d5e6f0;display:grid;place-items:center;margin:0 auto 10px;font-size:1rem;font-weight:950;box-shadow:0 8px 18px rgba(18,65,101,.08);transition:.18s}
+.aj-path-step strong{display:block;font-size:.78rem;line-height:1.25}
+.aj-path-step.active span{background:linear-gradient(145deg,#0871b4,#0ba7d3);color:#fff;border-color:transparent;box-shadow:0 11px 24px rgba(7,119,183,.23);transform:translateY(-4px)}
+.aj-path-step.active strong{color:#0874b1}
+.aj-course-summary{border-radius:28px;padding:24px;background:linear-gradient(135deg,#fff,#f8fcff);box-shadow:0 14px 36px rgba(18,56,87,.07)}
+.aj-xp-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.aj-xp-row span{padding:7px 10px;border-radius:999px;background:#f0f7fb;border:1px solid #e0ebf2;font-size:.75rem;font-weight:850}
+.aj-continue{border-radius:20px!important}
+.aj-module{position:relative}.aj-module-head{padding:0 4px 10px}
+.aj-grid{gap:15px}.aj-card{border-radius:24px}
+body:has(.aj-learning-path) .aj-card{box-shadow:0 9px 24px rgba(18,65,101,.055)}
+body:has(.aj-learning-path) .aj-card:hover{transform:translateY(-5px) scale(1.005)}
+/* Biblioteca: búsqueda y catálogo profesional, no ruta de curso */
+.aj-tip{border-radius:22px;background:linear-gradient(135deg,#f8fcff,#f0f8fd)}
+.aj-search{top:82px;border-radius:20px}
+@media(max-width:767.98px){
+ .aj-hero{padding:23px;border-radius:26px}.aj-modebar{grid-template-columns:1fr 1fr 1fr;gap:7px}
+ .aj-mode{display:block;text-align:center;padding:11px 6px;border-radius:17px}.aj-mode-icon{margin:0 auto 5px;width:38px;height:38px}.aj-mode small{display:none!important}
+ .aj-learning-path{padding:18px 12px;border-radius:24px}.aj-learning-path-head{display:block;padding:0 5px}
+ .aj-path-scroll{margin:0 -5px}.aj-path-step{min-width:120px}.aj-path-step span{width:48px;height:48px}
+ .aj-course-summary{grid-template-columns:1fr;text-align:center;padding:20px}.aj-ring{margin:auto}.aj-xp-row{justify-content:center}
+ .aj-grid{grid-template-columns:1fr!important}.aj-search{position:relative;top:auto}
+}
