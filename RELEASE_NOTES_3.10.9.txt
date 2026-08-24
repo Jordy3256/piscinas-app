@@ -1,0 +1,24 @@
+JVAQUA v3.10.9 — Conservación de contrato + Scroll móvil
+
+1. Edición segura de contratos
+- La configuración económica/comercial ya guardada se conserva durante una edición parcial.
+- Se protegen forma y programación de cobro, días/reglas de cobro, porcentaje,
+  precio mensual y pago mensual al técnico.
+- El técnico asignado se conserva si una edición parcial no envía ese control.
+- La edición modifica valores explícitos sin convertir campos ausentes/vacíos en pérdida accidental de información.
+- No modifica el historial de obligaciones/pagos ya generado.
+
+2. Usabilidad móvil
+- Tablas anchas de Nómina permiten desplazamiento horizontal interno.
+- Calendario mensual permite desplazamiento horizontal dentro de su tarjeta.
+- Agenda semanal permite desplazamiento horizontal por columnas.
+- La página completa NO se ensancha.
+- Se añade un indicador discreto “Desliza para ver más →” donde existe contenido tabular ancho.
+- Mantiene intacto el diseño UI 2.0.
+
+No requiere migraciones.
+
+Después de copiar:
+python manage.py check
+python manage.py makemigrations --check --dry-run
+python manage.py collectstatic --noinput

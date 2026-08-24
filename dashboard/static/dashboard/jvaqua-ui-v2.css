@@ -147,3 +147,28 @@ body:not(.app-body) .wh-tip{border:1px solid #f4df9d!important;background:linear
  .mi-card .card-body{padding:.95rem}
 }
 @media(prefers-reduced-motion:reduce){.exec-card,.cc-card,.cp-card,.cp-mobile-card,.mi-card,.btn,.check-option label,.inspection-choice label{transition:none!important}}
+
+
+/* v3.10.9 — deslizamiento interno seguro en móvil */
+@media (max-width: 767.98px){
+  .table-responsive,
+  .mini-calendario,
+  .agenda-board,
+  .jv-mobile-scroll{
+    display:block!important;
+    width:100%!important;
+    max-width:100%!important;
+    overflow-x:auto!important;
+    overflow-y:hidden;
+    -webkit-overflow-scrolling:touch;
+    overscroll-behavior-inline:contain;
+    touch-action:pan-x pan-y;
+    scrollbar-width:thin;
+  }
+  .table-responsive > table,
+  .mini-calendario > table{min-width:720px!important;width:max-content!important;min-width:max(720px,100%)!important;}
+  .agenda-board{flex-wrap:nowrap!important;scroll-snap-type:x proximity;}
+  .agenda-board > *{flex:0 0 min(86vw,360px)!important;scroll-snap-align:start;}
+  .table-responsive:after,.mini-calendario:after{content:"Desliza para ver más  →";position:sticky;left:12px;display:inline-block;margin:7px 10px 9px;padding:4px 9px;border-radius:999px;background:#eef6ff;color:#24659b;font-size:.7rem;font-weight:700;pointer-events:none;}
+  html,body{max-width:100%;overflow-x:hidden!important;}
+}

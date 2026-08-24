@@ -7955,6 +7955,30 @@ def contrato_editar_view(request, pk):
     if request.method == "POST":
         validacion = _validar_datos_contrato(request)
 
+        # Edición conservadora: una edición parcial nunca debe borrar la
+        # configuración económica/comercial que ya estaba guardada. Los
+        # valores solo cambian cuando el formulario envía un valor explícito.
+        campos_financieros_conservables = (
+            "forma_pago", "forma_pago_personalizada", "periodo_dia_inicio",
+            "programacion_cobro", "cobro_mes_desfase", "cobro_dia_1",
+            "cobro_dia_2", "cobro_rango_desde", "cobro_rango_hasta",
+            "cobro_dias_despues_cierre", "porcentaje_primer_pago",
+            "programacion_cobro_personalizada", "precio_mensual",
+            "valor_tecnico_mensual",
+        )
+        for campo in campos_financieros_conservables:
+            enviado = request.POST.get(campo)
+            if enviado is None or (isinstance(enviado, str) and not enviado.strip()):
+                valor_actual = getattr(contrato, campo, None)
+                if valor_actual not in (None, ""):
+                    validacion[campo] = valor_actual
+
+        # El técnico asignado también se conserva si una edición parcial no
+        # incluye ese control. Esto evita perder la base de nómina existente.
+        if "tecnico_designado" not in request.POST:
+            validacion["tecnico_designado"] = contrato.tecnico_designado
+            validacion["tecnico_id"] = str(contrato.tecnico_designado_id or "")
+
         datos_formulario = {
             "cliente_id": request.POST.get("cliente", ""),
             "frecuencia": validacion["frecuencia"],
