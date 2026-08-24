@@ -1909,6 +1909,7 @@ def trabajadores_list_view(request):
         t.mantenimientos_mes = Mantenimiento.objects.filter(trabajadores=t, fecha__gte=inicio_mes, fecha__lte=hoy, estado="realizado").count()
         t.ordenes_mes = OrdenTrabajo.objects.filter(trabajador=t, fecha__gte=inicio_mes, fecha__lte=hoy, estado="completada").count()
         t.inventario_productos_count = InventarioTrabajador.objects.filter(trabajador=t, stock__gt=0).count()
+        t.contratos_activos_count = Contrato.objects.filter(tecnico_designado=t, activo=True).count()
         t.pagos_mes = PagoTrabajador.objects.filter(obligacion__trabajador=t, activo=True, fecha__gte=inicio_mes, fecha__lte=hoy).aggregate(total=Sum("monto"))["total"] or Decimal("0.00")
     return render(request, "dashboard/trabajadores_list.html", {"trabajadores": trabajadores, "hoy": hoy, "ciudades": Ciudad.objects.filter(activa=True), "ciudad_id": ciudad_id})
 
@@ -1934,6 +1935,7 @@ def _trabajador_expediente_contexto(trabajador, desde=None, hasta=None):
 
     inventario = InventarioTrabajador.objects.filter(trabajador=trabajador).select_related("insumo").filter(stock__gt=0).order_by("insumo__nombre")
     contratos_asignados = Contrato.objects.filter(tecnico_designado=trabajador).select_related("cliente").order_by("-activo", "cliente__nombre")
+    contratos_activos_total = contratos_asignados.filter(activo=True).count()
     anticipos = AnticipoTrabajador.objects.filter(trabajador=trabajador).order_by("-fecha", "-id")
     if desde:
         anticipos = anticipos.filter(fecha__gte=desde)
@@ -1970,7 +1972,7 @@ def _trabajador_expediente_contexto(trabajador, desde=None, hasta=None):
         "cumplimiento_pct": round(realizados/total_m*100, 1) if total_m else 0,
         "ordenes_total": o_qs.count(), "ordenes_completadas": ordenes_comp,
         "pagos_total": pagos_total, "anticipos_total": anticipos_total, "pago_ordenes_total": pago_ordenes_total, "obligaciones_total": obligaciones_total,
-        "contratos_asignados_total": contratos_asignados.count(), "inventario_productos": inventario.count(), "academia_completadas": completadas,
+        "contratos_asignados_total": contratos_asignados.count(), "contratos_activos_total": contratos_activos_total, "inventario_productos": inventario.count(), "academia_completadas": completadas,
         "academia_total": total_lecciones, "academia_pct": academia_pct,
     }
 
@@ -1979,7 +1981,40 @@ def _trabajador_expediente_contexto(trabajador, desde=None, hasta=None):
 def trabajador_detalle_view(request, pk):
     if not es_admin(request.user):
         return render(request, "dashboard/no_autorizado.html", status=403)
-    trabajador = get_object_or_404(Trabajador.objects.select_related("user"), pk=pk)
+    trabajador = get_object_or_404(Trabajador.objects.select_related("user", "ciudad_principal"), pk=pk)
+
+    if request.method == "POST":
+        accion = (request.POST.get("accion") or "").strip()
+        if accion == "guardar_foto_perfil":
+            foto = request.FILES.get("foto_perfil")
+            if not foto:
+                messages.error(request, "Selecciona una imagen para el perfil del trabajador.")
+            elif getattr(foto, "size", 0) > 5 * 1024 * 1024:
+                messages.error(request, "La fotografía no puede superar los 5 MB.")
+            elif getattr(foto, "content_type", "") and not foto.content_type.startswith("image/"):
+                messages.error(request, "El archivo seleccionado debe ser una imagen.")
+            else:
+                if trabajador.foto_perfil:
+                    try:
+                        trabajador.foto_perfil.delete(save=False)
+                    except Exception:
+                        pass
+                trabajador.foto_perfil = foto
+                trabajador.save(update_fields=["foto_perfil"])
+                messages.success(request, "Fotografía de perfil actualizada correctamente.")
+            return redirect("trabajador_detalle", pk=trabajador.pk)
+
+        if accion == "eliminar_foto_perfil":
+            if trabajador.foto_perfil:
+                try:
+                    trabajador.foto_perfil.delete(save=False)
+                except Exception:
+                    pass
+                trabajador.foto_perfil = None
+                trabajador.save(update_fields=["foto_perfil"])
+                messages.success(request, "Fotografía de perfil eliminada.")
+            return redirect("trabajador_detalle", pk=trabajador.pk)
+
     desde, hasta = _rango_trabajador_request(request)
     ctx = _trabajador_expediente_contexto(trabajador, desde, hasta)
     return render(request, "dashboard/trabajador_detalle.html", ctx)
