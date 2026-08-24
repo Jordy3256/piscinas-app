@@ -157,7 +157,7 @@
     <section class="exec-card">
       <div class="exec-card-head"><div class="exec-card-title">📄 Contratos y crecimiento</div><a class="exec-link" href="{% url 'contrato_list' %}">Contratos →</a></div>
       <div class="exec-card-body pt-2">
-        <div class="mini-stats"><div class="mini-stat"><strong>{{ total_contratos_activos }}</strong><span>Activos</span></div><div class="mini-stat"><strong>{{ clientes_nuevos_mes }}</strong><span>Clientes nuevos</span></div><div class="mini-stat"><strong>{{ total_contratos_por_revisar }}</strong><span>Por revisar</span></div></div>
+        <div class="mini-stats"><div class="mini-stat"><strong>{{ total_contratos_activos }}</strong><span>Activos</span></div><div class="mini-stat"><strong>{{ clientes_nuevos_mes }}</strong><span>Clientes nuevos</span></div><div class="mini-stat"><strong>{{ contratos_recuperados_mes }}</strong><span>♻️ Recuperados este mes</span></div><div class="mini-stat"><strong>{{ total_contratos_por_revisar }}</strong><span>Por revisar</span></div></div>
         {% if contratos_por_revisar %}<div class="simple-list mt-2">{% for c in contratos_por_revisar|slice:":4" %}<div class="simple-row"><div class="simple-main"><div class="simple-title">{{ c.cliente }}</div><div class="simple-meta">Programado hasta: {% if c.programado_hasta %}{{ c.programado_hasta|date:"d/m/Y" }}{% else %}Sin programación{% endif %}</div></div><a class="exec-link" href="{% url 'contrato_detalle' c.pk %}">Abrir</a></div>{% endfor %}</div>{% endif %}
       </div>
     </section>

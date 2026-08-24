@@ -1,0 +1,149 @@
+{% extends "dashboard/base_admin.html" %}
+{% block title %}Reactivar contrato{% endblock %}
+{% block top_title %}Reactivar contrato{% endblock %}
+{% block content %}
+<div class="container py-3" style="max-width:980px">
+  <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
+    <div class="card-body p-4 p-lg-5">
+      <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-4">
+        <div>
+          <div class="text-success fw-bold small text-uppercase">♻️ Contrato recuperado</div>
+          <h2 class="fw-bold mb-1">Reactivar contrato</h2>
+          <p class="text-muted mb-0">Los datos anteriores están precargados. Modifica únicamente lo que haya cambiado.</p>
+        </div>
+        <a class="btn btn-outline-secondary" href="{% url 'contrato_detalle' contrato.pk %}">Cancelar</a>
+      </div>
+
+      <div class="alert alert-light border rounded-4 mb-4">
+        <div class="fw-bold">{{ contrato.cliente.nombre }}</div>
+        <div class="small text-muted">{% if contrato.fecha_baja %}Inactivo desde {{ contrato.fecha_baja|date:"d/m/Y" }}{% else %}Contrato inactivo{% endif %}</div>
+      </div>
+
+      <form method="post" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ next }}">
+
+        <div class="row g-3">
+          <div class="col-12"><h5 class="fw-bold mb-0">📅 Nueva programación</h5><div class="small text-muted">Define desde cuándo vuelve a operar y revisa frecuencia, días y técnico.</div></div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Nueva fecha de inicio</label>
+            <input type="date" class="form-control" id="fechaInicio" name="fecha_inicio" value="{{ datos.fecha_inicio }}" required>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Frecuencia</label>
+            <select class="form-select" id="frecuencia" name="frecuencia" required>
+              {% for value,label in frecuencias %}<option value="{{ value }}" {% if datos.frecuencia == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Técnico designado</label>
+            <select class="form-select" name="tecnico_designado">
+              <option value="">Sin técnico</option>
+              {% for t in trabajadores %}<option value="{{ t.id }}" {% if datos.tecnico_id == t.id|stringformat:"s" %}selected{% endif %}>{{ t.user.get_full_name|default:t.user.username }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="col-12" id="frecuenciaPersonalizadaBox">
+            <label class="form-label fw-semibold">Frecuencia personalizada</label>
+            <input type="text" class="form-control" name="frecuencia_personalizada" value="{{ datos.frecuencia_personalizada }}" placeholder="Describe la frecuencia">
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold d-block">Días de visita</label>
+            <div class="d-flex gap-2 flex-wrap">
+              {% for value,label in dias_semana %}
+                <label class="btn btn-outline-primary rounded-pill">
+                  <input class="form-check-input me-1" type="checkbox" name="dias_visita" value="{{ value }}" {% if value in datos.dias_visita %}checked{% endif %}> {{ label }}
+                </label>
+              {% endfor %}
+            </div>
+          </div>
+
+          <div class="col-12 mt-4"><hr><h5 class="fw-bold mb-0">💵 Actualización financiera</h5><div class="small text-muted">Se conservan los valores anteriores hasta que decidas modificarlos.</div></div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Cobro mensual al cliente</label>
+            <div class="input-group"><span class="input-group-text">$</span><input type="number" step="0.01" min="0.01" class="form-control" name="precio_mensual" value="{{ datos.precio_mensual }}" required></div>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Pago mensual al técnico</label>
+            <div class="input-group"><span class="input-group-text">$</span><input type="number" step="0.01" min="0" class="form-control" name="valor_tecnico_mensual" value="{{ datos.valor_tecnico_mensual }}"></div>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Forma de pago</label>
+            <select class="form-select" id="formaPago" name="forma_pago" required>
+              {% for value,label in formas_pago %}<option value="{{ value }}" {% if datos.forma_pago == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="col-12" id="formaPagoPersonalizadaBox">
+            <label class="form-label fw-semibold">Forma de pago personalizada</label>
+            <input type="text" class="form-control" name="forma_pago_personalizada" value="{{ datos.forma_pago_personalizada }}">
+          </div>
+
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Día de inicio del período</label>
+            <input type="number" min="1" max="31" class="form-control" id="periodoDiaInicio" name="periodo_dia_inicio" value="{{ datos.periodo_dia_inicio }}" required>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Programación de cobro</label>
+            <select class="form-select" id="programacionCobro" name="programacion_cobro" required>
+              {% for value,label in programaciones_cobro %}<option value="{{ value }}" {% if datos.programacion_cobro == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Desfase de mes</label>
+            <select class="form-select" name="cobro_mes_desfase">
+              <option value="0" {% if datos.cobro_mes_desfase|stringformat:"s" == "0" %}selected{% endif %}>Mismo mes</option>
+              <option value="1" {% if datos.cobro_mes_desfase|stringformat:"s" == "1" %}selected{% endif %}>Mes siguiente</option>
+              <option value="2" {% if datos.cobro_mes_desfase|stringformat:"s" == "2" %}selected{% endif %}>Dos meses después</option>
+            </select>
+          </div>
+
+          <div class="col-md-3 cobro-extra" data-show="dia_fijo dos_pagos">
+            <label class="form-label fw-semibold">Día de cobro 1</label><input type="number" min="1" max="31" class="form-control" name="cobro_dia_1" value="{{ datos.cobro_dia_1 }}">
+          </div>
+          <div class="col-md-3 cobro-extra" data-show="dos_pagos">
+            <label class="form-label fw-semibold">Día de cobro 2</label><input type="number" min="1" max="31" class="form-control" name="cobro_dia_2" value="{{ datos.cobro_dia_2 }}">
+          </div>
+          <div class="col-md-3 cobro-extra" data-show="rango_dias">
+            <label class="form-label fw-semibold">Rango desde</label><input type="number" min="1" max="31" class="form-control" name="cobro_rango_desde" value="{{ datos.cobro_rango_desde }}">
+          </div>
+          <div class="col-md-3 cobro-extra" data-show="rango_dias">
+            <label class="form-label fw-semibold">Rango hasta</label><input type="number" min="1" max="31" class="form-control" name="cobro_rango_hasta" value="{{ datos.cobro_rango_hasta }}">
+          </div>
+          <div class="col-md-4 cobro-extra" data-show="despues_cierre">
+            <label class="form-label fw-semibold">Días después del cierre</label><input type="number" min="0" max="365" class="form-control" name="cobro_dias_despues_cierre" value="{{ datos.cobro_dias_despues_cierre }}">
+          </div>
+          <div class="col-md-4 cobro-extra" data-show="dos_pagos">
+            <label class="form-label fw-semibold">% primer pago</label><input type="number" min="0.01" max="99.99" step="0.01" class="form-control" name="porcentaje_primer_pago" value="{{ datos.porcentaje_primer_pago }}">
+          </div>
+          <div class="col-12 cobro-extra" data-show="personalizado">
+            <label class="form-label fw-semibold">Programación personalizada</label><input type="text" class="form-control" name="programacion_cobro_personalizada" value="{{ datos.programacion_cobro_personalizada }}">
+          </div>
+        </div>
+
+        <div class="alert alert-success-subtle border border-success-subtle rounded-4 mt-4 mb-0">
+          <strong>Al confirmar:</strong> el contrato volverá a estar activo, se registrará como contrato recuperado y se reconstruirán únicamente los mantenimientos futuros desde la nueva fecha. El historial anterior no se modifica.
+        </div>
+        <div class="d-flex gap-2 justify-content-end mt-4 flex-wrap">
+          <a class="btn btn-outline-secondary" href="{% url 'contrato_detalle' contrato.pk %}">Cancelar</a>
+          <button class="btn btn-success px-4" type="submit">♻️ Confirmar reactivación</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  const freq=document.getElementById('frecuencia'), freqBox=document.getElementById('frecuenciaPersonalizadaBox');
+  const forma=document.getElementById('formaPago'), formaBox=document.getElementById('formaPagoPersonalizadaBox');
+  const cobro=document.getElementById('programacionCobro');
+  function refresh(){
+    freqBox.style.display=freq.value==='personalizado'?'block':'none';
+    formaBox.style.display=forma.value==='personalizado'?'block':'none';
+    document.querySelectorAll('.cobro-extra').forEach(el=>{el.style.display=(el.dataset.show||'').split(' ').includes(cobro.value)?'block':'none';});
+  }
+  [freq,forma,cobro].forEach(el=>el.addEventListener('change',refresh)); refresh();
+  document.getElementById('fechaInicio').addEventListener('change',function(){
+    if(!this.value) return; const d=parseInt(this.value.split('-')[2],10); if(d) document.getElementById('periodoDiaInicio').value=d;
+  });
+})();
+</script>
+{% endblock %}

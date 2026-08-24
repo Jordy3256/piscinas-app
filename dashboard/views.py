@@ -51,7 +51,7 @@ from finanzas.models import (
     AnticipoTrabajador,
 )
 from clientes.models import Cliente, Ciudad
-from contratos.models import Contrato, CotizacionMantenimiento, EquipamientoContrato
+from contratos.models import Contrato, ReactivacionContrato, CotizacionMantenimiento, EquipamientoContrato
 from ordenes_trabajo.models import OrdenTrabajo
 from contratos.programacion import (
     DIAS_SEMANA,
@@ -2645,6 +2645,13 @@ def dashboard_view(request):
             fecha_registro__date__gte=primer_dia_mes_actual,
             fecha_registro__date__lte=ultimo_dia_mes_actual,
         ).count()
+        contratos_recuperados_mes = ReactivacionContrato.objects.filter(
+            fecha_reactivacion__gte=primer_dia_mes_actual,
+            fecha_reactivacion__lte=ultimo_dia_mes_actual,
+        ).count()
+        contratos_recuperados_anio = ReactivacionContrato.objects.filter(
+            fecha_reactivacion__year=hoy.year,
+        ).count()
 
         total_trabajadores_activos = Trabajador.objects.filter(activo=True).count()
 
@@ -2718,15 +2725,15 @@ def dashboard_view(request):
             ini=date(yy,mm,1); fin=date(yy,mm,monthrange(yy,mm)[1])
             ing=ingresos_bi.filter(fecha__range=(ini,fin)).aggregate(v=Sum("total"))["v"] or Decimal("0")
             egr=egresos_bi.filter(fecha__range=(ini,fin),aprobado=True).aggregate(v=Sum("total"))["v"] or Decimal("0")
-            activos=contratos_bi.filter(fecha_inicio__lte=fin).filter(Q(activo=True)|Q(fecha_baja__isnull=False)).filter(Q(fecha_baja__isnull=True)|Q(fecha_baja__gt=fin)).count()
-            altas=contratos_bi.filter(fecha_inicio__range=(ini,fin)).count()
+            activos=contratos_bi.filter(fecha_inicio_original__lte=fin).filter(Q(activo=True)|Q(fecha_baja__isnull=False)).filter(Q(fecha_baja__isnull=True)|Q(fecha_baja__gt=fin)).count()
+            altas=contratos_bi.filter(fecha_inicio_original__range=(ini,fin)).count()
             bajas=contratos_bi.filter(fecha_baja__range=(ini,fin)).count()
             meses_bi.append({"label":ini.strftime("%b %y"),"ingresos":float(ing),"egresos":float(egr),"utilidad":float(ing-egr),"activos":activos,"altas":altas,"bajas":bajas})
         inicio_actual=base_mes; fin_actual=date(hoy.year,hoy.month,monthrange(hoy.year,hoy.month)[1])
         bajas_mes_qs=contratos_bi.filter(fecha_baja__range=(inicio_actual,fin_actual))
         contratos_perdidos_mes=bajas_mes_qs.count()
         facturacion_perdida_mes=bajas_mes_qs.aggregate(v=Sum("precio_mensual"))["v"] or Decimal("0")
-        altas_mes_bi=contratos_bi.filter(fecha_inicio__range=(inicio_actual,fin_actual)).count()
+        altas_mes_bi=contratos_bi.filter(fecha_inicio_original__range=(inicio_actual,fin_actual)).count()
         crecimiento_neto_bi=altas_mes_bi-contratos_perdidos_mes
         ranking_ciudades=[]
         for ciudad in ciudades_dashboard:
@@ -2751,6 +2758,11 @@ def dashboard_view(request):
             cumplimiento_hoy = round((realizados_hoy / total_mantenimientos_hoy) * 100, 1) if total_mantenimientos_hoy else 0
             total_contratos_activos = contratos_bi.filter(activo=True).count()
             clientes_nuevos_mes = Cliente.objects.filter(ciudad_ref=ciudad_obj, fecha_registro__date__range=(primer_dia_mes_actual, ultimo_dia_mes_actual)).count()
+            contratos_recuperados_mes = ReactivacionContrato.objects.filter(
+                fecha_reactivacion__range=(primer_dia_mes_actual, ultimo_dia_mes_actual)
+            ).filter(
+                models.Q(contrato__ciudad_ref=ciudad_obj) | models.Q(contrato__ciudad_ref__isnull=True, contrato__cliente__ciudad_ref=ciudad_obj)
+            ).count()
             ingreso_contratos_proyectado = contratos_bi.filter(activo=True).aggregate(v=Sum("precio_mensual"))["v"] or Decimal("0")
             nomina_contratos_proyectada = contratos_bi.filter(activo=True).aggregate(v=Sum("valor_tecnico_mensual"))["v"] or Decimal("0")
             margen_operativo_base = ingreso_contratos_proyectado - nomina_contratos_proyectada
@@ -2875,6 +2887,8 @@ def dashboard_view(request):
             "contratos_por_revisar": contratos_por_revisar,
             "total_contratos_por_revisar": total_contratos_por_revisar,
             "clientes_nuevos_mes": clientes_nuevos_mes,
+            "contratos_recuperados_mes": contratos_recuperados_mes,
+            "contratos_recuperados_anio": contratos_recuperados_anio,
             "total_trabajadores_activos": total_trabajadores_activos,
             "ingreso_contratos_proyectado": ingreso_contratos_proyectado,
             "nomina_contratos_proyectada": nomina_contratos_proyectada,
@@ -4684,7 +4698,7 @@ def generar_facturas_automaticas(anio=None, mes=None):
     existentes = 0
     errores = []
 
-    from contratos.models import Contrato, CotizacionMantenimiento, EquipamientoContrato
+    from contratos.models import Contrato, ReactivacionContrato, CotizacionMantenimiento, EquipamientoContrato
 
     contratos = Contrato.objects.select_related("cliente").all().order_by("id")
 
@@ -8396,6 +8410,212 @@ def contrato_regenerar_programacion_view(request, pk):
 
 
 @login_required
+@require_http_methods(["GET", "POST"])
+def contrato_reactivar_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    contrato = get_object_or_404(
+        Contrato.objects.select_related("cliente", "tecnico_designado__user"),
+        pk=pk,
+    )
+    if contrato.activo:
+        messages.info(request, "Este contrato ya se encuentra activo.")
+        return redirect(f"/dashboard/contratos/{contrato.pk}/")
+
+    trabajadores = (
+        Trabajador.objects.filter(activo=True)
+        .select_related("user")
+        .order_by("user__username")
+    )
+
+    def decimal_web(valor):
+        if valor in (None, ""):
+            return ""
+        return format(Decimal(valor), "f")
+
+    datos = {
+        "fecha_inicio": timezone.localdate().isoformat(),
+        "frecuencia": contrato.frecuencia,
+        "frecuencia_personalizada": contrato.frecuencia_personalizada,
+        "dias_visita": list(contrato.dias_visita or []),
+        "tecnico_id": str(contrato.tecnico_designado_id or ""),
+        "forma_pago": contrato.forma_pago,
+        "forma_pago_personalizada": contrato.forma_pago_personalizada,
+        "periodo_dia_inicio": contrato.periodo_dia_inicio or timezone.localdate().day,
+        "programacion_cobro": contrato.programacion_cobro,
+        "cobro_mes_desfase": contrato.cobro_mes_desfase or 0,
+        "cobro_dia_1": contrato.cobro_dia_1 or "",
+        "cobro_dia_2": contrato.cobro_dia_2 or "",
+        "cobro_rango_desde": contrato.cobro_rango_desde or "",
+        "cobro_rango_hasta": contrato.cobro_rango_hasta or "",
+        "cobro_dias_despues_cierre": contrato.cobro_dias_despues_cierre or 0,
+        "porcentaje_primer_pago": decimal_web(contrato.porcentaje_primer_pago),
+        "programacion_cobro_personalizada": contrato.programacion_cobro_personalizada,
+        "precio_mensual": decimal_web(contrato.precio_mensual),
+        "valor_tecnico_mensual": decimal_web(contrato.valor_tecnico_mensual),
+    }
+    siguiente = (request.POST.get("next") if request.method == "POST" else request.GET.get("next")) or f"/dashboard/contratos/{contrato.pk}/"
+
+    if request.method == "POST":
+        errores = []
+        fecha_inicio = parse_date((request.POST.get("fecha_inicio") or "").strip())
+        frecuencia = (request.POST.get("frecuencia") or "").strip()
+        frecuencia_personalizada = (request.POST.get("frecuencia_personalizada") or "").strip()
+        dias_visita = normalizar_dias(request.POST.getlist("dias_visita"))
+        tecnico_id = (request.POST.get("tecnico_designado") or "").strip()
+        forma_pago = (request.POST.get("forma_pago") or "").strip()
+        forma_pago_personalizada = (request.POST.get("forma_pago_personalizada") or "").strip()
+        programacion_cobro = (request.POST.get("programacion_cobro") or "").strip()
+        programacion_cobro_personalizada = (request.POST.get("programacion_cobro_personalizada") or "").strip()
+
+        tecnico = Trabajador.objects.filter(pk=int(tecnico_id), activo=True).select_related("user").first() if tecnico_id.isdigit() else None
+        if not fecha_inicio:
+            errores.append("Selecciona una fecha válida para el nuevo inicio del contrato.")
+        if frecuencia not in FRECUENCIAS_CONTRATO_VALIDAS:
+            errores.append("Selecciona una frecuencia válida.")
+        if frecuencia == "personalizado" and not frecuencia_personalizada:
+            errores.append("Describe la frecuencia personalizada.")
+        if forma_pago not in FORMAS_PAGO_CONTRATO_VALIDAS:
+            errores.append("Selecciona una forma de pago válida.")
+        if forma_pago == "personalizado" and not forma_pago_personalizada:
+            errores.append("Describe la forma de pago personalizada.")
+        if programacion_cobro not in PROGRAMACIONES_COBRO_VALIDAS:
+            errores.append("Selecciona una programación de cobro válida.")
+        if programacion_cobro == "personalizado" and not programacion_cobro_personalizada:
+            errores.append("Describe la programación de cobro personalizada.")
+        errores.extend(validar_programacion(frecuencia, dias_visita, tecnico, automatica=contrato.generacion_automatica))
+
+        enteros = {}
+        config = [
+            ("periodo_dia_inicio", 1, 31, True), ("cobro_mes_desfase", 0, 2, True),
+            ("cobro_dia_1", 1, 31, programacion_cobro in {"dia_fijo", "dos_pagos"}),
+            ("cobro_dia_2", 1, 31, programacion_cobro == "dos_pagos"),
+            ("cobro_rango_desde", 1, 31, programacion_cobro == "rango_dias"),
+            ("cobro_rango_hasta", 1, 31, programacion_cobro == "rango_dias"),
+            ("cobro_dias_despues_cierre", 0, 365, programacion_cobro == "despues_cierre"),
+        ]
+        for nombre, minimo, maximo, obligatorio in config:
+            try:
+                enteros[nombre] = _entero_post(request, nombre, minimo, maximo, obligatorio)
+            except (TypeError, ValueError):
+                errores.append(f"Revisa el valor de {nombre.replace('_', ' ')}.")
+        if enteros.get("cobro_rango_desde") and enteros.get("cobro_rango_hasta") and enteros["cobro_rango_hasta"] < enteros["cobro_rango_desde"]:
+            errores.append("El último día del rango de cobro no puede ser anterior al primero.")
+
+        try:
+            porcentaje_primer_pago = Decimal((request.POST.get("porcentaje_primer_pago") or "50").replace(",", "."))
+            if not Decimal("0.01") <= porcentaje_primer_pago <= Decimal("99.99"):
+                raise ValueError
+        except Exception:
+            porcentaje_primer_pago = Decimal("50.00")
+            errores.append("El porcentaje del primer pago debe estar entre 0.01 y 99.99.")
+        try:
+            precio_mensual = Decimal((request.POST.get("precio_mensual") or "").replace(",", "."))
+            if precio_mensual <= 0:
+                raise ValueError
+        except Exception:
+            precio_mensual = None
+            errores.append("El cobro mensual debe ser mayor que cero.")
+        try:
+            valor_tecnico_mensual = Decimal((request.POST.get("valor_tecnico_mensual") or "0").replace(",", "."))
+            if valor_tecnico_mensual < 0:
+                raise ValueError
+        except Exception:
+            valor_tecnico_mensual = Decimal("0.00")
+            errores.append("El pago mensual al técnico debe ser cero o mayor.")
+        if valor_tecnico_mensual and not tecnico:
+            errores.append("Selecciona un técnico para asignarle un pago mensual.")
+
+        datos = {
+            "fecha_inicio": request.POST.get("fecha_inicio", ""),
+            "frecuencia": frecuencia, "frecuencia_personalizada": frecuencia_personalizada,
+            "dias_visita": dias_visita, "tecnico_id": tecnico_id,
+            "forma_pago": forma_pago, "forma_pago_personalizada": forma_pago_personalizada,
+            "periodo_dia_inicio": request.POST.get("periodo_dia_inicio", ""),
+            "programacion_cobro": programacion_cobro, "cobro_mes_desfase": request.POST.get("cobro_mes_desfase", "0"),
+            "cobro_dia_1": request.POST.get("cobro_dia_1", ""), "cobro_dia_2": request.POST.get("cobro_dia_2", ""),
+            "cobro_rango_desde": request.POST.get("cobro_rango_desde", ""), "cobro_rango_hasta": request.POST.get("cobro_rango_hasta", ""),
+            "cobro_dias_despues_cierre": request.POST.get("cobro_dias_despues_cierre", "0"),
+            "porcentaje_primer_pago": request.POST.get("porcentaje_primer_pago", "50.00"),
+            "programacion_cobro_personalizada": programacion_cobro_personalizada,
+            "precio_mensual": request.POST.get("precio_mensual", ""),
+            "valor_tecnico_mensual": request.POST.get("valor_tecnico_mensual", ""),
+        }
+
+        if errores:
+            for error in errores:
+                messages.error(request, error)
+        else:
+            fecha_baja_anterior = contrato.fecha_baja
+            motivo_baja_anterior = contrato.motivo_baja
+            fecha_inicio_anterior = contrato.fecha_inicio
+            with transaction.atomic():
+                contrato.fecha_inicio = fecha_inicio
+                contrato.frecuencia = frecuencia
+                contrato.frecuencia_personalizada = frecuencia_personalizada
+                contrato.dias_visita = dias_visita
+                contrato.tecnico_designado = tecnico
+                contrato.forma_pago = forma_pago
+                contrato.forma_pago_personalizada = forma_pago_personalizada
+                contrato.periodo_dia_inicio = enteros["periodo_dia_inicio"]
+                contrato.programacion_cobro = programacion_cobro
+                contrato.cobro_mes_desfase = enteros["cobro_mes_desfase"] or 0
+                contrato.cobro_dia_1 = enteros["cobro_dia_1"]
+                contrato.cobro_dia_2 = enteros["cobro_dia_2"]
+                contrato.cobro_rango_desde = enteros["cobro_rango_desde"]
+                contrato.cobro_rango_hasta = enteros["cobro_rango_hasta"]
+                contrato.cobro_dias_despues_cierre = enteros["cobro_dias_despues_cierre"] or 0
+                contrato.porcentaje_primer_pago = porcentaje_primer_pago
+                contrato.programacion_cobro_personalizada = programacion_cobro_personalizada
+                contrato.precio_mensual = precio_mensual
+                contrato.valor_tecnico_mensual = valor_tecnico_mensual
+                contrato.activo = True
+                contrato.fecha_baja = None
+                contrato.motivo_baja = ""
+                contrato.motivo_baja_detalle = ""
+                contrato.programado_hasta = None
+                contrato.save()
+
+                ReactivacionContrato.objects.create(
+                    contrato=contrato, fecha_reactivacion=timezone.localdate(), registrada_por=request.user,
+                    fecha_baja_anterior=fecha_baja_anterior, motivo_baja_anterior=motivo_baja_anterior,
+                    fecha_inicio_anterior=fecha_inicio_anterior, fecha_inicio=fecha_inicio, frecuencia=frecuencia, frecuencia_personalizada=frecuencia_personalizada,
+                    dias_visita=dias_visita, tecnico_designado=tecnico, forma_pago=forma_pago,
+                    forma_pago_personalizada=forma_pago_personalizada, periodo_dia_inicio=enteros["periodo_dia_inicio"],
+                    programacion_cobro=programacion_cobro, cobro_mes_desfase=enteros["cobro_mes_desfase"] or 0,
+                    cobro_dia_1=enteros["cobro_dia_1"], cobro_dia_2=enteros["cobro_dia_2"],
+                    cobro_rango_desde=enteros["cobro_rango_desde"], cobro_rango_hasta=enteros["cobro_rango_hasta"],
+                    cobro_dias_despues_cierre=enteros["cobro_dias_despues_cierre"] or 0,
+                    porcentaje_primer_pago=porcentaje_primer_pago,
+                    programacion_cobro_personalizada=programacion_cobro_personalizada,
+                    precio_mensual=precio_mensual, valor_tecnico_mensual=valor_tecnico_mensual,
+                )
+
+                resultado = generar_mantenimientos_contrato(contrato, desde=fecha_inicio, reconciliar=True) if contrato.generacion_automatica else {"creados": 0, "errores": []}
+
+            errores_programacion = resultado.get("errores") or []
+            if errores_programacion:
+                for error in errores_programacion:
+                    messages.warning(request, error)
+            _registrar_actividad(
+                user=request.user, titulo="Contrato recuperado",
+                descripcion=f"{request.user.username} reactivó el contrato de {contrato.cliente} desde {fecha_inicio:%d/%m/%Y}.",
+                url=f"/dashboard/contratos/{contrato.pk}/",
+            )
+            messages.success(request, f"Contrato reactivado correctamente. Se generaron {resultado.get('creados', 0)} mantenimientos futuros.")
+            if not url_has_allowed_host_and_scheme(siguiente, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
+                siguiente = f"/dashboard/contratos/{contrato.pk}/"
+            return redirect(siguiente)
+
+    return render(request, "dashboard/contrato_reactivar.html", {
+        "contrato": contrato, "trabajadores": trabajadores, "frecuencias": Contrato.FRECUENCIA_CHOICES,
+        "formas_pago": Contrato.FORMA_PAGO_CHOICES, "programaciones_cobro": Contrato.PROGRAMACION_COBRO_CHOICES,
+        "dias_semana": DIAS_SEMANA.items(), "datos": datos, "next": siguiente, "es_admin": True,
+    })
+
+
+@login_required
 @require_http_methods(["POST"])
 def contrato_toggle_view(request, pk):
     if not es_admin(request.user):
@@ -8406,6 +8626,10 @@ def contrato_toggle_view(request, pk):
         )
 
     contrato = get_object_or_404(Contrato, pk=pk)
+
+    if not contrato.activo:
+        siguiente = request.POST.get("next", f"/dashboard/contratos/{contrato.pk}/")
+        return redirect(f"/dashboard/contratos/{contrato.pk}/reactivar/?{urlencode({'next': siguiente})}")
 
     if contrato.activo and request.POST.get("confirmar_baja") != "1":
         return render(request, "dashboard/contrato_confirmar_baja.html", {"contrato": contrato, "motivos": Contrato.MOTIVO_BAJA_CHOICES, "next": request.POST.get("next", "")})

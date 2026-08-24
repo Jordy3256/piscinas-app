@@ -144,6 +144,7 @@ class Contrato(models.Model):
     precio_mensual = models.DecimalField(max_digits=10, decimal_places=2)
     valor_tecnico_mensual = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     fecha_inicio = models.DateField()
+    fecha_inicio_original = models.DateField(null=True, blank=True, db_index=True)
     tecnico_designado = models.ForeignKey(
         Trabajador,
         on_delete=models.SET_NULL,
@@ -349,6 +350,8 @@ class Contrato(models.Model):
             self.tipo = equivalencias[self.frecuencia]
 
     def save(self, *args, **kwargs):
+        if not self.fecha_inicio_original and self.fecha_inicio:
+            self.fecha_inicio_original = self.fecha_inicio
         self.ciudad = (self.ciudad or "").strip()
         self.sector_urbanizacion = (self.sector_urbanizacion or "").strip()
         self.direccion = (self.direccion or "").strip()
@@ -394,6 +397,49 @@ class Contrato(models.Model):
         verbose_name = "Contrato"
         verbose_name_plural = "Contratos"
         ordering = ["-activo", "cliente__nombre", "id"]
+
+
+class ReactivacionContrato(models.Model):
+    contrato = models.ForeignKey(Contrato, on_delete=models.CASCADE, related_name="reactivaciones")
+    fecha_reactivacion = models.DateField(db_index=True)
+    registrada_en = models.DateTimeField(auto_now_add=True)
+    registrada_por = models.ForeignKey("auth.User", on_delete=models.SET_NULL, null=True, blank=True)
+
+    # Referencia de la baja que dio origen a esta recuperación.
+    fecha_baja_anterior = models.DateField(null=True, blank=True)
+    motivo_baja_anterior = models.CharField(max_length=30, blank=True, default="")
+
+    # Condiciones vigentes al momento de recuperar el contrato.
+    fecha_inicio_anterior = models.DateField(null=True, blank=True)
+    fecha_inicio = models.DateField()
+    frecuencia = models.CharField(max_length=30, blank=True, default="")
+    frecuencia_personalizada = models.CharField(max_length=150, blank=True, default="")
+    dias_visita = models.JSONField(default=list, blank=True)
+    tecnico_designado = models.ForeignKey(
+        Trabajador, on_delete=models.SET_NULL, null=True, blank=True, related_name="reactivaciones_contrato"
+    )
+    forma_pago = models.CharField(max_length=30, blank=True, default="")
+    forma_pago_personalizada = models.CharField(max_length=150, blank=True, default="")
+    periodo_dia_inicio = models.PositiveSmallIntegerField(default=1)
+    programacion_cobro = models.CharField(max_length=30, blank=True, default="")
+    cobro_mes_desfase = models.PositiveSmallIntegerField(default=0)
+    cobro_dia_1 = models.PositiveSmallIntegerField(null=True, blank=True)
+    cobro_dia_2 = models.PositiveSmallIntegerField(null=True, blank=True)
+    cobro_rango_desde = models.PositiveSmallIntegerField(null=True, blank=True)
+    cobro_rango_hasta = models.PositiveSmallIntegerField(null=True, blank=True)
+    cobro_dias_despues_cierre = models.PositiveSmallIntegerField(default=0)
+    porcentaje_primer_pago = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal("50.00"))
+    programacion_cobro_personalizada = models.CharField(max_length=200, blank=True, default="")
+    precio_mensual = models.DecimalField(max_digits=10, decimal_places=2)
+    valor_tecnico_mensual = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
+    def __str__(self):
+        return f"Reactivación #{self.pk} · {self.contrato} · {self.fecha_reactivacion:%d/%m/%Y}"
+
+    class Meta:
+        verbose_name = "Reactivación de contrato"
+        verbose_name_plural = "Reactivaciones de contratos"
+        ordering = ["-fecha_reactivacion", "-registrada_en", "-id"]
 
 
 class EquipamientoContrato(models.Model):

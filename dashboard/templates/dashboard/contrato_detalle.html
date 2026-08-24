@@ -202,15 +202,15 @@
             <button type="submit" class="btn btn-outline-success" onclick="return confirm('Se sincronizarán únicamente los mantenimientos futuros automáticos pendientes. ¿Continuar?');">🔄 Regenerar programación</button>
           </form>
         {% endif %}
-        <form method="post" action="/dashboard/contratos/{{ contrato.id }}/toggle/" class="d-inline">
-          {% csrf_token %}
-          <input type="hidden" name="next" value="/dashboard/contratos/{{ contrato.id }}/">
-          {% if contrato.activo %}
+        {% if contrato.activo %}
+          <form method="post" action="/dashboard/contratos/{{ contrato.id }}/toggle/" class="d-inline">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="/dashboard/contratos/{{ contrato.id }}/">
             <button type="submit" class="btn btn-outline-danger" onclick="return confirm('¿Deseas desactivar este contrato?');">⏸ Desactivar contrato</button>
-          {% else %}
-            <button type="submit" class="btn btn-outline-success" onclick="return confirm('¿Deseas activar este contrato?');">▶ Activar contrato</button>
-          {% endif %}
-        </form>
+          </form>
+        {% else %}
+          <a class="btn btn-outline-success" href="{% url 'contrato_reactivar' contrato.id %}?next={{ request.get_full_path|urlencode }}">♻️ Reactivar contrato</a>
+        {% endif %}
       </div>
     </div>
   </div>
