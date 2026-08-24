@@ -106,8 +106,12 @@
       <div class="cd-card">
         <div class="cd-card-header"><div class="cd-card-title">📄 Información del contrato</div></div>
         <div class="cd-card-body">
-          <div class="detail-label">Precio mensual</div>
+          <div class="detail-label">Cobro mensual al cliente</div>
           <div class="contract-price">${{ contrato.precio_mensual|floatformat:2 }}</div>
+          <div class="row g-3 mt-1">
+            <div class="col-12 col-md-6"><div class="detail-label">Pago mensual al técnico</div><div class="detail-value">${{ contrato.valor_tecnico_mensual|floatformat:2 }}</div></div>
+            <div class="col-12 col-md-6"><div class="detail-label">Margen bruto del contrato</div><div class="detail-value">${{ margen_bruto_contrato|floatformat:2 }}</div></div>
+          </div>
           <hr class="my-4">
           <div class="row g-3">
             <div class="col-12"><div class="detail-label">Frecuencia</div><div class="detail-value">{{ contrato.frecuencia_completa }}</div></div>
@@ -123,6 +127,32 @@
           </div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <div class="cd-card mb-3">
+    <div class="cd-card-header">
+      <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">
+        <div><div class="cd-card-title">🏊 Ficha técnica de la piscina</div><div class="small text-muted mt-1">Información técnica guardada específicamente para esta piscina.</div></div>
+        <a class="btn btn-sm btn-outline-primary" href="/dashboard/contratos/{{ contrato.id }}/editar/">Editar ficha</a>
+      </div>
+    </div>
+    <div class="cd-card-body">
+      {% if contrato.piscina_largo_m or contrato.piscina_ancho_m or contrato.piscina_volumen_m3 or contrato.piscina_profundidad_min_m or contrato.piscina_profundidad_max_m or contrato.piscina_tipo or contrato.piscina_uso or contrato.piscina_filtracion or contrato.piscina_desinfeccion or contrato.piscina_observaciones %}
+      <div class="row g-4">
+        <div class="col-6 col-md-3"><div class="detail-label">Largo</div><div class="detail-value">{% if contrato.piscina_largo_m %}{{ contrato.piscina_largo_m|floatformat:2 }} m{% else %}<span class="text-muted">—</span>{% endif %}</div></div>
+        <div class="col-6 col-md-3"><div class="detail-label">Ancho</div><div class="detail-value">{% if contrato.piscina_ancho_m %}{{ contrato.piscina_ancho_m|floatformat:2 }} m{% else %}<span class="text-muted">—</span>{% endif %}</div></div>
+        <div class="col-6 col-md-3"><div class="detail-label">Profundidad</div><div class="detail-value">{% if contrato.piscina_profundidad_min_m or contrato.piscina_profundidad_max_m %}{{ contrato.piscina_profundidad_min_m|default:'—' }} – {{ contrato.piscina_profundidad_max_m|default:'—' }} m{% else %}<span class="text-muted">—</span>{% endif %}</div></div>
+        <div class="col-6 col-md-3"><div class="detail-label">Volumen</div><div class="detail-value">{% if contrato.piscina_volumen_m3 %}{{ contrato.piscina_volumen_m3|floatformat:2 }} m³{% else %}<span class="text-muted">—</span>{% endif %}</div></div>
+        <div class="col-6 col-md-3"><div class="detail-label">Tipo</div><div class="detail-value">{{ contrato.piscina_tipo|default:'No registrado' }}</div></div>
+        <div class="col-6 col-md-3"><div class="detail-label">Uso</div><div class="detail-value">{{ contrato.piscina_uso|default:'No registrado' }}</div></div>
+        <div class="col-12 col-md-3"><div class="detail-label">Filtración</div><div class="detail-value">{{ contrato.piscina_filtracion|default:'No registrada' }}</div></div>
+        <div class="col-12 col-md-3"><div class="detail-label">Desinfección</div><div class="detail-value">{{ contrato.piscina_desinfeccion|default:'No registrada' }}</div></div>
+        {% if contrato.piscina_observaciones %}<div class="col-12"><div class="detail-label">Observaciones</div><div class="detail-value">{{ contrato.piscina_observaciones|linebreaksbr }}</div></div>{% endif %}
+      </div>
+      {% else %}
+        <div class="text-muted">Todavía no hay información técnica registrada para esta piscina.</div>
+      {% endif %}
     </div>
   </div>
 

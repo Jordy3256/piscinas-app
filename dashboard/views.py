@@ -8231,6 +8231,7 @@ def contrato_detalle_view(request, pk):
             "total_facturado": total_facturado,
             "total_pagado": total_pagado,
             "total_pendiente": total_pendiente,
+            "margen_bruto_contrato": (Decimal(contrato.precio_mensual or 0) - Decimal(contrato.valor_tecnico_mensual or 0)),
             "mantenimientos_futuros": mantenimientos_futuros,
             "proximo_mantenimiento": proximo_mantenimiento,
             "periodo_inicio_actual": periodo_inicio,
