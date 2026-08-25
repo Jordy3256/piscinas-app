@@ -334,7 +334,7 @@ def facturas_lista(request):
 
     facturas = list(facturas_qs)
     activas = [f for f in facturas if f.estado != Factura.ESTADO_ANULADA]
-    total_facturado = sum((f.total for f in activas), Decimal("0.00"))
+    total_facturado = sum((f.total_cobro for f in activas), Decimal("0.00"))
     total_cobrado = sum((f.monto_pagado for f in activas), Decimal("0.00"))
     total_pendiente = sum((f.saldo for f in activas), Decimal("0.00"))
     total_vencido = sum((f.saldo for f in activas if f.estado_visual == Factura.ESTADO_VENCIDA), Decimal("0.00"))
@@ -371,6 +371,12 @@ def factura_detalle(request, pk):
     factura = get_object_or_404(
         Factura.objects.select_related("cliente", "contrato").prefetch_related("items", "pagos__ingreso"), pk=pk
     )
+    # Autocorregir cuentas promocionales antiguas que hayan conservado el total contractual.
+    total_cobro = factura.total_cobro
+    if factura.promocion_id and factura.total != total_cobro:
+        factura.total = total_cobro
+        factura.save(update_fields=["total", "actualizada_en"])
+    factura.sincronizar_estado()
     return render(request, "finanzas/factura_detalle.html", {"factura": factura, "es_admin": True})
 
 
@@ -445,7 +451,7 @@ def generar_facturas_desde_contratos(request):
             "mes_generacion": mes,
             "estados": Factura.ESTADO_CHOICES,
             "querystring": f"anio={anio}&mes={mes}",
-            "total_facturado": sum((f.total for f in activas), Decimal("0.00")),
+            "total_facturado": sum((f.total_cobro for f in activas), Decimal("0.00")),
             "total_cobrado": sum((f.monto_pagado for f in activas), Decimal("0.00")),
             "total_pendiente": sum((f.saldo for f in activas), Decimal("0.00")),
             "total_vencido": sum((f.saldo for f in activas if f.estado_visual == Factura.ESTADO_VENCIDA), Decimal("0.00")),

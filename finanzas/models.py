@@ -345,16 +345,31 @@ class Factura(models.Model):
         return total_pagos
 
     @property
+    def total_cobro(self):
+        """Total realmente exigible después de promociones o descuentos.
+
+        Se calcula también en lectura para corregir cuentas antiguas que pudieron
+        conservar el total contractual aunque ya tuvieran una promoción aplicada.
+        """
+        descuento = self.descuento_promocion or Decimal("0.00")
+        if self.promocion_id or descuento > 0:
+            contractual = self.valor_contractual or self.subtotal or self.total or Decimal("0.00")
+            neto = max(contractual - descuento, Decimal("0.00"))
+            return (neto + (self.impuesto or Decimal("0.00"))).quantize(Decimal("0.01"))
+        return (self.total or Decimal("0.00")).quantize(Decimal("0.01"))
+
+    @property
     def saldo(self):
         if self.estado in {self.ESTADO_ANULADA, self.ESTADO_PROMOCION}:
             return Decimal("0.00")
-        return max((self.total or Decimal("0.00")) - self.monto_pagado, Decimal("0.00"))
+        return max(self.total_cobro - self.monto_pagado, Decimal("0.00"))
 
     @property
     def porcentaje_pagado(self):
-        if not self.total:
-            return 0
-        return min(100, int((self.monto_pagado / self.total) * 100))
+        total_cobro = self.total_cobro
+        if not total_cobro:
+            return 100 if self.estado == self.ESTADO_PROMOCION else 0
+        return min(100, int((self.monto_pagado / total_cobro) * 100))
 
     @property
     def estado_visual(self):
@@ -366,7 +381,8 @@ class Factura(models.Model):
         if self.estado in {self.ESTADO_ANULADA, self.ESTADO_PROMOCION}:
             return self.estado
         pagado = self.monto_pagado
-        if self.total > 0 and pagado >= self.total:
+        total_cobro = self.total_cobro
+        if total_cobro > 0 and pagado >= total_cobro:
             nuevo = self.ESTADO_PAGADA
         elif pagado > 0:
             nuevo = self.ESTADO_PARCIAL
@@ -383,7 +399,12 @@ class Factura(models.Model):
     def actualizar_totales(self, guardar=True):
         subtotal = sum((item.subtotal for item in self.items.all()), Decimal("0"))
         self.subtotal = subtotal
-        self.total = subtotal + (self.impuesto or Decimal("0"))
+        descuento = self.descuento_promocion or Decimal("0.00")
+        if self.promocion_id or descuento > 0:
+            contractual = self.valor_contractual or subtotal
+            self.total = max(contractual - descuento, Decimal("0.00")) + (self.impuesto or Decimal("0"))
+        else:
+            self.total = subtotal + (self.impuesto or Decimal("0"))
         if guardar:
             self.save(update_fields=["subtotal", "total", "actualizada_en"])
 
@@ -410,7 +431,12 @@ class Factura(models.Model):
         es_nueva = self.pk is None
         if self.numero is None:
             self.numero = ""
-        self.total = (self.subtotal or Decimal("0")) + (self.impuesto or Decimal("0"))
+        descuento = self.descuento_promocion or Decimal("0.00")
+        if self.promocion_id or descuento > 0:
+            contractual = self.valor_contractual or self.subtotal or Decimal("0.00")
+            self.total = max(contractual - descuento, Decimal("0.00")) + (self.impuesto or Decimal("0"))
+        else:
+            self.total = (self.subtotal or Decimal("0")) + (self.impuesto or Decimal("0"))
         if self.estado == self.ESTADO_PENDIENTE and self.fecha_vencimiento < timezone.localdate():
             self.estado = self.ESTADO_VENCIDA
         super().save(*args, **kwargs)

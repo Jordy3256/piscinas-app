@@ -8335,7 +8335,7 @@ def contrato_promocion_nueva_view(request, pk):
                 actualizadas = 0
                 for factura in facturas:
                     clave = factura.periodo_anio * 100 + factura.periodo_mes
-                    if not (promo.periodo_inicio_clave <= clave <= promo.periodo_fin_clave) or factura.pagos.filter(activo=True).exists() or factura.estado == Factura.ESTADO_ANULADA:
+                    if not (promo.periodo_inicio_clave <= clave <= promo.periodo_fin_clave) or factura.estado == Factura.ESTADO_ANULADA:
                         continue
                     calc = promo.calcular(contrato.precio_mensual)
                     # Distribuir por cuota respetando 50/50 u otras configuraciones.
@@ -8344,6 +8344,11 @@ def contrato_promocion_nueva_view(request, pk):
                     if not cuota: continue
                     proporcion = cuota["valor"] / Decimal(contrato.precio_mensual or 1)
                     nuevo_total = (calc["total"] * proporcion).quantize(Decimal("0.01"))
+                    pagado_actual = factura.monto_pagado
+                    # Si ya se cobró más que el nuevo total, se requiere devolución/nota de crédito.
+                    # Si lo cobrado es igual o menor, la promoción puede aplicarse normalmente.
+                    if pagado_actual > nuevo_total:
+                        continue
                     factura.valor_contractual = cuota["valor"]
                     factura.descuento_promocion = max(cuota["valor"] - nuevo_total, Decimal("0.00"))
                     factura.promocion = promo; factura.promocion_nombre = promo.nombre
@@ -8353,6 +8358,7 @@ def contrato_promocion_nueva_view(request, pk):
                     item = factura.items.first()
                     if item:
                         item.precio_unitario = nuevo_total; item.save()
+                    factura.sincronizar_estado()
                     actualizadas += 1
             messages.success(request, f"Promoción aplicada correctamente. {actualizadas} cuenta(s) ya generada(s) fueron actualizadas.")
             return redirect("contrato_detalle", pk=contrato.pk)
