@@ -4,7 +4,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from contratos.models import Contrato
-from .models import Factura, FacturaItem
+from .models import Factura, FacturaItem, PromocionContrato
 
 
 MESES = (
@@ -12,6 +12,21 @@ MESES = (
     (5, "Mayo"), (6, "Junio"), (7, "Julio"), (8, "Agosto"),
     (9, "Septiembre"), (10, "Octubre"), (11, "Noviembre"), (12, "Diciembre"),
 )
+
+
+def promocion_para_periodo(contrato, anio, mes):
+    clave = int(anio) * 100 + int(mes)
+    for promo in PromocionContrato.objects.filter(contrato=contrato, activa=True).order_by("-creada_en", "-id"):
+        if promo.periodo_inicio_clave <= clave <= promo.periodo_fin_clave:
+            return promo
+    return None
+
+def valores_promocion(contrato, anio, mes):
+    base = Decimal(contrato.precio_mensual or 0).quantize(Decimal("0.01"))
+    promo = promocion_para_periodo(contrato, anio, mes)
+    if not promo:
+        return {"promocion": None, "valor_contractual": base, "descuento": Decimal("0.00"), "total": base}
+    datos = promo.calcular(base); datos["promocion"] = promo; return datos
 
 
 def fecha_vencimiento_contrato(contrato, anio, mes, cuota_numero=1):
@@ -46,7 +61,9 @@ def previsualizar_facturas_periodo(anio, mes):
             clave = (contrato.pk, cuota["cuota_numero"])
             if clave not in existentes:
                 nuevas.append((contrato, cuota))
-                valor_nuevo += cuota["valor"]
+                promo_datos = valores_promocion(contrato, anio, mes)
+                proporcion = (cuota["valor"] / Decimal(contrato.precio_mensual or 1)) if contrato.precio_mensual else Decimal("0")
+                valor_nuevo += (promo_datos["total"] * proporcion).quantize(Decimal("0.01"))
     return {
         "anio": anio,
         "mes": mes,
@@ -55,7 +72,7 @@ def previsualizar_facturas_periodo(anio, mes):
         "nuevas": len(nuevas),
         "existentes": len(existentes),
         "valor_nuevo": valor_nuevo,
-        "valor_total_periodo": sum((c.precio_mensual or Decimal("0.00") for c in contratos), Decimal("0.00")),
+        "valor_total_periodo": sum((valores_promocion(c, anio, mes)["total"] for c in contratos), Decimal("0.00")),
         "contratos_nuevos": nuevas,
     }
 
@@ -67,7 +84,12 @@ def generar_factura_contrato(contrato, anio, mes, usuario=None):
 
     creadas = []
     fecha_facturacion = contrato.fecha_programada_facturacion(anio, mes)
-    for cuota in contrato.calendario_cobros(anio, mes):
+    promo_datos = valores_promocion(contrato, anio, mes)
+    cuotas = contrato.calendario_cobros(anio, mes)
+    for cuota in cuotas:
+        proporcion = (cuota["valor"] / Decimal(contrato.precio_mensual or 1)) if contrato.precio_mensual else Decimal("0")
+        valor_cuota = (promo_datos["total"] * proporcion).quantize(Decimal("0.01"))
+        descuento_cuota = max(cuota["valor"] - valor_cuota, Decimal("0.00"))
         factura, creada = Factura.objects.get_or_create(
             contrato=contrato,
             periodo_anio=anio,
@@ -83,9 +105,14 @@ def generar_factura_contrato(contrato, anio, mes, usuario=None):
                 "fecha_vencimiento": cuota["fecha_vencimiento"],
                 "fecha_facturacion_programada": fecha_facturacion,
                 "requiere_factura": contrato.requiere_factura,
-                "subtotal": cuota["valor"],
+                "subtotal": valor_cuota,
                 "impuesto": Decimal("0.00"),
-                "total": cuota["valor"],
+                "total": valor_cuota,
+                "valor_contractual": cuota["valor"],
+                "descuento_promocion": descuento_cuota,
+                "promocion": promo_datos["promocion"],
+                "promocion_nombre": promo_datos["promocion"].nombre if promo_datos["promocion"] else "",
+                "estado": Factura.ESTADO_PROMOCION if valor_cuota == 0 and promo_datos["promocion"] else Factura.ESTADO_PENDIENTE,
                 "observaciones": "Cuenta por cobrar generada automáticamente desde el calendario comercial del contrato.",
             },
         )
@@ -97,7 +124,7 @@ def generar_factura_contrato(contrato, anio, mes, usuario=None):
                 factura=factura,
                 descripcion=descripcion,
                 cantidad=Decimal("1.00"),
-                precio_unitario=cuota["valor"],
+                precio_unitario=valor_cuota,
             )
             creadas.append(factura)
     return creadas, len(creadas)

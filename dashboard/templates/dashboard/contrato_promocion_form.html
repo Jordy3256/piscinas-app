@@ -1,0 +1,20 @@
+{% extends "dashboard/base_admin.html" %}
+{% block title %}Aplicar promoción{% endblock %}{% block top_title %}🎁 Promoción / descuento{% endblock %}
+{% block content %}
+<div class="container" style="max-width:820px"><div class="card border-0 shadow-sm rounded-4"><div class="card-body p-4 p-lg-5">
+<a href="{% url 'contrato_detalle' contrato.pk %}" class="text-decoration-none">← Volver al contrato</a>
+<h2 class="fw-bold mt-3 mb-1">Aplicar promoción</h2><p class="text-muted">{{ contrato.cliente.nombre }} · Valor contractual <strong>${{ contrato.precio_mensual|floatformat:2 }}</strong>. El precio base del contrato no será modificado.</p>
+<form method="post" class="row g-3">{% csrf_token %}
+<div class="col-12"><label class="form-label fw-bold">Nombre de la promoción</label><input class="form-control" name="nombre" value="{{ datos.nombre }}" placeholder="Ej. Recuperación de cliente · 50%" required></div>
+<div class="col-md-6"><label class="form-label fw-bold">Tipo</label><select class="form-select" name="tipo" id="tipoPromo" required>{% for value,label in tipos %}<option value="{{ value }}" {% if datos.tipo == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+<div class="col-md-6"><label class="form-label fw-bold">Valor</label><div class="input-group"><span class="input-group-text" id="prefijoPromo">%</span><input type="number" min="0" step="0.01" class="form-control" name="valor" id="valorPromo" value="{{ datos.valor }}" placeholder="50"></div><div class="form-text" id="ayudaPromo">Porcentaje de descuento.</div></div>
+<div class="col-6 col-md-3"><label class="form-label fw-bold">Desde · mes</label><input type="number" min="1" max="12" class="form-control" name="mes_inicio" value="{{ datos.mes_inicio }}" required></div>
+<div class="col-6 col-md-3"><label class="form-label fw-bold">Desde · año</label><input type="number" min="2020" max="2100" class="form-control" name="anio_inicio" value="{{ datos.anio_inicio }}" required></div>
+<div class="col-6 col-md-3"><label class="form-label fw-bold">Hasta · mes</label><input type="number" min="1" max="12" class="form-control" name="mes_fin" value="{{ datos.mes_fin }}" required></div>
+<div class="col-6 col-md-3"><label class="form-label fw-bold">Hasta · año</label><input type="number" min="2020" max="2100" class="form-control" name="anio_fin" value="{{ datos.anio_fin }}" required></div>
+<div class="col-12"><label class="form-label fw-bold">Motivo / explicación</label><textarea class="form-control" rows="3" name="motivo" placeholder="Ej. Promoción aplicada para recuperar al cliente. Tercer mes gratis." required>{{ datos.motivo }}</textarea><div class="form-text">Quedará guardado para saber siempre por qué se cobró menos o no se cobró.</div></div>
+<div class="col-12"><div class="alert alert-light border mb-0"><strong>Importante:</strong> la promoción afecta únicamente los cobros del periodo seleccionado. El valor mensual original del contrato se conserva.</div></div>
+<div class="col-12 d-flex gap-2"><button class="btn btn-primary px-4">Aplicar promoción</button><a class="btn btn-outline-secondary" href="{% url 'contrato_detalle' contrato.pk %}">Cancelar</a></div>
+</form></div></div></div>
+<script>function ajustarPromo(){const t=document.getElementById('tipoPromo').value,v=document.getElementById('valorPromo'),p=document.getElementById('prefijoPromo'),a=document.getElementById('ayudaPromo');if(t==='gratis'){p.textContent='100%';v.value='0';v.disabled=true;a.textContent='El periodo quedará totalmente cubierto por promoción.';}else{v.disabled=false;p.textContent=t==='porcentaje'?'%':'$';a.textContent=t==='porcentaje'?'Porcentaje de descuento.':t==='valor_fijo'?'Cantidad que se resta al cobro normal.':'Total especial que se cobrará durante el periodo.';}}document.getElementById('tipoPromo').addEventListener('change',ajustarPromo);ajustarPromo();</script>
+{% endblock %}

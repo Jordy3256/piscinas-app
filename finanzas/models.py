@@ -204,18 +204,79 @@ class MovimientoRecurrente(models.Model):
         verbose_name_plural = "Movimientos recurrentes"
 
 
+
+class PromocionContrato(models.Model):
+    TIPO_PORCENTAJE = "porcentaje"
+    TIPO_VALOR_FIJO = "valor_fijo"
+    TIPO_GRATIS = "gratis"
+    TIPO_VALOR_ESPECIAL = "valor_especial"
+    TIPO_CHOICES = [
+        (TIPO_PORCENTAJE, "Porcentaje de descuento"),
+        (TIPO_VALOR_FIJO, "Valor fijo de descuento"),
+        (TIPO_GRATIS, "Mes gratis / 100%"),
+        (TIPO_VALOR_ESPECIAL, "Valor especial a cobrar"),
+    ]
+
+    contrato = models.ForeignKey(Contrato, on_delete=models.CASCADE, related_name="promociones")
+    nombre = models.CharField(max_length=120)
+    motivo = models.TextField()
+    tipo = models.CharField(max_length=20, choices=TIPO_CHOICES)
+    valor = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    anio_inicio = models.PositiveIntegerField()
+    mes_inicio = models.PositiveSmallIntegerField()
+    anio_fin = models.PositiveIntegerField()
+    mes_fin = models.PositiveSmallIntegerField()
+    activa = models.BooleanField(default=True)
+    creado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="promociones_contrato_creadas")
+    creada_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-anio_inicio", "-mes_inicio", "-id"]
+
+    def __str__(self):
+        return f"{self.contrato} · {self.nombre}"
+
+    @property
+    def periodo_inicio_clave(self):
+        return self.anio_inicio * 100 + self.mes_inicio
+
+    @property
+    def periodo_fin_clave(self):
+        return self.anio_fin * 100 + self.mes_fin
+
+    def aplica_a(self, anio, mes):
+        clave = int(anio) * 100 + int(mes)
+        return self.activa and self.periodo_inicio_clave <= clave <= self.periodo_fin_clave
+
+    def calcular(self, valor_contractual):
+        base = max(Decimal(valor_contractual or 0), Decimal("0.00"))
+        if self.tipo == self.TIPO_GRATIS:
+            total = Decimal("0.00")
+        elif self.tipo == self.TIPO_PORCENTAJE:
+            pct = min(max(self.valor, Decimal("0.00")), Decimal("100.00"))
+            total = base * (Decimal("1.00") - pct / Decimal("100.00"))
+        elif self.tipo == self.TIPO_VALOR_FIJO:
+            total = max(base - self.valor, Decimal("0.00"))
+        else:
+            total = min(max(self.valor, Decimal("0.00")), base)
+        total = total.quantize(Decimal("0.01"))
+        return {"valor_contractual": base.quantize(Decimal("0.01")), "descuento": (base-total).quantize(Decimal("0.01")), "total": total}
+
+
 class Factura(models.Model):
     ESTADO_PENDIENTE = "pendiente"
     ESTADO_PARCIAL = "parcial"
     ESTADO_PAGADA = "pagada"
     ESTADO_VENCIDA = "vencida"
     ESTADO_ANULADA = "anulada"
+    ESTADO_PROMOCION = "promocion"
     ESTADO_CHOICES = [
         (ESTADO_PENDIENTE, "Pendiente"),
         (ESTADO_PARCIAL, "Parcial"),
         (ESTADO_PAGADA, "Pagada"),
         (ESTADO_VENCIDA, "Vencida"),
         (ESTADO_ANULADA, "Anulada"),
+        (ESTADO_PROMOCION, "Cubierto por promoción"),
     ]
 
     cliente = models.ForeignKey(Cliente, on_delete=models.PROTECT, related_name="facturas")
@@ -237,6 +298,10 @@ class Factura(models.Model):
     subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     impuesto = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    valor_contractual = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    descuento_promocion = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    promocion = models.ForeignKey("PromocionContrato", on_delete=models.SET_NULL, null=True, blank=True, related_name="facturas")
+    promocion_nombre = models.CharField(max_length=120, blank=True, default="")
     estado = models.CharField(max_length=10, choices=ESTADO_CHOICES, default=ESTADO_PENDIENTE)
     observaciones = models.TextField(blank=True, default="")
     ingreso_generado = models.OneToOneField(
@@ -281,7 +346,7 @@ class Factura(models.Model):
 
     @property
     def saldo(self):
-        if self.estado == self.ESTADO_ANULADA:
+        if self.estado in {self.ESTADO_ANULADA, self.ESTADO_PROMOCION}:
             return Decimal("0.00")
         return max((self.total or Decimal("0.00")) - self.monto_pagado, Decimal("0.00"))
 
@@ -298,7 +363,7 @@ class Factura(models.Model):
         return self.estado
 
     def sincronizar_estado(self, guardar=True):
-        if self.estado == self.ESTADO_ANULADA:
+        if self.estado in {self.ESTADO_ANULADA, self.ESTADO_PROMOCION}:
             return self.estado
         pagado = self.monto_pagado
         if self.total > 0 and pagado >= self.total:

@@ -49,6 +49,7 @@ from finanzas.models import (
     PagoTrabajador,
     LotePagoTrabajador,
     AnticipoTrabajador,
+    PromocionContrato,
 )
 from clientes.models import Cliente, Ciudad
 from contratos.models import Contrato, ReactivacionContrato, CotizacionMantenimiento, EquipamientoContrato
@@ -8293,10 +8294,70 @@ def contrato_detalle_view(request, pk):
             "inventario_critico_contrato": inventario_critico_contrato,
             "proxima_reposicion_dias": proxima_reposicion_dias,
             "insumos_inventario": insumos_inventario,
+            "promociones_contrato": contrato.promociones.all()[:12],
             "es_admin": True,
         },
     )
 
+
+
+@login_required
+def contrato_promocion_nueva_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    contrato = get_object_or_404(Contrato.objects.select_related("cliente"), pk=pk)
+    hoy = timezone.localdate()
+    datos = {
+        "nombre": "", "motivo": "", "tipo": "porcentaje", "valor": "",
+        "anio_inicio": hoy.year, "mes_inicio": hoy.month, "anio_fin": hoy.year, "mes_fin": hoy.month,
+    }
+    if request.method == "POST":
+        datos = {k: (request.POST.get(k) or "").strip() for k in datos}
+        errores = []
+        try:
+            ai, mi, af, mf = int(datos["anio_inicio"]), int(datos["mes_inicio"]), int(datos["anio_fin"]), int(datos["mes_fin"])
+            if not (1 <= mi <= 12 and 1 <= mf <= 12 and ai * 100 + mi <= af * 100 + mf): raise ValueError
+        except (TypeError, ValueError):
+            errores.append("El periodo de vigencia no es válido."); ai=af=hoy.year; mi=mf=hoy.month
+        tipo = datos["tipo"]
+        if tipo not in dict(PromocionContrato.TIPO_CHOICES): errores.append("Selecciona un tipo de promoción válido.")
+        try: valor = Decimal((datos["valor"] or "0").replace(",", "."))
+        except Exception: valor = Decimal("0"); errores.append("El valor de la promoción no es válido.")
+        if tipo == "porcentaje" and not (Decimal("0") < valor <= Decimal("100")): errores.append("El porcentaje debe ser mayor que 0 y máximo 100%.")
+        if tipo in {"valor_fijo", "valor_especial"} and valor < 0: errores.append("El valor no puede ser negativo.")
+        if not datos["nombre"]: errores.append("Escribe un nombre para identificar la promoción.")
+        if not datos["motivo"]: errores.append("El motivo es obligatorio para conservar el historial.")
+        if not errores:
+            with transaction.atomic():
+                promo = PromocionContrato.objects.create(contrato=contrato, nombre=datos["nombre"], motivo=datos["motivo"], tipo=tipo, valor=valor, anio_inicio=ai, mes_inicio=mi, anio_fin=af, mes_fin=mf, creado_por=request.user)
+                # Ajustar cuentas ya generadas dentro de la vigencia solo si todavía no tienen pagos.
+                facturas = Factura.objects.filter(contrato=contrato).prefetch_related("items", "pagos")
+                actualizadas = 0
+                for factura in facturas:
+                    clave = factura.periodo_anio * 100 + factura.periodo_mes
+                    if not (promo.periodo_inicio_clave <= clave <= promo.periodo_fin_clave) or factura.pagos.filter(activo=True).exists() or factura.estado == Factura.ESTADO_ANULADA:
+                        continue
+                    calc = promo.calcular(contrato.precio_mensual)
+                    # Distribuir por cuota respetando 50/50 u otras configuraciones.
+                    cuotas = contrato.calendario_cobros(factura.periodo_anio, factura.periodo_mes)
+                    cuota = next((x for x in cuotas if x["cuota_numero"] == factura.cuota_numero), None)
+                    if not cuota: continue
+                    proporcion = cuota["valor"] / Decimal(contrato.precio_mensual or 1)
+                    nuevo_total = (calc["total"] * proporcion).quantize(Decimal("0.01"))
+                    factura.valor_contractual = cuota["valor"]
+                    factura.descuento_promocion = max(cuota["valor"] - nuevo_total, Decimal("0.00"))
+                    factura.promocion = promo; factura.promocion_nombre = promo.nombre
+                    factura.subtotal = nuevo_total; factura.total = nuevo_total
+                    factura.estado = Factura.ESTADO_PROMOCION if nuevo_total == 0 else Factura.ESTADO_PENDIENTE
+                    factura.save()
+                    item = factura.items.first()
+                    if item:
+                        item.precio_unitario = nuevo_total; item.save()
+                    actualizadas += 1
+            messages.success(request, f"Promoción aplicada correctamente. {actualizadas} cuenta(s) ya generada(s) fueron actualizadas.")
+            return redirect("contrato_detalle", pk=contrato.pk)
+        for error in errores: messages.error(request, error)
+    return render(request, "dashboard/contrato_promocion_form.html", {"contrato": contrato, "datos": datos, "tipos": PromocionContrato.TIPO_CHOICES, "es_admin": True})
 
 
 @login_required

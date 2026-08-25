@@ -81,6 +81,7 @@
         <div class="d-flex gap-2 flex-wrap">
           <a class="btn btn-light" href="/dashboard/contratos/">← Volver</a>
           <a class="btn btn-warning" href="/dashboard/contratos/{{ contrato.id }}/editar/">✏️ Editar contrato</a>
+          <a class="btn btn-success" href="{% url 'contrato_promocion_nueva' contrato.id %}">🎁 Aplicar promoción</a>
         </div>
       </div>
     </div>
@@ -153,6 +154,13 @@
       {% else %}
         <div class="text-muted">Todavía no hay información técnica registrada para esta piscina.</div>
       {% endif %}
+    </div>
+  </div>
+
+  <div class="cd-card mb-3">
+    <div class="cd-card-header"><div class="d-flex justify-content-between align-items-center gap-2 flex-wrap"><div><div class="cd-card-title">🎁 Promociones y descuentos</div><div class="small text-muted mt-1">Historial de beneficios aplicados sin modificar el valor contractual.</div></div><a class="btn btn-sm btn-success" href="{% url 'contrato_promocion_nueva' contrato.id %}">+ Aplicar promoción</a></div></div>
+    <div class="cd-card-body">
+      {% for promo in promociones_contrato %}<div class="border rounded-4 p-3 mb-2"><div class="d-flex justify-content-between gap-2 flex-wrap"><div><div class="fw-bold">{{ promo.nombre }}</div><div class="small text-muted">{{ promo.get_tipo_display }} · {{ promo.mes_inicio|stringformat:"02d" }}/{{ promo.anio_inicio }} → {{ promo.mes_fin|stringformat:"02d" }}/{{ promo.anio_fin }}</div></div><span class="badge {% if promo.activa %}text-bg-success{% else %}text-bg-secondary{% endif %}">{% if promo.activa %}Activa{% else %}Inactiva{% endif %}</span></div><div class="mt-2">{{ promo.motivo }}</div><div class="small fw-bold text-success mt-1">{% if promo.tipo == 'gratis' %}100% · periodo gratis{% elif promo.tipo == 'porcentaje' %}{{ promo.valor|floatformat:2 }}% de descuento{% elif promo.tipo == 'valor_fijo' %}${{ promo.valor|floatformat:2 }} de descuento{% else %}Cobro especial: ${{ promo.valor|floatformat:2 }}{% endif %}</div></div>{% empty %}<div class="text-muted">Este contrato todavía no tiene promociones registradas.</div>{% endfor %}
     </div>
   </div>
 
