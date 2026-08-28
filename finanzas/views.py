@@ -20,7 +20,7 @@ from .models import Egreso, Factura, Ingreso, PagoFactura, ObligacionTrabajador,
 from clientes.models import Cliente
 from contratos.models import Contrato
 
-from .cuentas_por_cobrar import MESES, generar_facturas_periodo, previsualizar_facturas_periodo
+from .cuentas_por_cobrar import MESES, generar_facturas_periodo, previsualizar_facturas_periodo, valores_promocion
 
 from .servicios_financieros import obtener_resumen_financiero
 from .alertas_financieras import generar_alertas_financieras
@@ -1138,6 +1138,211 @@ def _pdf_response(nombre_archivo, titulo, subtitulo, filas, encabezados, resumen
     tabla.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#123b66")),("TEXTCOLOR",(0,0),(-1,0),colors.white),("GRID",(0,0),(-1,-1),0.25,colors.HexColor("#cbd5e1")),("VALIGN",(0,0),(-1,-1),"TOP"),("PADDING",(0,0),(-1,-1),5)]))
     elementos.append(tabla); doc.build(elementos); return response
 
+
+
+@login_required
+def resumen_mensual_cobros_pagos_pdf(request):
+    """PDF de control físico: qué corresponde cobrar y pagar en el mes.
+
+    Es deliberadamente independiente del estado pagado/pendiente. Combina los
+    registros ya generados con la programación vigente que todavía no haya sido
+    materializada en Factura/ObligacionTrabajador.
+    """
+    if not _es_admin(request.user):
+        return _denegado(request)
+
+    hoy = timezone.localdate()
+    try:
+        anio = int(request.GET.get("anio") or hoy.year)
+        mes = int(request.GET.get("mes") or hoy.month)
+        if mes < 1 or mes > 12 or anio < 2020 or anio > 2100:
+            raise ValueError
+    except (TypeError, ValueError):
+        anio, mes = hoy.year, hoy.month
+
+    nombre_mes = dict(MESES).get(mes, str(mes))
+    inicio_mes, fin_mes = _rango_mes(anio, mes)
+
+    # --- COBROS: primero respetamos cuentas históricas ya generadas.
+    facturas = list(
+        Factura.objects
+        .select_related("cliente", "contrato", "promocion")
+        .filter(fecha_vencimiento__range=(inicio_mes, fin_mes))
+        .exclude(estado=Factura.ESTADO_ANULADA)
+        .order_by("fecha_vencimiento", "cliente__nombre", "id")
+    )
+    claves_factura = {
+        (f.contrato_id, f.periodo_anio, f.periodo_mes, f.cuota_numero)
+        for f in facturas
+    }
+    cobros = []
+    for f in facturas:
+        cobros.append({
+            "fecha": f.fecha_vencimiento,
+            "cliente": f.cliente.nombre,
+            "detalle": f"Cuota {f.cuota_numero}/{f.total_cuotas}" if f.total_cuotas > 1 else "Mensualidad",
+            "contractual": f.valor_contractual or f.subtotal or f.total,
+            "descuento": f.descuento_promocion or Decimal("0.00"),
+            "valor": f.total_cobro,
+            "promocion": f.promocion_nombre or (f.promocion.nombre if f.promocion_id else ""),
+        })
+
+    # Si todavía no se generó una cuenta, la proyectamos desde el contrato sin
+    # escribir nada en la base. Se revisan meses de servicio cercanos porque un
+    # contrato puede cobrar al mes siguiente.
+    contratos = list(
+        Contrato.objects.filter(activo=True, precio_mensual__gt=0)
+        .select_related("cliente", "tecnico_designado")
+    )
+    for contrato in contratos:
+        for pa, pm in _meses_servicio_candidatos_para_pago(anio, mes, meses_atras=12):
+            promo = valores_promocion(contrato, pa, pm)
+            for cuota in contrato.calendario_cobros(pa, pm):
+                fecha = cuota.get("fecha_vencimiento")
+                if not fecha or fecha.year != anio or fecha.month != mes:
+                    continue
+                clave = (contrato.pk, pa, pm, cuota["cuota_numero"])
+                if clave in claves_factura:
+                    continue
+                proporcion = (
+                    cuota["valor"] / Decimal(contrato.precio_mensual)
+                    if contrato.precio_mensual else Decimal("0.00")
+                )
+                valor_neto = (promo["total"] * proporcion).quantize(Decimal("0.01"))
+                descuento = max(cuota["valor"] - valor_neto, Decimal("0.00"))
+                cobros.append({
+                    "fecha": fecha,
+                    "cliente": contrato.cliente.nombre,
+                    "detalle": f"Cuota {cuota['cuota_numero']}/{cuota['total_cuotas']}" if cuota["total_cuotas"] > 1 else "Mensualidad",
+                    "contractual": cuota["valor"],
+                    "descuento": descuento,
+                    "valor": valor_neto,
+                    "promocion": promo["promocion"].nombre if promo["promocion"] else "",
+                })
+
+    cobros.sort(key=lambda x: (x["fecha"], x["cliente"]))
+    total_contractual = sum((x["contractual"] for x in cobros), Decimal("0.00"))
+    total_descuentos = sum((x["descuento"] for x in cobros), Decimal("0.00"))
+    total_cobrar = sum((x["valor"] for x in cobros), Decimal("0.00"))
+
+    # --- PAGOS A TRABAJADORES: obligaciones existentes + programación faltante.
+    obligaciones = list(
+        ObligacionTrabajador.objects
+        .select_related("trabajador__user", "contrato__cliente")
+        .filter(fecha_pago_programada__range=(inicio_mes, fin_mes))
+        .exclude(estado=ObligacionTrabajador.ESTADO_ANULADO)
+        .order_by("fecha_pago_programada", "trabajador__user__first_name", "id")
+    )
+    claves_nomina = {(o.contrato_id, o.periodo_anio, o.periodo_mes) for o in obligaciones}
+    pagos = [{
+        "fecha": o.fecha_pago_programada,
+        "trabajador": str(o.trabajador),
+        "cliente": o.contrato.cliente.nombre,
+        "valor": o.valor_acordado,
+    } for o in obligaciones]
+
+    for contrato in contratos:
+        if not contrato.tecnico_designado_id or not contrato.valor_tecnico_mensual or contrato.valor_tecnico_mensual <= 0:
+            continue
+        for pa, pm in _meses_servicio_candidatos_para_pago(anio, mes, meses_atras=12):
+            fecha = _fecha_pago_programada_contrato(contrato, pa, pm)
+            if fecha.year != anio or fecha.month != mes:
+                continue
+            periodo_inicio, periodo_fin = contrato.periodo_servicio(pa, pm)
+            if contrato.fecha_inicio and periodo_fin <= contrato.fecha_inicio:
+                continue
+            clave = (contrato.pk, pa, pm)
+            if clave in claves_nomina:
+                continue
+            pagos.append({
+                "fecha": fecha,
+                "trabajador": str(contrato.tecnico_designado),
+                "cliente": contrato.cliente.nombre,
+                "valor": contrato.valor_tecnico_mensual,
+            })
+
+    pagos.sort(key=lambda x: (x["fecha"], x["trabajador"], x["cliente"]))
+    total_pagar = sum((x["valor"] for x in pagos), Decimal("0.00"))
+    diferencia = total_cobrar - total_pagar
+
+    response = HttpResponse(content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename="resumen_cobros_pagos_{anio}_{mes:02d}.pdf"'
+    doc = SimpleDocTemplate(
+        response, pagesize=A4, rightMargin=10*mm, leftMargin=10*mm,
+        topMargin=10*mm, bottomMargin=10*mm
+    )
+    estilos = getSampleStyleSheet()
+    titulo = ParagraphStyle("RMTitle", parent=estilos["Title"], fontSize=16, leading=19, alignment=TA_CENTER)
+    subtitulo = ParagraphStyle("RMSub", parent=estilos["Normal"], fontSize=9, leading=12, alignment=TA_CENTER, textColor=colors.HexColor("#64748b"))
+    seccion = ParagraphStyle("RMSec", parent=estilos["Heading2"], fontSize=11, leading=14, textColor=colors.HexColor("#123b66"), spaceAfter=5)
+    pequeno = ParagraphStyle("RMSmall", parent=estilos["BodyText"], fontSize=7.2, leading=9)
+    elementos = [
+        Paragraph("JVAQUA · Resumen mensual de cobros y pagos", titulo),
+        Paragraph(f"{nombre_mes} {anio} · Control físico de planificación", subtitulo),
+        Spacer(1, 4*mm),
+    ]
+
+    resumen = [
+        ["TOTAL A COBRAR", f"${total_cobrar:.2f}", "TOTAL A PAGAR", f"${total_pagar:.2f}", "DIFERENCIA", f"${diferencia:.2f}"],
+    ]
+    t = Table(resumen, colWidths=[31*mm, 27*mm, 31*mm, 27*mm, 29*mm, 27*mm])
+    t.setStyle(TableStyle([
+        ("BACKGROUND", (0,0), (-1,-1), colors.HexColor("#eef4fb")),
+        ("TEXTCOLOR", (0,0), (-1,-1), colors.HexColor("#123b66")),
+        ("FONTNAME", (0,0), (-1,-1), "Helvetica-Bold"),
+        ("FONTSIZE", (0,0), (-1,-1), 7.5),
+        ("ALIGN", (1,0), (1,0), "RIGHT"), ("ALIGN", (3,0), (3,0), "RIGHT"), ("ALIGN", (5,0), (5,0), "RIGHT"),
+        ("GRID", (0,0), (-1,-1), .35, colors.HexColor("#cbd5e1")),
+        ("PADDING", (0,0), (-1,-1), 6),
+    ]))
+    elementos += [t, Spacer(1, 5*mm)]
+
+    elementos.append(Paragraph(f"COBROS DE CONTRATOS · {len(cobros)} registros", seccion))
+    datos_c = [["✓", "Fecha", "Cliente", "Detalle / promoción", "Base", "Desc.", "Cobrar"]]
+    for x in cobros:
+        detalle = x["detalle"] + (f" · {x['promocion']}" if x["promocion"] else "")
+        datos_c.append([
+            "☐", x["fecha"].strftime("%d/%m/%Y"), Paragraph(x["cliente"], pequeno),
+            Paragraph(detalle, pequeno), f"${x['contractual']:.2f}", f"${x['descuento']:.2f}", f"${x['valor']:.2f}"
+        ])
+    if len(datos_c) == 1:
+        datos_c.append(["", "", "Sin cobros programados", "", "", "", ""])
+    tc = Table(datos_c, repeatRows=1, colWidths=[8*mm, 21*mm, 43*mm, 47*mm, 22*mm, 20*mm, 22*mm])
+    tc.setStyle(TableStyle([
+        ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#123b66")),("TEXTCOLOR",(0,0),(-1,0),colors.white),
+        ("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),7),
+        ("GRID",(0,0),(-1,-1),.25,colors.HexColor("#cbd5e1")),("VALIGN",(0,0),(-1,-1),"MIDDLE"),
+        ("ALIGN",(4,1),(-1,-1),"RIGHT"),("PADDING",(0,0),(-1,-1),4),
+    ]))
+    elementos += [tc, Spacer(1, 2*mm)]
+    elementos.append(Paragraph(
+        f"Valor contractual: ${total_contractual:.2f} · Descuentos/promociones: ${total_descuentos:.2f} · Total real a cobrar: ${total_cobrar:.2f}",
+        pequeno
+    ))
+    elementos += [Spacer(1, 5*mm), Paragraph(f"PAGOS A TRABAJADORES · {len(pagos)} registros", seccion)]
+
+    datos_p = [["✓", "Fecha", "Trabajador", "Contrato / cliente", "Pagar"]]
+    for x in pagos:
+        datos_p.append([
+            "☐", x["fecha"].strftime("%d/%m/%Y"), Paragraph(x["trabajador"], pequeno),
+            Paragraph(x["cliente"], pequeno), f"${x['valor']:.2f}"
+        ])
+    if len(datos_p) == 1:
+        datos_p.append(["", "", "Sin pagos programados", "", ""])
+    tp = Table(datos_p, repeatRows=1, colWidths=[10*mm, 25*mm, 50*mm, 75*mm, 24*mm])
+    tp.setStyle(TableStyle([
+        ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#123b66")),("TEXTCOLOR",(0,0),(-1,0),colors.white),
+        ("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),7.2),
+        ("GRID",(0,0),(-1,-1),.25,colors.HexColor("#cbd5e1")),("VALIGN",(0,0),(-1,-1),"MIDDLE"),
+        ("ALIGN",(4,1),(4,-1),"RIGHT"),("PADDING",(0,0),(-1,-1),4),
+    ]))
+    elementos += [tp, Spacer(1, 3*mm), Paragraph(
+        "Este documento muestra lo programado para el mes, independientemente de si ya fue cobrado o pagado en el sistema. "
+        "La casilla de verificación está destinada al control físico/manual.",
+        pequeno
+    )]
+    doc.build(elementos)
+    return response
 
 @login_required
 def cliente_estado_cuenta_pdf(request, cliente_pk):

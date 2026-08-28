@@ -27,6 +27,7 @@
         <a class="btn btn-outline-light" href="{% url 'finanzas_cartera' %}">Cartera</a>
         <a class="btn btn-outline-light" href="{% url 'finanzas_nomina' %}">Nómina</a>
         <a class="btn btn-outline-light" href="{% url 'finanzas_movimientos' %}">Movimientos</a>
+        <a class="btn btn-outline-light" href="{% url 'finanzas_resumen_mensual_pdf' %}?anio={{ anio }}&mes={{ mes }}">📄 PDF mensual</a>
       </div>
     </div>
     <form class="fin-filter mt-3" method="get">
