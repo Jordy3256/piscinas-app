@@ -33,6 +33,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+from reportlab.platypus import HRFlowable
 
 
 def _es_admin(user):
@@ -1430,20 +1431,272 @@ def comprobante_servicio_anular(request,pk):
 
 @login_required
 def comprobante_servicio_pdf(request,pk):
-    if not _es_admin(request.user): return _denegado(request)
-    c=get_object_or_404(ComprobanteServicio.objects.prefetch_related("detalles"),pk=pk)
-    response=HttpResponse(content_type="application/pdf"); response["Content-Disposition"]=f'attachment; filename="{c.numero_formateado}.pdf"'
-    doc=SimpleDocTemplate(response,pagesize=A4,rightMargin=12*mm,leftMargin=12*mm,topMargin=10*mm,bottomMargin=10*mm)
-    s=getSampleStyleSheet(); normal=ParagraphStyle("csn",parent=s["BodyText"],fontSize=8,leading=11); warn=ParagraphStyle("csw",parent=normal,alignment=TA_CENTER,textColor=colors.HexColor("#b91c1c"))
-    story=[Paragraph("JVAQUA",ParagraphStyle("cst",parent=s["Title"],fontSize=18,textColor=colors.HexColor("#123b66"))),Paragraph("COMPROBANTE DE SERVICIO",ParagraphStyle("csh",parent=s["Heading1"],alignment=TA_RIGHT,fontSize=14)),Paragraph("<b>DOCUMENTO SIN VALIDEZ TRIBUTARIA · NO AUTORIZADO POR EL SRI</b>",warn),Spacer(1,4*mm)]
-    info=Table([[Paragraph("<b>JVAQUA · POOL MAINTENANCE</b><br/>Servicios para piscinas",normal),Paragraph(f"<b>No. {c.numero_formateado}</b><br/>Fecha: {c.fecha.strftime('%d/%m/%Y')}<br/>Estado: {c.get_estado_display()}",normal)]],colWidths=[115*mm,65*mm])
-    info.setStyle(TableStyle([("BOX",(0,0),(-1,-1),.7,colors.grey),("PADDING",(0,0),(-1,-1),7)])); story += [info,Spacer(1,4*mm)]
-    cli=Table([["Cliente / Razón social",c.cliente_nombre,"Identificación",c.cliente_identificacion or "—"],["Dirección",c.cliente_direccion or "—","Teléfono",c.cliente_telefono or "—"],["Correo",c.cliente_email or "—","Forma de pago",c.forma_pago or "—"]],colWidths=[35*mm,60*mm,30*mm,55*mm])
-    cli.setStyle(TableStyle([("GRID",(0,0),(-1,-1),.4,colors.grey),("FONTNAME",(0,0),(0,-1),"Helvetica-Bold"),("FONTNAME",(2,0),(2,-1),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),7.5),("PADDING",(0,0),(-1,-1),5)])); story += [cli,Spacer(1,5*mm)]
-    data=[["Cant.","Descripción","P. unitario","Total"]]+[[f"{d.cantidad:.2f}",Paragraph(d.descripcion,normal),f"${d.precio_unitario:.2f}",f"${d.total:.2f}"] for d in c.detalles.all()]
-    tab=Table(data,repeatRows=1,colWidths=[20*mm,105*mm,27*mm,28*mm]); tab.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#123b66")),("TEXTCOLOR",(0,0),(-1,0),colors.white),("GRID",(0,0),(-1,-1),.4,colors.grey),("FONTSIZE",(0,0),(-1,-1),7.5),("PADDING",(0,0),(-1,-1),5)])); story += [tab,Spacer(1,3*mm)]
-    tot=Table([["SUBTOTAL",f"${c.subtotal:.2f}"],["DESCUENTO",f"${c.descuento:.2f}"],["VALOR TOTAL",f"${c.total:.2f}"]],colWidths=[45*mm,30*mm],hAlign="RIGHT"); tot.setStyle(TableStyle([("GRID",(0,0),(-1,-1),.4,colors.grey),("FONTNAME",(0,0),(-1,-1),"Helvetica-Bold"),("ALIGN",(1,0),(1,-1),"RIGHT"),("PADDING",(0,0),(-1,-1),5)])); story.append(tot)
-    if c.observaciones: story += [Spacer(1,5*mm),Paragraph("<b>Observaciones</b>",normal),Paragraph(c.observaciones,normal)]
-    if c.estado==ComprobanteServicio.ESTADO_ANULADO: story += [Spacer(1,7*mm),Paragraph("<b>DOCUMENTO ANULADO</b>",warn)]
-    story += [Spacer(1,8*mm),Paragraph("Este comprobante es únicamente un respaldo informativo del servicio. No constituye factura, nota de venta ni comprobante tributario.",warn)]
-    doc.build(story); return response
+    if not _es_admin(request.user):
+        return _denegado(request)
+
+    c = get_object_or_404(
+        ComprobanteServicio.objects.prefetch_related("detalles"),
+        pk=pk,
+    )
+
+    def dinero(valor):
+        valor = Decimal(valor or 0)
+        return f"${valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+    def cantidad(valor):
+        valor = Decimal(valor or 0)
+        if valor == valor.to_integral():
+            return str(int(valor))
+        return f"{valor:.2f}".replace(".", ",")
+
+    response = HttpResponse(content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename="{c.numero_formateado}.pdf"'
+
+    doc = SimpleDocTemplate(
+        response,
+        pagesize=A4,
+        rightMargin=13*mm,
+        leftMargin=13*mm,
+        topMargin=11*mm,
+        bottomMargin=13*mm,
+        title=f"Comprobante de Servicio {c.numero_formateado}",
+        author="JVAQUA",
+    )
+
+    styles = getSampleStyleSheet()
+    azul = colors.HexColor("#123B66")
+    azul_claro = colors.HexColor("#EAF2F8")
+    celeste = colors.HexColor("#0B8FD3")
+    gris = colors.HexColor("#64748B")
+    gris_claro = colors.HexColor("#E2E8F0")
+    fondo = colors.HexColor("#F8FAFC")
+    rojo = colors.HexColor("#B42318")
+
+    marca = ParagraphStyle(
+        "CSMarca", parent=styles["Title"], fontName="Helvetica-Bold",
+        fontSize=22, leading=24, textColor=azul, spaceAfter=0
+    )
+    slogan = ParagraphStyle(
+        "CSSlogan", parent=styles["Normal"], fontName="Helvetica-Bold",
+        fontSize=7.5, leading=10, textColor=gris
+    )
+    titulo = ParagraphStyle(
+        "CSTitulo", parent=styles["Heading1"], fontName="Helvetica-Bold",
+        fontSize=15.5, leading=18, textColor=azul, alignment=TA_RIGHT, spaceAfter=2
+    )
+    numero = ParagraphStyle(
+        "CSNumero", parent=styles["Normal"], fontName="Helvetica-Bold",
+        fontSize=10, leading=13, textColor=celeste, alignment=TA_RIGHT
+    )
+    label = ParagraphStyle(
+        "CSLabel", parent=styles["Normal"], fontName="Helvetica-Bold",
+        fontSize=7.2, leading=9, textColor=gris
+    )
+    value = ParagraphStyle(
+        "CSValue", parent=styles["Normal"], fontName="Helvetica",
+        fontSize=8.2, leading=11, textColor=colors.HexColor("#172033")
+    )
+    value_bold = ParagraphStyle(
+        "CSValueBold", parent=value, fontName="Helvetica-Bold"
+    )
+    small = ParagraphStyle(
+        "CSSmall", parent=styles["Normal"], fontSize=7.2, leading=9.5,
+        textColor=gris
+    )
+    warning = ParagraphStyle(
+        "CSWarning", parent=styles["Normal"], fontName="Helvetica-Bold",
+        fontSize=7.2, leading=9.5, alignment=TA_CENTER, textColor=rojo
+    )
+    section = ParagraphStyle(
+        "CSSection", parent=styles["Heading2"], fontName="Helvetica-Bold",
+        fontSize=8.5, leading=11, textColor=azul, spaceAfter=4
+    )
+
+    story = []
+
+    # Cabecera corporativa compacta.
+    izquierda = [
+        Paragraph("JVAQUA", marca),
+        Paragraph("POOL MAINTENANCE", slogan),
+        Spacer(1, 1.5*mm),
+        Paragraph("Mantenimiento y soluciones técnicas para piscinas", small),
+    ]
+    derecha = [
+        Paragraph("COMPROBANTE DE SERVICIO", titulo),
+        Paragraph(c.numero_formateado, numero),
+        Spacer(1, 1.5*mm),
+        Paragraph(f"Fecha de emisión: <b>{c.fecha.strftime('%d/%m/%Y')}</b>", small),
+    ]
+    header = Table([[izquierda, derecha]], colWidths=[92*mm, 89*mm])
+    header.setStyle(TableStyle([
+        ("VALIGN", (0,0), (-1,-1), "TOP"),
+        ("LEFTPADDING", (0,0), (-1,-1), 0),
+        ("RIGHTPADDING", (0,0), (-1,-1), 0),
+        ("TOPPADDING", (0,0), (-1,-1), 0),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 0),
+    ]))
+    story += [header, Spacer(1, 3*mm)]
+
+    aviso = Table(
+        [[Paragraph("DOCUMENTO SIN VALIDEZ TRIBUTARIA - NO AUTORIZADO POR EL SRI", warning)]],
+        colWidths=[181*mm],
+    )
+    aviso.setStyle(TableStyle([
+        ("BACKGROUND", (0,0), (-1,-1), colors.HexColor("#FFF4F2")),
+        ("BOX", (0,0), (-1,-1), 0.45, colors.HexColor("#FDA29B")),
+        ("TOPPADDING", (0,0), (-1,-1), 4),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+    ]))
+    story += [aviso, Spacer(1, 5*mm)]
+
+    # Datos del cliente: dirección en fila completa para evitar solapamientos.
+    story.append(Paragraph("DATOS DEL CLIENTE", section))
+    cliente = [
+        [
+            Paragraph("CLIENTE / RAZÓN SOCIAL", label),
+            Paragraph(c.cliente_nombre or "—", value_bold),
+            Paragraph("IDENTIFICACIÓN", label),
+            Paragraph(c.cliente_identificacion or "—", value),
+        ],
+        [
+            Paragraph("DIRECCIÓN", label),
+            Paragraph(c.cliente_direccion or "—", value),
+            "",
+            "",
+        ],
+        [
+            Paragraph("TELÉFONO", label),
+            Paragraph(c.cliente_telefono or "—", value),
+            Paragraph("CORREO", label),
+            Paragraph(c.cliente_email or "—", value),
+        ],
+        [
+            Paragraph("FORMA DE PAGO", label),
+            Paragraph(c.forma_pago or "—", value),
+            Paragraph("ESTADO", label),
+            Paragraph(c.get_estado_display(), value_bold),
+        ],
+    ]
+    ct = Table(cliente, colWidths=[32*mm, 59*mm, 25*mm, 65*mm])
+    ct.setStyle(TableStyle([
+        ("SPAN", (1,1), (3,1)),
+        ("BACKGROUND", (0,0), (-1,-1), fondo),
+        ("GRID", (0,0), (-1,-1), 0.35, gris_claro),
+        ("VALIGN", (0,0), (-1,-1), "TOP"),
+        ("LEFTPADDING", (0,0), (-1,-1), 6),
+        ("RIGHTPADDING", (0,0), (-1,-1), 6),
+        ("TOPPADDING", (0,0), (-1,-1), 5),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+    ]))
+    story += [ct, Spacer(1, 6*mm)]
+
+    story.append(Paragraph("DETALLE DEL SERVICIO", section))
+    data = [[
+        Paragraph("CANT.", label),
+        Paragraph("DESCRIPCIÓN", label),
+        Paragraph("P. UNITARIO", label),
+        Paragraph("TOTAL", label),
+    ]]
+    for d in c.detalles.all():
+        data.append([
+            cantidad(d.cantidad),
+            Paragraph(d.descripcion, value),
+            dinero(d.precio_unitario),
+            dinero(d.total),
+        ])
+
+    detalle = Table(
+        data,
+        repeatRows=1,
+        colWidths=[18*mm, 107*mm, 28*mm, 28*mm],
+    )
+    detalle.setStyle(TableStyle([
+        ("BACKGROUND", (0,0), (-1,0), azul),
+        ("TEXTCOLOR", (0,0), (-1,0), colors.white),
+        ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+        ("GRID", (0,0), (-1,-1), 0.35, gris_claro),
+        ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+        ("ALIGN", (0,1), (0,-1), "CENTER"),
+        ("ALIGN", (2,1), (-1,-1), "RIGHT"),
+        ("LEFTPADDING", (0,0), (-1,-1), 6),
+        ("RIGHTPADDING", (0,0), (-1,-1), 6),
+        ("TOPPADDING", (0,0), (-1,-1), 6),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 6),
+    ]))
+    story += [detalle, Spacer(1, 4*mm)]
+
+    # Totales compactos. El descuento se muestra solo cuando existe.
+    totales = [["SUBTOTAL", dinero(c.subtotal)]]
+    if (c.descuento or Decimal("0.00")) > 0:
+        totales.append(["DESCUENTO", f"- {dinero(c.descuento)}"])
+    totales.append(["TOTAL", dinero(c.total)])
+
+    tt = Table(totales, colWidths=[43*mm, 32*mm], hAlign="RIGHT")
+    estilo_totales = [
+        ("GRID", (0,0), (-1,-1), 0.35, gris_claro),
+        ("FONTNAME", (0,0), (0,-1), "Helvetica-Bold"),
+        ("ALIGN", (1,0), (1,-1), "RIGHT"),
+        ("LEFTPADDING", (0,0), (-1,-1), 7),
+        ("RIGHTPADDING", (0,0), (-1,-1), 7),
+        ("TOPPADDING", (0,0), (-1,-1), 6),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 6),
+    ]
+    ultima = len(totales) - 1
+    estilo_totales += [
+        ("BACKGROUND", (0,ultima), (-1,ultima), azul_claro),
+        ("TEXTCOLOR", (0,ultima), (-1,ultima), azul),
+        ("FONTNAME", (0,ultima), (-1,ultima), "Helvetica-Bold"),
+        ("FONTSIZE", (0,ultima), (-1,ultima), 10),
+    ]
+    tt.setStyle(TableStyle(estilo_totales))
+    story += [tt]
+
+    if c.observaciones:
+        story += [
+            Spacer(1, 6*mm),
+            Paragraph("OBSERVACIONES", section),
+            Table(
+                [[Paragraph(c.observaciones, value)]],
+                colWidths=[181*mm],
+                style=TableStyle([
+                    ("BACKGROUND", (0,0), (-1,-1), fondo),
+                    ("BOX", (0,0), (-1,-1), 0.35, gris_claro),
+                    ("LEFTPADDING", (0,0), (-1,-1), 7),
+                    ("RIGHTPADDING", (0,0), (-1,-1), 7),
+                    ("TOPPADDING", (0,0), (-1,-1), 7),
+                    ("BOTTOMPADDING", (0,0), (-1,-1), 7),
+                ]),
+            ),
+        ]
+
+    if c.estado == ComprobanteServicio.ESTADO_ANULADO:
+        story += [
+            Spacer(1, 7*mm),
+            Table(
+                [[Paragraph("DOCUMENTO ANULADO", ParagraphStyle(
+                    "CSAnulado", parent=warning, fontSize=13, leading=16
+                ))]],
+                colWidths=[181*mm],
+                style=TableStyle([
+                    ("BACKGROUND", (0,0), (-1,-1), colors.HexColor("#FFF4F2")),
+                    ("BOX", (0,0), (-1,-1), 0.7, rojo),
+                    ("TOPPADDING", (0,0), (-1,-1), 7),
+                    ("BOTTOMPADDING", (0,0), (-1,-1), 7),
+                ]),
+            ),
+        ]
+
+    story += [
+        Spacer(1, 12*mm),
+        HRFlowable(width="100%", thickness=0.5, color=gris_claro),
+        Spacer(1, 2.5*mm),
+        Paragraph(
+            "Documento informativo emitido por JVAQUA como respaldo del servicio. "
+            "No constituye factura, nota de venta ni comprobante tributario.",
+            ParagraphStyle("CSFooter", parent=small, alignment=TA_CENTER, fontSize=6.8),
+        ),
+    ]
+
+    doc.build(story)
+    return response
+
