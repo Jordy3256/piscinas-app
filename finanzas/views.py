@@ -4,6 +4,7 @@ from calendar import monthrange
 from datetime import date, timedelta
 from decimal import Decimal
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
@@ -32,7 +33,7 @@ from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import mm
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, Image
 from reportlab.platypus import HRFlowable
 
 
@@ -1514,20 +1515,31 @@ def comprobante_servicio_pdf(request,pk):
 
     story = []
 
-    # Cabecera corporativa compacta.
-    izquierda = [
-        Paragraph("JVAQUA", marca),
-        Paragraph("POOL MAINTENANCE", slogan),
-        Spacer(1, 1.5*mm),
-        Paragraph("Mantenimiento y soluciones técnicas para piscinas", small),
-    ]
+    # Cabecera corporativa con el logotipo oficial de JVAQUA.
+    logo_path = settings.BASE_DIR / "finanzas" / "static" / "finanzas" / "img" / "jvaqua_logo.png"
+    if logo_path.exists():
+        logo = Image(str(logo_path), width=38*mm, height=38*mm)
+        logo.hAlign = "LEFT"
+        izquierda = [
+            logo,
+            Spacer(1, 1.2*mm),
+            Paragraph("POOL MAINTENANCE", slogan),
+            Paragraph("Mantenimiento y soluciones técnicas para piscinas", small),
+        ]
+    else:
+        izquierda = [
+            Paragraph("JVAQUA", marca),
+            Paragraph("POOL MAINTENANCE", slogan),
+            Spacer(1, 1.5*mm),
+            Paragraph("Mantenimiento y soluciones técnicas para piscinas", small),
+        ]
     derecha = [
         Paragraph("COMPROBANTE DE SERVICIO", titulo),
         Paragraph(c.numero_formateado, numero),
         Spacer(1, 1.5*mm),
         Paragraph(f"Fecha de emisión: <b>{c.fecha.strftime('%d/%m/%Y')}</b>", small),
     ]
-    header = Table([[izquierda, derecha]], colWidths=[92*mm, 89*mm])
+    header = Table([[izquierda, derecha]], colWidths=[92*mm, 89*mm], rowHeights=[42*mm])
     header.setStyle(TableStyle([
         ("VALIGN", (0,0), (-1,-1), "TOP"),
         ("LEFTPADDING", (0,0), (-1,-1), 0),
