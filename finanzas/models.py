@@ -761,3 +761,41 @@ class PagoTrabajador(models.Model):
         if self.activo:
             self.activo = False
             self.save(update_fields=["activo", "actualizado_en"])
+
+class ComprobanteServicio(models.Model):
+    ESTADO_EMITIDO = "EMITIDO"
+    ESTADO_ANULADO = "ANULADO"
+    ESTADOS = [(ESTADO_EMITIDO, "Emitido"), (ESTADO_ANULADO, "Anulado")]
+    numero = models.PositiveIntegerField(unique=True, editable=False)
+    fecha = models.DateField(default=timezone.localdate)
+    cliente_nombre = models.CharField(max_length=180)
+    cliente_identificacion = models.CharField(max_length=30, blank=True)
+    cliente_direccion = models.CharField(max_length=255, blank=True)
+    cliente_telefono = models.CharField(max_length=50, blank=True)
+    cliente_email = models.EmailField(blank=True)
+    forma_pago = models.CharField(max_length=120, blank=True)
+    observaciones = models.TextField(blank=True)
+    descuento = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    estado = models.CharField(max_length=12, choices=ESTADOS, default=ESTADO_EMITIDO)
+    creado_por = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="comprobantes_servicio_creados")
+    creado_en = models.DateTimeField(auto_now_add=True)
+    anulado_en = models.DateTimeField(null=True, blank=True)
+    class Meta: ordering = ["-fecha", "-numero"]
+    def save(self, *args, **kwargs):
+        if not self.numero:
+            self.numero = (ComprobanteServicio.objects.order_by("-numero").values_list("numero", flat=True).first() or 0) + 1
+        super().save(*args, **kwargs)
+    @property
+    def numero_formateado(self): return f"CS-{self.numero:06d}"
+    @property
+    def subtotal(self): return sum((d.total for d in self.detalles.all()), Decimal("0.00"))
+    @property
+    def total(self): return max(self.subtotal - (self.descuento or Decimal("0.00")), Decimal("0.00"))
+
+class DetalleComprobanteServicio(models.Model):
+    comprobante = models.ForeignKey(ComprobanteServicio, on_delete=models.CASCADE, related_name="detalles")
+    cantidad = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("1.00"))
+    descripcion = models.TextField()
+    precio_unitario = models.DecimalField(max_digits=12, decimal_places=2)
+    @property
+    def total(self): return (self.cantidad * self.precio_unitario).quantize(Decimal("0.01"))

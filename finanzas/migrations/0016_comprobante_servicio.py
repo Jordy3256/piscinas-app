@@ -1,0 +1,10 @@
+from django.conf import settings
+from django.db import migrations, models
+import django.db.models.deletion
+import django.utils.timezone
+class Migration(migrations.Migration):
+    dependencies=[("finanzas","0015_promociones_contrato"),migrations.swappable_dependency(settings.AUTH_USER_MODEL)]
+    operations=[
+      migrations.CreateModel(name="ComprobanteServicio",fields=[("id",models.BigAutoField(auto_created=True,primary_key=True,serialize=False,verbose_name="ID")),("numero",models.PositiveIntegerField(editable=False,unique=True)),("fecha",models.DateField(default=django.utils.timezone.localdate)),("cliente_nombre",models.CharField(max_length=180)),("cliente_identificacion",models.CharField(blank=True,max_length=30)),("cliente_direccion",models.CharField(blank=True,max_length=255)),("cliente_telefono",models.CharField(blank=True,max_length=50)),("cliente_email",models.EmailField(blank=True,max_length=254)),("forma_pago",models.CharField(blank=True,max_length=120)),("observaciones",models.TextField(blank=True)),("descuento",models.DecimalField(decimal_places=2,default=0,max_digits=12)),("estado",models.CharField(choices=[("EMITIDO","Emitido"),("ANULADO","Anulado")],default="EMITIDO",max_length=12)),("creado_en",models.DateTimeField(auto_now_add=True)),("anulado_en",models.DateTimeField(blank=True,null=True)),("creado_por",models.ForeignKey(blank=True,null=True,on_delete=django.db.models.deletion.SET_NULL,related_name="comprobantes_servicio_creados",to=settings.AUTH_USER_MODEL))],options={"ordering":["-fecha","-numero"]}),
+      migrations.CreateModel(name="DetalleComprobanteServicio",fields=[("id",models.BigAutoField(auto_created=True,primary_key=True,serialize=False,verbose_name="ID")),("cantidad",models.DecimalField(decimal_places=2,default=1,max_digits=10)),("descripcion",models.TextField()),("precio_unitario",models.DecimalField(decimal_places=2,max_digits=12)),("comprobante",models.ForeignKey(on_delete=django.db.models.deletion.CASCADE,related_name="detalles",to="finanzas.comprobanteservicio"))])
+    ]

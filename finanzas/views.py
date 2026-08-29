@@ -1,3 +1,4 @@
+from .models import ComprobanteServicio, DetalleComprobanteServicio
 from calendar import monthrange
 from calendar import monthrange
 from datetime import date, timedelta
@@ -14,6 +15,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.urls import reverse
 from django.utils.text import slugify
+from django.views.decorators.http import require_POST
 
 from .forms import EgresoForm, IngresoForm, PagoFacturaForm, PagoTrabajadorForm, PagoConsolidadoTrabajadorForm
 from .models import Egreso, Factura, Ingreso, PagoFactura, ObligacionTrabajador, PagoTrabajador, LotePagoTrabajador, AnticipoTrabajador
@@ -1390,3 +1392,58 @@ def calendario_financiero(request):
     for e in Egreso.objects.filter(fecha__range=(inicio,fin)).exclude(estado=Egreso.ESTADO_ANULADO): eventos.append({"fecha":e.fecha,"tipo":"Egreso realizado","detalle":e.concepto,"valor":e.monto_pagado,"estado":"pagado"})
     eventos.sort(key=lambda x:(x["fecha"],x["tipo"],x["detalle"]))
     return render(request,"finanzas/calendario.html",{"eventos":eventos,"anio":anio,"mes":mes,"meses":MESES,"es_admin":True})
+
+@login_required
+def comprobantes_servicio_lista(request):
+    if not _es_admin(request.user): return _denegado(request)
+    return render(request, "finanzas/comprobantes_servicio_lista.html", {"comprobantes": ComprobanteServicio.objects.prefetch_related("detalles").all()})
+
+@login_required
+def comprobante_servicio_nuevo(request):
+    if not _es_admin(request.user): return _denegado(request)
+    if request.method == "POST":
+        nombre=(request.POST.get("cliente_nombre") or "").strip()
+        descs=request.POST.getlist("descripcion[]"); cants=request.POST.getlist("cantidad[]"); precios=request.POST.getlist("precio_unitario[]")
+        if not nombre or not any(x.strip() for x in descs):
+            messages.error(request,"Ingresa el cliente y al menos un detalle.")
+        else:
+            try: fecha=datetime.strptime(request.POST.get("fecha"),"%Y-%m-%d").date()
+            except Exception: fecha=timezone.localdate()
+            with transaction.atomic():
+                c=ComprobanteServicio.objects.create(fecha=fecha,cliente_nombre=nombre,cliente_identificacion=(request.POST.get("cliente_identificacion") or "").strip(),cliente_direccion=(request.POST.get("cliente_direccion") or "").strip(),cliente_telefono=(request.POST.get("cliente_telefono") or "").strip(),cliente_email=(request.POST.get("cliente_email") or "").strip(),forma_pago=(request.POST.get("forma_pago") or "").strip(),observaciones=(request.POST.get("observaciones") or "").strip(),descuento=Decimal((request.POST.get("descuento") or "0").replace(",",".")),creado_por=request.user)
+                for d,q,p in zip(descs,cants,precios):
+                    if d.strip(): DetalleComprobanteServicio.objects.create(comprobante=c,descripcion=d.strip(),cantidad=Decimal((q or "1").replace(",",".")),precio_unitario=Decimal((p or "0").replace(",",".")))
+            return redirect("finanzas_comprobante_servicio_detalle",pk=c.pk)
+    return render(request,"finanzas/comprobante_servicio_form.html",{"hoy":timezone.localdate()})
+
+@login_required
+def comprobante_servicio_detalle(request,pk):
+    if not _es_admin(request.user): return _denegado(request)
+    return render(request,"finanzas/comprobante_servicio_detalle.html",{"comprobante":get_object_or_404(ComprobanteServicio.objects.prefetch_related("detalles"),pk=pk)})
+
+@login_required
+@require_POST
+def comprobante_servicio_anular(request,pk):
+    if not _es_admin(request.user): return _denegado(request)
+    c=get_object_or_404(ComprobanteServicio,pk=pk); c.estado=ComprobanteServicio.ESTADO_ANULADO; c.anulado_en=timezone.now(); c.save(update_fields=["estado","anulado_en"])
+    return redirect("finanzas_comprobante_servicio_detalle",pk=pk)
+
+@login_required
+def comprobante_servicio_pdf(request,pk):
+    if not _es_admin(request.user): return _denegado(request)
+    c=get_object_or_404(ComprobanteServicio.objects.prefetch_related("detalles"),pk=pk)
+    response=HttpResponse(content_type="application/pdf"); response["Content-Disposition"]=f'attachment; filename="{c.numero_formateado}.pdf"'
+    doc=SimpleDocTemplate(response,pagesize=A4,rightMargin=12*mm,leftMargin=12*mm,topMargin=10*mm,bottomMargin=10*mm)
+    s=getSampleStyleSheet(); normal=ParagraphStyle("csn",parent=s["BodyText"],fontSize=8,leading=11); warn=ParagraphStyle("csw",parent=normal,alignment=TA_CENTER,textColor=colors.HexColor("#b91c1c"))
+    story=[Paragraph("JVAQUA",ParagraphStyle("cst",parent=s["Title"],fontSize=18,textColor=colors.HexColor("#123b66"))),Paragraph("COMPROBANTE DE SERVICIO",ParagraphStyle("csh",parent=s["Heading1"],alignment=TA_RIGHT,fontSize=14)),Paragraph("<b>DOCUMENTO SIN VALIDEZ TRIBUTARIA · NO AUTORIZADO POR EL SRI</b>",warn),Spacer(1,4*mm)]
+    info=Table([[Paragraph("<b>JVAQUA · POOL MAINTENANCE</b><br/>Servicios para piscinas",normal),Paragraph(f"<b>No. {c.numero_formateado}</b><br/>Fecha: {c.fecha.strftime('%d/%m/%Y')}<br/>Estado: {c.get_estado_display()}",normal)]],colWidths=[115*mm,65*mm])
+    info.setStyle(TableStyle([("BOX",(0,0),(-1,-1),.7,colors.grey),("PADDING",(0,0),(-1,-1),7)])); story += [info,Spacer(1,4*mm)]
+    cli=Table([["Cliente / Razón social",c.cliente_nombre,"Identificación",c.cliente_identificacion or "—"],["Dirección",c.cliente_direccion or "—","Teléfono",c.cliente_telefono or "—"],["Correo",c.cliente_email or "—","Forma de pago",c.forma_pago or "—"]],colWidths=[35*mm,60*mm,30*mm,55*mm])
+    cli.setStyle(TableStyle([("GRID",(0,0),(-1,-1),.4,colors.grey),("FONTNAME",(0,0),(0,-1),"Helvetica-Bold"),("FONTNAME",(2,0),(2,-1),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),7.5),("PADDING",(0,0),(-1,-1),5)])); story += [cli,Spacer(1,5*mm)]
+    data=[["Cant.","Descripción","P. unitario","Total"]]+[[f"{d.cantidad:.2f}",Paragraph(d.descripcion,normal),f"${d.precio_unitario:.2f}",f"${d.total:.2f}"] for d in c.detalles.all()]
+    tab=Table(data,repeatRows=1,colWidths=[20*mm,105*mm,27*mm,28*mm]); tab.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#123b66")),("TEXTCOLOR",(0,0),(-1,0),colors.white),("GRID",(0,0),(-1,-1),.4,colors.grey),("FONTSIZE",(0,0),(-1,-1),7.5),("PADDING",(0,0),(-1,-1),5)])); story += [tab,Spacer(1,3*mm)]
+    tot=Table([["SUBTOTAL",f"${c.subtotal:.2f}"],["DESCUENTO",f"${c.descuento:.2f}"],["VALOR TOTAL",f"${c.total:.2f}"]],colWidths=[45*mm,30*mm],hAlign="RIGHT"); tot.setStyle(TableStyle([("GRID",(0,0),(-1,-1),.4,colors.grey),("FONTNAME",(0,0),(-1,-1),"Helvetica-Bold"),("ALIGN",(1,0),(1,-1),"RIGHT"),("PADDING",(0,0),(-1,-1),5)])); story.append(tot)
+    if c.observaciones: story += [Spacer(1,5*mm),Paragraph("<b>Observaciones</b>",normal),Paragraph(c.observaciones,normal)]
+    if c.estado==ComprobanteServicio.ESTADO_ANULADO: story += [Spacer(1,7*mm),Paragraph("<b>DOCUMENTO ANULADO</b>",warn)]
+    story += [Spacer(1,8*mm),Paragraph("Este comprobante es únicamente un respaldo informativo del servicio. No constituye factura, nota de venta ni comprobante tributario.",warn)]
+    doc.build(story); return response
