@@ -1279,6 +1279,9 @@
               <div class="flex-grow-1">
                 <div class="fw-bold">{{ m.cliente }}</div>
                 <div class="text-muted small">📅 {{ m.fecha|date:"d/m/Y" }}</div>
+                <div class="small mt-1">
+                  📍 <strong>{{ m.cliente.ciudad|default:"Sin ciudad" }}</strong>{% if m.cliente.sector_urbanizacion %} · {{ m.cliente.sector_urbanizacion }}{% endif %}
+                </div>
               </div>
 
               <div class="w-100 w-sm-auto">
@@ -1328,6 +1331,9 @@
             <div class="flex-grow-1">
               <div class="fw-bold">{{ m.cliente }}</div>
               <div class="text-muted small">📅 {{ m.fecha|date:"d/m/Y" }}</div>
+                <div class="small mt-1">
+                  📍 <strong>{{ m.cliente.ciudad|default:"Sin ciudad" }}</strong>{% if m.cliente.sector_urbanizacion %} · {{ m.cliente.sector_urbanizacion }}{% endif %}
+                </div>
             </div>
 
             <div class="w-100 w-sm-auto">
@@ -1383,6 +1389,9 @@
               <div class="flex-grow-1">
                 <div class="fw-bold">{{ m.cliente }}</div>
                 <div class="text-muted small">📅 {{ m.fecha|date:"d/m/Y" }}</div>
+                <div class="small mt-1">
+                  📍 <strong>{{ m.cliente.ciudad|default:"Sin ciudad" }}</strong>{% if m.cliente.sector_urbanizacion %} · {{ m.cliente.sector_urbanizacion }}{% endif %}
+                </div>
               </div>
 
               <div class="w-100 w-sm-auto">

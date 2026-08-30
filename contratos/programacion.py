@@ -196,3 +196,49 @@ def cancelar_programacion_futura(contrato, desde=None):
     contrato.programado_hasta = None
     contrato.save(update_fields=["programado_hasta"])
     return eliminados
+
+
+def mantener_programacion_automatica(horizonte_dias=14):
+    """Mantiene un mes futuro de visitas para todos los contratos automáticos activos.
+
+    Se ejecuta al entrar al ERP. Si un contrato está sin programación o entra
+    dentro del horizonte de renovación, agrega el siguiente bloque sin tocar
+    visitas realizadas ni crear duplicados.
+    """
+    from contratos.models import Contrato
+
+    hoy = timezone.localdate()
+    limite = hoy + timedelta(days=horizonte_dias)
+    contratos = (
+        Contrato.objects
+        .filter(activo=True, generacion_automatica=True)
+        .select_related("tecnico_designado", "cliente")
+        .order_by("id")
+    )
+
+    renovados = 0
+    creados = 0
+    errores = []
+    for contrato in contratos:
+        if contrato.programado_hasta and contrato.programado_hasta > limite:
+            continue
+
+        desde = (
+            contrato.programado_hasta + timedelta(days=1)
+            if contrato.programado_hasta and contrato.programado_hasta >= hoy
+            else max(contrato.fecha_inicio, hoy)
+        )
+        hasta = sumar_un_mes(desde)
+        resultado = generar_mantenimientos_contrato(
+            contrato,
+            desde=desde,
+            hasta=hasta,
+            reconciliar=False,
+        )
+        if resultado.get("errores"):
+            errores.append({"contrato": contrato.pk, "errores": resultado["errores"]})
+            continue
+        renovados += 1
+        creados += resultado.get("creados", 0)
+
+    return {"renovados": renovados, "creados": creados, "errores": errores}

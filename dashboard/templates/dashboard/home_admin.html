@@ -157,15 +157,6 @@
           {% for mantenimiento in mantenimientos_hoy|slice:":5" %}<article class="ac-item"><div class="ac-item-main"><h3 class="ac-item-title">{{ mantenimiento.cliente }}</h3><div class="ac-item-meta"><span class="ac-badge">{{ mantenimiento.get_estado_display }}</span>{% if mantenimiento.trabajadores.all %}<span>{% for t in mantenimiento.trabajadores.all %}{{ t }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% else %}<span>Sin asignar</span>{% endif %}</div></div><a class="ac-action" href="{% url 'mantenimiento_detalle' mantenimiento.pk %}">Abrir</a></article>{% empty %}{% if not mantenimientos_atrasados %}<div class="ac-empty">No hay mantenimientos programados para hoy.</div>{% endif %}{% endfor %}
         </div>
       </section>
-
-      {% if contratos_programacion %}
-      <section class="ac-panel ac-green">
-        <header class="ac-panel-head"><h2 class="ac-panel-title">📅 Programación de contratos <span class="ac-count">{{ cantidad_contratos_programacion }}</span></h2><a class="ac-panel-link" href="{% url 'contrato_list' %}">Ver contratos →</a></header>
-        <div class="ac-list">
-          {% for contrato in contratos_programacion %}<article class="ac-item"><div class="ac-item-main"><h3 class="ac-item-title">{{ contrato.cliente }}</h3><div class="ac-item-meta"><span class="ac-badge">Extender programación</span><span>Generado hasta {% if contrato.programado_hasta %}{{ contrato.programado_hasta|date:"d/m/Y" }}{% else %}sin fecha{% endif %}</span></div></div><a class="ac-action" href="{% url 'contrato_detalle' contrato.pk %}">Revisar</a></article>{% endfor %}
-        </div>
-      </section>
-      {% endif %}
     </main>
 
     <aside>

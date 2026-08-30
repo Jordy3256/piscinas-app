@@ -57,6 +57,7 @@ from ordenes_trabajo.models import OrdenTrabajo
 from contratos.programacion import (
     DIAS_SEMANA,
     cancelar_programacion_futura,
+    mantener_programacion_automatica,
     generar_mantenimientos_contrato,
     normalizar_dias,
     validar_programacion,
@@ -2367,6 +2368,11 @@ def home_view(request):
 @login_required
 def dashboard_view(request):
     base_ctx = {"VAPID_PUBLIC_KEY": getattr(settings, "VAPID_PUBLIC_KEY", "")}
+
+    # Renovación silenciosa de la programación: mantiene siempre visitas futuras
+    # para contratos activos. Al desactivar un contrato, la lógica existente
+    # cancela sus mantenimientos automáticos pendientes.
+    mantener_programacion_automatica(horizonte_dias=14)
 
     if es_admin(request.user):
         hoy = date.today()

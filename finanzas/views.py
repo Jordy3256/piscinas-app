@@ -98,18 +98,25 @@ def panel_financiero(request):
     except (TypeError, ValueError):
         anio, mes = hoy.year, hoy.month
 
+    ciudad = (request.GET.get("ciudad") or "").strip()
+
     # Al abrir Finanzas se actualizan la campana y las alertas push del administrador.
     generar_alertas_financieras(enviar_push=True)
-    resumen = obtener_resumen_financiero(anio, mes)
+    resumen = obtener_resumen_financiero(anio, mes, ciudad=ciudad)
     inicio, fin = resumen["inicio"], resumen["fin"]
 
     ingresos = Ingreso.objects.select_related("cliente", "contrato").filter(fecha__range=(inicio, fin))
     egresos = Egreso.objects.filter(fecha__range=(inicio, fin))
     ingresos_validos = ingresos.exclude(estado=Ingreso.ESTADO_ANULADO)
     egresos_validos = egresos.exclude(estado=Egreso.ESTADO_ANULADO)
+    if ciudad:
+        ingresos = ingresos.filter(Q(cliente__ciudad__iexact=ciudad) | Q(ciudad__iexact=ciudad)).distinct()
+        egresos = egresos.filter(ciudad_proyecto__iexact=ciudad)
+        ingresos_validos = ingresos.exclude(estado=Ingreso.ESTADO_ANULADO)
+        egresos_validos = egresos.exclude(estado=Egreso.ESTADO_ANULADO)
 
     ant_anio, ant_mes = _mes_anterior(anio, mes)
-    resumen_anterior = obtener_resumen_financiero(ant_anio, ant_mes)
+    resumen_anterior = obtener_resumen_financiero(ant_anio, ant_mes, ciudad=ciudad)
 
     categorias = list(
         egresos_validos.filter(aprobado=True)
@@ -161,6 +168,8 @@ def panel_financiero(request):
         "inicio": inicio,
         "fin": fin,
         "hoy": hoy,
+        "ciudad": ciudad,
+        "ciudades": Cliente.objects.exclude(ciudad="").values_list("ciudad", flat=True).distinct().order_by("ciudad"),
         **resumen,
         "variacion_ingresos": _variacion(resumen["ingresos_cobrados"], resumen_anterior["ingresos_cobrados"]),
         "variacion_egresos": _variacion(resumen["egresos_pagados"], resumen_anterior["egresos_pagados"]),
@@ -1164,17 +1173,20 @@ def resumen_mensual_cobros_pagos_pdf(request):
     except (TypeError, ValueError):
         anio, mes = hoy.year, hoy.month
 
+    ciudad = (request.GET.get("ciudad") or "").strip()
     nombre_mes = dict(MESES).get(mes, str(mes))
     inicio_mes, fin_mes = _rango_mes(anio, mes)
 
     # --- COBROS: primero respetamos cuentas históricas ya generadas.
-    facturas = list(
+    facturas_qs = (
         Factura.objects
         .select_related("cliente", "contrato", "promocion")
         .filter(fecha_vencimiento__range=(inicio_mes, fin_mes))
         .exclude(estado=Factura.ESTADO_ANULADA)
-        .order_by("fecha_vencimiento", "cliente__nombre", "id")
     )
+    if ciudad:
+        facturas_qs = facturas_qs.filter(cliente__ciudad__iexact=ciudad)
+    facturas = list(facturas_qs.order_by("fecha_vencimiento", "cliente__nombre", "id"))
     claves_factura = {
         (f.contrato_id, f.periodo_anio, f.periodo_mes, f.cuota_numero)
         for f in facturas
@@ -1194,10 +1206,10 @@ def resumen_mensual_cobros_pagos_pdf(request):
     # Si todavía no se generó una cuenta, la proyectamos desde el contrato sin
     # escribir nada en la base. Se revisan meses de servicio cercanos porque un
     # contrato puede cobrar al mes siguiente.
-    contratos = list(
-        Contrato.objects.filter(activo=True, precio_mensual__gt=0)
-        .select_related("cliente", "tecnico_designado")
-    )
+    contratos_qs = Contrato.objects.filter(activo=True, precio_mensual__gt=0).select_related("cliente", "tecnico_designado")
+    if ciudad:
+        contratos_qs = contratos_qs.filter(cliente__ciudad__iexact=ciudad)
+    contratos = list(contratos_qs)
     for contrato in contratos:
         for pa, pm in _meses_servicio_candidatos_para_pago(anio, mes, meses_atras=12):
             promo = valores_promocion(contrato, pa, pm)
@@ -1230,13 +1242,15 @@ def resumen_mensual_cobros_pagos_pdf(request):
     total_cobrar = sum((x["valor"] for x in cobros), Decimal("0.00"))
 
     # --- PAGOS A TRABAJADORES: obligaciones existentes + programación faltante.
-    obligaciones = list(
+    obligaciones_qs = (
         ObligacionTrabajador.objects
         .select_related("trabajador__user", "contrato__cliente")
         .filter(fecha_pago_programada__range=(inicio_mes, fin_mes))
         .exclude(estado=ObligacionTrabajador.ESTADO_ANULADO)
-        .order_by("fecha_pago_programada", "trabajador__user__first_name", "id")
     )
+    if ciudad:
+        obligaciones_qs = obligaciones_qs.filter(contrato__cliente__ciudad__iexact=ciudad)
+    obligaciones = list(obligaciones_qs.order_by("fecha_pago_programada", "trabajador__user__first_name", "id"))
     claves_nomina = {(o.contrato_id, o.periodo_anio, o.periodo_mes) for o in obligaciones}
     pagos = [{
         "fecha": o.fecha_pago_programada,
@@ -1282,7 +1296,7 @@ def resumen_mensual_cobros_pagos_pdf(request):
     pequeno = ParagraphStyle("RMSmall", parent=estilos["BodyText"], fontSize=7.2, leading=9)
     elementos = [
         Paragraph("JVAQUA · Resumen mensual de cobros y pagos", titulo),
-        Paragraph(f"{nombre_mes} {anio} · Control físico de planificación", subtitulo),
+        Paragraph(f"{nombre_mes} {anio} · {ciudad if ciudad else 'Todas las ciudades'} · Control físico de planificación", subtitulo),
         Spacer(1, 4*mm),
     ]
 

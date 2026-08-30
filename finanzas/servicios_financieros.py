@@ -13,6 +13,7 @@ from .models import (
     Ingreso,
     MovimientoRecurrente,
     ObligacionTrabajador,
+    PagoTrabajador,
 )
 
 CERO = Decimal("0.00")
@@ -44,7 +45,7 @@ def _egresos_no_nomina(anio: int, mes: int):
     )
 
 
-def obtener_resumen_financiero(anio: int, mes: int) -> dict:
+def obtener_resumen_financiero(anio: int, mes: int, ciudad: str = "") -> dict:
     """Calcula el estado real y proyectado sin duplicar cartera ni nómina.
 
     Real:
@@ -56,6 +57,7 @@ def obtener_resumen_financiero(anio: int, mes: int) -> dict:
       - Egresos: obligaciones cuya fecha programada de pago cae en el mes + egresos no vinculados a nómina.
     """
     inicio, fin = _rango_mes(anio, mes)
+    ciudad = (ciudad or "").strip()
 
     ingresos_reales_qs = Ingreso.objects.filter(fecha__range=(inicio, fin)).exclude(
         estado=Ingreso.ESTADO_ANULADO
@@ -64,8 +66,28 @@ def obtener_resumen_financiero(anio: int, mes: int) -> dict:
         fecha__range=(inicio, fin), aprobado=True
     ).exclude(estado=Egreso.ESTADO_ANULADO)
 
+    pagos_consolidados_ciudad = CERO
+    if ciudad:
+        ingresos_reales_qs = ingresos_reales_qs.filter(
+            Q(cliente__ciudad__iexact=ciudad) | Q(ciudad__iexact=ciudad)
+        ).distinct()
+        # Los pagos individuales ya guardan ciudad_proyecto. Los consolidados se
+        # distribuyen por obligación para no atribuir todo el lote a una sola ciudad.
+        egresos_reales_qs = egresos_reales_qs.exclude(
+            lote_pago_trabajador__isnull=False
+        ).filter(ciudad_proyecto__iexact=ciudad)
+        pagos_consolidados_ciudad = (
+            PagoTrabajador.objects.filter(
+                activo=True,
+                lote__isnull=False,
+                lote__activo=True,
+                fecha__range=(inicio, fin),
+                obligacion__contrato__cliente__ciudad__iexact=ciudad,
+            ).aggregate(valor=Sum("monto"))["valor"] or CERO
+        )
+
     ingresos_cobrados = _sumar(ingresos_reales_qs, "monto_pagado")
-    egresos_pagados = _sumar(egresos_reales_qs, "monto_pagado")
+    egresos_pagados = _sumar(egresos_reales_qs, "monto_pagado") + pagos_consolidados_ciudad
 
     facturas = (
         Factura.objects.filter(periodo_anio=anio, periodo_mes=mes)
@@ -85,6 +107,14 @@ def obtener_resumen_financiero(anio: int, mes: int) -> dict:
     ingresos_manuales = _ingresos_manuales(anio, mes)
     egresos_no_nomina = _egresos_no_nomina(anio, mes)
 
+    if ciudad:
+        facturas = facturas.filter(cliente__ciudad__iexact=ciudad)
+        obligaciones = obligaciones.filter(contrato__cliente__ciudad__iexact=ciudad)
+        ingresos_manuales = ingresos_manuales.filter(
+            Q(cliente__ciudad__iexact=ciudad) | Q(ciudad__iexact=ciudad)
+        ).distinct()
+        egresos_no_nomina = egresos_no_nomina.filter(ciudad_proyecto__iexact=ciudad)
+
     total_facturado = _sumar(facturas, "total")
     total_ingresos_manuales = _sumar(ingresos_manuales, "total")
     ingresos_esperados = total_facturado + total_ingresos_manuales
@@ -98,7 +128,9 @@ def obtener_resumen_financiero(anio: int, mes: int) -> dict:
         tipo="egreso",
         proxima_fecha__range=(inicio, fin),
     )
-    total_recurrentes_pendientes = _sumar(recurrentes_pendientes, "monto")
+    # Los recurrentes actuales no tienen ciudad asignada; por eso solo forman
+    # parte de la vista Global y no contaminan una ciudad específica.
+    total_recurrentes_pendientes = CERO if ciudad else _sumar(recurrentes_pendientes, "monto")
     egresos_previstos = total_nomina + total_egresos_no_nomina + total_recurrentes_pendientes
 
     cobrado_facturas = sum((factura.monto_pagado for factura in facturas), CERO)

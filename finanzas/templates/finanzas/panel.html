@@ -27,12 +27,12 @@
         <a class="btn btn-outline-light" href="{% url 'finanzas_cartera' %}">Cartera</a>
         <a class="btn btn-outline-light" href="{% url 'finanzas_nomina' %}">Nómina</a>
         <a class="btn btn-outline-light" href="{% url 'finanzas_movimientos' %}">Movimientos</a>
-        <a class="btn btn-outline-light" href="{% url 'finanzas_resumen_mensual_pdf' %}?anio={{ anio }}&mes={{ mes }}">📄 PDF mensual</a>
+        <a class="btn btn-outline-light" href="{% url 'finanzas_resumen_mensual_pdf' %}?anio={{ anio }}&mes={{ mes }}{% if ciudad %}&ciudad={{ ciudad|urlencode }}{% endif %}">📄 PDF mensual</a>
       </div>
     </div>
     <form class="fin-filter mt-3" method="get">
       <div><label>AÑO</label><input type="number" name="anio" value="{{ anio }}" min="2020" max="2100"></div>
-      <div><label>MES</label><input type="number" name="mes" value="{{ mes }}" min="1" max="12"></div>
+      <div><label>MES</label><input type="number" name="mes" value="{{ mes }}" min="1" max="12"></div><div><label>CIUDAD</label><select name="ciudad"><option value="">Global · Todas</option>{% for c in ciudades %}<option value="{{ c }}" {% if ciudad == c %}selected{% endif %}>{{ c }}</option>{% endfor %}</select></div>
       <button class="btn btn-light" type="submit">Aplicar</button>
     </form>
 <a class="btn btn-outline-primary" href="{% url 'finanzas_comprobantes_servicio' %}">🧾 Comprobantes de servicio</a>
