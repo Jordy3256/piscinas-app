@@ -165,6 +165,7 @@ def panel_financiero(request):
     contexto = {
         "anio": anio,
         "mes": mes,
+        "meses": MESES,
         "inicio": inicio,
         "fin": fin,
         "hoy": hoy,

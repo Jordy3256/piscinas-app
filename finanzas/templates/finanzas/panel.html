@@ -123,18 +123,6 @@
     <article class="fin-card projected"><div class="fin-label">Egresos previstos</div><div class="fin-value text-primary">${{ egresos_previstos|floatformat:2|intcomma }}</div><div class="fin-meta">Nómina + gastos no vinculados a nómina</div></article>
     <article class="fin-card projected"><div class="fin-label">Resultado proyectado</div><div class="fin-value {% if resultado_proyectado < 0 %}fin-down{% else %}fin-up{% endif %}">${{ resultado_proyectado|floatformat:2|intcomma }}</div><div class="fin-meta">Margen proyectado: {{ margen_proyectado|floatformat:1 }}%</div></article>
   </section>
-
-  <article class="fin-card">
-    <div class="fin-section-title"><h2>Flujo de caja esperado</h2></div>
-    <div class="summary-strip">
-      <div class="metric"><span class="fin-label">Ingresar</span><strong class="fin-up">${{ ingresos_esperados|floatformat:2|intcomma }}</strong></div>
-      <div class="arrow">→</div>
-      <div class="metric"><span class="fin-label">Gastar</span><strong class="fin-down">${{ egresos_previstos|floatformat:2|intcomma }}</strong></div>
-      <div class="arrow">→</div>
-      <div class="metric"><span class="fin-label">Resultado</span><strong class="{% if resultado_proyectado < 0 %}fin-down{% else %}fin-up{% endif %}">${{ resultado_proyectado|floatformat:2|intcomma }}</strong></div>
-    </div>
-  </article>
-
   <div class="fin-block-title"><div><h2>Gestión pendiente</h2><p>Lo que falta cobrar y pagar para completar la proyección.</p></div></div>
   <section class="fin-grid four">
     <article class="fin-card pending"><div class="fin-label">Por cobrar</div><div class="fin-value text-primary">${{ por_cobrar|floatformat:2|intcomma }}</div><div class="fin-meta">Saldo pendiente de clientes</div></article>
