@@ -20,7 +20,7 @@ from django.views.decorators.http import require_POST
 
 from .forms import EgresoForm, IngresoForm, PagoFacturaForm, PagoTrabajadorForm, PagoConsolidadoTrabajadorForm
 from .models import Egreso, Factura, Ingreso, PagoFactura, ObligacionTrabajador, PagoTrabajador, LotePagoTrabajador, AnticipoTrabajador
-from clientes.models import Cliente
+from clientes.models import Cliente, Ciudad
 from contratos.models import Contrato
 
 from .cuentas_por_cobrar import MESES, generar_facturas_periodo, previsualizar_facturas_periodo, valores_promocion
@@ -169,7 +169,7 @@ def panel_financiero(request):
         "fin": fin,
         "hoy": hoy,
         "ciudad": ciudad,
-        "ciudades": Cliente.objects.exclude(ciudad="").values_list("ciudad", flat=True).distinct().order_by("ciudad"),
+        "ciudades": Ciudad.objects.filter(activa=True).order_by("orden", "nombre").values_list("nombre", flat=True),
         **resumen,
         "variacion_ingresos": _variacion(resumen["ingresos_cobrados"], resumen_anterior["ingresos_cobrados"]),
         "variacion_egresos": _variacion(resumen["egresos_pagados"], resumen_anterior["egresos_pagados"]),
