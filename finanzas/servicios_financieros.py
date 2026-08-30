@@ -7,6 +7,8 @@ from decimal import Decimal
 from django.db.models import Q, Sum
 from django.utils import timezone
 
+from contratos.models import Contrato
+
 from .models import (
     Egreso,
     Factura,
@@ -14,6 +16,7 @@ from .models import (
     MovimientoRecurrente,
     ObligacionTrabajador,
     PagoTrabajador,
+    PromocionContrato,
 )
 
 CERO = Decimal("0.00")
@@ -25,6 +28,18 @@ def _sumar(qs, campo: str) -> Decimal:
 
 def _rango_mes(anio: int, mes: int) -> tuple[date, date]:
     return date(anio, mes, 1), date(anio, mes, monthrange(anio, mes)[1])
+
+
+def _filtro_ciudad_contrato(ciudad: str) -> Q:
+    return (Q(ciudad_ref__nombre__iexact=ciudad) | Q(ciudad_ref__isnull=True, ciudad__iexact=ciudad) | Q(ciudad_ref__isnull=True, cliente__ciudad_ref__nombre__iexact=ciudad) | Q(ciudad_ref__isnull=True, cliente__ciudad__iexact=ciudad))
+
+
+def _contratos_del_periodo(anio: int, mes: int, ciudad: str):
+    inicio, fin = _rango_mes(anio, mes)
+    qs = Contrato.objects.select_related("cliente", "ciudad_ref").filter(fecha_inicio__lte=fin).filter(Q(activo=True) | Q(fecha_baja__gte=inicio))
+    if ciudad:
+        qs = qs.filter(_filtro_ciudad_contrato(ciudad))
+    return qs.distinct()
 
 
 def _ingresos_manuales(anio: int, mes: int):
@@ -69,7 +84,7 @@ def obtener_resumen_financiero(anio: int, mes: int, ciudad: str = "") -> dict:
     pagos_consolidados_ciudad = CERO
     if ciudad:
         ingresos_reales_qs = ingresos_reales_qs.filter(
-            Q(cliente__ciudad__iexact=ciudad) | Q(ciudad__iexact=ciudad)
+            Q(contrato__ciudad_ref__nombre__iexact=ciudad) | Q(contrato__ciudad__iexact=ciudad) | Q(cliente__ciudad_ref__nombre__iexact=ciudad) | Q(cliente__ciudad__iexact=ciudad) | Q(ciudad__iexact=ciudad)
         ).distinct()
         # Los pagos individuales ya guardan ciudad_proyecto. Los consolidados se
         # distribuyen por obligación para no atribuir todo el lote a una sola ciudad.
@@ -82,7 +97,7 @@ def obtener_resumen_financiero(anio: int, mes: int, ciudad: str = "") -> dict:
                 lote__isnull=False,
                 lote__activo=True,
                 fecha__range=(inicio, fin),
-                obligacion__contrato__cliente__ciudad__iexact=ciudad,
+                obligacion__contrato__ciudad_ref__nombre__iexact=ciudad,
             ).aggregate(valor=Sum("monto"))["valor"] or CERO
         )
 
@@ -108,19 +123,38 @@ def obtener_resumen_financiero(anio: int, mes: int, ciudad: str = "") -> dict:
     egresos_no_nomina = _egresos_no_nomina(anio, mes)
 
     if ciudad:
-        facturas = facturas.filter(cliente__ciudad__iexact=ciudad)
-        obligaciones = obligaciones.filter(contrato__cliente__ciudad__iexact=ciudad)
+        facturas = facturas.filter(Q(contrato__ciudad_ref__nombre__iexact=ciudad) | Q(contrato__ciudad__iexact=ciudad) | Q(cliente__ciudad_ref__nombre__iexact=ciudad) | Q(cliente__ciudad__iexact=ciudad)).distinct()
+        obligaciones = obligaciones.filter(Q(contrato__ciudad_ref__nombre__iexact=ciudad) | Q(contrato__ciudad__iexact=ciudad) | Q(contrato__cliente__ciudad_ref__nombre__iexact=ciudad) | Q(contrato__cliente__ciudad__iexact=ciudad)).distinct()
         ingresos_manuales = ingresos_manuales.filter(
-            Q(cliente__ciudad__iexact=ciudad) | Q(ciudad__iexact=ciudad)
+            Q(contrato__ciudad_ref__nombre__iexact=ciudad) | Q(contrato__ciudad__iexact=ciudad) | Q(cliente__ciudad_ref__nombre__iexact=ciudad) | Q(cliente__ciudad__iexact=ciudad) | Q(ciudad__iexact=ciudad)
         ).distinct()
         egresos_no_nomina = egresos_no_nomina.filter(ciudad_proyecto__iexact=ciudad)
 
     total_facturado = _sumar(facturas, "total")
     total_ingresos_manuales = _sumar(ingresos_manuales, "total")
-    ingresos_esperados = total_facturado + total_ingresos_manuales
-
     total_nomina = _sumar(obligaciones, "valor_acordado")
     total_egresos_no_nomina = _sumar(egresos_no_nomina, "total")
+
+    # Completa la proyección territorial desde contratos cuando todavía no se han
+    # materializado la factura o la obligación del período. No duplica documentos existentes.
+    if ciudad:
+        contratos_periodo = _contratos_del_periodo(anio, mes, ciudad)
+        ids_facturados = set(facturas.values_list("contrato_id", flat=True))
+        ids_obligados = set(obligaciones.values_list("contrato_id", flat=True))
+        promos = {}
+        for promo in PromocionContrato.objects.filter(contrato__in=contratos_periodo, activa=True):
+            if promo.aplica_a(anio, mes):
+                promos[promo.contrato_id] = promo
+        for contrato in contratos_periodo:
+            if contrato.id not in ids_facturados:
+                valor = Decimal(contrato.precio_mensual or 0)
+                if contrato.id in promos:
+                    valor = promos[contrato.id].calcular(valor)["total"]
+                total_facturado += valor
+            if contrato.id not in ids_obligados:
+                total_nomina += Decimal(contrato.valor_tecnico_mensual or 0)
+
+    ingresos_esperados = total_facturado + total_ingresos_manuales
 
     # Los recurrentes que aún no fueron procesados también son previsiones del mes.
     recurrentes_pendientes = MovimientoRecurrente.objects.filter(
