@@ -572,10 +572,6 @@
 
   <section class="op-hero">
     <div class="op-hero-content">
-      <div class="d-flex justify-content-end gap-2 flex-wrap mb-2">
-        <a href="{% url 'ordenes_trabajo:lista' %}" class="btn btn-outline-primary btn-sm">🛠 Órdenes de trabajo</a>
-        <a href="{% url 'ordenes_trabajo:crear' %}" class="btn btn-primary btn-sm">＋ Nueva visita / trabajo</a>
-      </div>
       <div class="op-hero-eyebrow">🧭 Centro de operaciones</div>
       <h1 class="op-hero-title">Control operativo de JVAQUA</h1>
       <p class="op-hero-subtitle">
@@ -595,7 +591,7 @@
       <div class="d-flex flex-wrap gap-2">
         <a class="btn btn-primary" href="/dashboard/operativo/"><i class="bi bi-calendar-check"></i> Mantenimientos</a>
         <a class="btn btn-outline-primary" href="{% url 'ordenes_trabajo:lista' %}"><i class="bi bi-tools"></i> Órdenes de trabajo</a>
-        <a class="btn btn-outline-secondary" href="{% url 'ordenes_trabajo:crear' %}"><i class="bi bi-plus-lg"></i> Nueva orden</a>
+        <a class="btn btn-outline-secondary" href="{% url 'ordenes_trabajo:crear' %}"><i class="bi bi-plus-lg"></i> ＋ Nueva visita / trabajo</a>
       </div>
     </div>
   </div>
@@ -649,22 +645,22 @@
       <input type="hidden" name="fecha_seleccionada" value="{{ fecha_seleccionada_str }}">
       {% endif %}
 
-      <div class="col-12 col-md-4">
+      <div class="col-12 col-lg-4">
         <label class="form-label mb-1">Buscar</label>
         <input
           type="text"
           class="form-control"
           name="q"
           value="{{ q }}"
-          placeholder="Cliente, contrato o trabajador"
+          placeholder="Cliente, sector, ciudad o trabajador"
         >
       </div>
 
-      <div class="col-12 col-md-2 d-grid">
-        <button class="btn btn-primary" type="submit">Aplicar</button>
-      </div>
+      <div class="col-6 col-lg-3"><label class="form-label mb-1">Ciudad</label><select class="form-select" name="ciudad"><option value="">Todas las ciudades</option>{% for c in ciudades %}<option value="{{ c.nombre }}" {% if ciudad == c.nombre %}selected{% endif %}>{{ c.nombre }}</option>{% endfor %}</select></div>
+      <div class="col-6 col-lg-3"><label class="form-label mb-1">Trabajador</label><select class="form-select" name="trabajador"><option value="">Todos</option>{% for t in trabajadores_filtro %}<option value="{{ t.id }}" {% if trabajador_id == t.id|stringformat:"s" %}selected{% endif %}>{{ t.user.get_full_name|default:t.user.username }}</option>{% endfor %}</select></div>
+      <div class="col-12 col-lg-2 d-grid"><button class="btn btn-primary" type="submit">Aplicar filtros</button></div>
 
-      <div class="col-12 col-md-6">
+      <div class="col-12">
         <div class="d-grid d-md-flex gap-2">
           <a class="btn {% if not modo_actual and not fecha_seleccionada_str %}btn-primary{% else %}btn-outline-secondary{% endif %}"
              href="/dashboard/operativo/?vista={{ vista_actual }}{% if q %}&q={{ q|urlencode }}{% endif %}">
@@ -727,12 +723,15 @@
   </a>
 </div>
 
+{% if total_atrasados_reales or total_sin_asignar %}
+<div class="card shadow-sm mb-3 border-warning op-card-compact"><div class="card-body"><div class="op-section-title mb-2">⚠ Requieren atención</div><div class="d-flex flex-wrap gap-2">{% if total_atrasados_reales %}<span class="op-chip">🔴 {{ total_atrasados_reales }} atrasado{{ total_atrasados_reales|pluralize }}</span>{% endif %}{% if total_sin_asignar %}<span class="op-chip">🟠 {{ total_sin_asignar }} sin trabajador asignado</span>{% endif %}</div></div></div>
+
 <div class="row g-2 mb-3">
   <div class="col-6 col-md-3">
     <div class="card shadow-sm border-primary op-kpi">
       <div class="card-body py-3">
         <div class="text-muted small">{{ etiqueta_periodo }}</div>
-        <div class="fs-4 fw-bold text-primary">{{ dia_list|length }}</div>
+        <div class="fs-4 fw-bold text-primary">{{ total_dia_reales }}</div>
       </div>
     </div>
   </div>
@@ -741,7 +740,7 @@
     <div class="card shadow-sm border-danger op-kpi">
       <div class="card-body py-3">
         <div class="text-muted small">Atrasados</div>
-        <div class="fs-4 fw-bold text-danger">{{ atrasados|length }}</div>
+        <div class="fs-4 fw-bold text-danger">{{ total_atrasados_reales }}</div>
       </div>
     </div>
   </div>
@@ -874,7 +873,7 @@
                         {% endif %}
 
                         {% if m.estado == "pendiente" and m.fecha < hoy %}
-                          <span class="badge text-bg-danger">Atrasado</span>
+                          <span class="badge text-bg-danger">{{ m.dias_atraso }} día{{ m.dias_atraso|pluralize }} atrasado</span>
                         {% endif %}
 
                         {% if not m.trabajadores.all %}
@@ -1122,7 +1121,7 @@
                     </a>
                   </div>
                   <div class="text-muted small mt-1">
-                    📅 {{ m.fecha }} · {{ m.contrato }}
+                    📍 {{ m.cliente.ciudad|default:"Sin ciudad" }}{% if m.cliente.sector_urbanizacion %} · {{ m.cliente.sector_urbanizacion }}{% endif %}<br>📅 {{ m.fecha }} · {{ m.contrato }}
                   </div>
                 </div>
 
@@ -1157,6 +1156,7 @@
           </div>
         {% endfor %}
       </div>
+      {% if mostrar_ver_mas_atrasados %}<div class="d-grid mt-3"><a class="btn btn-outline-danger" href="?{% if modo_actual %}filtro={{ modo_actual }}&{% endif %}ver_mas_atrasados=1{% if ciudad %}&ciudad={{ ciudad|urlencode }}{% endif %}{% if trabajador_id %}&trabajador={{ trabajador_id }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}">Ver {{ total_atrasados_reales|add:"-20" }} atrasados más ↓</a></div>{% endif %}
     {% else %}
       <div class="text-muted">No hay atrasados 🎉</div>
     {% endif %}
@@ -1185,7 +1185,7 @@
                     </a>
                   </div>
                   <div class="text-muted small mt-1">
-                    📅 {{ m.fecha }} · {{ m.contrato }}
+                    📍 {{ m.cliente.ciudad|default:"Sin ciudad" }}{% if m.cliente.sector_urbanizacion %} · {{ m.cliente.sector_urbanizacion }}{% endif %}<br>📅 {{ m.fecha }} · {{ m.contrato }}
                   </div>
                 </div>
 
@@ -1223,6 +1223,7 @@
           </div>
         {% endfor %}
       </div>
+      {% if mostrar_ver_mas_dia %}<div class="d-grid mt-3"><a class="btn btn-outline-primary" href="?{% if modo_actual %}filtro={{ modo_actual }}&{% endif %}ver_mas_dia=1{% if ciudad %}&ciudad={{ ciudad|urlencode }}{% endif %}{% if trabajador_id %}&trabajador={{ trabajador_id }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}">Ver {{ total_dia_reales|add:"-20" }} mantenimientos más ↓</a></div>{% endif %}
     {% else %}
       <div class="text-muted">
         No hay mantenimientos para este filtro.
@@ -1262,7 +1263,7 @@
                     </a>
                   </div>
                   <div class="text-muted small mt-1">
-                    📅 {{ m.fecha }} · {{ m.contrato }}
+                    📍 {{ m.cliente.ciudad|default:"Sin ciudad" }}{% if m.cliente.sector_urbanizacion %} · {{ m.cliente.sector_urbanizacion }}{% endif %}<br>📅 {{ m.fecha }} · {{ m.contrato }}
                   </div>
                 </div>
 

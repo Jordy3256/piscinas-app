@@ -3474,6 +3474,10 @@ def admin_operativo_view(request):
     hoy = date.today()
     filtro = (request.GET.get("filtro", "") or "").strip().lower()
     q = (request.GET.get("q", "") or "").strip()
+    ciudad = (request.GET.get("ciudad", "") or "").strip()
+    trabajador_id = (request.GET.get("trabajador", "") or "").strip()
+    ver_mas_atrasados = (request.GET.get("ver_mas_atrasados", "") or "").strip() == "1"
+    ver_mas_dia = (request.GET.get("ver_mas_dia", "") or "").strip() == "1"
     ver_mas_proximos = (request.GET.get("ver_mas_proximos", "") or "").strip() == "1"
     vista_actual = (request.GET.get("vista", "calendario") or "calendario").strip().lower()
 
@@ -3491,6 +3495,11 @@ def admin_operativo_view(request):
         .prefetch_related("trabajadores")
         .order_by("fecha", "estado", "id")
     )
+
+    if ciudad:
+        base_qs = base_qs.filter(cliente__ciudad__iexact=ciudad)
+    if trabajador_id.isdigit():
+        base_qs = base_qs.filter(trabajadores__id=int(trabajador_id)).distinct()
 
     if fecha_seleccionada:
         dia_list = list(
@@ -3585,6 +3594,19 @@ def admin_operativo_view(request):
         atrasados = _filtrar_mantenimientos_por_busqueda(atrasados, q)
         proximos = _filtrar_mantenimientos_por_busqueda(proximos, q)
 
+    total_dia_reales = len(dia_list)
+    total_atrasados_reales = len(atrasados)
+    for m in atrasados:
+        m.dias_atraso = max((hoy - m.fecha).days, 0)
+
+    if not ver_mas_dia:
+        dia_list = dia_list[:20]
+    if not ver_mas_atrasados:
+        atrasados = atrasados[:20]
+
+    mostrar_ver_mas_dia = total_dia_reales > 20 and not ver_mas_dia
+    mostrar_ver_mas_atrasados = total_atrasados_reales > 20 and not ver_mas_atrasados
+
     resumen_trabajadores = _resumen_trabajadores_desde_listas(dia_list, atrasados, proximos)
 
     sin_asignar_dia = _sin_asignar_count(dia_list)
@@ -3632,6 +3654,10 @@ def admin_operativo_view(request):
         {
             "hoy": hoy,
             "q": q,
+            "ciudad": ciudad,
+            "ciudades": Ciudad.objects.filter(activa=True).order_by("orden", "nombre"),
+            "trabajador_id": trabajador_id,
+            "trabajadores_filtro": Trabajador.objects.select_related("user").filter(activo=True).order_by("user__first_name", "user__username"),
             "modo_actual": filtro,
             "vista_actual": vista_actual,
             "etiqueta_periodo": etiqueta_periodo,
@@ -3653,6 +3679,12 @@ def admin_operativo_view(request):
             "ver_mas_proximos": ver_mas_proximos,
             "mostrar_boton_ver_mas_proximos": mostrar_boton_ver_mas_proximos,
             "total_proximos_reales": total_proximos_reales,
+            "total_dia_reales": total_dia_reales,
+            "total_atrasados_reales": total_atrasados_reales,
+            "mostrar_ver_mas_dia": mostrar_ver_mas_dia,
+            "mostrar_ver_mas_atrasados": mostrar_ver_mas_atrasados,
+            "ver_mas_dia": ver_mas_dia,
+            "ver_mas_atrasados": ver_mas_atrasados,
             "fecha_seleccionada": fecha_seleccionada,
             "fecha_seleccionada_str": fecha_seleccionada_str,
             "agenda_semanal": agenda_semanal,
