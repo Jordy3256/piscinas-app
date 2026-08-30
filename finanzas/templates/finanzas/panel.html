@@ -18,25 +18,42 @@
   @media(max-width:600px){.fin-shell{gap:12px}.fin-hero{padding:17px;border-radius:19px}.fin-actions{display:grid;grid-template-columns:1fr 1fr;width:100%}.fin-actions .btn{width:100%;font-size:.82rem}.fin-filter{width:100%;display:grid;grid-template-columns:1fr 1fr auto}.fin-filter input{width:100%;min-width:0}.fin-grid,.fin-grid.four{grid-template-columns:1fr 1fr;gap:10px}.fin-card{padding:14px;border-radius:17px}.fin-value{font-size:1.35rem}.fin-main{gap:10px}.fin-item{padding:10px;gap:9px}.fin-dot{width:36px;height:36px}.fin-item-title{font-size:.85rem}.fin-amount{font-size:.88rem}.summary-strip{grid-template-columns:1fr}.summary-strip .arrow{transform:rotate(90deg);text-align:center}}
 </style>
 <div class="fin-shell">
-  <section class="fin-hero">
-    <div class="fin-hero-row">
-      <div><h1>Centro financiero inteligente</h1><p>Compara lo realmente cobrado y pagado con todo lo proyectado para el mes.</p></div>
+  <section class="fin-hero fin-hero-clean">
+  <div class="fin-head">
+    <h1>Centro financiero inteligente</h1>
+    <p>Compara lo realmente cobrado y pagado con todo lo proyectado para el mes.</p>
+  </div>
+
+  <div class="fin-toolbar">
+    <div>
+      <span class="fin-label">GESTIÓN</span>
       <div class="fin-actions">
         <a class="btn btn-light" href="{% url 'finanzas_ingreso_nuevo' %}">＋ Ingreso</a>
         <a class="btn btn-outline-light" href="{% url 'finanzas_egreso_nuevo' %}">− Egreso</a>
         <a class="btn btn-outline-light" href="{% url 'finanzas_cartera' %}">Cartera</a>
         <a class="btn btn-outline-light" href="{% url 'finanzas_nomina' %}">Nómina</a>
         <a class="btn btn-outline-light" href="{% url 'finanzas_movimientos' %}">Movimientos</a>
-        <a class="btn btn-outline-light" href="{% url 'finanzas_resumen_mensual_pdf' %}?anio={{ anio }}&mes={{ mes }}{% if ciudad %}&ciudad={{ ciudad|urlencode }}{% endif %}">📄 PDF mensual</a>
       </div>
     </div>
-    <form class="fin-filter mt-3" method="get">
+    <div class="fin-docs">
+      <span class="fin-label">DOCUMENTOS</span>
+      <div class="fin-actions">
+        <a class="btn btn-outline-light" href="{% url 'finanzas_resumen_mensual_pdf' %}?anio={{ anio }}&mes={{ mes }}{% if ciudad %}&ciudad={{ ciudad|urlencode }}{% endif %}">📄 PDF mensual</a>
+        <a class="btn btn-outline-light" href="{% url 'finanzas_comprobantes_servicio' %}">🧾 Comprobantes</a>
+      </div>
+    </div>
+  </div>
+
+  <form method="get" class="fin-filter">
+    <div class="fin-filter-title"><strong>Período de análisis</strong><span>Filtra por período y ciudad</span></div>
+    <div class="fin-fields">
       <div><label>AÑO</label><input type="number" name="anio" value="{{ anio }}" min="2020" max="2100"></div>
-      <div><label>MES</label><input type="number" name="mes" value="{{ mes }}" min="1" max="12"></div><div><label>CIUDAD</label><select name="ciudad"><option value="">Global · Todas</option>{% for c in ciudades %}<option value="{{ c }}" {% if ciudad == c %}selected{% endif %}>{{ c }}</option>{% endfor %}</select></div>
-      <button class="btn btn-light" type="submit">Aplicar</button>
-    </form>
-<a class="btn btn-outline-primary" href="{% url 'finanzas_comprobantes_servicio' %}">🧾 Comprobantes de servicio</a>
-  </section>
+      <div><label>MES</label><select name="mes">{% for numero, nombre in meses %}<option value="{{ numero }}" {% if mes == numero %}selected{% endif %}>{{ nombre }}</option>{% endfor %}</select></div>
+      <div class="city"><label>CIUDAD</label><select name="ciudad"><option value="">Global · Todas</option>{% for c in ciudades %}<option value="{{ c }}" {% if ciudad == c %}selected{% endif %}>{{ c }}</option>{% endfor %}</select></div>
+      <button class="btn fin-apply" type="submit">Aplicar</button>
+    </div>
+  </form>
+</section>
 
   <div class="fin-block-title"><div><h2>Estado real</h2><p>Dinero efectivamente cobrado y pagado durante el mes.</p></div></div>
   <section class="fin-grid">
@@ -116,3 +133,15 @@
   </article>
 </div>
 {% endblock %}
+<style>
+.fin-hero-clean{padding:26px!important}.fin-head h1{margin:0;font-size:clamp(1.65rem,2.4vw,2.15rem);line-height:1.08}.fin-head p{margin:8px 0 0;opacity:.82}
+.fin-toolbar{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;margin-top:22px;padding-top:18px;border-top:1px solid rgba(255,255,255,.18)}
+.fin-label{display:block;margin:0 0 8px 3px;font-size:.68rem;font-weight:900;letter-spacing:.08em;color:rgba(255,255,255,.72)}.fin-actions{display:flex;flex-wrap:wrap;gap:8px}
+.fin-actions .btn{min-height:42px;display:inline-flex;align-items:center;justify-content:center;border-radius:12px;font-weight:800;padding:8px 15px;white-space:nowrap}
+.fin-filter{margin-top:18px;padding:14px 16px;border-radius:16px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.1);display:flex;align-items:flex-end;gap:20px}
+.fin-filter-title{min-width:175px}.fin-filter-title strong,.fin-filter-title span{display:block}.fin-filter-title strong{color:#fff;font-size:.88rem}.fin-filter-title span{margin-top:3px;color:rgba(255,255,255,.7);font-size:.74rem}
+.fin-fields{display:flex;align-items:flex-end;justify-content:flex-end;gap:9px;flex:1}.fin-fields>div{width:110px}.fin-fields .city{width:190px}.fin-fields label{display:block;margin:0 0 5px 2px;font-size:.65rem;font-weight:900;color:rgba(255,255,255,.9)}
+.fin-fields input,.fin-fields select{width:100%;height:42px;border:0;border-radius:11px;background:#fff;color:#172033;padding:0 11px;font-weight:700}.fin-apply{height:42px;border:0;border-radius:11px;background:#fff;color:#173b6b;font-weight:900;padding:0 18px}
+@media(max-width:900px){.fin-hero-clean{padding:20px!important}.fin-toolbar{display:block}.fin-docs{margin-top:16px}.fin-filter{display:block}.fin-fields{margin-top:12px;display:grid;grid-template-columns:1fr 1fr}.fin-fields>div,.fin-fields .city{width:auto}.fin-fields .city,.fin-apply{grid-column:1/-1}.fin-apply{width:100%}}
+@media(max-width:560px){.fin-actions{display:grid;grid-template-columns:1fr 1fr}.fin-actions .btn{width:100%;padding-left:7px;padding-right:7px}.fin-filter-title span{display:none}}
+</style>
