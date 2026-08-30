@@ -1,0 +1,128 @@
+/* JVAQUA · Sistema semántico global de color
+   Rojo = problema / atraso / déficit
+   Verde = correcto / completado / positivo
+   Azul = información / acción neutral
+   Ámbar = atención preventiva
+*/
+:root{
+  --jvs-blue:#0b5ed7;
+  --jvs-blue-dark:#084298;
+  --jvs-blue-soft:#eaf3ff;
+  --jvs-green:#198754;
+  --jvs-green-dark:#146c43;
+  --jvs-green-soft:#eaf8f1;
+  --jvs-red:#dc3545;
+  --jvs-red-dark:#b02a37;
+  --jvs-red-soft:#fff0f2;
+  --jvs-amber:#d99000;
+  --jvs-amber-soft:#fff7df;
+}
+
+/* Bootstrap y utilidades existentes: un mismo lenguaje visual en todo el ERP */
+.text-success{color:var(--jvs-green)!important}
+.text-danger{color:var(--jvs-red)!important}
+.text-primary,.text-info{color:var(--jvs-blue)!important}
+
+.bg-success{background-color:var(--jvs-green)!important}
+.bg-danger{background-color:var(--jvs-red)!important}
+.bg-primary,.bg-info{background-color:var(--jvs-blue)!important}
+
+.badge.bg-success,.badge.text-bg-success,
+.badge.bg-danger,.badge.text-bg-danger,
+.badge.bg-primary,.badge.text-bg-primary,
+.badge.bg-warning,.badge.text-bg-warning{
+  padding:.46rem .68rem;
+  border-radius:999px;
+  font-weight:800;
+}
+
+/* Estados semánticos detectados por JVAQUA */
+.jvs-state{
+  display:inline-flex;
+  align-items:center;
+  gap:.35rem;
+  border-radius:999px!important;
+  font-weight:800!important;
+  line-height:1.1;
+}
+.jvs-state-danger{
+  color:var(--jvs-red-dark)!important;
+  background:var(--jvs-red-soft)!important;
+  border-color:rgba(220,53,69,.28)!important;
+}
+.jvs-state-success{
+  color:var(--jvs-green-dark)!important;
+  background:var(--jvs-green-soft)!important;
+  border-color:rgba(25,135,84,.25)!important;
+}
+.jvs-state-info{
+  color:var(--jvs-blue-dark)!important;
+  background:var(--jvs-blue-soft)!important;
+  border-color:rgba(11,94,215,.22)!important;
+}
+.jvs-state-warning{
+  color:#8a5a00!important;
+  background:var(--jvs-amber-soft)!important;
+  border-color:rgba(217,144,0,.28)!important;
+}
+
+/* Tarjetas/indicadores que ya usan semántica Bootstrap */
+.card.border-danger,.border-danger{
+  border-color:rgba(220,53,69,.38)!important;
+}
+.card.border-success,.border-success{
+  border-color:rgba(25,135,84,.35)!important;
+}
+.card.border-primary,.border-primary{
+  border-color:rgba(11,94,215,.32)!important;
+}
+
+.alert-danger{
+  color:var(--jvs-red-dark)!important;
+  background:var(--jvs-red-soft)!important;
+  border-color:rgba(220,53,69,.24)!important;
+}
+.alert-success{
+  color:var(--jvs-green-dark)!important;
+  background:var(--jvs-green-soft)!important;
+  border-color:rgba(25,135,84,.22)!important;
+}
+.alert-info,.alert-primary{
+  color:var(--jvs-blue-dark)!important;
+  background:var(--jvs-blue-soft)!important;
+  border-color:rgba(11,94,215,.20)!important;
+}
+.alert-warning{
+  color:#805300!important;
+  background:var(--jvs-amber-soft)!important;
+  border-color:rgba(217,144,0,.24)!important;
+}
+
+/* Botones: rojo solo para acciones destructivas, verde para confirmaciones */
+.btn-danger{
+  background:var(--jvs-red)!important;
+  border-color:var(--jvs-red)!important;
+}
+.btn-success{
+  background:var(--jvs-green)!important;
+  border-color:var(--jvs-green)!important;
+}
+.btn-primary{
+  background:var(--jvs-blue)!important;
+  border-color:var(--jvs-blue)!important;
+}
+.btn-outline-danger{color:var(--jvs-red)!important;border-color:rgba(220,53,69,.45)!important}
+.btn-outline-success{color:var(--jvs-green)!important;border-color:rgba(25,135,84,.42)!important}
+.btn-outline-primary{color:var(--jvs-blue)!important;border-color:rgba(11,94,215,.40)!important}
+
+/* Valores monetarios/indicadores ya marcados por la aplicación */
+.jvs-value-positive{color:var(--jvs-green)!important}
+.jvs-value-negative{color:var(--jvs-red)!important}
+.jvs-value-neutral{color:var(--jvs-blue)!important}
+
+/* Mantener accesibilidad: el color nunca elimina texto, iconos ni etiquetas */
+@media (prefers-contrast: more){
+  .jvs-state-danger,.jvs-state-success,.jvs-state-info,.jvs-state-warning{
+    border-width:2px!important;
+  }
+}
