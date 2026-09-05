@@ -496,6 +496,8 @@ class PiscinaSuscriptor(models.Model):
     TIPOS = CasoAsistenteTecnico.TIPO_PISCINA_CHOICES
     DESINFECCION = [("cloro", "Cloro"), ("sal", "Cloración salina"), ("otro", "Otro / no lo sé")]
     FILTROS = [("arena", "Filtro de arena"), ("cartucho", "Filtro de cartucho"), ("otro", "Otro / no lo sé")]
+    ORIGEN_AGUA = [("potable", "Potable / red pública"), ("pozo", "Pozo"), ("mixta", "Mixta"), ("otro", "Otro / no lo sé")]
+    HIERRO = [("no_se", "No lo sé"), ("si", "Sí / ha reaccionado al cloro"), ("no", "No detectado")]
     suscriptor = models.ForeignKey(PerfilSuscriptor, on_delete=models.CASCADE, related_name="piscinas")
     nombre = models.CharField(max_length=100, default="Mi piscina")
     tipo_piscina = models.CharField(max_length=30, choices=TIPOS, default="residencial")
@@ -505,6 +507,8 @@ class PiscinaSuscriptor(models.Model):
     volumen_m3 = models.DecimalField(max_digits=9, decimal_places=2)
     tipo_filtro = models.CharField(max_length=20, choices=FILTROS, default="arena")
     desinfeccion = models.CharField(max_length=20, choices=DESINFECCION, default="cloro")
+    origen_agua = models.CharField(max_length=20, choices=ORIGEN_AGUA, default="potable", db_index=True)
+    antecedente_hierro = models.CharField(max_length=12, choices=HIERRO, default="no_se")
     notas = models.TextField(blank=True, default="")
     principal = models.BooleanField(default=False, db_index=True)
     activa = models.BooleanField(default=True, db_index=True)
@@ -568,8 +572,9 @@ class PlanMantenimientoPiscina(models.Model):
         except (TypeError, ValueError):
             visita_numero = 1
 
+        alerta_pozo = self.piscina.origen_agua in {"pozo", "mixta"}
         if self.frecuencia_semanal == 2 and visita_numero == 1:
-            return [
+            tareas = [
                 "Medir pH y cloro",
                 "Aspirar en desagüe o filtración solo si es necesario",
                 "Cepillar paredes y piso",
@@ -577,9 +582,12 @@ class PlanMantenimientoPiscina(models.Model):
                 "Aplicar tratamiento químico solo si las mediciones lo requieren",
                 "Finalizar mantenimiento",
             ]
+            if alerta_pozo:
+                tareas.insert(1, "Observar coloración o precipitados antes de clorar; en agua de pozo considerar hierro/metales")
+            return tareas
 
         # Visita única semanal o segunda visita de un plan de dos visitas.
-        return [
+        tareas = [
             "Medir pH y cloro",
             "Aspirar en desagüe o filtración obligatoriamente, según convenga",
             "Cepillar paredes y piso",
@@ -588,6 +596,9 @@ class PlanMantenimientoPiscina(models.Model):
             "Aplicar tratamiento químico según las mediciones de pH y cloro",
             "Finalizar mantenimiento",
         ]
+        if alerta_pozo:
+            tareas.insert(1, "Observar coloración o precipitados antes de clorar; en agua de pozo considerar hierro/metales")
+        return tareas
 
 
 class RegistroMantenimientoPiscina(models.Model):

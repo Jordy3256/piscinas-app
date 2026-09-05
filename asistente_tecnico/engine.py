@@ -70,7 +70,7 @@ def _producto(nombre, cantidad, unidad, motivo, clave=""):
     }
 
 
-def calcular_recomendacion(volumen, ph, cloro, estado_agua, tipo_piscina, reglas=None):
+def calcular_recomendacion(volumen, ph, cloro, estado_agua, tipo_piscina, reglas=None, tipo_agua="potable", antecedente_hierro="no_se"):
     r = {**DEFAULT_RULES, **(reglas or {})}
     volumen = float(volumen)
     ph = float(ph)
@@ -84,6 +84,13 @@ def calcular_recomendacion(volumen, ph, cloro, estado_agua, tipo_piscina, reglas
         "Aplicar los productos por separado y respetar la ficha técnica y elementos de protección personal.",
         "Volver a medir pH y cloro antes de repetir una corrección.",
     ]
+    agua_pozo = tipo_agua in {"pozo", "mixta"}
+    hierro_riesgo = agua_pozo and antecedente_hierro in {"si", "no_se"}
+    if agua_pozo:
+        advertencias.insert(0, "Esta piscina utiliza agua de pozo o mixta. No debe asumirse que responde igual que agua potable: antes de una oxidación fuerte conviene considerar hierro, manganeso y otros metales disueltos.")
+        if hierro_riesgo:
+            advertencias.insert(1, "El cloro puede oxidar hierro disuelto y producir coloración amarilla, marrón o verdosa y precipitados. Si existe antecedente o no se conoce la concentración de metales, evita interpretar automáticamente un cambio de color como algas.")
+
     explicaciones = {
         "sulfato_aluminio": "El sulfato de aluminio es el floculante principal del protocolo JVAQUA. Agrupa partículas para facilitar su sedimentación y además tiende a disminuir el pH.",
         "cloro_granulado": "El cloro granulado se utiliza cuando hace falta una elevación rápida del nivel de desinfectante. La cantidad estimada depende del volumen, el cloro medido y el objetivo del protocolo.",
@@ -197,6 +204,15 @@ def calcular_recomendacion(volumen, ph, cloro, estado_agua, tipo_piscina, reglas
         protocolo.append({"paso": paso + 1, "titulo": "Volver a comprobar", "detalle": "Controlar nuevamente pH y cloro según el uso de la piscina. En alto uso, aumentar la frecuencia de medición y aplicación."})
         if alto_uso:
             advertencias.append("Alto uso: la carga de bañistas puede consumir rápidamente el desinfectante. Se recomienda control frecuente y, cuando sea necesario, aplicaciones diarias.")
+
+    if agua_pozo:
+        protocolo.insert(0, {
+            "paso": 0,
+            "titulo": "Control especial por agua de pozo",
+            "detalle": "Antes de una cloración fuerte, observa color y precipitados y, si es posible, confirma presencia de hierro/metales. Si el agua cambia de color al clorar, prioriza el manejo de metales y filtración antes de repetir oxidante a ciegas.",
+        })
+        for i, item in enumerate(protocolo, 1):
+            item["paso"] = i
 
     return {
         "diagnostico": diagnostico,

@@ -65,3 +65,9 @@ body:has(.aj-learning-path) .aj-card:hover{transform:translateY(-5px) scale(1.00
  .aj-course-summary{grid-template-columns:1fr;text-align:center;padding:20px}.aj-ring{margin:auto}.aj-xp-row{justify-content:center}
  .aj-grid{grid-template-columns:1fr!important}.aj-search{position:relative;top:auto}
 }
+
+/* v3.10.21 · Biblioteca como herramienta de consulta rápida */
+.aj-consult-launch{display:grid;grid-template-columns:minmax(220px,.75fr) 1.5fr;gap:18px;align-items:center;padding:20px;border:1px solid #dceaf3;border-radius:25px;background:linear-gradient(135deg,#fff,#f6fbff);box-shadow:0 10px 28px rgba(18,56,87,.055)}
+.aj-consult-launch h4{font-weight:900;margin:3px 0 5px;color:var(--aj-ink)}.aj-consult-launch p{margin:0;color:var(--aj-muted);font-size:.86rem}.aj-consult-cats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.aj-consult-cats a{display:flex;align-items:center;gap:8px;min-height:50px;padding:10px 12px;border:1px solid #dfeaf2;border-radius:16px;background:#fff;color:#31566d;text-decoration:none;font-size:.78rem;font-weight:850;transition:.18s}.aj-consult-cats a:hover{transform:translateY(-2px);border-color:#8acbea;background:#f3fbff}.aj-consult-cats span{font-size:1.1rem}
+@media(max-width:820px){.aj-consult-launch{grid-template-columns:1fr}.aj-consult-cats{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:480px){.aj-consult-cats{grid-template-columns:1fr 1fr}.aj-consult-cats a{font-size:.72rem;padding:9px}}

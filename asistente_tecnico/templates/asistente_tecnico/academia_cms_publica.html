@@ -40,6 +40,8 @@
     <div class="aj-tip mb-3"><div class="small text-primary fw-bold">💡 CONSEJO TÉCNICO DEL DÍA</div><strong>{{ consejo.titulo }}</strong><div class="small mt-1">{{ consejo.texto }}</div></div>
   {% endif %}
 
+  {% if modo != 'aprender' %}<section class="aj-consult-launch mb-3"><div><div class="aj-eyebrow">CONSULTA RÁPIDA</div><h4>¿Qué necesitas revisar?</h4><p>Entra directamente al tema. La Biblioteca funciona como tu manual técnico de consulta, sin seguir un orden.</p></div><div class="aj-consult-cats"><a href="?modo=consultar&q=agua"><span>💧</span>Agua y química</a><a href="?modo=consultar&q=bomba"><span>⚙️</span>Bombas y equipos</a><a href="?modo=consultar&q=limpieza"><span>🧹</span>Limpieza</a><a href="?modo=consultar&q=cloro"><span>🧪</span>Productos químicos</a><a href="?modo=consultar&q=agua+verde"><span>🚨</span>Problemas frecuentes</a><a href="?modo=consultar&q=retrolavado"><span>🔧</span>Procedimientos</a></div></section>{% endif %}
+
   <form class="aj-search mb-4" method="get">
     <input type="hidden" name="modo" value="{{ modo }}">
     <div class="row g-2">

@@ -1132,10 +1132,11 @@ def digital_piscina_form_view(request, pk=None):
             obj.tipo_piscina=request.POST.get("tipo_piscina") or "residencial"
             obj.largo_m=largo; obj.ancho_m=ancho; obj.profundidad_m=profundidad; obj.volumen_m3=volumen
             obj.tipo_filtro=request.POST.get("tipo_filtro") or "otro"; obj.desinfeccion=request.POST.get("desinfeccion") or "otro"
+            obj.origen_agua=request.POST.get("origen_agua") or "potable"; obj.antecedente_hierro=request.POST.get("antecedente_hierro") or "no_se"
             obj.notas=(request.POST.get("notas") or "").strip(); obj.principal=request.POST.get("principal")=="on"; obj.save()
             messages.success(request,"Piscina guardada. El Asistente ya puede usar estos datos.")
             return redirect("asistente_tecnico:digital_inicio")
-    return render(request,"asistente_tecnico/digital_piscina_form.html",{"obj":obj,"tipo_choices":PiscinaSuscriptor.TIPOS,"filtro_choices":PiscinaSuscriptor.FILTROS,"desinfeccion_choices":PiscinaSuscriptor.DESINFECCION})
+    return render(request,"asistente_tecnico/digital_piscina_form.html",{"obj":obj,"tipo_choices":PiscinaSuscriptor.TIPOS,"filtro_choices":PiscinaSuscriptor.FILTROS,"desinfeccion_choices":PiscinaSuscriptor.DESINFECCION,"origen_agua_choices":PiscinaSuscriptor.ORIGEN_AGUA,"hierro_choices":PiscinaSuscriptor.HIERRO})
 
 @login_required
 @require_http_methods(["GET", "POST"])
@@ -1202,7 +1203,7 @@ def digital_resolver_view(request):
                 if estado not in {x[0] for x in CasoAsistenteTecnico.ESTADO_AGUA_CHOICES}:
                     messages.error(request,"Selecciona cómo se ve el agua.")
                 else:
-                    motor=_motor_activo(); resultado=calcular_recomendacion(piscina.volumen_m3,ph,cloro,estado,piscina.tipo_piscina,motor.reglas)
+                    motor=_motor_activo(); resultado=calcular_recomendacion(piscina.volumen_m3,ph,cloro,estado,piscina.tipo_piscina,motor.reglas,tipo_agua=piscina.origen_agua,antecedente_hierro=piscina.antecedente_hierro)
                     caso=CasoAsistenteTecnico.objects.create(user=request.user,motor=motor,volumen_m3=piscina.volumen_m3,ph_inicial=ph,cloro_inicial=cloro,estado_agua=estado,tipo_piscina=piscina.tipo_piscina,diagnostico=resultado["diagnostico"],tipo_tratamiento=resultado["tipo_tratamiento"],prioridad=resultado["prioridad"],resumen=resultado["resumen"],protocolo=resultado["protocolo"],productos_sugeridos=resultado["productos_sugeridos"],explicaciones=resultado["explicaciones"],advertencias=resultado["advertencias"],seguimiento_programado_para=timezone.now()+timedelta(hours=resultado["seguimiento_horas"]))
     return render(request,"asistente_tecnico/digital_resolver.html",{
         "piscinas":piscinas,"piscina":piscina,"resultado":resultado,"caso":caso,
