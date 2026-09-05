@@ -1,3 +1,4 @@
+from finanzas.reconciliacion import reconciliar_cartera_nomina
 # dashboard/views.py
 import json
 import logging
@@ -1643,6 +1644,7 @@ def push_test_view(request):
 def _centro_acciones_contexto():
     """Construye prioridades diarias sin duplicar la lógica financiera."""
     hoy = timezone.localdate()
+    reconciliar_cartera_nomina()
     proximos_tres_dias = hoy + timedelta(days=3)
     limite_programacion = hoy + timedelta(days=7)
 

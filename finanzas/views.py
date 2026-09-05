@@ -26,6 +26,7 @@ from contratos.models import Contrato
 from .cuentas_por_cobrar import MESES, generar_facturas_periodo, previsualizar_facturas_periodo, valores_promocion
 
 from .servicios_financieros import obtener_resumen_financiero
+from .reconciliacion import reconciliar_cartera_nomina
 from .alertas_financieras import generar_alertas_financieras
 
 from reportlab.lib import colors
@@ -492,6 +493,7 @@ def cartera_centro(request):
         return _denegado(request)
 
     hoy = timezone.localdate()
+    reconciliar_cartera_nomina()
     q = (request.GET.get("q") or "").strip()
     estado = (request.GET.get("estado") or "todas").strip()
     ciudad = (request.GET.get("ciudad") or "").strip()
@@ -568,6 +570,7 @@ def cartera_centro(request):
 @login_required
 def nomina_lista(request):
     if not _es_admin(request.user): return _denegado(request)
+    reconciliar_cartera_nomina()
     hoy=timezone.localdate()
     try:
         anio = int(request.GET.get("anio") or hoy.year)
