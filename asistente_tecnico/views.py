@@ -2,7 +2,7 @@ from datetime import timedelta, datetime, time
 from decimal import Decimal, InvalidOperation
 
 from django.contrib import messages
-from django.contrib.auth import get_user_model, login as auth_login
+from django.contrib.auth import get_user_model, login as auth_login, logout as auth_logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
@@ -33,6 +33,30 @@ def _es_trabajador(user):
         return False
     grupos = {g.name.strip().lower() for g in user.groups.all()}
     return "trabajadores" in grupos or "trabajador" in grupos
+
+
+def _notificar_admin_digital(titulo, mensaje, url="/dashboard/asistente/administracion/suscripciones-digitales/"):
+    """Crea avisos internos para todos los administradores del ERP."""
+    try:
+        from dashboard.models import Notificacion
+        User = get_user_model()
+        admins = User.objects.filter(
+            Q(is_superuser=True)
+            | Q(is_staff=True)
+            | Q(groups__name__in=["Administradores", "Administrador", "Admins", "Adimistradores"])
+        ).distinct()
+        for admin_user in admins:
+            Notificacion.objects.create(
+                user=admin_user,
+                titulo=titulo[:150],
+                mensaje=mensaje,
+                url=url,
+                tipo="general",
+                leida=False,
+            )
+    except Exception:
+        # La creación de la cuenta/pago nunca debe fallar por una notificación.
+        pass
 
 
 def _suscriptor(user):
@@ -1190,6 +1214,11 @@ def digital_registro_view(request):
                         telefono=telefono[:30], inicio=timezone.localdate(),
                     )
                 auth_login(request, user)
+                nombre_cliente = f"{nombre} {apellido}".strip()
+                _notificar_admin_digital(
+                    "Nuevo registro en JVAQUA Digital",
+                    f"{nombre_cliente or correo} se registró con el Plan {_plan_digital(plan)['nombre']}. Revisa su activación cuando envíe el pago.",
+                )
                 messages.success(request, "Cuenta creada. Realiza el pago para activar JVAQUA Digital.")
                 return redirect("asistente_tecnico:digital_acceso")
 
@@ -1235,8 +1264,22 @@ def digital_acceso_view(request):
             if not perfil.tiene_acceso:
                 perfil.estado = "pendiente"
             perfil.save(update_fields=["plan", "estado", "actualizado_en"])
-            messages.success(request, "Pago registrado. JVAQUA verificará el comprobante y activará tu acceso.")
-            return redirect("asistente_tecnico:digital_acceso")
+            correo_acceso = request.user.email or request.user.username
+            nombre_acceso = f"{request.user.first_name} {request.user.last_name}".strip() or request.user.username
+            _notificar_admin_digital(
+                "Pago pendiente · JVAQUA Digital",
+                f"{nombre_acceso} envió un pago de ${plan['precio']} para el Plan {plan['nombre']}. Verifica el comprobante y activa la suscripción.",
+            )
+            auth_logout(request)
+            return render(
+                request,
+                "asistente_tecnico/digital_pago_enviado.html",
+                {
+                    "correo_acceso": correo_acceso,
+                    "plan": plan,
+                    "nombre_acceso": nombre_acceso,
+                },
+            )
 
     nombre = f"{request.user.first_name} {request.user.last_name}".strip() or request.user.username
     whatsapp_texto = (

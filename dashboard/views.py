@@ -1749,6 +1749,23 @@ def _centro_acciones_contexto():
             ActividadSistema.objects.select_related("user").all()[:8]
         )
 
+    digital_registros_pendientes = 0
+    digital_ultimos_registros = []
+    digital_pagos_pendientes = 0
+    try:
+        from asistente_tecnico.models import PerfilSuscriptor, SolicitudSuscripcionDigital
+        digital_qs = (
+            PerfilSuscriptor.objects
+            .filter(estado="pendiente")
+            .select_related("user")
+            .order_by("-creado_en")
+        )
+        digital_registros_pendientes = digital_qs.count()
+        digital_ultimos_registros = list(digital_qs[:4])
+        digital_pagos_pendientes = SolicitudSuscripcionDigital.objects.filter(estado="pendiente").count()
+    except Exception:
+        pass
+
     total_acciones = (
         len(cobros_vencidos)
         + len(cobros_hoy)
@@ -1757,6 +1774,7 @@ def _centro_acciones_contexto():
         + len(mantenimientos_atrasados)
         + len(mantenimientos_sin_asignar)
         + len(contratos_programacion)
+        + digital_registros_pendientes
     )
 
     return {
@@ -1782,6 +1800,9 @@ def _centro_acciones_contexto():
         "contratos_programacion": contratos_programacion,
         "cantidad_contratos_programacion": len(contratos_programacion),
         "actividad_reciente": actividad_reciente,
+        "digital_registros_pendientes": digital_registros_pendientes,
+        "digital_ultimos_registros": digital_ultimos_registros,
+        "digital_pagos_pendientes": digital_pagos_pendientes,
         "total_acciones": total_acciones,
     }
 

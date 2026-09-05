@@ -59,6 +59,28 @@
 {% endblock %}
 
 {% block content %}
+{% if digital_registros_pendientes %}
+<div class="alert border-0 shadow-sm rounded-4 mb-3 p-3 p-md-4" style="background:linear-gradient(135deg,#eef8ff,#f4fbff);color:#173d52">
+  <div class="d-flex justify-content-between align-items-center gap-3 flex-wrap">
+    <div>
+      <div class="small fw-bold text-primary">🔔 JVAQUA DIGITAL</div>
+      <h5 class="fw-bold mb-1">Nuevos registros en JVAQUA Digital</h5>
+      <div class="small text-muted">
+        {{ digital_registros_pendientes }} usuario{{ digital_registros_pendientes|pluralize }} pendiente{{ digital_registros_pendientes|pluralize }}
+        {% if digital_pagos_pendientes %} · {{ digital_pagos_pendientes }} pago{{ digital_pagos_pendientes|pluralize }} esperando validación{% endif %}
+      </div>
+      {% if digital_ultimos_registros %}
+      <div class="small mt-2">
+        {% for p in digital_ultimos_registros %}
+          <span class="badge rounded-pill text-bg-light border me-1">{{ p.user.get_full_name|default:p.user.username }} · {{ p.get_plan_display }}</span>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+    <a class="btn btn-primary rounded-3 fw-bold" href="/dashboard/asistente/administracion/suscripciones-digitales/">Revisar suscripciones</a>
+  </div>
+</div>
+
 <div class="action-center">
   <section class="ac-hero">
     <div class="ac-hero-grid">
