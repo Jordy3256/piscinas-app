@@ -117,3 +117,14 @@ body:has(.aj-learning-path) .aj-card:hover{transform:translateY(-5px) scale(1.00
  .course-essential{grid-template-columns:36px 1fr}
  .course-section-icon{width:34px;height:34px;border-radius:11px}
 }
+
+/* v3.10.26 · Material audiovisual del Curso / Biblioteca */
+.course-media{background:#fff;border:1px solid #dceaf1;border-radius:24px;padding:22px}
+.course-media h3{font-weight:900;color:#173d52;margin:.2rem 0 .35rem}
+.course-media-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.course-media-card{overflow:hidden;background:#f8fbfd;border:1px solid #dce8ee;border-radius:18px}
+.course-media-card video{display:block;width:100%;aspect-ratio:16/9;object-fit:contain;background:#071722}
+.course-media-card audio{display:block;width:calc(100% - 24px);margin:12px}
+.course-media-info{padding:13px 14px}.course-media-info strong{color:#173d52}.course-media-info small{color:#738692;white-space:nowrap}.course-media-info p{font-size:.88rem;color:#657b87;margin:.4rem 0 0}
+.course-audio-icon{height:120px;display:grid;place-items:center;background:#eaf7fc;color:#0879b7;font-size:2.3rem}
+@media(max-width:700px){.course-media-grid{grid-template-columns:1fr}.course-media{padding:17px}}

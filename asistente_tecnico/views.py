@@ -722,9 +722,9 @@ def consejo_form_view(request, pk=None):
 # ============================================================
 from django.http import HttpResponse
 from django.utils.text import slugify
-from .forms import ContenidoAcademiaForm, ImagenContenidoAcademiaForm, ExperienciaConocimientoForm
+from .forms import ContenidoAcademiaForm, ImagenContenidoAcademiaForm, MaterialAudiovisualAcademiaForm, MaterialAudiovisualAcademiaForm, ExperienciaConocimientoForm
 from .models import (
-    ContenidoAcademia, ImagenContenidoAcademia, VersionContenidoAcademia, ExperienciaConocimiento,
+    ContenidoAcademia, ImagenContenidoAcademia, MaterialAudiovisualAcademia, VersionContenidoAcademia, ExperienciaConocimiento,
     ProgresoContenidoAcademia, FavoritoContenidoAcademia, ConsultaContenidoAcademia,
 )
 
@@ -821,6 +821,41 @@ def academia_cms_imagen_form_view(request, contenido_pk):
     else:
         form = ImagenContenidoAcademiaForm()
     return render(request, "asistente_tecnico/cms_imagen_form.html", {"base_template":"dashboard/base_admin.html","form":form,"contenido":contenido,"es_admin":True})
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def academia_cms_material_form_view(request, contenido_pk):
+    if not _es_admin(request.user):
+        return HttpResponseForbidden("No autorizado")
+    contenido = get_object_or_404(ContenidoAcademia, pk=contenido_pk)
+    if request.method == "POST":
+        form = MaterialAudiovisualAcademiaForm(request.POST, request.FILES)
+        if form.is_valid():
+            material = form.save(commit=False)
+            material.contenido = contenido
+            material.save()
+            messages.success(request, "Material audiovisual añadido correctamente.")
+            return redirect("asistente_tecnico:cms_contenido_editar", pk=contenido.pk)
+    else:
+        form = MaterialAudiovisualAcademiaForm()
+    return render(
+        request,
+        "asistente_tecnico/cms_material_form.html",
+        {"base_template": "dashboard/base_admin.html", "form": form, "contenido": contenido, "es_admin": True},
+    )
+
+
+@login_required
+@require_http_methods(["POST"])
+def academia_cms_material_eliminar_view(request, pk):
+    if not _es_admin(request.user):
+        return HttpResponseForbidden("No autorizado")
+    material = get_object_or_404(MaterialAudiovisualAcademia, pk=pk)
+    contenido_pk = material.contenido_id
+    material.delete()
+    messages.success(request, "Material audiovisual eliminado.")
+    return redirect("asistente_tecnico:cms_contenido_editar", pk=contenido_pk)
 
 
 @login_required

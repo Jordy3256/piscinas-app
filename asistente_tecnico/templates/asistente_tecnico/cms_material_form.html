@@ -1,0 +1,28 @@
+{% extends base_template %}
+{% block title %}Material audiovisual · Academia JVAQUA{% endblock %}
+{% block content %}
+<div class="container py-3" style="max-width:820px">
+  <a class="btn btn-outline-secondary btn-sm mb-3" href="{% url 'asistente_tecnico:cms_contenido_editar' contenido.pk %}">← Volver al contenido</a>
+  <div class="card border-0 shadow-sm rounded-4">
+    <div class="card-body p-4">
+      <div class="small fw-bold text-primary">ACADEMIA JVAQUA</div>
+      <h2 class="fw-bold">Añadir material audiovisual</h2>
+      <p class="text-muted">Contenido: <strong>{{ contenido.titulo }}</strong>. Puedes cargar videos prácticos cortos o material de audio.</p>
+      <form method="post" enctype="multipart/form-data">{% csrf_token %}
+        {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+        <div class="row g-3">
+          {% for field in form %}
+          <div class="{% if field.name == 'descripcion' or field.name == 'archivo' %}col-12{% else %}col-md-6{% endif %}">
+            <label class="form-label fw-semibold">{{ field.label }}</label>{{ field }}
+            {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+            {% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+          </div>
+          {% endfor %}
+        </div>
+        <div class="alert alert-info mt-3 mb-0"><strong>Recomendación:</strong> para las clases prácticas usa videos breves, horizontales o verticales, enfocados en una sola tarea. El reproductor se adapta automáticamente a móvil.</div>
+        <div class="d-flex justify-content-end mt-3"><button class="btn btn-primary px-4">Subir material</button></div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

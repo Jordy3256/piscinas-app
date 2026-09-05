@@ -387,6 +387,37 @@ class ImagenContenidoAcademia(models.Model):
         return self.titulo or f"Imagen #{self.pk}"
 
 
+class MaterialAudiovisualAcademia(models.Model):
+    TIPOS = [
+        ("video", "Video"),
+        ("audio", "Audio"),
+    ]
+    contenido = models.ForeignKey(
+        ContenidoAcademia,
+        on_delete=models.CASCADE,
+        related_name="materiales_audiovisuales",
+    )
+    tipo = models.CharField(max_length=10, choices=TIPOS, default="video", db_index=True)
+    archivo = models.FileField(upload_to="academia/audiovisual/%Y/%m/")
+    titulo = models.CharField(max_length=160)
+    descripcion = models.CharField(max_length=320, blank=True, default="")
+    duracion_texto = models.CharField(
+        max_length=30, blank=True, default="",
+        help_text="Opcional. Ej.: 45 s, 1:20 min."
+    )
+    orden = models.PositiveSmallIntegerField(default=0)
+    activo = models.BooleanField(default=True, db_index=True)
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["orden", "id"]
+        verbose_name = "Material audiovisual de Academia"
+        verbose_name_plural = "Material audiovisual de Academia"
+
+    def __str__(self):
+        return f"{self.get_tipo_display()} · {self.titulo}"
+
+
 class VersionContenidoAcademia(models.Model):
     contenido = models.ForeignKey(ContenidoAcademia, on_delete=models.CASCADE, related_name="versiones")
     version = models.CharField(max_length=20)

@@ -1,6 +1,6 @@
 from django import forms
 from django.utils.text import slugify
-from .models import CategoriaAcademia, LeccionAcademia, ArticuloBiblioteca, ConsejoJVAQUA, ContenidoAcademia, ImagenContenidoAcademia, ExperienciaConocimiento
+from .models import CategoriaAcademia, LeccionAcademia, ArticuloBiblioteca, ConsejoJVAQUA, ContenidoAcademia, ImagenContenidoAcademia, MaterialAudiovisualAcademia, ExperienciaConocimiento
 
 
 class StyledModelForm(forms.ModelForm):
@@ -103,6 +103,28 @@ class ImagenContenidoAcademiaForm(StyledModelForm):
     class Meta:
         model = ImagenContenidoAcademia
         fields = ["imagen", "titulo", "descripcion", "orden"]
+
+
+class MaterialAudiovisualAcademiaForm(StyledModelForm):
+    class Meta:
+        model = MaterialAudiovisualAcademia
+        fields = ["tipo", "archivo", "titulo", "descripcion", "duracion_texto", "orden", "activo"]
+        widgets = {
+            "archivo": forms.ClearableFileInput(attrs={"accept": "video/*,audio/*"}),
+            "descripcion": forms.Textarea(attrs={"rows": 3}),
+        }
+
+    def clean_archivo(self):
+        archivo = self.cleaned_data.get("archivo")
+        if not archivo:
+            return archivo
+        tipo = self.cleaned_data.get("tipo")
+        content_type = getattr(archivo, "content_type", "") or ""
+        if tipo == "video" and content_type and not content_type.startswith("video/"):
+            raise forms.ValidationError("Selecciona un archivo de video válido.")
+        if tipo == "audio" and content_type and not content_type.startswith("audio/"):
+            raise forms.ValidationError("Selecciona un archivo de audio válido.")
+        return archivo
 
 
 class ExperienciaConocimientoForm(StyledModelForm):

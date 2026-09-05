@@ -19,6 +19,22 @@
 </form>
 {% if obj %}
 <div class="ec-card mt-3 p-3"><div class="d-flex justify-content-between align-items-center"><div><h5 class="fw-bold mb-1">Galería ilustrativa</h5><div class="text-muted small">Añade fotografías, diagramas o referencias visuales.</div></div><a class="btn btn-sm btn-primary" href="{% url 'asistente_tecnico:cms_imagen_nueva' obj.pk %}">+ Añadir imagen</a></div><div class="ec-gallery mt-3">{% for img in obj.galeria.all %}<div>{% if img.imagen %}<img src="{{ img.imagen.url }}" alt="{{ img.titulo }}">{% endif %}<div class="small fw-semibold mt-1">{{ img.titulo }}</div><form method="post" action="{% url 'asistente_tecnico:cms_imagen_eliminar' img.pk %}" onsubmit="return confirm('¿Eliminar imagen?')">{% csrf_token %}<button class="btn btn-sm btn-link text-danger p-0">Eliminar</button></form></div>{% empty %}<div class="text-muted">Aún no hay imágenes.</div>{% endfor %}</div></div>
+
+<div class="ec-card mt-3 p-3">
+  <div class="d-flex justify-content-between align-items-center gap-3 flex-wrap">
+    <div><h5 class="fw-bold mb-1">Material audiovisual</h5><div class="text-muted small">Sube videos prácticos o audios relacionados con esta lección o artículo.</div></div>
+    <a class="btn btn-sm btn-primary" href="{% url 'asistente_tecnico:cms_material_nuevo' obj.pk %}">+ Añadir video / audio</a>
+  </div>
+  <div class="row g-3 mt-1">
+    {% for media in obj.materiales_audiovisuales.all %}
+    <div class="col-md-6"><div class="border rounded-3 p-3 h-100">
+      <div class="d-flex justify-content-between gap-2"><strong>{% if media.tipo == 'video' %}🎬{% else %}🎧{% endif %} {{ media.titulo }}</strong><small class="text-muted">{{ media.duracion_texto }}</small></div>
+      {% if media.descripcion %}<div class="small text-muted mt-1">{{ media.descripcion }}</div>{% endif %}
+      <form class="mt-2" method="post" action="{% url 'asistente_tecnico:cms_material_eliminar' media.pk %}" onsubmit="return confirm('¿Eliminar este material audiovisual?')">{% csrf_token %}<button class="btn btn-sm btn-link text-danger p-0">Eliminar</button></form>
+    </div></div>
+    {% empty %}<div class="col-12 text-muted">Aún no hay videos ni audios cargados.</div>{% endfor %}
+  </div>
+</div>
 <div class="ec-card mt-3 p-3"><h5 class="fw-bold">Historial de versiones</h5>{% for v in obj.versiones.all %}<div class="border-top py-2"><strong>v{{ v.version }}</strong> · {{ v.creado_en|date:"d/m/Y H:i" }}{% if v.creado_por %} · {{ v.creado_por.get_full_name|default:v.creado_por.username }}{% endif %}<div class="small text-muted">{{ v.motivo }}</div></div>{% empty %}<div class="text-muted">Sin versiones registradas.</div>{% endfor %}</div>
 {% endif %}
 </div>

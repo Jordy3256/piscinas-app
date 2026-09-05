@@ -67,13 +67,7 @@
       <div class="ad-gallery">{% for img in obj.galeria.all %}<figure><img src="{{ img.imagen.url }}" alt="{{ img.titulo }}"><figcaption><strong>{{ img.titulo }}</strong>{% if img.descripcion %}<small>{{ img.descripcion }}</small>{% endif %}</figcaption></figure>{% endfor %}</div>
     </section>
     {% endif %}
-
-    <section class="course-finish">
-      <div class="course-finish-check">✓</div>
-      <div><div class="course-label">AL TERMINAR DEBES PODER</div><h3>Reconocer y aplicar este tema correctamente</h3><p>Identifica cuándo corresponde hacerlo, sigue el procedimiento en orden y evita improvisar si las condiciones de tu piscina son diferentes.</p></div>
-    </section>
-
-    <div class="course-deeper">
+<div class="course-deeper">
       <div><strong>¿Quieres conocer más detalles?</strong><span>La teoría, buenas prácticas, errores y referencias quedan en Biblioteca.</span></div>
       <a class="btn btn-outline-primary" href="{% url 'asistente_tecnico:academia_contenido_detalle' obj.slug %}">Profundizar en Biblioteca →</a>
     </div>
@@ -114,6 +108,8 @@
     {% if obj.recomendaciones_jvaqua %}<section class="ad-section ad-tip"><h4>💡 Recomendaciones JVAQUA</h4><div class="ad-text">{{ obj.recomendaciones_jvaqua|linebreaks }}</div></section>{% endif %}
 
     {% if obj.galeria.all %}<section class="ad-section"><h4>🖼️ Referencias visuales</h4><div class="ad-gallery">{% for img in obj.galeria.all %}<figure><img src="{{ img.imagen.url }}" alt="{{ img.titulo }}"><figcaption><strong>{{ img.titulo }}</strong>{% if img.descripcion %}<small>{{ img.descripcion }}</small>{% endif %}</figcaption></figure>{% endfor %}</div></section>{% endif %}
+
+    {% if obj.materiales_audiovisuales.all %}<section class="ad-section"><h4>🎬 Material audiovisual relacionado</h4><div class="course-media-grid">{% for media in obj.materiales_audiovisuales.all %}{% if media.activo %}<article class="course-media-card">{% if media.tipo == "video" %}<video controls preload="metadata" playsinline src="{{ media.archivo.url }}"></video>{% else %}<audio controls preload="metadata" src="{{ media.archivo.url }}"></audio>{% endif %}<div class="course-media-info"><strong>{{ media.titulo }}</strong>{% if media.descripcion %}<p>{{ media.descripcion }}</p>{% endif %}</div></article>{% endif %}{% endfor %}</div></section>{% endif %}
     {% if obj.referencias_tecnicas %}<section id="referencias" class="ad-section library-reference"><h4>📑 Referencias técnicas</h4><div class="ad-text">{{ obj.referencias_tecnicas|linebreaks }}</div></section>{% endif %}
     {% if obj.relacionados.all %}<section class="ad-section"><h4>🔗 Temas relacionados</h4><div class="ad-related">{% for r in obj.relacionados.all %}{% if r.estado == 'aprobado' %}<a href="{% url 'asistente_tecnico:academia_contenido_detalle' r.slug %}"><span>{{ r.titulo }}</span><span>→</span></a>{% endif %}{% endfor %}</div></section>{% endif %}
 

@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import MotorRecomendacion, CasoAsistenteTecnico, ContenidoAcademia, ImagenContenidoAcademia, VersionContenidoAcademia, ExperienciaConocimiento, PerfilSuscriptor, PiscinaSuscriptor, PlanMantenimientoPiscina, RegistroMantenimientoPiscina, SugerenciaDigital
+from .models import MotorRecomendacion, CasoAsistenteTecnico, ContenidoAcademia, ImagenContenidoAcademia, MaterialAudiovisualAcademia, VersionContenidoAcademia, ExperienciaConocimiento, PerfilSuscriptor, PiscinaSuscriptor, PlanMantenimientoPiscina, RegistroMantenimientoPiscina, SugerenciaDigital
 
 
 @admin.register(MotorRecomendacion)
@@ -29,6 +29,7 @@ class ExperienciaConocimientoAdmin(admin.ModelAdmin):
     search_fields=("titulo","problema","aprendizaje")
 
 admin.site.register(ImagenContenidoAcademia)
+admin.site.register(MaterialAudiovisualAcademia)
 admin.site.register(VersionContenidoAcademia)
 
 
