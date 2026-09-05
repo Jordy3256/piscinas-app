@@ -1142,21 +1142,127 @@ def digital_piscina_form_view(request, pk=None):
 @require_http_methods(["GET", "POST"])
 def digital_plan_mantenimiento_view(request, pk):
     perfil = _suscriptor(request.user)
-    if not perfil: return HttpResponseForbidden("No autorizado")
-    piscina = get_object_or_404(PiscinaSuscriptor, pk=pk, suscriptor=perfil, activa=True)
+    if not perfil:
+        return HttpResponseForbidden("No autorizado")
+
+    piscina = get_object_or_404(
+        PiscinaSuscriptor, pk=pk, suscriptor=perfil, activa=True
+    )
     plan, _ = PlanMantenimientoPiscina.objects.get_or_create(piscina=piscina)
+
+    dosificacion = None
+    valores_dosificacion = {
+        "ph": "",
+        "cloro": "",
+        "estado_agua": "transparente",
+    }
+
     if request.method == "POST":
-        try: frecuencia = int(request.POST.get("frecuencia_semanal") or 1)
-        except ValueError: frecuencia = 1
-        plan.frecuencia_semanal = frecuencia if frecuencia in (1,2) else 1
-        plan.arena_deteriorada = request.POST.get("arena_deteriorada") == "on"
-        plan.retrolavado_dias = 15
-        plan.save()
-        messages.success(request, "AQUO actualizó el plan semanal de esta piscina.")
-        return redirect("asistente_tecnico:digital_plan_mantenimiento", pk=piscina.pk)
-    rutinas = [(i, plan.rutina_visita(i)) for i in range(1, plan.frecuencia_semanal + 1)]
+        accion = (request.POST.get("accion") or "configurar").strip()
+
+        if accion == "dosificar":
+            ph_txt = (request.POST.get("ph") or "").replace(",", ".").strip()
+            cloro_txt = (request.POST.get("cloro") or "").replace(",", ".").strip()
+            estado = (request.POST.get("estado_agua") or "transparente").strip()
+            valores_dosificacion = {
+                "ph": ph_txt,
+                "cloro": cloro_txt,
+                "estado_agua": estado,
+            }
+            try:
+                ph = Decimal(ph_txt)
+                cloro = Decimal(cloro_txt)
+                if ph <= 0 or cloro < 0:
+                    raise InvalidOperation
+            except (InvalidOperation, ValueError):
+                messages.error(
+                    request,
+                    "Ingresa valores válidos de pH y cloro para calcular la dosificación.",
+                )
+            else:
+                dosificacion = calcular_recomendacion(
+                    volumen=float(piscina.volumen_m3),
+                    ph=float(ph),
+                    cloro=float(cloro),
+                    estado_agua=estado,
+                    tipo_piscina=piscina.tipo_piscina,
+                    tipo_agua=piscina.origen_agua,
+                    antecedente_hierro=piscina.antecedente_hierro,
+                )
+        else:
+            try:
+                frecuencia = int(request.POST.get("frecuencia_semanal") or 1)
+            except ValueError:
+                frecuencia = 1
+            plan.frecuencia_semanal = frecuencia if frecuencia in (1, 2) else 1
+            plan.arena_deteriorada = request.POST.get("arena_deteriorada") == "on"
+            plan.retrolavado_dias = 15
+            plan.save()
+            messages.success(
+                request, "AQUO actualizó el plan semanal de esta piscina."
+            )
+            return redirect(
+                "asistente_tecnico:digital_plan_mantenimiento", pk=piscina.pk
+            )
+
+    def guia_para(tarea):
+        texto = tarea.lower()
+        if "medir ph" in texto or "cloro" in texto and "medir" in texto:
+            return "medir pH y cloro"
+        if "pozo" in texto or "hierro" in texto or "precipitado" in texto:
+            return "agua de pozo hierro"
+        if "aspirar" in texto:
+            return "aspirado piscina"
+        if "cepillar" in texto:
+            return "cepillado piscina"
+        if "basura" in texto or "superficial" in texto:
+            return "limpieza superficial cernidera"
+        if "canastilla" in texto or "skimmer" in texto:
+            return "limpieza skimmer canastilla bomba"
+        if "tratamiento químico" in texto or "quimico" in texto:
+            return "tratamiento químico mantenimiento"
+        if "retrolavado" in texto:
+            return "retrolavado filtro"
+        if "finalizar" in texto:
+            return "rutina mantenimiento piscina"
+        return "mantenimiento piscina"
+
+    rutinas = []
+    rutinas_guiadas = []
+    for numero in range(1, plan.frecuencia_semanal + 1):
+        tareas = plan.rutina_visita(numero)
+        rutinas.append((numero, tareas))
+        rutinas_guiadas.append(
+            (
+                numero,
+                [
+                    {"titulo": tarea, "guia": guia_para(tarea)}
+                    for tarea in tareas
+                ],
+            )
+        )
+
     historial = piscina.mantenimientos_digitales.all()[:8]
-    return render(request, "asistente_tecnico/digital_plan_mantenimiento.html", {"perfil":perfil,"piscina":piscina,"plan":plan,"rutinas":rutinas,"historial":historial})
+    return render(
+        request,
+        "asistente_tecnico/digital_plan_mantenimiento.html",
+        {
+            "perfil": perfil,
+            "piscina": piscina,
+            "plan": plan,
+            "rutinas": rutinas,
+            "rutinas_guiadas": rutinas_guiadas,
+            "historial": historial,
+            "dosificacion": dosificacion,
+            "valores_dosificacion": valores_dosificacion,
+            "estados_agua": [
+                ("transparente", "Transparente / normal"),
+                ("ligeramente_turbia", "Ligeramente turbia"),
+                ("muy_turbia", "Muy turbia"),
+                ("verde", "Verde / con algas"),
+            ],
+        },
+    )
 
 
 @login_required
