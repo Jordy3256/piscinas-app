@@ -1,3 +1,4 @@
+from datetime import timedelta
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 from django.db import transaction
@@ -164,20 +165,102 @@ def revertir_consumo(*, uso, usuario=None):
         observacion=f"Reverso de consumo eliminado/ajustado en mantenimiento #{uso.mantenimiento_id}",
     )
 
-def _materializar_estimado_contrato(inv, hoy=None):
+def _iterar_tramos_mensuales(inicio, fin_exclusivo):
+    """Divide [inicio, fin_exclusivo) por meses para conservar el período del costo."""
+    actual = inicio
+    while actual < fin_exclusivo:
+        if actual.month == 12:
+            siguiente_mes = actual.replace(year=actual.year + 1, month=1, day=1)
+        else:
+            siguiente_mes = actual.replace(month=actual.month + 1, day=1)
+        tramo_fin = min(siguiente_mes, fin_exclusivo)
+        yield actual, tramo_fin
+        actual = tramo_fin
+
+
+def _materializar_estimado_contrato(inv, hoy=None, usuario=None):
+    """
+    Convierte el consumo diario estimado del inventario en sitio en movimientos
+    reales de costo y actualiza la existencia.
+
+    Importante:
+    - Nunca consume más stock del disponible.
+    - Conserva trazabilidad del costo.
+    - Separa el consumo por mes para no cargar a septiembre, por ejemplo, días
+      que realmente correspondían a agosto.
+    """
     from django.utils import timezone
+
     hoy = hoy or timezone.localdate()
     referencia = inv.fecha_referencia_estimacion or hoy
-    dias = max((hoy - referencia).days, 0)
-    if dias > 0 and Decimal(inv.consumo_diario_estimado or 0) > 0:
-        consumido = Decimal(inv.consumo_diario_estimado or 0) * Decimal(dias)
-        inv.stock = max(Decimal(inv.stock or 0) - consumido, Decimal("0.000")).quantize(Q3)
-        inv.fecha_referencia_estimacion = hoy
-        inv.save(update_fields=["stock", "fecha_referencia_estimacion", "actualizado_en"])
-    elif referencia != hoy:
+    if referencia >= hoy:
+        return inv
+
+    consumo_diario = Decimal(inv.consumo_diario_estimado or 0)
+    stock_actual = Decimal(inv.stock or 0)
+
+    if consumo_diario <= 0 or stock_actual <= 0:
         inv.fecha_referencia_estimacion = hoy
         inv.save(update_fields=["fecha_referencia_estimacion", "actualizado_en"])
+        return inv
+
+    insumo = inv.insumo
+    stock_movimiento = stock_actual
+
+    for tramo_inicio, tramo_fin in _iterar_tramos_mensuales(referencia, hoy):
+        if stock_movimiento <= 0:
+            break
+
+        dias = max((tramo_fin - tramo_inicio).days, 0)
+        if dias <= 0:
+            continue
+
+        cantidad_teorica = (consumo_diario * Decimal(dias)).quantize(Q3, rounding=ROUND_HALF_UP)
+        cantidad_real = min(cantidad_teorica, stock_movimiento).quantize(Q3, rounding=ROUND_HALF_UP)
+        if cantidad_real <= 0:
+            continue
+
+        antes = stock_movimiento
+        despues = (antes - cantidad_real).quantize(Q3)
+        movimiento = MovimientoInventario.objects.create(
+            insumo=insumo,
+            tipo="consumo_contrato",
+            cantidad=cantidad_real,
+            stock_anterior=Decimal(insumo.stock or 0),
+            stock_resultante=Decimal(insumo.stock or 0),
+            contrato=inv.contrato,
+            stock_contrato_anterior=antes,
+            stock_contrato_resultante=despues,
+            costo_unitario=insumo.costo or 0,
+            total_costo=_costo_total(insumo, cantidad_real),
+            usuario=usuario,
+            observacion=f"Consumo diario automático estimado · {dias} día(s)",
+        )
+        # auto_now_add fija hoy; corregimos la fecha contable al último día del tramo.
+        fecha_movimiento = tramo_fin - timedelta(days=1)
+        MovimientoInventario.objects.filter(pk=movimiento.pk).update(fecha=fecha_movimiento)
+        stock_movimiento = despues
+
+    inv.stock = max(stock_movimiento, Decimal("0.000")).quantize(Q3)
+    inv.fecha_referencia_estimacion = hoy
+    inv.save(update_fields=["stock", "fecha_referencia_estimacion", "actualizado_en"])
     return inv
+
+
+def materializar_consumos_contratos(*, hoy=None, usuario=None, contratos_activos=True):
+    """Actualiza de forma segura todos los consumos automáticos pendientes."""
+    from django.utils import timezone
+
+    hoy = hoy or timezone.localdate()
+    qs = InventarioContrato.objects.select_related("insumo", "contrato")
+    if contratos_activos:
+        qs = qs.filter(contrato__activo=True)
+
+    procesados = 0
+    for inv in qs.iterator():
+        _materializar_estimado_contrato(inv, hoy=hoy, usuario=usuario)
+        procesados += 1
+    return procesados
 
 
 @transaction.atomic

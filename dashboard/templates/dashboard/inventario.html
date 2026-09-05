@@ -8,7 +8,7 @@
 <section class="log-hero mb-4"><div class="d-flex flex-wrap justify-content-between gap-3 align-items-center"><div><div class="small opacity-75 fw-bold">JVAQUA ERP</div><h2 class="fw-bold mb-1">Centro Logístico</h2><div class="opacity-75">Bodega, productos, inventario por técnico, compras, ventas y trazabilidad.</div></div><div class="d-flex flex-wrap gap-2"><a href="{% url 'inventario_productos' %}" class="btn btn-light fw-bold">📦 Productos</a><a href="{% url 'inventario_historial' %}" class="btn btn-outline-light">Movimientos</a></div></div></section>
 
 <div class="log-grid mb-4">
-  <div class="card log-stat"><div class="card-body"><div class="text-muted small">Inventario valorizado</div><div class="v">${{ valor_inventario|floatformat:2 }}</div></div></div>
+  <div class="card log-stat"><div class="card-body"><div class="text-muted small">Inventario valorizado total</div><div class="v">${{ valor_inventario|floatformat:2 }}</div><div class="small text-muted">Bodega + técnicos + sitios</div></div></div>
   <div class="card log-stat"><div class="card-body"><div class="text-muted small">Productos activos</div><div class="v">{{ total_insumos }}</div></div></div>
   <div class="card log-stat"><div class="card-body"><div class="text-muted small">Stock bajo</div><div class="v">{{ bajo_stock }}</div></div></div>
   <div class="card log-stat"><div class="card-body"><div class="text-muted small">Sin stock</div><div class="v">{{ sin_stock }}</div></div></div>
@@ -18,7 +18,7 @@
 <div class="row g-3 mb-4">
   <div class="col-md-4"><div class="card quick-card h-100"><div class="card-body"><div class="text-muted small">Compras del mes</div><div class="fs-3 fw-bold">${{ total_compras_mes|floatformat:2 }}</div><div class="small text-muted">Ingreso de mercadería a bodega.</div></div></div></div>
   <div class="col-md-4"><div class="card quick-card h-100"><div class="card-body"><div class="text-muted small">Ventas del mes</div><div class="fs-3 fw-bold">${{ total_ventas_mes|floatformat:2 }}</div><div class="small text-muted">Ganancia estimada ${{ ganancia_mes|floatformat:2 }}</div></div></div></div>
-  <div class="col-md-4"><div class="card quick-card h-100"><div class="card-body"><div class="text-muted small">Consumo en mantenimientos</div><div class="fs-3 fw-bold">${{ costo_consumo_mes|floatformat:2 }}</div><div class="small text-muted">Costo químico acumulado del mes.</div></div></div></div>
+  <div class="col-md-4"><div class="card quick-card h-100"><div class="card-body"><div class="text-muted small">Consumo químico del mes</div><div class="fs-3 fw-bold">${{ costo_consumo_mes|floatformat:2 }}</div><div class="small text-muted">Incluye mantenimientos y consumo automático en sitio.</div></div></div></div>
 </div>
 
 <div class="d-flex flex-wrap gap-2 mb-4">

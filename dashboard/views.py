@@ -2720,15 +2720,32 @@ def dashboard_view(request):
 
         total_trabajadores_activos = Trabajador.objects.filter(activo=True).count()
 
-        # Rentabilidad operativa base por contrato: ingreso mensual - técnico - químicos del mes.
-        consumos_contrato = {
-            fila["mantenimiento__contrato_id"]: (fila["total"] or Decimal("0.00"))
-            for fila in UsoInsumo.objects.filter(
-                mantenimiento__contrato_id__isnull=False,
-                mantenimiento__fecha__gte=primer_dia_mes_actual,
-                mantenimiento__fecha__lte=ultimo_dia_mes_actual,
-            ).values("mantenimiento__contrato_id").annotate(total=Sum("costo_total"))
-        }
+        # Rentabilidad operativa base por contrato:
+        # ingreso mensual - técnico - consumo químico REAL/ESTIMADO del mes.
+        #
+        # Antes se tomaba únicamente UsoInsumo ligado a mantenimientos, por lo
+        # que el consumo diario automático del inventario almacenado en sitio
+        # quedaba fuera del costo del contrato.
+        materializar_consumos_contratos(hoy=hoy, usuario=request.user)
+
+        consumos_contrato = defaultdict(lambda: Decimal("0.00"))
+        movimientos_consumo = (
+            MovimientoInventario.objects
+            .filter(
+                tipo__in=["mantenimiento", "consumo_contrato"],
+                fecha__gte=primer_dia_mes_actual,
+                fecha__lte=ultimo_dia_mes_actual,
+            )
+            .select_related("mantenimiento")
+        )
+        for mov in movimientos_consumo:
+            contrato_id = mov.contrato_id or (
+                mov.mantenimiento.contrato_id
+                if mov.mantenimiento_id and mov.mantenimiento
+                else None
+            )
+            if contrato_id:
+                consumos_contrato[contrato_id] += Decimal(mov.total_costo or 0)
         rentabilidad_contratos = []
         ingreso_contratos_proyectado = Decimal("0.00")
         nomina_contratos_proyectada = Decimal("0.00")
@@ -5795,15 +5812,39 @@ from inventario.models import (
 )
 from inventario.services import (
     convertir_a_base, entregar_a_trabajador, devolver_de_trabajador,
-    consumir_trabajador, consumir_contrato, reponer_contrato, ajustar_inventario_contrato, revertir_consumo, decimal_positivo,
+    consumir_trabajador, consumir_contrato, reponer_contrato, ajustar_inventario_contrato, revertir_consumo, decimal_positivo, materializar_consumos_contratos,
 )
 
 
 def _inventario_valorizado():
-    total = Decimal("0.00")
-    for insumo in Insumo.objects.filter(activo=True):
-        total += Decimal(insumo.stock or 0) * Decimal(insumo.costo or 0)
-    return total
+    """
+    Valor total de inventario propiedad de JVAQUA:
+    bodega + asignado a trabajadores + almacenado en contratos.
+    """
+    bodega = sum(
+        (Decimal(i.stock or 0) * Decimal(i.costo or 0) for i in Insumo.objects.filter(activo=True)),
+        Decimal("0.00"),
+    )
+    trabajadores = sum(
+        (
+            Decimal(inv.stock or 0) * Decimal(inv.insumo.costo or 0)
+            for inv in InventarioTrabajador.objects.filter(stock__gt=0).select_related("insumo")
+        ),
+        Decimal("0.00"),
+    )
+    contratos = sum(
+        (
+            Decimal(inv.stock_estimado or 0) * Decimal(inv.insumo.costo or 0)
+            for inv in InventarioContrato.objects.filter(contrato__activo=True).select_related("insumo")
+        ),
+        Decimal("0.00"),
+    )
+    return {
+        "total": bodega + trabajadores + contratos,
+        "bodega": bodega,
+        "trabajadores": trabajadores,
+        "contratos": contratos,
+    }
 
 
 def _cantidad_texto(insumo, cantidad):
@@ -5816,6 +5857,9 @@ def _cantidad_texto(insumo, cantidad):
 def inventario_view(request):
     if not es_admin(request.user):
         return render(request, "dashboard/no_autorizado.html", status=403)
+
+    # Mantiene sincronizado el inventario en sitio y registra su costo automático.
+    materializar_consumos_contratos(hoy=timezone.localdate(), usuario=request.user)
 
     insumos = list(Insumo.objects.filter(activo=True).prefetch_related("presentaciones").order_by("nombre"))
     trabajadores = list(Trabajador.objects.filter(activo=True).select_related("user").order_by("user__username"))
@@ -5880,7 +5924,10 @@ def inventario_view(request):
         "bajo_stock": bajo_stock,
         "sin_stock": sin_stock,
         "stock_total_kg": stock_total_kg,
-        "valor_inventario": _inventario_valorizado(),
+        "valor_inventario": _inventario_valorizado()["total"],
+        "valor_inventario_bodega": _inventario_valorizado()["bodega"],
+        "valor_inventario_trabajadores": _inventario_valorizado()["trabajadores"],
+        "valor_inventario_contratos": _inventario_valorizado()["contratos"],
         "valor_asignado": valor_asignado,
         "productos_asignados": productos_asignados,
         "resumen_contratos_inventario": resumen_contratos_inventario,
@@ -6707,13 +6754,15 @@ def _obtener_serie_mensual_ganancias(fecha_inicio=None, fecha_fin=None):
 
         ingresos_mes = (
             Ingreso.objects.filter(fecha__range=(primer_dia, ultimo_dia))
-            .aggregate(total=Sum("total"))
+            .exclude(estado=Ingreso.ESTADO_ANULADO)
+            .aggregate(total=Sum("monto_pagado"))
             .get("total")
             or Decimal("0")
         )
         egresos_mes = (
-            Egreso.objects.filter(fecha__range=(primer_dia, ultimo_dia))
-            .aggregate(total=Sum("total"))
+            Egreso.objects.filter(fecha__range=(primer_dia, ultimo_dia), aprobado=True)
+            .exclude(estado=Egreso.ESTADO_ANULADO)
+            .aggregate(total=Sum("monto_pagado"))
             .get("total")
             or Decimal("0")
         )
@@ -6733,9 +6782,13 @@ def _obtener_serie_mensual_ganancias(fecha_inicio=None, fecha_fin=None):
 
 
 def _obtener_datos_reporte_ganancias(fecha_inicio=None, fecha_fin=None):
-    ingresos = Ingreso.objects.all().order_by("-fecha", "-id")
+    ingresos = (
+        Ingreso.objects.exclude(estado=Ingreso.ESTADO_ANULADO)
+        .order_by("-fecha", "-id")
+    )
     egresos = (
-        Egreso.objects.all()
+        Egreso.objects.filter(aprobado=True)
+        .exclude(estado=Egreso.ESTADO_ANULADO)
         .select_related("insumo", "mantenimiento", "mantenimiento__cliente")
         .order_by("-fecha", "-id")
     )
@@ -6748,8 +6801,8 @@ def _obtener_datos_reporte_ganancias(fecha_inicio=None, fecha_fin=None):
         ingresos = ingresos.filter(fecha__lte=fecha_fin)
         egresos = egresos.filter(fecha__lte=fecha_fin)
 
-    total_ingresos = ingresos.aggregate(total=Sum("total"))["total"] or Decimal("0")
-    total_egresos = egresos.aggregate(total=Sum("total"))["total"] or Decimal("0")
+    total_ingresos = ingresos.aggregate(total=Sum("monto_pagado"))["total"] or Decimal("0")
+    total_egresos = egresos.aggregate(total=Sum("monto_pagado"))["total"] or Decimal("0")
     ganancia = total_ingresos - total_egresos
 
     movimientos = []
@@ -6758,7 +6811,7 @@ def _obtener_datos_reporte_ganancias(fecha_inicio=None, fecha_fin=None):
         movimientos.append({
             "tipo": "Ingreso",
             "concepto": getattr(i, "concepto", "") or "-",
-            "monto": i.total or Decimal("0"),
+            "monto": i.monto_pagado or Decimal("0"),
             "fecha": i.fecha,
         })
 
@@ -6771,7 +6824,7 @@ def _obtener_datos_reporte_ganancias(fecha_inicio=None, fecha_fin=None):
         movimientos.append({
             "tipo": "Egreso",
             "concepto": concepto,
-            "monto": e.total or Decimal("0"),
+            "monto": e.monto_pagado or Decimal("0"),
             "fecha": e.fecha,
         })
 
@@ -8479,6 +8532,12 @@ def contrato_inventario_configurar_view(request, pk):
         messages.error(request, "Revisa el stock mínimo y el consumo diario estimado.")
         return redirect(f"/dashboard/contratos/{contrato.pk}/#inventario-sitio")
     inv, creado = InventarioContrato.objects.get_or_create(contrato=contrato, insumo=insumo)
+    if not creado:
+        # Cierra el período anterior con la tasa antigua para no recalcular
+        # retroactivamente días pasados usando el nuevo consumo diario.
+        from inventario.services import _materializar_estimado_contrato
+        _materializar_estimado_contrato(inv, hoy=timezone.localdate(), usuario=request.user)
+        inv.refresh_from_db()
     inv.stock_minimo = minimo
     inv.consumo_diario_estimado = consumo
     inv.save(update_fields=["stock_minimo", "consumo_diario_estimado", "actualizado_en"])

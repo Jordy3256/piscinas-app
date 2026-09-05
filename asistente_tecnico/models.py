@@ -509,7 +509,7 @@ class PerfilSuscriptor(models.Model):
     }
     LIMITES = {"individual": 1, "esencial": 3, "profesional": 30}
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="perfil_suscriptor")
-    estado = models.CharField(max_length=20, choices=ESTADOS, default="prueba", db_index=True)
+    estado = models.CharField(max_length=20, choices=ESTADOS, default="pendiente", db_index=True)
     plan = models.CharField(max_length=30, choices=PLANES, default="individual")
     telefono = models.CharField(max_length=30, blank=True, default="")
     inicio = models.DateField(default=timezone.localdate)
