@@ -1,31 +1,124 @@
-{% extends base_template %}{% load static %}{% block title %}{{ obj.titulo }}{% endblock %}{% block top_title %}🎓 Academia JVAQUA{% endblock %}
+{% extends base_template %}{% load static %}{% block title %}{{ obj.titulo }}{% endblock %}{% block top_title %}{% if es_curso %}🎓 Curso JVAQUA{% else %}📚 Biblioteca JVAQUA{% endif %}{% endblock %}
 {% block content %}
-<link rel="stylesheet" href="{% static 'asistente_tecnico/academia/academia-v2.css' %}?v=3108?v=20260819-20">
+<link rel="stylesheet" href="{% static 'asistente_tecnico/academia/academia-v2.css' %}?v=31025">
 <div class="ad-wrap">
-  <div class="d-flex justify-content-between gap-2 flex-wrap mb-3"><a class="btn btn-outline-secondary" href="{% url 'asistente_tecnico:academia_cms' %}{% if es_curso %}?modo=aprender{% endif %}">← {% if es_curso %}Camino de aprendizaje{% else %}Academia{% endif %}</a><div class="ad-actions">{% if es_admin %}<a class="btn btn-outline-primary" href="{% url 'asistente_tecnico:cms_contenido_editar' obj.pk %}">Editar</a>{% endif %}<form method="post" action="{% url 'asistente_tecnico:academia_contenido_favorito' obj.slug %}">{% csrf_token %}<button class="btn {% if favorito %}btn-warning{% else %}btn-outline-warning{% endif %}" type="submit">⭐ {% if favorito %}Favorito{% else %}Guardar{% endif %}</button></form><a class="btn btn-dark" href="{% url 'asistente_tecnico:academia_pdf_articulo' obj.slug %}">PDF</a></div></div>
-  {% if es_curso %}<section class="course-mission-top"><div class="course-mission-aquo">🤖</div><div><div class="small fw-bold text-primary">MISIÓN DE APRENDIZAJE · +40 XP</div><h3>AQUO te acompaña en esta lección</h3><p>Completa los bloques en orden. Al final marca la misión como aprendida y continúa al siguiente reto.</p></div><div class="course-mission-status">{% if completado %}✓ Completada{% else %}En progreso{% endif %}</div></section>{% endif %}
-  <article class="ad-shell {% if es_curso %}course-mode{% endif %}">
-    <div class="ad-hero">{% if obj.imagen_principal %}<img src="{{ obj.imagen_principal.url }}" alt="{{ obj.titulo }}">{% else %}<img src="{% static obj.visual_asset %}" alt="Ilustración de {{ obj.titulo }}">{% endif %}<div class="ad-hero-badges"><span class="ad-badge">{{ obj.get_tipo_display }}</span><span class="ad-badge">{{ obj.get_nivel_display }}</span><span class="ad-badge">{{ obj.tiempo_lectura_min }} min</span></div></div>
-    <header class="ad-head"><div class="small fw-bold text-primary">{{ obj.codigo }} · v{{ obj.version }}</div><h1>{{ obj.titulo }}</h1><p class="ad-summary mb-2">{{ obj.resumen }}</p><div class="d-flex gap-2 flex-wrap">{% if obj.estado == 'aprobado' %}<span class="badge text-bg-success">✓ Conocimiento Oficial JVAQUA</span>{% elif obj.estado == 'borrador' %}<span class="badge text-bg-warning">Borrador</span>{% else %}<span class="badge text-bg-secondary">Archivado</span>{% endif %}</div><div class="ad-quick"><div class="ad-quick-item"><small>Formato</small><strong>{{ obj.get_tipo_display }}</strong></div><div class="ad-quick-item"><small>Nivel</small><strong>{{ obj.get_nivel_display }}</strong></div><div class="ad-quick-item"><small>Lectura</small><strong>{{ obj.tiempo_lectura_min }} minutos</strong></div></div></header>
-    <section class="ad-learnbox"><div class="ad-learn-icon">🎯</div><div><div class="small fw-bold text-primary">{% if es_curso %}🎯 TU RETO{% else %}OBJETIVO DE ESTA LECCIÓN{% endif %}</div><strong>Al terminar podrás explicar este tema y reconocer cuándo aplicarlo en una situación real.</strong><div class="small text-muted mt-1">Lee primero la explicación, revisa los errores comunes y utiliza el Asistente si necesitas llevarlo a un caso específico.</div></div></section>
-    <nav class="ad-nav">{% if obj.introduccion %}<a href="#saber">Qué debes saber</a>{% endif %}{% if obj.contenido %}<a href="#informacion">Información</a>{% endif %}{% if obj.procedimiento %}<a href="#procedimiento">Paso a paso</a>{% endif %}{% if obj.funcionamiento %}<a href="#funcionamiento">Cómo funciona</a>{% endif %}{% if obj.mantenimiento %}<a href="#mantenimiento">Mantenimiento</a>{% endif %}{% if obj.buenas_practicas %}<a href="#buenas">Buenas prácticas</a>{% endif %}{% if obj.errores_comunes %}<a href="#errores">Errores</a>{% endif %}{% if obj.recomendaciones_jvaqua %}<a href="#jvaqua">Consejo JVAQUA</a>{% endif %}</nav>
-    {% if obj.introduccion %}<section id="saber" class="ad-section"><h4>🧭 Lo que debes saber</h4><div class="ad-text">{{ obj.introduccion }}</div></section>{% endif %}
-    {% if obj.contenido %}<section id="informacion" class="ad-section"><h4>📘 Información</h4><div class="ad-text">{{ obj.contenido }}</div></section>{% endif %}
-    {% if obj.procedimiento %}<section id="procedimiento" class="ad-section"><h4>🧰 Paso a paso</h4><div class="ad-text">{{ obj.procedimiento }}</div></section>{% endif %}
-    {% if obj.herramientas_materiales %}<section class="ad-section"><h4>🧰 Herramientas y materiales</h4><div class="ad-text">{{ obj.herramientas_materiales }}</div></section>{% endif %}
-    {% if obj.funcionamiento %}<section id="funcionamiento" class="ad-section"><h4>⚙️ Cómo funciona</h4><div class="ad-text">{{ obj.funcionamiento }}</div></section>{% endif %}
-    {% if obj.componentes %}<section class="ad-section"><h4>🧩 Componentes</h4><div class="ad-text">{{ obj.componentes }}</div></section>{% endif %}
-    {% if obj.mantenimiento %}<section id="mantenimiento" class="ad-section"><h4>🔧 Mantenimiento</h4><div class="ad-text">{{ obj.mantenimiento }}</div></section>{% endif %}
-    {% if obj.fallas_frecuentes %}<section class="ad-section"><h4>🔎 Fallas frecuentes</h4><div class="ad-text">{{ obj.fallas_frecuentes }}</div></section>{% endif %}
-    {% if obj.buenas_practicas %}<section id="buenas" class="ad-section ad-good"><h4>✅ Buenas prácticas</h4><div class="ad-text">{{ obj.buenas_practicas }}</div></section>{% endif %}
-    {% if obj.errores_comunes %}<section id="errores" class="ad-section ad-bad"><h4>❌ Errores comunes</h4><div class="ad-text">{{ obj.errores_comunes }}</div></section>{% endif %}
-    {% if obj.recomendaciones_jvaqua %}<section id="jvaqua" class="ad-section ad-tip"><h4>💡 Recomendaciones JVAQUA</h4><div class="ad-text">{{ obj.recomendaciones_jvaqua }}</div></section>{% endif %}
-    {% if obj.galeria.all %}<section class="ad-section"><h4>🖼️ Referencia visual</h4><div class="ad-gallery">{% for img in obj.galeria.all %}<div><img src="{{ img.imagen.url }}" alt="{{ img.titulo }}"><div class="small fw-semibold mt-1">{{ img.titulo }}</div><div class="small text-muted">{{ img.descripcion }}</div></div>{% endfor %}</div></section>{% endif %}
-    {% if obj.relacionados.all %}<section class="ad-section"><h4>🔗 Continúa aprendiendo</h4><div class="ad-related">{% for r in obj.relacionados.all %}{% if r.estado == 'aprobado' %}<a href="{% url 'asistente_tecnico:academia_contenido_detalle' r.slug %}"><span>{{ r.titulo }}</span><span>→</span></a>{% endif %}{% endfor %}</div></section>{% endif %}
-    {% if obj.referencias_tecnicas %}<section class="ad-section"><h5 class="fw-bold">Referencias técnicas</h5><div class="ad-text small text-muted">{{ obj.referencias_tecnicas }}</div></section>{% endif %}
-    {% if es_curso %}<section class="course-checkpoint"><div class="course-check-icon">⚡</div><div><div class="small fw-bold text-primary">PUNTO DE CONTROL</div><h4>¿Puedes explicarlo con tus propias palabras?</h4><p>Antes de avanzar, piensa qué revisarías primero y qué error evitarías. Si tienes una duda, pregúntale a AQUO y luego vuelve a completar la misión.</p></div></section>{% endif %}
-    <section class="ad-section ad-resolve"><div><div class="small fw-bold text-primary">¿TIENES ESTE PROBLEMA EN TU PISCINA?</div><h4 class="mb-1">🤖 Pídele ayuda al Asistente Técnico</h4><div class="text-muted">Usa lo aprendido aquí junto con los datos reales de tu piscina para obtener una orientación específica.</div></div><a class="btn btn-primary" href="{% if base_template == 'asistente_tecnico/base_suscriptor.html' %}{% url 'asistente_tecnico:digital_resolver' %}{% else %}{% url 'asistente_tecnico:inicio' %}{% endif %}">Abrir Asistente →</a></section>
+  <div class="d-flex justify-content-between gap-2 flex-wrap mb-3">
+    <a class="btn btn-outline-secondary" href="{% url 'asistente_tecnico:academia_cms' %}?modo={% if es_curso %}aprender{% else %}consultar{% endif %}">← {% if es_curso %}Volver al curso{% else %}Volver a Biblioteca{% endif %}</a>
+    <div class="ad-actions">
+      {% if es_admin %}<a class="btn btn-outline-primary" href="{% url 'asistente_tecnico:cms_contenido_editar' obj.pk %}">Editar</a>{% endif %}
+      {% if not es_curso %}<form method="post" action="{% url 'asistente_tecnico:academia_contenido_favorito' obj.slug %}">{% csrf_token %}<button class="btn {% if favorito %}btn-warning{% else %}btn-outline-warning{% endif %}" type="submit">⭐ {% if favorito %}Favorito{% else %}Guardar{% endif %}</button></form><a class="btn btn-dark" href="{% url 'asistente_tecnico:academia_pdf_articulo' obj.slug %}">PDF</a>{% endif %}
+    </div>
+  </div>
+
+  {% if es_curso %}
+  <!-- CURSO: enseñanza directa, visual y secuencial. -->
+  <article class="course-lesson">
+    <header class="course-lesson-hero">
+      <div class="course-visual">
+        {% if obj.imagen_principal %}<img src="{{ obj.imagen_principal.url }}" alt="{{ obj.titulo }}">{% else %}<img src="{% static obj.visual_asset %}" alt="Referencia visual de {{ obj.titulo }}">{% endif %}
+        <span class="course-module">{{ obj.get_modulo_curso_display }}</span>
+      </div>
+      <div class="course-intro">
+        <div class="course-kicker">LECCIÓN {{ obj.orden_curso|default:"" }} · {{ obj.tiempo_lectura_min }} MIN</div>
+        <h1>{{ obj.titulo }}</h1>
+        <div class="course-comprende">
+          <span>QUÉ COMPRENDE</span>
+          <p>{{ obj.resumen|default:"Los conceptos y el procedimiento esencial para aplicar correctamente este tema en tu piscina." }}</p>
+        </div>
+        <div class="course-status">{% if completado %}✓ Lección completada{% else %}En aprendizaje{% endif %}</div>
+      </div>
+    </header>
+
+    <section class="course-essential">
+      <div class="course-section-icon">1</div>
+      <div>
+        <div class="course-label">LO QUE DEBES SABER</div>
+        <h3>Antes de comenzar</h3>
+        <div class="course-readable">{{ obj.introduccion|default:obj.contenido|linebreaks }}</div>
+      </div>
+    </section>
+
+    {% if obj.contenido and obj.introduccion %}
+    <section class="course-essential">
+      <div class="course-section-icon">2</div>
+      <div>
+        <div class="course-label">INFORMACIÓN</div>
+        <h3>Entiende lo necesario</h3>
+        <div class="course-readable">{{ obj.contenido|linebreaks }}</div>
+      </div>
+    </section>
+    {% endif %}
+
+    {% if obj.procedimiento %}
+    <section class="course-steps">
+      <div class="course-steps-head"><div class="course-section-icon">3</div><div><div class="course-label">PASO A PASO</div><h3>Hazlo de esta manera</h3></div></div>
+      <div class="course-procedure">{{ obj.procedimiento|linebreaks }}</div>
+    </section>
+    {% elif obj.funcionamiento %}
+    <section class="course-steps">
+      <div class="course-steps-head"><div class="course-section-icon">3</div><div><div class="course-label">CÓMO FUNCIONA</div><h3>Así debes entenderlo</h3></div></div>
+      <div class="course-procedure">{{ obj.funcionamiento|linebreaks }}</div>
+    </section>
+    {% endif %}
+
+    {% if obj.galeria.all %}
+    <section class="course-reference">
+      <div class="course-label">MÍRALO ANTES DE HACERLO</div><h3>Referencia visual</h3>
+      <div class="ad-gallery">{% for img in obj.galeria.all %}<figure><img src="{{ img.imagen.url }}" alt="{{ img.titulo }}"><figcaption><strong>{{ img.titulo }}</strong>{% if img.descripcion %}<small>{{ img.descripcion }}</small>{% endif %}</figcaption></figure>{% endfor %}</div>
+    </section>
+    {% endif %}
+
+    <section class="course-finish">
+      <div class="course-finish-check">✓</div>
+      <div><div class="course-label">AL TERMINAR DEBES PODER</div><h3>Reconocer y aplicar este tema correctamente</h3><p>Identifica cuándo corresponde hacerlo, sigue el procedimiento en orden y evita improvisar si las condiciones de tu piscina son diferentes.</p></div>
+    </section>
+
+    <div class="course-deeper">
+      <div><strong>¿Quieres conocer más detalles?</strong><span>La teoría, buenas prácticas, errores y referencias quedan en Biblioteca.</span></div>
+      <a class="btn btn-outline-primary" href="{% url 'asistente_tecnico:academia_contenido_detalle' obj.slug %}">Profundizar en Biblioteca →</a>
+    </div>
+
+    <section class="ad-resolve course-aquo">
+      <div><div class="small fw-bold text-primary">LLEVARLO A TU PISCINA</div><h4 class="mb-1">🤖 Pregúntale a AQUO</h4><div class="text-muted">Si tu caso tiene condiciones particulares, AQUO puede orientarte usando los datos de tu piscina.</div></div>
+      <a class="btn btn-primary" href="{% if base_template == 'asistente_tecnico/base_suscriptor.html' %}{% url 'asistente_tecnico:digital_resolver' %}{% else %}{% url 'asistente_tecnico:inicio' %}{% endif %}">Abrir AQUO →</a>
+    </section>
   </article>
-  {% if obj.modulo_curso %}<div class="ad-float-progress d-flex justify-content-between align-items-center gap-3 flex-wrap"><div><div class="small text-primary fw-bold">{{ obj.get_modulo_curso_display }}</div>{% if completado %}<strong>✓ Tema aprendido</strong>{% else %}<strong>Guarda tu progreso cuando termines</strong>{% endif %}</div><div class="d-flex gap-2 flex-wrap">{% if not completado %}<form method="post" action="{% url 'asistente_tecnico:academia_contenido_completar' obj.slug %}">{% csrf_token %}<button class="btn btn-success" type="submit">✓ Marcar aprendido</button></form>{% endif %}{% if siguiente %}<a class="btn btn-outline-primary" href="{% url 'asistente_tecnico:academia_contenido_detalle' siguiente.slug %}{% if es_curso %}?curso=1{% endif %}">Siguiente misión →</a>{% endif %}</div></div>{% endif %}
+
+  {% if obj.modulo_curso %}
+  <div class="ad-float-progress d-flex justify-content-between align-items-center gap-3 flex-wrap">
+    <div><div class="small text-primary fw-bold">{{ obj.get_modulo_curso_display }}</div>{% if completado %}<strong>✓ Tema aprendido</strong>{% else %}<strong>Completa la lección cuando puedas realizarla o explicarla</strong>{% endif %}</div>
+    <div class="d-flex gap-2 flex-wrap">{% if not completado %}<form method="post" action="{% url 'asistente_tecnico:academia_contenido_completar' obj.slug %}">{% csrf_token %}<button class="btn btn-success" type="submit">✓ Completar lección</button></form>{% endif %}{% if siguiente %}<a class="btn btn-outline-primary" href="{% url 'asistente_tecnico:academia_contenido_detalle' siguiente.slug %}?curso=1">Siguiente lección →</a>{% endif %}</div>
+  </div>
+  {% endif %}
+
+  {% else %}
+  <!-- BIBLIOTECA: consulta extensa y técnica. -->
+  <article class="ad-shell library-mode">
+    <div class="ad-hero">{% if obj.imagen_principal %}<img src="{{ obj.imagen_principal.url }}" alt="{{ obj.titulo }}">{% else %}<img src="{% static obj.visual_asset %}" alt="Ilustración de {{ obj.titulo }}">{% endif %}<div class="ad-hero-badges"><span class="ad-badge">{{ obj.get_tipo_display }}</span><span class="ad-badge">{{ obj.get_nivel_display }}</span><span class="ad-badge">{{ obj.tiempo_lectura_min }} min</span></div></div>
+    <header class="ad-head"><div class="small fw-bold text-primary">BIBLIOTECA TÉCNICA · {{ obj.codigo }}</div><h1>{{ obj.titulo }}</h1><p class="ad-summary">{{ obj.resumen }}</p><div class="d-flex gap-2 flex-wrap"><span class="badge text-bg-success">✓ Conocimiento JVAQUA</span>{% if obj.modulo_curso %}<a class="badge text-bg-primary text-decoration-none" href="{% url 'asistente_tecnico:academia_contenido_detalle' obj.slug %}?curso=1">🎓 Ver como lección</a>{% endif %}</div></header>
+
+    <nav class="ad-nav">
+      {% if obj.introduccion %}<a href="#introduccion">Introducción</a>{% endif %}{% if obj.contenido %}<a href="#informacion">Información</a>{% endif %}{% if obj.procedimiento %}<a href="#procedimiento">Procedimiento</a>{% endif %}{% if obj.buenas_practicas %}<a href="#buenas">Buenas prácticas</a>{% endif %}{% if obj.errores_comunes %}<a href="#errores">Errores comunes</a>{% endif %}{% if obj.referencias_tecnicas %}<a href="#referencias">Referencias</a>{% endif %}
+    </nav>
+
+    {% if obj.introduccion %}<section id="introduccion" class="ad-section"><h4>🧭 Introducción</h4><div class="ad-text">{{ obj.introduccion|linebreaks }}</div></section>{% endif %}
+    {% if obj.contenido %}<section id="informacion" class="ad-section"><h4>📘 Información completa</h4><div class="ad-text">{{ obj.contenido|linebreaks }}</div></section>{% endif %}
+    {% if obj.funcionamiento %}<section class="ad-section"><h4>⚙️ Cómo funciona</h4><div class="ad-text">{{ obj.funcionamiento|linebreaks }}</div></section>{% endif %}
+    {% if obj.componentes %}<section class="ad-section"><h4>🧩 Componentes</h4><div class="ad-text">{{ obj.componentes|linebreaks }}</div></section>{% endif %}
+    {% if obj.herramientas_materiales %}<section class="ad-section"><h4>🧰 Herramientas y materiales</h4><div class="ad-text">{{ obj.herramientas_materiales|linebreaks }}</div></section>{% endif %}
+    {% if obj.procedimiento %}<section id="procedimiento" class="ad-section"><h4>🔧 Procedimiento de referencia</h4><div class="ad-text">{{ obj.procedimiento|linebreaks }}</div></section>{% endif %}
+    {% if obj.mantenimiento %}<section class="ad-section"><h4>🔄 Mantenimiento</h4><div class="ad-text">{{ obj.mantenimiento|linebreaks }}</div></section>{% endif %}
+    {% if obj.fallas_frecuentes %}<section class="ad-section"><h4>🔎 Fallas frecuentes</h4><div class="ad-text">{{ obj.fallas_frecuentes|linebreaks }}</div></section>{% endif %}
+    {% if obj.buenas_practicas %}<section id="buenas" class="ad-section ad-good"><h4>✅ Buenas prácticas</h4><div class="ad-text">{{ obj.buenas_practicas|linebreaks }}</div></section>{% endif %}
+    {% if obj.errores_comunes %}<section id="errores" class="ad-section ad-bad"><h4>❌ Errores comunes</h4><div class="ad-text">{{ obj.errores_comunes|linebreaks }}</div></section>{% endif %}
+    {% if obj.recomendaciones_jvaqua %}<section class="ad-section ad-tip"><h4>💡 Recomendaciones JVAQUA</h4><div class="ad-text">{{ obj.recomendaciones_jvaqua|linebreaks }}</div></section>{% endif %}
+
+    {% if obj.galeria.all %}<section class="ad-section"><h4>🖼️ Referencias visuales</h4><div class="ad-gallery">{% for img in obj.galeria.all %}<figure><img src="{{ img.imagen.url }}" alt="{{ img.titulo }}"><figcaption><strong>{{ img.titulo }}</strong>{% if img.descripcion %}<small>{{ img.descripcion }}</small>{% endif %}</figcaption></figure>{% endfor %}</div></section>{% endif %}
+    {% if obj.referencias_tecnicas %}<section id="referencias" class="ad-section library-reference"><h4>📑 Referencias técnicas</h4><div class="ad-text">{{ obj.referencias_tecnicas|linebreaks }}</div></section>{% endif %}
+    {% if obj.relacionados.all %}<section class="ad-section"><h4>🔗 Temas relacionados</h4><div class="ad-related">{% for r in obj.relacionados.all %}{% if r.estado == 'aprobado' %}<a href="{% url 'asistente_tecnico:academia_contenido_detalle' r.slug %}"><span>{{ r.titulo }}</span><span>→</span></a>{% endif %}{% endfor %}</div></section>{% endif %}
+
+    <section class="ad-resolve"><div><div class="small fw-bold text-primary">¿NECESITAS APLICARLO A TU CASO?</div><h4 class="mb-1">🤖 Consultar con AQUO</h4><div class="text-muted">La Biblioteca explica el tema. AQUO puede ayudarte a aplicarlo a una piscina específica.</div></div><a class="btn btn-primary" href="{% if base_template == 'asistente_tecnico/base_suscriptor.html' %}{% url 'asistente_tecnico:digital_resolver' %}{% else %}{% url 'asistente_tecnico:inicio' %}{% endif %}">Abrir AQUO →</a></section>
+  </article>
+  {% endif %}
 </div>
 {% endblock %}

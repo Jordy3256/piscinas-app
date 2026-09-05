@@ -7,15 +7,15 @@
       <div style="max-width:760px">
         <div class="aj-hero-kicker">Academia JVAQUA · Aprende a entender tu piscina</div>
         <h2 class="fw-bold mt-2 mb-2">{% if modo == 'aprender' %}Aprende paso a paso{% else %}Encuentra la respuesta que necesitas{% endif %}</h2>
-        <p class="mb-0 opacity-90">{% if modo == 'aprender' %}Avanza por módulos, guarda tu progreso y vuelve a cualquier tema cuando necesites reforzarlo.{% else %}Consulta productos, procedimientos y equipos con explicaciones claras, referencias visuales y recomendaciones prácticas.{% endif %}</p>
+        <p class="mb-0 opacity-90">{% if modo == 'aprender' %}Aprende cada tema con lo esencial: qué comprende, qué debes saber y cómo hacerlo paso a paso. Sin información innecesaria.{% else %}Profundiza cuando lo necesites: explicación técnica, buenas prácticas, errores comunes, referencias y temas relacionados.{% endif %}</p>
       </div>
       <a class="btn btn-outline-light" href="{% url 'asistente_tecnico:centro_conocimiento' %}">← Volver</a>
     </div>
   </section>
 
   <div class="aj-modebar">
-    <a class="aj-mode {% if modo == 'aprender' %}active{% endif %}" href="?modo=aprender"><span class="aj-mode-icon">🎓</span><span><strong>Aprender</strong><small class="d-block text-muted">Curso guiado y progreso</small></span></a>
-    <a class="aj-mode {% if modo != 'aprender' %}active{% endif %}" href="?modo=consultar"><span class="aj-mode-icon">📚</span><span><strong>Consultar</strong><small class="d-block text-muted">Biblioteca rápida</small></span></a>
+    <a class="aj-mode {% if modo == 'aprender' %}active{% endif %}" href="?modo=aprender"><span class="aj-mode-icon">🎓</span><span><strong>Aprender</strong><small class="d-block text-muted">Curso práctico paso a paso</small></span></a>
+    <a class="aj-mode {% if modo != 'aprender' %}active{% endif %}" href="?modo=consultar"><span class="aj-mode-icon">📚</span><span><strong>Consultar</strong><small class="d-block text-muted">Consulta técnica completa</small></span></a>
     <a class="aj-mode" href="{% if base_template == 'asistente_tecnico/base_suscriptor.html' %}{% url 'asistente_tecnico:digital_resolver' %}{% else %}{% url 'asistente_tecnico:inicio' %}{% endif %}"><span class="aj-mode-icon">🤖</span><span><strong>Resolver</strong><small class="d-block text-muted">Asistente inteligente</small></span></a>
   </div>
 
@@ -33,7 +33,7 @@
         <h4 class="fw-bold mb-1">Mantenimiento y cuidado profesional de piscinas</h4>
         <div class="text-muted">{{ curso_completadas }} de {{ curso_total }} misiones completadas. Avanza por el camino, gana XP y desbloquea el siguiente reto.</div>
         <div class="aj-xp-row"><span>⚡ <strong>{{ curso_xp }} XP</strong></span><span>🎯 {{ curso_completadas }} misiones</span><span>🏆 {{ curso_porcentaje }}% del curso</span></div>
-        {% if continuar %}<div class="aj-continue mt-3"><div class="small text-primary fw-bold">CONTINUAR DONDE QUEDASTE</div><div class="d-flex justify-content-between align-items-center gap-3 flex-wrap mt-1"><div><strong>{{ continuar.titulo }}</strong><div class="text-muted small">{{ continuar.get_modulo_curso_display }} · {{ continuar.tiempo_lectura_min }} min</div></div><a class="btn btn-success" href="{% url 'asistente_tecnico:academia_contenido_detalle' continuar.slug %}">Continuar →</a></div></div>{% endif %}
+        {% if continuar %}<div class="aj-continue mt-3"><div class="small text-primary fw-bold">CONTINUAR DONDE QUEDASTE</div><div class="d-flex justify-content-between align-items-center gap-3 flex-wrap mt-1"><div><strong>{{ continuar.titulo }}</strong><div class="text-muted small">{{ continuar.get_modulo_curso_display }} · {{ continuar.tiempo_lectura_min }} min</div></div><a class="btn btn-success" href="{% url 'asistente_tecnico:academia_contenido_detalle' continuar.slug %}?curso=1">Continuar →</a></div></div>{% endif %}
       </div>
     </div>
   {% elif consejo %}
