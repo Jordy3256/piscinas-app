@@ -82,15 +82,43 @@ def _fechas_semanales(inicio, fin, dias):
         actual += timedelta(days=1)
 
 
-def _fechas_quincenales(inicio, fin, dias):
+def _fecha_quincenal_inicial(fecha_inicio_contrato, dia_objetivo):
+    """
+    Ancla la primera visita quincenal al inicio REAL del contrato.
+
+    La referencia es dos semanas después de la fecha de inicio y se ajusta al
+    día de visita seleccionado más cercano. A partir de esa fecha la cadencia
+    permanece fija cada 14 días, evitando que cambie al entrar al ERP otro día.
+    """
+    referencia = fecha_inicio_contrato + timedelta(days=14)
+
+    hacia_adelante = (dia_objetivo - referencia.weekday()) % 7
+    fecha_adelante = referencia + timedelta(days=hacia_adelante)
+    fecha_atras = fecha_adelante - timedelta(days=7)
+
+    distancia_adelante = abs((fecha_adelante - referencia).days)
+    distancia_atras = abs((referencia - fecha_atras).days)
+
+    if distancia_atras < distancia_adelante and fecha_atras > fecha_inicio_contrato:
+        return fecha_atras
+    return fecha_adelante
+
+
+def _fechas_quincenales(inicio, fin, dias, fecha_inicio_contrato=None):
     dias = normalizar_dias(dias)
     if not dias:
         return
 
     dia_objetivo = dias[0]
-    primera = inicio
-    while primera.weekday() != dia_objetivo:
-        primera += timedelta(days=1)
+    ancla_contrato = fecha_inicio_contrato or inicio
+    primera = _fecha_quincenal_inicial(ancla_contrato, dia_objetivo)
+
+    # Si estamos extendiendo una programación ya existente, avanzamos desde el
+    # ancla original sin reiniciar la quincena desde "hoy".
+    if primera < inicio:
+        diferencia = (inicio - primera).days
+        saltos = (diferencia + 13) // 14
+        primera += timedelta(days=saltos * 14)
 
     actual = primera
     while actual <= fin:
@@ -100,7 +128,14 @@ def _fechas_quincenales(inicio, fin, dias):
 
 def fechas_programadas(contrato, inicio, fin):
     if contrato.frecuencia == "quincenal":
-        return list(_fechas_quincenales(inicio, fin, contrato.dias_visita))
+        return list(
+            _fechas_quincenales(
+                inicio,
+                fin,
+                contrato.dias_visita,
+                fecha_inicio_contrato=contrato.fecha_inicio,
+            )
+        )
     if contrato.frecuencia in {"1_semanal", "2_semanales", "3_semanales"}:
         return list(_fechas_semanales(inicio, fin, contrato.dias_visita))
     return []
