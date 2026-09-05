@@ -12,7 +12,7 @@ from django.views.decorators.http import require_http_methods
 
 from trabajadores.models import Trabajador
 from .engine import DEFAULT_RULES, calcular_recomendacion, diagnosticar_problema_tecnico, PROBLEMAS_TECNICOS
-from .models import CasoAsistenteTecnico, MotorRecomendacion, ContenidoAcademia, ProgresoContenidoAcademia, FavoritoContenidoAcademia, ConsultaContenidoAcademia, PerfilSuscriptor, PiscinaSuscriptor, PlanMantenimientoPiscina, RegistroMantenimientoPiscina, VisitaProgramadaPiscina, NotificacionDigital
+from .models import CasoAsistenteTecnico, MotorRecomendacion, ContenidoAcademia, ProgresoContenidoAcademia, FavoritoContenidoAcademia, ConsultaContenidoAcademia, PerfilSuscriptor, PiscinaSuscriptor, PlanMantenimientoPiscina, RegistroMantenimientoPiscina, VisitaProgramadaPiscina, NotificacionDigital, SugerenciaDigital
 from .services import generar_recordatorios_seguimiento
 
 
@@ -1099,12 +1099,101 @@ def digital_inicio_view(request):
         return HttpResponseForbidden("Tu acceso a JVAQUA Digital no está activo.")
     piscinas = perfil.piscinas.filter(activa=True)
     principal = piscinas.filter(principal=True).first() or piscinas.first()
-    recientes = CasoAsistenteTecnico.objects.filter(user=request.user)[:4]
+    recientes_qs = CasoAsistenteTecnico.objects.filter(user=request.user)
+    if principal:
+        recientes_qs = recientes_qs.filter(piscina=principal)
+    recientes = recientes_qs[:4]
     progreso_total = ContenidoAcademia.objects.filter(estado="aprobado").exclude(acceso="interno").exclude(modulo_curso="").count()
     completados = ProgresoContenidoAcademia.objects.filter(user=request.user, completado=True, contenido__estado="aprobado").exclude(contenido__acceso="interno").count()
     porcentaje = round(completados * 100 / progreso_total) if progreso_total else 0
     plan = PlanMantenimientoPiscina.objects.filter(piscina=principal, activo=True).first() if principal else None
     return render(request, "asistente_tecnico/digital_inicio.html", {"perfil":perfil,"piscinas":piscinas,"principal":principal,"recientes":recientes,"curso_porcentaje":porcentaje,"plan_mantenimiento":plan,"base_template":"asistente_tecnico/base_suscriptor.html"})
+
+
+@login_required
+def digital_piscinas_view(request):
+    perfil = _suscriptor(request.user)
+    if not perfil:
+        return HttpResponseForbidden("No autorizado")
+    piscinas = perfil.piscinas.filter(activa=True)
+    return render(
+        request,
+        "asistente_tecnico/digital_piscinas.html",
+        {"perfil": perfil, "piscinas": piscinas},
+    )
+
+
+@login_required
+def digital_piscina_detalle_view(request, pk):
+    perfil = _suscriptor(request.user)
+    if not perfil:
+        return HttpResponseForbidden("No autorizado")
+    piscina = get_object_or_404(PiscinaSuscriptor, pk=pk, suscriptor=perfil, activa=True)
+    casos = piscina.casos_asistente.filter(user=request.user)[:12]
+    mantenimientos = piscina.mantenimientos_digitales.all()[:12]
+    visitas = piscina.visitas_programadas.all()[:12]
+    plan = PlanMantenimientoPiscina.objects.filter(piscina=piscina, activo=True).first()
+    return render(
+        request,
+        "asistente_tecnico/digital_piscina_detalle.html",
+        {
+            "perfil": perfil,
+            "piscina": piscina,
+            "casos": casos,
+            "mantenimientos": mantenimientos,
+            "visitas": visitas,
+            "plan": plan,
+        },
+    )
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def digital_sugerencias_view(request):
+    perfil = _suscriptor(request.user)
+    if not perfil:
+        return HttpResponseForbidden("No autorizado")
+    piscinas = perfil.piscinas.filter(activa=True)
+    if request.method == "POST":
+        categoria = (request.POST.get("categoria") or "general").strip()
+        if categoria not in {x[0] for x in SugerenciaDigital.CATEGORIAS}:
+            categoria = "general"
+        mensaje = (request.POST.get("mensaje") or "").strip()
+        piscina = None
+        piscina_id = request.POST.get("piscina_id")
+        if piscina_id:
+            piscina = piscinas.filter(pk=piscina_id).first()
+        calificacion = None
+        try:
+            valor = int(request.POST.get("calificacion") or 0)
+            if 1 <= valor <= 5:
+                calificacion = valor
+        except (TypeError, ValueError):
+            pass
+        if len(mensaje) < 5:
+            messages.error(request, "Cuéntanos un poco más para poder entender tu sugerencia.")
+        else:
+            SugerenciaDigital.objects.create(
+                suscriptor=perfil,
+                piscina=piscina,
+                categoria=categoria,
+                calificacion=calificacion,
+                mensaje=mensaje,
+            )
+            messages.success(request, "Gracias. Tu opinión fue enviada directamente a JVAQUA.")
+            return redirect("asistente_tecnico:digital_sugerencias")
+    propias = perfil.sugerencias_digitales.all()[:6]
+    return render(
+        request,
+        "asistente_tecnico/digital_sugerencias.html",
+        {
+            "perfil": perfil,
+            "piscinas": piscinas,
+            "categorias": SugerenciaDigital.CATEGORIAS,
+            "propias": propias,
+        },
+    )
+
 
 @login_required
 @require_http_methods(["GET", "POST"])
@@ -1527,8 +1616,10 @@ def digital_resolver_view(request):
     piscinas=perfil.piscinas.filter(activa=True)
     piscina=None; resultado=None; caso=None; categoria_consulta="agua"; detalle_problema=""
     pid=request.POST.get("piscina_id") or request.GET.get("piscina")
-    if pid: piscina=piscinas.filter(pk=pid).first()
-    if not piscina: piscina=piscinas.filter(principal=True).first() or piscinas.first()
+    if pid:
+        piscina=piscinas.filter(pk=pid).first()
+    elif piscinas.count() == 1:
+        piscina=piscinas.first()
     if request.method=="POST":
         categoria_consulta=(request.POST.get("categoria_consulta") or "agua").strip()
         detalle_problema=(request.POST.get("detalle_problema") or "").strip()
@@ -1547,7 +1638,7 @@ def digital_resolver_view(request):
                     messages.error(request,"Selecciona cómo se ve el agua.")
                 else:
                     motor=_motor_activo(); resultado=calcular_recomendacion(piscina.volumen_m3,ph,cloro,estado,piscina.tipo_piscina,motor.reglas,tipo_agua=piscina.origen_agua,antecedente_hierro=piscina.antecedente_hierro)
-                    caso=CasoAsistenteTecnico.objects.create(user=request.user,motor=motor,volumen_m3=piscina.volumen_m3,ph_inicial=ph,cloro_inicial=cloro,estado_agua=estado,tipo_piscina=piscina.tipo_piscina,diagnostico=resultado["diagnostico"],tipo_tratamiento=resultado["tipo_tratamiento"],prioridad=resultado["prioridad"],resumen=resultado["resumen"],protocolo=resultado["protocolo"],productos_sugeridos=resultado["productos_sugeridos"],explicaciones=resultado["explicaciones"],advertencias=resultado["advertencias"],seguimiento_programado_para=timezone.now()+timedelta(hours=resultado["seguimiento_horas"]))
+                    caso=CasoAsistenteTecnico.objects.create(user=request.user,piscina=piscina,motor=motor,volumen_m3=piscina.volumen_m3,ph_inicial=ph,cloro_inicial=cloro,estado_agua=estado,tipo_piscina=piscina.tipo_piscina,diagnostico=resultado["diagnostico"],tipo_tratamiento=resultado["tipo_tratamiento"],prioridad=resultado["prioridad"],resumen=resultado["resumen"],protocolo=resultado["protocolo"],productos_sugeridos=resultado["productos_sugeridos"],explicaciones=resultado["explicaciones"],advertencias=resultado["advertencias"],seguimiento_programado_para=timezone.now()+timedelta(hours=resultado["seguimiento_horas"]))
     return render(request,"asistente_tecnico/digital_resolver.html",{
         "piscinas":piscinas,"piscina":piscina,"resultado":resultado,"caso":caso,
         "estado_choices":CasoAsistenteTecnico.ESTADO_AGUA_CHOICES,

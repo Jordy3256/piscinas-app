@@ -1,0 +1,30 @@
+{% extends 'asistente_tecnico/base_suscriptor.html' %}
+{% block title %}Mis piscinas · JVAQUA Digital{% endblock %}
+{% block extra_head %}<style>
+.pools-wrap{max-width:1050px;margin:auto}.pool-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.pool-profile{border:1px solid #deebf2;border-radius:23px;background:#fff;padding:20px;text-decoration:none;color:#18394e;transition:.18s}
+.pool-profile:hover{transform:translateY(-2px);box-shadow:0 12px 30px rgba(17,54,83,.08);border-color:#bcddea}
+.pool-icon{width:48px;height:48px;border-radius:16px;background:#eaf8fd;color:#0879b7;display:grid;place-items:center;font-size:1.25rem}
+@media(max-width:700px){.pool-grid{grid-template-columns:1fr}}
+</style>{% endblock %}
+{% block content %}
+<div class="pools-wrap">
+  <div class="d-flex justify-content-between align-items-end gap-3 flex-wrap mb-3">
+    <div><div class="jd-kicker">MIS PISCINAS</div><h2 class="fw-bold mb-1">Cada piscina, su propio perfil</h2><p class="text-muted mb-0">AQUO mantiene separados sus datos, diagnósticos, planes e historial.</p></div>
+    {% if perfil.piscinas_disponibles > 0 %}<a class="btn jd-btn jd-btn-primary" href="{% url 'asistente_tecnico:digital_piscina_nueva' %}"><i class="bi bi-plus-lg me-1"></i>Agregar piscina</a>{% endif %}
+  </div>
+  <div class="pool-grid">
+    {% for p in piscinas %}
+    <a class="pool-profile" href="{% url 'asistente_tecnico:digital_piscina_detalle' p.pk %}">
+      <div class="d-flex gap-3 align-items-start"><div class="pool-icon"><i class="bi bi-water"></i></div><div class="flex-grow-1">
+        <div class="d-flex justify-content-between gap-2"><h4 class="fw-bold mb-1">{{ p.nombre }}</h4>{% if p.principal %}<span class="badge text-bg-primary rounded-pill">Principal</span>{% endif %}</div>
+        <div class="text-muted small">{{ p.volumen_m3 }} m³ · {{ p.get_origen_agua_display }}</div>
+        <div class="d-flex gap-2 flex-wrap mt-3"><span class="badge text-bg-light border">{{ p.get_tipo_filtro_display }}</span><span class="badge text-bg-light border">{{ p.get_desinfeccion_display }}</span></div>
+      </div></div>
+    </a>
+    {% empty %}
+    <div class="jd-panel p-4"><h4 class="fw-bold">Todavía no tienes piscinas</h4><a class="btn jd-btn jd-btn-primary mt-2" href="{% url 'asistente_tecnico:digital_piscina_nueva' %}">Registrar primera piscina</a></div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

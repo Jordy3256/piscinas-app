@@ -64,6 +64,14 @@ class CasoAsistenteTecnico(models.Model):
         on_delete=models.PROTECT,
         related_name="casos",
     )
+    piscina = models.ForeignKey(
+        "PiscinaSuscriptor",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="casos_asistente",
+    )
+
 
     volumen_m3 = models.DecimalField(max_digits=9, decimal_places=2)
     ph_inicial = models.DecimalField(max_digits=4, decimal_places=2)
@@ -723,3 +731,49 @@ class RegistroMantenimientoPiscina(models.Model):
 
     def __str__(self):
         return f"{self.piscina} · {self.fecha} · visita {self.visita_numero}"
+
+
+class SugerenciaDigital(models.Model):
+    CATEGORIAS = [
+        ("general", "Aplicación en general"),
+        ("aquo", "Asistente AQUO"),
+        ("plan", "Plan semanal"),
+        ("curso", "Curso"),
+        ("biblioteca", "Biblioteca"),
+        ("piscinas", "Mis piscinas"),
+        ("otro", "Otro"),
+    ]
+    ESTADOS = [
+        ("nueva", "Nueva"),
+        ("revision", "En revisión"),
+        ("considerada", "Considerada"),
+        ("cerrada", "Cerrada"),
+    ]
+
+    suscriptor = models.ForeignKey(
+        PerfilSuscriptor,
+        on_delete=models.CASCADE,
+        related_name="sugerencias_digitales",
+    )
+    piscina = models.ForeignKey(
+        PiscinaSuscriptor,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="sugerencias",
+    )
+    categoria = models.CharField(max_length=20, choices=CATEGORIAS, default="general", db_index=True)
+    calificacion = models.PositiveSmallIntegerField(null=True, blank=True)
+    mensaje = models.TextField()
+    estado = models.CharField(max_length=20, choices=ESTADOS, default="nueva", db_index=True)
+    respuesta_interna = models.TextField(blank=True, default="")
+    creada_en = models.DateTimeField(auto_now_add=True, db_index=True)
+    actualizada_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-creada_en", "-id"]
+        verbose_name = "Sugerencia JVAQUA Digital"
+        verbose_name_plural = "Sugerencias JVAQUA Digital"
+
+    def __str__(self):
+        return f"{self.suscriptor} · {self.get_categoria_display()}"

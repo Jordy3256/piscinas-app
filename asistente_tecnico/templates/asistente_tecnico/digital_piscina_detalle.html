@@ -1,0 +1,38 @@
+{% extends 'asistente_tecnico/base_suscriptor.html' %}
+{% block title %}{{ piscina.nombre }} · JVAQUA Digital{% endblock %}
+{% block extra_head %}<style>
+.pool-wrap{max-width:1080px;margin:auto}.pool-hero{background:linear-gradient(135deg,#062f53,#0782bf);color:#fff;border-radius:26px;padding:24px}
+.metric{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.16);border-radius:15px;padding:11px}.metric small{display:block;color:#cce8f7}.timeline-item{padding:13px 0;border-bottom:1px solid #edf2f5}.timeline-item:last-child{border:0}
+</style>{% endblock %}
+{% block content %}
+<div class="pool-wrap">
+<a class="text-decoration-none fw-bold" href="{% url 'asistente_tecnico:digital_piscinas' %}"><i class="bi bi-arrow-left me-1"></i>Mis piscinas</a>
+<section class="pool-hero mt-3">
+  <div class="d-flex justify-content-between gap-3 flex-wrap align-items-start">
+    <div><div class="small text-white-50 fw-bold">PERFIL INDIVIDUAL</div><h2 class="fw-bold mb-1">{{ piscina.nombre }}</h2><div class="text-white-50">AQUO usa únicamente la información e historial de esta piscina.</div></div>
+    <div class="d-flex gap-2 flex-wrap"><a class="btn btn-light" href="{% url 'asistente_tecnico:digital_resolver' %}?piscina={{ piscina.pk }}"><i class="bi bi-stars me-1"></i>Resolver con AQUO</a><a class="btn btn-outline-light" href="{% url 'asistente_tecnico:digital_plan_mantenimiento' piscina.pk %}"><i class="bi bi-calendar2-check me-1"></i>Plan semanal</a></div>
+  </div>
+  <div class="row g-2 mt-3">
+    <div class="col-6 col-md-3"><div class="metric"><small>Volumen</small><strong>{{ piscina.volumen_m3 }} m³</strong></div></div>
+    <div class="col-6 col-md-3"><div class="metric"><small>Agua</small><strong>{{ piscina.get_origen_agua_display }}</strong></div></div>
+    <div class="col-6 col-md-3"><div class="metric"><small>Filtro</small><strong>{{ piscina.get_tipo_filtro_display }}</strong></div></div>
+    <div class="col-6 col-md-3"><div class="metric"><small>Desinfección</small><strong>{{ piscina.get_desinfeccion_display }}</strong></div></div>
+  </div>
+</section>
+
+<div class="row g-3 mt-1">
+  <div class="col-lg-7"><section class="jd-panel p-4 h-100">
+    <div class="d-flex justify-content-between align-items-center"><div><div class="jd-kicker">HISTORIAL AQUO</div><h4 class="fw-bold mb-0">Diagnósticos de esta piscina</h4></div><a class="btn btn-sm btn-light border" href="{% url 'asistente_tecnico:digital_resolver' %}?piscina={{ piscina.pk }}">Nueva consulta</a></div>
+    {% for c in casos %}<div class="timeline-item"><div class="d-flex justify-content-between gap-2"><strong>{{ c.diagnostico }}</strong><small class="text-muted">{{ c.creado_en|date:"d/m/Y" }}</small></div><div class="small text-muted mt-1">pH {{ c.ph_inicial }} · CL {{ c.cloro_inicial }} ppm · {{ c.get_estado_agua_display }}</div></div>{% empty %}<div class="text-muted py-4">Todavía no hay diagnósticos asociados a esta piscina.</div>{% endfor %}
+  </section></div>
+  <div class="col-lg-5"><section class="jd-panel p-4 h-100">
+    <div class="jd-kicker">MANTENIMIENTO</div><h4 class="fw-bold">Actividad de esta piscina</h4>
+    {% for m in mantenimientos %}<div class="timeline-item"><div class="d-flex justify-content-between"><strong>Mantenimiento · visita {{ m.visita_numero }}</strong><small>{{ m.fecha|date:"d/m/Y" }}</small></div><div class="small text-muted">pH {{ m.ph|default:"—" }} · CL {{ m.cloro|default:"—" }}</div></div>{% empty %}<div class="text-muted py-3">Sin mantenimientos registrados todavía.</div>{% endfor %}
+  </section></div>
+</div>
+<div class="d-flex justify-content-between align-items-center gap-2 flex-wrap mt-3">
+  <small class="text-muted">Creada {{ piscina.creado_en|date:"d/m/Y" }}</small>
+  <a class="btn btn-light border jd-btn" href="{% url 'asistente_tecnico:digital_piscina_editar' piscina.pk %}"><i class="bi bi-pencil me-1"></i>Editar datos de la piscina</a>
+</div>
+</div>
+{% endblock %}

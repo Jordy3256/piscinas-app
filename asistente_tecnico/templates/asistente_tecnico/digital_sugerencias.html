@@ -1,0 +1,22 @@
+{% extends 'asistente_tecnico/base_suscriptor.html' %}
+{% block title %}Sugerencias · JVAQUA Digital{% endblock %}
+{% block extra_head %}<style>
+.feedback-wrap{max-width:900px;margin:auto}.feedback-hero{background:linear-gradient(135deg,#edf9ff,#fff);border:1px solid #d8ebf4;border-radius:25px;padding:24px}.stars{display:flex;gap:7px}.stars input{display:none}.stars label{font-size:1.8rem;color:#cbd8df;cursor:pointer}.stars input:checked~label{color:#cbd8df}.stars:has(#star5:checked) label:nth-of-type(-n+5),.stars:has(#star4:checked) label:nth-of-type(-n+4),.stars:has(#star3:checked) label:nth-of-type(-n+3),.stars:has(#star2:checked) label:nth-of-type(-n+2),.stars:has(#star1:checked) label:nth-of-type(1){color:#f2b01e}
+</style>{% endblock %}
+{% block content %}
+<div class="feedback-wrap">
+<section class="feedback-hero mb-3"><div class="jd-kicker">TU OPINIÓN IMPORTA</div><h2 class="fw-bold mb-2">Ayúdanos a mejorar JVAQUA Digital</h2><p class="text-muted mb-0">Cuéntanos qué funciona bien, qué te resulta difícil o qué te gustaría que AQUO y la aplicación pudieran hacer.</p></section>
+<section class="jd-panel p-4 mb-3">
+<form method="post">{% csrf_token %}
+  <div class="row g-3">
+    <div class="col-md-6"><label class="form-label fw-bold">¿Sobre qué quieres opinar?</label><select class="form-select" name="categoria">{% for value,label in categorias %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></div>
+    <div class="col-md-6"><label class="form-label fw-bold">Piscina relacionada <span class="text-muted fw-normal">(opcional)</span></label><select class="form-select" name="piscina_id"><option value="">No aplica / general</option>{% for p in piscinas %}<option value="{{ p.pk }}">{{ p.nombre }}</option>{% endfor %}</select></div>
+    <div class="col-12"><label class="form-label fw-bold">¿Cómo calificarías tu experiencia? <span class="text-muted fw-normal">(opcional)</span></label><div class="stars"><input id="star1" type="radio" name="calificacion" value="1"><label for="star1">★</label><input id="star2" type="radio" name="calificacion" value="2"><label for="star2">★</label><input id="star3" type="radio" name="calificacion" value="3"><label for="star3">★</label><input id="star4" type="radio" name="calificacion" value="4"><label for="star4">★</label><input id="star5" type="radio" name="calificacion" value="5"><label for="star5">★</label></div></div>
+    <div class="col-12"><label class="form-label fw-bold">Tu comentario o sugerencia</label><textarea class="form-control" name="mensaje" rows="5" placeholder="Ejemplo: Me gustaría que AQUO me avisara cuando..." required></textarea></div>
+  </div>
+  <button class="btn jd-btn jd-btn-primary mt-3"><i class="bi bi-send me-1"></i>Enviar a JVAQUA</button>
+</form>
+</section>
+{% if propias %}<section class="jd-panel p-4"><div class="jd-kicker">ENVIADAS RECIENTEMENTE</div>{% for s in propias %}<div class="py-3 border-bottom"><div class="d-flex justify-content-between gap-2"><strong>{{ s.get_categoria_display }}</strong><small class="text-muted">{{ s.creada_en|date:"d/m/Y" }}</small></div><div class="small mt-1">{{ s.mensaje }}</div><small class="text-muted">{{ s.get_estado_display }}{% if s.calificacion %} · {{ s.calificacion }}/5{% endif %}</small></div>{% endfor %}</section>{% endif %}
+</div>
+{% endblock %}

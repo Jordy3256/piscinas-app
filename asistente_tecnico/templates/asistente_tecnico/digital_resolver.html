@@ -28,7 +28,29 @@
     {% if resultado %}<a class="btn btn-light border jd-btn" href="{% url 'asistente_tecnico:digital_resolver' %}{% if piscina %}?piscina={{piscina.pk}}{% endif %}"><i class="bi bi-arrow-clockwise me-1"></i>Nueva consulta</a>{% endif %}
   </div>
   {% if not piscina %}
-  <section class="chat-card p-4 text-center"><div class="aqua-chat-avatar empty mx-auto mb-3">{% include 'asistente_tecnico/partials/aqua_hero.html' %}</div><h3 class="fw-bold">Primero quiero conocer tu piscina</h3><p class="text-muted mx-auto" style="max-width:560px">Guarda su volumen y características una sola vez. Así podré darte recomendaciones y cantidades adaptadas a ella.</p><a class="btn jd-btn jd-btn-primary px-4" href="{% url 'asistente_tecnico:digital_piscina_nueva' %}"><i class="bi bi-plus-lg me-1"></i>Registrar mi piscina</a></section>
+  <section class="chat-card p-4 text-center">
+    <div class="aqua-chat-avatar empty mx-auto mb-3">{% include 'asistente_tecnico/partials/aqua_hero.html' %}</div>
+    {% if piscinas %}
+      <h3 class="fw-bold">¿Qué piscina vamos a revisar?</h3>
+      <p class="text-muted mx-auto" style="max-width:620px">AQUO mantiene separado el perfil y el historial de cada piscina. Selecciona una antes de iniciar el diagnóstico.</p>
+      <div class="row g-2 mt-3 text-start">
+        {% for p in piscinas %}
+        <div class="col-md-6">
+          <a class="d-block text-decoration-none text-dark border rounded-4 p-3 h-100" href="{% url 'asistente_tecnico:digital_resolver' %}?piscina={{ p.pk }}">
+            <div class="d-flex justify-content-between gap-2">
+              <strong>{{ p.nombre }}</strong><i class="bi bi-chevron-right text-primary"></i>
+            </div>
+            <small class="text-muted">{{ p.volumen_m3 }} m³ · {{ p.get_origen_agua_display }} · {{ p.get_tipo_filtro_display }}</small>
+          </a>
+        </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <h3 class="fw-bold">Primero quiero conocer tu piscina</h3>
+      <p class="text-muted mx-auto" style="max-width:560px">Guarda su volumen y características una sola vez. Así podré darte recomendaciones y cantidades adaptadas a ella.</p>
+      <a class="btn jd-btn jd-btn-primary px-4" href="{% url 'asistente_tecnico:digital_piscina_nueva' %}"><i class="bi bi-plus-lg me-1"></i>Registrar mi piscina</a>
+    {% endif %}
+  </section>
   {% else %}
   <div class="chat-layout">
     <section class="chat-card">
