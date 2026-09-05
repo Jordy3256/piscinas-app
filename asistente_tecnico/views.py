@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import timedelta, datetime, time
 from decimal import Decimal, InvalidOperation
 
 from django.contrib import messages
@@ -12,7 +12,7 @@ from django.views.decorators.http import require_http_methods
 
 from trabajadores.models import Trabajador
 from .engine import DEFAULT_RULES, calcular_recomendacion, diagnosticar_problema_tecnico, PROBLEMAS_TECNICOS
-from .models import CasoAsistenteTecnico, MotorRecomendacion, ContenidoAcademia, ProgresoContenidoAcademia, FavoritoContenidoAcademia, ConsultaContenidoAcademia, PerfilSuscriptor, PiscinaSuscriptor, PlanMantenimientoPiscina, RegistroMantenimientoPiscina
+from .models import CasoAsistenteTecnico, MotorRecomendacion, ContenidoAcademia, ProgresoContenidoAcademia, FavoritoContenidoAcademia, ConsultaContenidoAcademia, PerfilSuscriptor, PiscinaSuscriptor, PlanMantenimientoPiscina, RegistroMantenimientoPiscina, VisitaProgramadaPiscina, NotificacionDigital
 from .services import generar_recordatorios_seguimiento
 
 
@@ -1150,97 +1150,223 @@ def digital_plan_mantenimiento_view(request, pk):
     )
     plan, _ = PlanMantenimientoPiscina.objects.get_or_create(piscina=piscina)
 
-    dosificacion = None
-    valores_dosificacion = {
+    resultado = None
+    plan_visitas = []
+    valores = {
+        "frecuencia": plan.frecuencia_semanal,
         "ph": "",
         "cloro": "",
         "estado_agua": "transparente",
     }
 
-    if request.method == "POST":
-        accion = (request.POST.get("accion") or "configurar").strip()
+    def _fechas_semana(frecuencia):
+        """Distribuye las visitas de forma uniforme desde hoy en los próximos 7 días."""
+        hoy = timezone.localdate()
+        if frecuencia <= 1:
+            return [hoy]
+        offsets = [int(i * 7 / frecuencia) for i in range(frecuencia)]
+        return [hoy + timedelta(days=offset) for offset in offsets]
 
-        if accion == "dosificar":
-            ph_txt = (request.POST.get("ph") or "").replace(",", ".").strip()
-            cloro_txt = (request.POST.get("cloro") or "").replace(",", ".").strip()
-            estado = (request.POST.get("estado_agua") or "transparente").strip()
-            valores_dosificacion = {
-                "ph": ph_txt,
-                "cloro": cloro_txt,
-                "estado_agua": estado,
-            }
-            try:
-                ph = Decimal(ph_txt)
-                cloro = Decimal(cloro_txt)
-                if ph <= 0 or cloro < 0:
-                    raise InvalidOperation
-            except (InvalidOperation, ValueError):
-                messages.error(
-                    request,
-                    "Ingresa valores válidos de pH y cloro para calcular la dosificación.",
-                )
-            else:
-                dosificacion = calcular_recomendacion(
-                    volumen=float(piscina.volumen_m3),
-                    ph=float(ph),
-                    cloro=float(cloro),
-                    estado_agua=estado,
-                    tipo_piscina=piscina.tipo_piscina,
-                    tipo_agua=piscina.origen_agua,
-                    antecedente_hierro=piscina.antecedente_hierro,
-                )
-        else:
-            try:
-                frecuencia = int(request.POST.get("frecuencia_semanal") or 1)
-            except ValueError:
-                frecuencia = 1
-            plan.frecuencia_semanal = frecuencia if frecuencia in (1, 2) else 1
-            plan.arena_deteriorada = request.POST.get("arena_deteriorada") == "on"
-            plan.retrolavado_dias = 15
-            plan.save()
-            messages.success(
-                request, "AQUO actualizó el plan semanal de esta piscina."
-            )
-            return redirect(
-                "asistente_tecnico:digital_plan_mantenimiento", pk=piscina.pk
-            )
-
-    def guia_para(tarea):
-        texto = tarea.lower()
-        if "medir ph" in texto or "cloro" in texto and "medir" in texto:
+    def _guia_para(texto):
+        texto = (texto or "").lower()
+        if "ph" in texto or ("cloro" in texto and "medir" in texto):
             return "medir pH y cloro"
         if "pozo" in texto or "hierro" in texto or "precipitado" in texto:
             return "agua de pozo hierro"
-        if "aspirar" in texto:
+        if "aspir" in texto:
             return "aspirado piscina"
-        if "cepillar" in texto:
+        if "cepill" in texto:
             return "cepillado piscina"
         if "basura" in texto or "superficial" in texto:
             return "limpieza superficial cernidera"
         if "canastilla" in texto or "skimmer" in texto:
             return "limpieza skimmer canastilla bomba"
-        if "tratamiento químico" in texto or "quimico" in texto:
-            return "tratamiento químico mantenimiento"
         if "retrolavado" in texto:
             return "retrolavado filtro"
-        if "finalizar" in texto:
-            return "rutina mantenimiento piscina"
+        if "tratamiento" in texto or "químico" in texto or "quimico" in texto:
+            return "tratamiento químico mantenimiento"
         return "mantenimiento piscina"
 
-    rutinas = []
-    rutinas_guiadas = []
-    for numero in range(1, plan.frecuencia_semanal + 1):
-        tareas = plan.rutina_visita(numero)
-        rutinas.append((numero, tareas))
-        rutinas_guiadas.append(
-            (
-                numero,
-                [
-                    {"titulo": tarea, "guia": guia_para(tarea)}
-                    for tarea in tareas
-                ],
+    def _armar_tareas(numero, recomendacion):
+        base = plan.rutina_visita(numero)
+        tareas = []
+        productos_agregados = False
+
+        for tarea in base:
+            es_tratamiento = "tratamiento químico" in tarea.lower() or "tratamiento quimico" in tarea.lower()
+            if es_tratamiento and numero == 1:
+                productos = recomendacion.get("productos_sugeridos", []) if recomendacion else []
+                if productos:
+                    for producto in productos:
+                        tareas.append({
+                            "tipo": "quimico",
+                            "titulo": f"Aplicar {producto.get('nombre', 'producto recomendado')}",
+                            "detalle": f"{producto.get('cantidad', '')} {producto.get('unidad', '')}".strip(),
+                            "motivo": producto.get("motivo", ""),
+                            "guia": producto.get("nombre", "tratamiento químico"),
+                        })
+                    productos_agregados = True
+                else:
+                    tareas.append({
+                        "tipo": "ok",
+                        "titulo": "No aplicar correctivos químicos adicionales",
+                        "detalle": "Las mediciones no requieren una corrección adicional según los estándares actuales de AQUO.",
+                        "motivo": "",
+                        "guia": "tratamiento químico mantenimiento",
+                    })
+                    productos_agregados = True
+                continue
+
+            if es_tratamiento and numero > 1:
+                tareas.append({
+                    "tipo": "control",
+                    "titulo": "Volver a medir pH y cloro antes de agregar químicos",
+                    "detalle": "No repitas automáticamente la dosis de la primera visita. Si las mediciones cambiaron, vuelve a calcular con AQUO.",
+                    "motivo": "",
+                    "guia": "medir pH y cloro",
+                })
+                continue
+
+            tareas.append({
+                "tipo": "tarea",
+                "titulo": tarea,
+                "detalle": "",
+                "motivo": "",
+                "guia": _guia_para(tarea),
+            })
+
+        if numero == 1 and recomendacion and recomendacion.get("protocolo"):
+            for paso in recomendacion["protocolo"]:
+                titulo = str(paso.get("titulo", "")).strip()
+                detalle = str(paso.get("detalle", "")).strip()
+                if not titulo:
+                    continue
+                # No duplicar el producto si ya está reflejado como tarea de dosificación.
+                if productos_agregados and "aplicar" in titulo.lower():
+                    continue
+                tareas.append({
+                    "tipo": "protocolo",
+                    "titulo": titulo,
+                    "detalle": detalle,
+                    "motivo": "",
+                    "guia": _guia_para(titulo + " " + detalle),
+                })
+        return tareas
+
+    if request.method == "POST":
+        try:
+            frecuencia = int(request.POST.get("frecuencia_semanal") or 1)
+        except (TypeError, ValueError):
+            frecuencia = 1
+        frecuencia = min(max(frecuencia, 1), 7)
+
+        ph_txt = (request.POST.get("ph") or "").replace(",", ".").strip()
+        cloro_txt = (request.POST.get("cloro") or "").replace(",", ".").strip()
+        estado = (request.POST.get("estado_agua") or "transparente").strip()
+        valores = {
+            "frecuencia": frecuencia,
+            "ph": ph_txt,
+            "cloro": cloro_txt,
+            "estado_agua": estado,
+        }
+
+        try:
+            ph = Decimal(ph_txt)
+            cloro = Decimal(cloro_txt)
+            if ph <= 0 or cloro < 0:
+                raise InvalidOperation
+        except (InvalidOperation, ValueError):
+            messages.error(
+                request,
+                "Ingresa valores válidos de pH y cloro para crear el plan semanal.",
             )
-        )
+        else:
+            plan.frecuencia_semanal = frecuencia
+            plan.save(update_fields=["frecuencia_semanal", "actualizado_en"])
+
+            resultado = calcular_recomendacion(
+                volumen=float(piscina.volumen_m3),
+                ph=float(ph),
+                cloro=float(cloro),
+                estado_agua=estado,
+                tipo_piscina=piscina.tipo_piscina,
+                tipo_agua=piscina.origen_agua,
+                antecedente_hierro=piscina.antecedente_hierro,
+            )
+
+            fechas = _fechas_semana(frecuencia)
+            # Reprogramar únicamente visitas futuras aún no ejecutadas de este ciclo.
+            VisitaProgramadaPiscina.objects.filter(
+                plan=plan,
+                fecha__gte=timezone.localdate(),
+                estado="programada",
+            ).delete()
+
+            for numero, fecha in enumerate(fechas, start=1):
+                tareas = _armar_tareas(numero, resultado)
+                visita = VisitaProgramadaPiscina.objects.create(
+                    plan=plan,
+                    piscina=piscina,
+                    fecha=fecha,
+                    visita_numero=numero,
+                    plan_resultado={
+                        "ph_inicial": str(ph),
+                        "cloro_inicial": str(cloro),
+                        "estado_agua": estado,
+                        "diagnostico": resultado.get("diagnostico", ""),
+                        "tareas": tareas,
+                    },
+                )
+                plan_visitas.append({
+                    "obj": visita,
+                    "fecha": fecha,
+                    "numero": numero,
+                    "tareas": tareas,
+                })
+
+                # La notificación queda programada para las 07:00 del día de la visita.
+                momento = timezone.make_aware(
+                    datetime.combine(fecha, time(hour=7)),
+                    timezone.get_current_timezone(),
+                )
+                NotificacionDigital.objects.get_or_create(
+                    suscriptor=perfil,
+                    visita=visita,
+                    tipo="visita_hoy",
+                    defaults={
+                        "piscina": piscina,
+                        "titulo": f"Mantenimiento de {piscina.nombre}",
+                        "mensaje": f"Hoy corresponde la visita {numero} de {frecuencia}. Abre tu plan y sigue los pasos preparados por AQUO.",
+                        "programada_para": momento,
+                    },
+                )
+
+            NotificacionDigital.objects.create(
+                suscriptor=perfil,
+                piscina=piscina,
+                tipo="plan_creado",
+                titulo="Plan semanal preparado",
+                mensaje=f"AQUO programó {frecuencia} visita{'s' if frecuencia != 1 else ''} para {piscina.nombre}.",
+                programada_para=timezone.now(),
+            )
+            messages.success(
+                request,
+                f"AQUO preparó y programó {frecuencia} visita{'s' if frecuencia != 1 else ''} para los próximos 7 días.",
+            )
+    else:
+        visitas_guardadas = VisitaProgramadaPiscina.objects.filter(
+            plan=plan,
+            fecha__gte=timezone.localdate(),
+            estado="programada",
+        ).order_by("fecha", "visita_numero")[:7]
+        for visita in visitas_guardadas:
+            data = visita.plan_resultado or {}
+            plan_visitas.append({
+                "obj": visita,
+                "fecha": visita.fecha,
+                "numero": visita.visita_numero,
+                "tareas": data.get("tareas", []),
+            })
 
     historial = piscina.mantenimientos_digitales.all()[:8]
     return render(
@@ -1250,11 +1376,11 @@ def digital_plan_mantenimiento_view(request, pk):
             "perfil": perfil,
             "piscina": piscina,
             "plan": plan,
-            "rutinas": rutinas,
-            "rutinas_guiadas": rutinas_guiadas,
+            "resultado": resultado,
+            "plan_visitas": plan_visitas,
+            "valores": valores,
             "historial": historial,
-            "dosificacion": dosificacion,
-            "valores_dosificacion": valores_dosificacion,
+            "frecuencias": PlanMantenimientoPiscina.FRECUENCIAS,
             "estados_agua": [
                 ("transparente", "Transparente / normal"),
                 ("ligeramente_turbia", "Ligeramente turbia"),
@@ -1269,17 +1395,128 @@ def digital_plan_mantenimiento_view(request, pk):
 @require_http_methods(["POST"])
 def digital_registrar_mantenimiento_view(request, pk):
     perfil = _suscriptor(request.user)
-    if not perfil: return HttpResponseForbidden("No autorizado")
-    piscina = get_object_or_404(PiscinaSuscriptor, pk=pk, suscriptor=perfil, activa=True)
+    if not perfil:
+        return HttpResponseForbidden("No autorizado")
+
+    piscina = get_object_or_404(
+        PiscinaSuscriptor, pk=pk, suscriptor=perfil, activa=True
+    )
     plan, _ = PlanMantenimientoPiscina.objects.get_or_create(piscina=piscina)
-    try: visita = int(request.POST.get("visita_numero") or 1)
-    except ValueError: visita = 1
+
+    try:
+        visita_numero = int(request.POST.get("visita_numero") or 1)
+    except ValueError:
+        visita_numero = 1
+
     def dec(name):
-        try: return Decimal((request.POST.get(name) or "").replace(",",".")) if request.POST.get(name) else None
-        except InvalidOperation: return None
-    RegistroMantenimientoPiscina.objects.create(piscina=piscina, visita_numero=visita, ph=dec("ph"), cloro=dec("cloro"), tareas=plan.rutina_visita(visita), observaciones=(request.POST.get("observaciones") or "").strip())
-    messages.success(request, "Mantenimiento registrado en el historial de la piscina.")
-    return redirect("asistente_tecnico:digital_plan_mantenimiento", pk=piscina.pk)
+        valor = (request.POST.get(name) or "").replace(",", ".").strip()
+        if not valor:
+            return None
+        try:
+            return Decimal(valor)
+        except InvalidOperation:
+            return None
+
+    visita_programada = None
+    visita_programada_id = request.POST.get("visita_programada_id")
+    if visita_programada_id:
+        visita_programada = VisitaProgramadaPiscina.objects.filter(
+            pk=visita_programada_id,
+            piscina=piscina,
+            plan=plan,
+        ).first()
+
+    tareas = (
+        (visita_programada.plan_resultado or {}).get("tareas", [])
+        if visita_programada
+        else plan.rutina_visita(visita_numero)
+    )
+
+    RegistroMantenimientoPiscina.objects.create(
+        piscina=piscina,
+        visita_numero=visita_numero,
+        ph=dec("ph"),
+        cloro=dec("cloro"),
+        tareas=tareas,
+        observaciones=(request.POST.get("observaciones") or "").strip(),
+    )
+
+    if visita_programada:
+        visita_programada.estado = "completada"
+        visita_programada.save(update_fields=["estado", "actualizado_en"])
+        visita_programada.notificaciones.update(leida=True)
+
+    messages.success(
+        request,
+        "Mantenimiento completado y guardado en el historial de la piscina.",
+    )
+    return redirect(
+        "asistente_tecnico:digital_plan_mantenimiento", pk=piscina.pk
+    )
+
+
+@login_required
+@require_http_methods(["GET"])
+def digital_notificaciones_view(request):
+    perfil = _suscriptor(request.user)
+    if not perfil:
+        return HttpResponseForbidden("No autorizado")
+
+    ahora = timezone.now()
+    notificaciones = NotificacionDigital.objects.filter(
+        suscriptor=perfil,
+        programada_para__lte=ahora,
+    ).select_related("piscina", "visita")[:80]
+
+    return render(
+        request,
+        "asistente_tecnico/digital_notificaciones.html",
+        {
+            "perfil": perfil,
+            "notificaciones": notificaciones,
+        },
+    )
+
+
+@login_required
+@require_http_methods(["POST"])
+def digital_notificacion_leer_view(request, pk):
+    perfil = _suscriptor(request.user)
+    if not perfil:
+        return HttpResponseForbidden("No autorizado")
+
+    notificacion = get_object_or_404(
+        NotificacionDigital,
+        pk=pk,
+        suscriptor=perfil,
+    )
+    notificacion.leida = True
+    notificacion.save(update_fields=["leida"])
+
+    destino = request.POST.get("next") or ""
+    if destino.startswith("/"):
+        return redirect(destino)
+    if notificacion.piscina_id:
+        return redirect(
+            "asistente_tecnico:digital_plan_mantenimiento",
+            pk=notificacion.piscina_id,
+        )
+    return redirect("asistente_tecnico:digital_notificaciones")
+
+
+@login_required
+@require_http_methods(["POST"])
+def digital_notificaciones_leer_todas_view(request):
+    perfil = _suscriptor(request.user)
+    if not perfil:
+        return HttpResponseForbidden("No autorizado")
+
+    NotificacionDigital.objects.filter(
+        suscriptor=perfil,
+        programada_para__lte=timezone.now(),
+        leida=False,
+    ).update(leida=True)
+    return redirect("asistente_tecnico:digital_notificaciones")
 
 
 @login_required

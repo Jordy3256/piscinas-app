@@ -11,6 +11,9 @@ urlpatterns = [
     path("digital/piscina/<int:pk>/editar/", views.digital_piscina_form_view, name="digital_piscina_editar"),
     path("digital/piscina/<int:pk>/plan/", views.digital_plan_mantenimiento_view, name="digital_plan_mantenimiento"),
     path("digital/piscina/<int:pk>/plan/registrar/", views.digital_registrar_mantenimiento_view, name="digital_registrar_mantenimiento"),
+    path("digital/notificaciones/", views.digital_notificaciones_view, name="digital_notificaciones"),
+    path("digital/notificaciones/<int:pk>/leer/", views.digital_notificacion_leer_view, name="digital_notificacion_leer"),
+    path("digital/notificaciones/leer-todas/", views.digital_notificaciones_leer_todas_view, name="digital_notificaciones_leer_todas"),
     path("", views.asistente_inicio_view, name="inicio"),
     path("historial/", views.asistente_historial_view, name="historial"),
     # Compatibilidad: la biblioteca antigua redirige conceptualmente a la biblioteca técnica nueva.

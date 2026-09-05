@@ -533,6 +533,11 @@ class PlanMantenimientoPiscina(models.Model):
     FRECUENCIAS = [
         (1, "1 vez por semana"),
         (2, "2 veces por semana"),
+        (3, "3 veces por semana"),
+        (4, "4 veces por semana"),
+        (5, "5 veces por semana"),
+        (6, "6 veces por semana"),
+        (7, "7 veces por semana"),
     ]
 
     piscina = models.OneToOneField(
@@ -573,20 +578,24 @@ class PlanMantenimientoPiscina(models.Model):
             visita_numero = 1
 
         alerta_pozo = self.piscina.origen_agua in {"pozo", "mixta"}
-        if self.frecuencia_semanal == 2 and visita_numero == 1:
+        # En planes con varias visitas, las primeras son de control/limpieza
+        # y la última concentra la rutina completa. AQUO puede incluir una
+        # dosificación química en la primera visita según la medición inicial.
+        if self.frecuencia_semanal > 1 and visita_numero < self.frecuencia_semanal:
             tareas = [
                 "Medir pH y cloro",
                 "Aspirar en desagüe o filtración solo si es necesario",
                 "Cepillar paredes y piso",
                 "Recoger basura superficial",
-                "Aplicar tratamiento químico solo si las mediciones lo requieren",
+                "Revisar canastillas y nivel de agua",
+                "Aplicar el tratamiento químico indicado por AQUO si corresponde",
                 "Finalizar mantenimiento",
             ]
             if alerta_pozo:
                 tareas.insert(1, "Observar coloración o precipitados antes de clorar; en agua de pozo considerar hierro/metales")
             return tareas
 
-        # Visita única semanal o segunda visita de un plan de dos visitas.
+        # Visita única semanal o última visita de un plan con varias visitas.
         tareas = [
             "Medir pH y cloro",
             "Aspirar en desagüe o filtración obligatoriamente, según convenga",
@@ -600,6 +609,97 @@ class PlanMantenimientoPiscina(models.Model):
             tareas.insert(1, "Observar coloración o precipitados antes de clorar; en agua de pozo considerar hierro/metales")
         return tareas
 
+
+
+class VisitaProgramadaPiscina(models.Model):
+    ESTADOS = [
+        ("programada", "Programada"),
+        ("completada", "Completada"),
+        ("omitida", "Omitida"),
+    ]
+
+    plan = models.ForeignKey(
+        PlanMantenimientoPiscina,
+        on_delete=models.CASCADE,
+        related_name="visitas_programadas",
+    )
+    piscina = models.ForeignKey(
+        PiscinaSuscriptor,
+        on_delete=models.CASCADE,
+        related_name="visitas_programadas",
+    )
+    fecha = models.DateField(db_index=True)
+    visita_numero = models.PositiveSmallIntegerField(default=1)
+    estado = models.CharField(max_length=16, choices=ESTADOS, default="programada", db_index=True)
+    plan_resultado = models.JSONField(default=dict, blank=True)
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["fecha", "visita_numero"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["plan", "fecha", "visita_numero"],
+                name="uq_plan_visita_fecha_numero",
+            )
+        ]
+        verbose_name = "Visita programada JVAQUA Digital"
+        verbose_name_plural = "Visitas programadas JVAQUA Digital"
+
+    def __str__(self):
+        return f"{self.piscina} · {self.fecha} · visita {self.visita_numero}"
+
+
+class NotificacionDigital(models.Model):
+    TIPOS = [
+        ("plan_creado", "Plan creado"),
+        ("visita_hoy", "Visita de hoy"),
+        ("recordatorio", "Recordatorio"),
+    ]
+
+    suscriptor = models.ForeignKey(
+        PerfilSuscriptor,
+        on_delete=models.CASCADE,
+        related_name="notificaciones_digitales",
+    )
+    piscina = models.ForeignKey(
+        PiscinaSuscriptor,
+        on_delete=models.CASCADE,
+        related_name="notificaciones_digitales",
+        null=True,
+        blank=True,
+    )
+    visita = models.ForeignKey(
+        VisitaProgramadaPiscina,
+        on_delete=models.CASCADE,
+        related_name="notificaciones",
+        null=True,
+        blank=True,
+    )
+    tipo = models.CharField(max_length=20, choices=TIPOS, default="recordatorio", db_index=True)
+    titulo = models.CharField(max_length=150)
+    mensaje = models.TextField()
+    programada_para = models.DateTimeField(db_index=True)
+    leida = models.BooleanField(default=False, db_index=True)
+    creada_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-programada_para", "-creada_en"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["suscriptor", "visita", "tipo"],
+                name="uq_notificacion_digital_visita_tipo",
+            )
+        ]
+        verbose_name = "Notificación JVAQUA Digital"
+        verbose_name_plural = "Notificaciones JVAQUA Digital"
+
+    @property
+    def disponible(self):
+        return self.programada_para <= timezone.now()
+
+    def __str__(self):
+        return f"{self.suscriptor} · {self.titulo}"
 
 class RegistroMantenimientoPiscina(models.Model):
     piscina = models.ForeignKey(
