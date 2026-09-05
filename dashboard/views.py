@@ -1046,8 +1046,10 @@ def login_view(request):
             messages.success(request, "Bienvenido.")
             if not next_url:
                 try:
-                    if user.perfil_suscriptor.tiene_acceso:
+                    perfil_digital = user.perfil_suscriptor
+                    if perfil_digital.tiene_acceso:
                         return redirect("/dashboard/asistente/digital/")
+                    return redirect("/dashboard/asistente/digital/suscripcion/")
                 except Exception:
                     pass
             return redirect(safe_redirect_target(next_url))

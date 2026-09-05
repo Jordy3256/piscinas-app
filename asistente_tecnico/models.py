@@ -1,3 +1,4 @@
+from decimal import Decimal
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
@@ -495,11 +496,22 @@ class ConsultaContenidoAcademia(models.Model):
 
 
 class PerfilSuscriptor(models.Model):
-    ESTADOS = [("prueba", "Prueba"), ("activo", "Activo"), ("pausado", "Pausado"), ("vencido", "Vencido")]
-    PLANES = [("basico", "JVAQUA Digital Básico"), ("plus", "JVAQUA Digital Plus")]
+    ESTADOS = [("pendiente", "Pendiente de activación"), ("activo", "Activo"), ("pausado", "Pausado"), ("vencido", "Vencido")]
+    PLANES = [
+        ("individual", "Plan Individual"),
+        ("esencial", "Plan Esencial"),
+        ("profesional", "Plan Profesional"),
+    ]
+    PRECIOS = {
+        "individual": Decimal("4.99"),
+        "esencial": Decimal("7.99"),
+        "profesional": Decimal("19.99"),
+    }
+    LIMITES = {"individual": 1, "esencial": 3, "profesional": 30}
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="perfil_suscriptor")
     estado = models.CharField(max_length=20, choices=ESTADOS, default="prueba", db_index=True)
-    plan = models.CharField(max_length=30, choices=PLANES, default="basico")
+    plan = models.CharField(max_length=30, choices=PLANES, default="individual")
+    telefono = models.CharField(max_length=30, blank=True, default="")
     inicio = models.DateField(default=timezone.localdate)
     prueba_hasta = models.DateField(null=True, blank=True)
     acceso_hasta = models.DateField(null=True, blank=True)
@@ -515,13 +527,21 @@ class PerfilSuscriptor(models.Model):
         hoy = timezone.localdate()
         if self.estado == "activo":
             return not self.acceso_hasta or self.acceso_hasta >= hoy
-        if self.estado == "prueba":
-            return not self.prueba_hasta or self.prueba_hasta >= hoy
         return False
 
     @property
     def limite_piscinas(self):
-        return 30 if self.plan == "plus" else 3
+        return self.LIMITES.get(self.plan, 1)
+
+    @property
+    def precio_mensual(self):
+        return self.PRECIOS.get(self.plan, Decimal("4.99"))
+
+    @property
+    def dias_restantes(self):
+        if not self.acceso_hasta:
+            return 0
+        return max(0, (self.acceso_hasta - timezone.localdate()).days)
 
     @property
     def piscinas_disponibles(self):
@@ -529,6 +549,46 @@ class PerfilSuscriptor(models.Model):
 
     def __str__(self):
         return f"{self.user} · {self.get_estado_display()}"
+
+
+class SolicitudSuscripcionDigital(models.Model):
+    TIPOS = [("alta", "Nueva suscripción"), ("renovacion", "Renovación")]
+    ESTADOS = [
+        ("pendiente", "Pendiente de verificación"),
+        ("aprobada", "Aprobada"),
+        ("rechazada", "Rechazada"),
+    ]
+    METODOS = [
+        ("plataforma", "Comprobante subido en JVAQUA Digital"),
+        ("whatsapp", "Comprobante enviado por WhatsApp"),
+        ("ambos", "Plataforma y WhatsApp"),
+    ]
+
+    suscriptor = models.ForeignKey(
+        PerfilSuscriptor, on_delete=models.CASCADE, related_name="solicitudes_suscripcion"
+    )
+    tipo = models.CharField(max_length=16, choices=TIPOS, default="alta", db_index=True)
+    plan = models.CharField(max_length=30, choices=PerfilSuscriptor.PLANES)
+    valor = models.DecimalField(max_digits=8, decimal_places=2)
+    comprobante = models.FileField(upload_to="jvaqua_digital/comprobantes/%Y/%m/", null=True, blank=True)
+    metodo_envio = models.CharField(max_length=16, choices=METODOS, default="plataforma")
+    observacion_cliente = models.CharField(max_length=300, blank=True, default="")
+    estado = models.CharField(max_length=16, choices=ESTADOS, default="pendiente", db_index=True)
+    observacion_admin = models.CharField(max_length=300, blank=True, default="")
+    revisada_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="suscripciones_digitales_revisadas",
+    )
+    creada_en = models.DateTimeField(auto_now_add=True, db_index=True)
+    revisada_en = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-creada_en", "-id"]
+        verbose_name = "Solicitud de suscripción JVAQUA Digital"
+        verbose_name_plural = "Solicitudes de suscripción JVAQUA Digital"
+
+    def __str__(self):
+        return f"{self.suscriptor.user} · {self.get_plan_display()} · {self.get_estado_display()}"
 
 
 class PiscinaSuscriptor(models.Model):

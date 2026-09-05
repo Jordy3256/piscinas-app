@@ -5,6 +5,10 @@ app_name = "asistente_tecnico"
 
 urlpatterns = [
     # JVAQUA Digital · portal aislado para suscriptores
+    path("digital/registro/", views.digital_registro_view, name="digital_registro"),
+    path("digital/suscripcion/", views.digital_acceso_view, name="digital_acceso"),
+    path("administracion/suscripciones-digitales/", views.digital_suscripciones_admin_view, name="digital_suscripciones_admin"),
+    path("administracion/suscripciones-digitales/<int:pk>/revisar/", views.digital_suscripcion_revisar_view, name="digital_suscripcion_revisar"),
     path("digital/", views.digital_inicio_view, name="digital_inicio"),
     path("digital/resolver/", views.digital_resolver_view, name="digital_resolver"),
     path("digital/piscinas/", views.digital_piscinas_view, name="digital_piscinas"),

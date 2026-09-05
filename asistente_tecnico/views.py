@@ -2,17 +2,20 @@ from datetime import timedelta, datetime, time
 from decimal import Decimal, InvalidOperation
 
 from django.contrib import messages
+from django.contrib.auth import get_user_model, login as auth_login
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Count, Q
-from django.http import HttpResponseForbidden
+from django.http import HttpResponseForbidden, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from trabajadores.models import Trabajador
 from .engine import DEFAULT_RULES, calcular_recomendacion, diagnosticar_problema_tecnico, PROBLEMAS_TECNICOS
-from .models import CasoAsistenteTecnico, MotorRecomendacion, ContenidoAcademia, ProgresoContenidoAcademia, FavoritoContenidoAcademia, ConsultaContenidoAcademia, PerfilSuscriptor, PiscinaSuscriptor, PlanMantenimientoPiscina, RegistroMantenimientoPiscina, VisitaProgramadaPiscina, NotificacionDigital, SugerenciaDigital
+from .models import CasoAsistenteTecnico, MotorRecomendacion, ContenidoAcademia, ProgresoContenidoAcademia, FavoritoContenidoAcademia, ConsultaContenidoAcademia, PerfilSuscriptor, PiscinaSuscriptor, PlanMantenimientoPiscina, RegistroMantenimientoPiscina, VisitaProgramadaPiscina, NotificacionDigital, SugerenciaDigital, SolicitudSuscripcionDigital
 from .services import generar_recordatorios_seguimiento
 
 
@@ -1127,11 +1130,200 @@ def academia_pdf_manual_view(request):
     qs=ContenidoAcademia.objects.filter(estado="aprobado")
     return _pdf_response("Manual_Tecnico_Oficial_JVAQUA.pdf",qs)
 
+
+def _planes_digitales():
+    return [
+        {"codigo": "individual", "nombre": "Individual", "precio": Decimal("4.99"), "piscinas": 1},
+        {"codigo": "esencial", "nombre": "Esencial", "precio": Decimal("7.99"), "piscinas": 3},
+        {"codigo": "profesional", "nombre": "Profesional", "precio": Decimal("19.99"), "piscinas": 30},
+    ]
+
+
+def _plan_digital(codigo):
+    return next((p for p in _planes_digitales() if p["codigo"] == codigo), None)
+
+
+@require_http_methods(["GET", "POST"])
+def digital_registro_view(request):
+    if request.user.is_authenticated:
+        try:
+            perfil = request.user.perfil_suscriptor
+            return redirect("asistente_tecnico:digital_inicio" if perfil.tiene_acceso else "asistente_tecnico:digital_acceso")
+        except PerfilSuscriptor.DoesNotExist:
+            pass
+
+    plan_inicial = (request.GET.get("plan") or request.POST.get("plan") or "individual").strip()
+    if not _plan_digital(plan_inicial):
+        plan_inicial = "individual"
+
+    if request.method == "POST":
+        nombre = (request.POST.get("nombre") or "").strip()
+        apellido = (request.POST.get("apellido") or "").strip()
+        correo = (request.POST.get("correo") or "").strip().lower()
+        telefono = (request.POST.get("telefono") or "").strip()
+        password = request.POST.get("password") or ""
+        password2 = request.POST.get("password2") or ""
+        plan = (request.POST.get("plan") or "individual").strip()
+        User = get_user_model()
+
+        if not nombre or not correo or not telefono:
+            messages.error(request, "Completa nombre, correo y teléfono.")
+        elif not _plan_digital(plan):
+            messages.error(request, "Selecciona un plan válido.")
+        elif password != password2:
+            messages.error(request, "Las contraseñas no coinciden.")
+        elif User.objects.filter(username__iexact=correo).exists() or User.objects.filter(email__iexact=correo).exists():
+            messages.error(request, "Ya existe una cuenta con ese correo. Inicia sesión para continuar.")
+        else:
+            try:
+                validate_password(password)
+            except ValidationError as exc:
+                messages.error(request, " ".join(exc.messages))
+            else:
+                with transaction.atomic():
+                    user = User.objects.create_user(
+                        username=correo, email=correo, password=password,
+                        first_name=nombre[:150], last_name=apellido[:150],
+                    )
+                    PerfilSuscriptor.objects.create(
+                        user=user, estado="pendiente", plan=plan,
+                        telefono=telefono[:30], inicio=timezone.localdate(),
+                    )
+                auth_login(request, user)
+                messages.success(request, "Cuenta creada. Realiza el pago para activar JVAQUA Digital.")
+                return redirect("asistente_tecnico:digital_acceso")
+
+    return render(request, "asistente_tecnico/digital_registro.html", {
+        "planes": _planes_digitales(), "plan_inicial": plan_inicial,
+    })
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def digital_acceso_view(request):
+    try:
+        perfil = request.user.perfil_suscriptor
+    except PerfilSuscriptor.DoesNotExist:
+        return HttpResponseForbidden("Esta cuenta no pertenece a JVAQUA Digital.")
+
+    if perfil.tiene_acceso and request.method == "GET" and request.GET.get("renovar") != "1":
+        return redirect("asistente_tecnico:digital_inicio")
+
+    plan_codigo = (request.POST.get("plan") or request.GET.get("plan") or perfil.plan or "individual").strip()
+    plan = _plan_digital(plan_codigo) or _plan_digital("individual")
+    pendiente = perfil.solicitudes_suscripcion.filter(estado="pendiente").first()
+
+    if request.method == "POST":
+        if pendiente:
+            messages.info(request, "Ya tienes un pago pendiente de verificación.")
+            return redirect("asistente_tecnico:digital_acceso")
+
+        metodo = (request.POST.get("metodo_envio") or "plataforma").strip()
+        if metodo not in {"plataforma", "whatsapp", "ambos"}:
+            metodo = "plataforma"
+        comprobante = request.FILES.get("comprobante")
+        if metodo in {"plataforma", "ambos"} and not comprobante:
+            messages.error(request, "Adjunta el comprobante o selecciona que lo enviaste por WhatsApp.")
+        else:
+            tipo = "renovacion" if perfil.acceso_hasta else "alta"
+            SolicitudSuscripcionDigital.objects.create(
+                suscriptor=perfil, tipo=tipo, plan=plan["codigo"], valor=plan["precio"],
+                comprobante=comprobante, metodo_envio=metodo,
+                observacion_cliente=(request.POST.get("observacion") or "").strip()[:300],
+            )
+            perfil.plan = plan["codigo"]
+            if not perfil.tiene_acceso:
+                perfil.estado = "pendiente"
+            perfil.save(update_fields=["plan", "estado", "actualizado_en"])
+            messages.success(request, "Pago registrado. JVAQUA verificará el comprobante y activará tu acceso.")
+            return redirect("asistente_tecnico:digital_acceso")
+
+    nombre = f"{request.user.first_name} {request.user.last_name}".strip() or request.user.username
+    whatsapp_texto = (
+        "Hola JVAQUA, acabo de realizar el pago de mi suscripción a JVAQUA Digital.%0A"
+        f"Nombre: {nombre}%0A"
+        f"Correo: {request.user.email or request.user.username}%0A"
+        f"Teléfono: {perfil.telefono}%0A"
+        f"Plan: {plan['nombre']}%0A"
+        f"Valor: ${plan['precio']}%0A"
+        f"Solicitud: {'Renovación' if perfil.acceso_hasta else 'Activación de nueva suscripción'}.%0A"
+        "Adjunto mi comprobante de pago."
+    )
+    return render(request, "asistente_tecnico/digital_acceso.html", {
+        "perfil": perfil, "planes": _planes_digitales(), "plan": plan,
+        "pendiente": pendiente, "whatsapp_texto": whatsapp_texto,
+    })
+
+
+@login_required
+@require_http_methods(["GET"])
+def digital_suscripciones_admin_view(request):
+    if not _es_admin(request.user):
+        return HttpResponseForbidden("No autorizado")
+    estado = (request.GET.get("estado") or "pendiente").strip()
+    qs = SolicitudSuscripcionDigital.objects.select_related("suscriptor__user", "revisada_por")
+    if estado in {"pendiente", "aprobada", "rechazada"}:
+        qs = qs.filter(estado=estado)
+    return render(request, "asistente_tecnico/digital_suscripciones_admin.html", {
+        "base_template": "dashboard/base_admin.html",
+        "solicitudes": qs[:200],
+        "estado_filtro": estado,
+        "pendientes_total": SolicitudSuscripcionDigital.objects.filter(estado="pendiente").count(),
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def digital_suscripcion_revisar_view(request, pk):
+    if not _es_admin(request.user):
+        return HttpResponseForbidden("No autorizado")
+    accion = (request.POST.get("accion") or "").strip()
+    if accion not in {"aprobar", "rechazar"}:
+        return HttpResponseBadRequest("Acción inválida")
+
+    with transaction.atomic():
+        solicitud = get_object_or_404(
+            SolicitudSuscripcionDigital.objects.select_for_update().select_related("suscriptor"),
+            pk=pk,
+        )
+        if solicitud.estado != "pendiente":
+            messages.info(request, "Esta solicitud ya fue revisada.")
+            return redirect("asistente_tecnico:digital_suscripciones_admin")
+
+        perfil = solicitud.suscriptor
+        solicitud.observacion_admin = (request.POST.get("observacion_admin") or "").strip()[:300]
+        solicitud.revisada_por = request.user
+        solicitud.revisada_en = timezone.now()
+
+        if accion == "aprobar":
+            hoy = timezone.localdate()
+            base = perfil.acceso_hasta if perfil.acceso_hasta and perfil.acceso_hasta >= hoy else hoy
+            perfil.plan = solicitud.plan
+            perfil.estado = "activo"
+            perfil.acceso_hasta = base + timedelta(days=30)
+            perfil.save(update_fields=["plan", "estado", "acceso_hasta", "actualizado_en"])
+            solicitud.estado = "aprobada"
+            messages.success(request, f"Suscripción aprobada. Acceso activo hasta {perfil.acceso_hasta:%d/%m/%Y}.")
+        else:
+            solicitud.estado = "rechazada"
+            if not perfil.tiene_acceso:
+                perfil.estado = "pendiente"
+                perfil.save(update_fields=["estado", "actualizado_en"])
+            messages.warning(request, "Solicitud rechazada.")
+
+        solicitud.save(update_fields=["estado", "observacion_admin", "revisada_por", "revisada_en"])
+
+    return redirect("asistente_tecnico:digital_suscripciones_admin")
+
 @login_required
 def digital_inicio_view(request):
     perfil = _suscriptor(request.user)
     if not perfil:
-        return HttpResponseForbidden("Tu acceso a JVAQUA Digital no está activo.")
+        try:
+            request.user.perfil_suscriptor
+            return redirect("asistente_tecnico:digital_acceso")
+        except PerfilSuscriptor.DoesNotExist:
+            return HttpResponseForbidden("Tu acceso a JVAQUA Digital no está activo.")
     piscinas = perfil.piscinas.filter(activa=True)
     principal = piscinas.filter(principal=True).first() or piscinas.first()
     recientes_qs = CasoAsistenteTecnico.objects.filter(user=request.user)
@@ -1249,7 +1441,7 @@ def digital_piscina_form_view(request, pk=None):
         else:
             if obj is None:
                 if perfil.piscinas.filter(activa=True).count() >= perfil.limite_piscinas:
-                    messages.error(request, f"Tu plan {perfil.get_plan_display()} permite hasta {perfil.limite_piscinas} piscinas. Cambia a Plus para administrar hasta 30.")
+                    messages.error(request, f"Tu plan {perfil.get_plan_display()} permite hasta {perfil.limite_piscinas} piscina(s). Puedes cambiar de plan desde tu suscripción.")
                     return redirect("asistente_tecnico:digital_inicio")
                 obj=PiscinaSuscriptor(suscriptor=perfil)
             obj.nombre=(request.POST.get("nombre") or "Mi piscina").strip()[:100]

@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import MotorRecomendacion, CasoAsistenteTecnico, ContenidoAcademia, ImagenContenidoAcademia, MaterialAudiovisualAcademia, VersionContenidoAcademia, ExperienciaConocimiento, PerfilSuscriptor, PiscinaSuscriptor, PlanMantenimientoPiscina, RegistroMantenimientoPiscina, SugerenciaDigital
+from .models import MotorRecomendacion, CasoAsistenteTecnico, ContenidoAcademia, ImagenContenidoAcademia, MaterialAudiovisualAcademia, VersionContenidoAcademia, ExperienciaConocimiento, PerfilSuscriptor, PiscinaSuscriptor, PlanMantenimientoPiscina, RegistroMantenimientoPiscina, SugerenciaDigital, SolicitudSuscripcionDigital
 
 
 @admin.register(MotorRecomendacion)
@@ -68,3 +68,14 @@ class SugerenciaDigitalAdmin(admin.ModelAdmin):
         "mensaje",
     )
     readonly_fields = ("creada_en", "actualizada_en")
+
+
+@admin.register(SolicitudSuscripcionDigital)
+class SolicitudSuscripcionDigitalAdmin(admin.ModelAdmin):
+    list_display = ("suscriptor", "tipo", "plan", "valor", "metodo_envio", "estado", "creada_en", "revisada_en")
+    list_filter = ("estado", "tipo", "plan", "metodo_envio", "creada_en")
+    search_fields = (
+        "suscriptor__user__username", "suscriptor__user__first_name",
+        "suscriptor__user__last_name", "suscriptor__telefono",
+    )
+    readonly_fields = ("creada_en", "revisada_en")
