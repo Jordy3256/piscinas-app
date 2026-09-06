@@ -4,8 +4,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>JVAQUA ERP | Acceso</title>
-  <meta name="description" content="Sistema Integral de Gestión JVAQUA">
+  <title>JVAQUA | Acceso</title>
+  <meta name="description" content="Accede a JVAQUA y JVAQUA Digital: piscinas, aprendizaje y asistencia inteligente con AQUO.">
   <meta name="theme-color" content="#0757b8">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -18,40 +18,40 @@
 <div class="login-page">
   <div class="water-lines" aria-hidden="true"><i></i><i></i><i></i></div>
 
-  <section class="login-brand" aria-label="JVAQUA ERP">
+  <section class="login-brand" aria-label="JVAQUA">
     <div class="brand-lockup">
       <div class="brand-mark">JV</div>
       <div>
         <div class="brand-name">JVAQUA</div>
-        <div class="brand-edition">ERP · PLATAFORMA OPERATIVA</div>
+        <div class="brand-edition">PISCINAS · TECNOLOGÍA · APRENDIZAJE</div>
       </div>
     </div>
 
     <div class="brand-main">
-      <div class="brand-kicker">Sistema integral</div>
-      <h1>Gestión inteligente <span>para piscinas.</span></h1>
-      <p>Operación, contratos, finanzas, inventario y asistencia técnica conectados en una sola plataforma JVAQUA.</p>
+      <div class="brand-kicker">Tu espacio JVAQUA</div>
+      <h1>Todo para cuidar <span>mejor tu piscina.</span></h1>
+      <p>Accede a herramientas, seguimiento de tus piscinas, aprendizaje especializado y a AQUO, nuestro asistente inteligente.</p>
       <div class="brand-features" aria-hidden="true">
-        <div class="brand-feature"><span>🏊</span>Mantenimientos</div>
-        <div class="brand-feature"><span>📦</span>Inventario</div>
-        <div class="brand-feature"><span>💳</span>Finanzas</div>
-        <div class="brand-feature"><span>🧠</span>Asistente técnico</div>
+        <div class="brand-feature"><span>🏊</span>Mis piscinas</div>
+        <div class="brand-feature"><span>🧪</span>Planes y dosificaciones</div>
+        <div class="brand-feature"><span>📚</span>Curso y biblioteca</div>
+        <div class="brand-feature"><span>🧠</span>AQUO inteligente</div>
       </div>
     </div>
 
-    <div class="brand-footer">© 2026 JVAQUA · Plataforma de uso interno</div>
+    <div class="brand-footer">© 2026 JVAQUA · Tecnología y conocimiento para el cuidado de piscinas</div>
   </section>
 
   <section class="login-panel">
     <div class="login-card">
       <div class="login-mobile-brand">
         <div class="brand-mark">JV</div>
-        <div><strong>JVAQUA ERP</strong><small>Sistema Integral de Gestión</small></div>
+        <div><strong>JVAQUA</strong><small>Tu espacio para piscinas</small></div>
       </div>
 
-      <p class="login-eyebrow">Acceso seguro</p>
+      <p class="login-eyebrow">Tu cuenta JVAQUA</p>
       <h2>Bienvenido</h2>
-      <p class="login-subtitle">Ingresa con tus credenciales para continuar a tu espacio de trabajo.</p>
+      <p class="login-subtitle">Ingresa para continuar a tu cuenta, tus piscinas y las herramientas disponibles para ti.</p>
 
       {% if messages %}
         {% for m in messages %}
@@ -64,39 +64,42 @@
         <input type="hidden" name="next" value="{{ next|default:'' }}">
 
         <div class="mb-3">
-          <label class="form-label" for="jvq-username">Usuario</label>
+          <label class="form-label" for="jvq-username">Correo o usuario</label>
           <div class="login-input">
             <span class="field-icon"><i class="bi bi-person"></i></span>
-            <input id="jvq-username" class="form-control" name="username" placeholder="Tu usuario" autocomplete="username" autocapitalize="none" required autofocus>
+            <input id="jvq-username" class="form-control" name="username" placeholder="Tu correo o usuario" autocomplete="username" autocapitalize="none" required autofocus>
           </div>
         </div>
 
         <div class="mb-4">
           <label class="form-label" for="jvq-password">Contraseña</label>
-          <div class="login-input">
+          <div class="login-input login-input-password">
             <span class="field-icon"><i class="bi bi-shield-lock"></i></span>
             <input id="jvq-password" class="form-control" type="password" name="password" placeholder="Tu contraseña" autocomplete="current-password" required>
+            <button class="password-toggle" id="jvq-password-toggle" type="button" aria-label="Mostrar contraseña" aria-pressed="false">
+              <i class="bi bi-eye" aria-hidden="true"></i>
+            </button>
           </div>
         </div>
 
         <button class="btn btn-primary w-100 login-submit" id="jvq-login-submit" type="submit">
-          <span class="login-submit-label">Entrar a JVAQUA ERP</span>
+          <span class="login-submit-label">Ingresar a JVAQUA</span>
           <span class="spinner-border spinner-border-sm d-none" aria-hidden="true"></span>
         </button>
       </form>
         <div class="text-center mt-3 pt-3 border-top">
-          <div class="small text-muted mb-2">¿Quieres utilizar JVAQUA Digital?</div>
+          <div class="small text-muted mb-2">¿Aún no tienes una cuenta?</div>
           <a class="btn btn-outline-primary w-100 rounded-3 fw-bold" href="/dashboard/asistente/digital/registro/">
-            Crear cuenta JVAQUA Digital
+            Crear cuenta en JVAQUA Digital
           </a>
         </div>
 
       <div class="security-row" aria-label="Características de seguridad">
         <div class="security-item"><span>🔒</span>Acceso protegido</div>
         <div class="security-item"><span>☁️</span>Plataforma online</div>
-        <div class="security-item"><span>⚡</span>JVAQUA ERP</div>
+        <div class="security-item"><span>💧</span>JVAQUA Digital</div>
       </div>
-      <div class="login-meta"><span>Versión 2.0</span><i></i><span>Uso autorizado</span></div>
+      <div class="login-meta"><span>JVAQUA</span><i></i><span>Siempre contigo</span></div>
     </div>
   </section>
 </div>
@@ -104,6 +107,22 @@
 <script>
 (function(){
   const form=document.getElementById('jvq-login-form');
+  const password=document.getElementById('jvq-password');
+  const passwordToggle=document.getElementById('jvq-password-toggle');
+  if(password && passwordToggle){
+    passwordToggle.addEventListener('click',()=>{
+      const mostrar=password.type==='password';
+      password.type=mostrar?'text':'password';
+      passwordToggle.setAttribute('aria-pressed', mostrar?'true':'false');
+      passwordToggle.setAttribute('aria-label', mostrar?'Ocultar contraseña':'Mostrar contraseña');
+      const icon=passwordToggle.querySelector('i');
+      if(icon){
+        icon.classList.toggle('bi-eye', !mostrar);
+        icon.classList.toggle('bi-eye-slash', mostrar);
+      }
+      password.focus({preventScroll:true});
+    });
+  }
   if(form){form.addEventListener('submit',()=>{const b=document.getElementById('jvq-login-submit');if(!b)return;b.disabled=true;b.querySelector('.login-submit-label').textContent='Ingresando...';b.querySelector('.spinner-border').classList.remove('d-none');});}
   if(!('serviceWorker' in navigator))return;
   window.addEventListener('load',async()=>{try{const regs=await navigator.serviceWorker.getRegistrations();for(const r of regs){const scope=r?.scope||'';if(scope.includes('/static/')||scope.includes('/dashboard/'))await r.unregister();}if('caches' in window){for(const k of await caches.keys()){if(k.includes('static-')||k.includes('pages-')||k.includes('images-')||k.includes('piscinas'))await caches.delete(k);}}}catch(e){console.warn('[JVAQUA] cleanup:',e);}});
