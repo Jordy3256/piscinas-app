@@ -74,6 +74,8 @@ class Contrato(models.Model):
         ("personalizado", "Personalizado"),
     ]
 
+    IVA_PORCENTAJE = Decimal("15.00")
+
     cliente = models.ForeignKey(Cliente, on_delete=models.CASCADE, related_name="contratos")
 
     # Ubicación propia de la piscina/contrato. Los campos del cliente se conservan
@@ -141,7 +143,15 @@ class Contrato(models.Model):
     notificacion_factura_dias_antes = models.PositiveSmallIntegerField(default=1)
     observaciones_facturacion = models.TextField(blank=True, default="")
 
-    precio_mensual = models.DecimalField(max_digits=10, decimal_places=2)
+    precio_mensual = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        help_text="Valor base mensual del contrato antes de IVA.",
+    )
+    aplica_iva = models.BooleanField(
+        default=False,
+        help_text="Si aplica, se agrega automáticamente IVA del 15% al valor que paga el cliente.",
+    )
     valor_tecnico_mensual = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     fecha_inicio = models.DateField()
     fecha_inicio_original = models.DateField(null=True, blank=True, db_index=True)
@@ -233,8 +243,32 @@ class Contrato(models.Model):
     piscina_desinfeccion = models.CharField(max_length=100, blank=True, default="")
     piscina_observaciones = models.TextField(blank=True, default="")
 
+    @property
+    def iva_mensual(self):
+        base = Decimal(self.precio_mensual or 0)
+        if not self.aplica_iva:
+            return Decimal("0.00")
+        return (base * self.IVA_PORCENTAJE / Decimal("100")).quantize(Decimal("0.01"))
+
+    @property
+    def precio_mensual_total(self):
+        return (Decimal(self.precio_mensual or 0) + self.iva_mensual).quantize(Decimal("0.01"))
+
+    def desglose_valor(self, valor_base):
+        base = Decimal(valor_base or 0).quantize(Decimal("0.01"))
+        impuesto = (
+            (base * self.IVA_PORCENTAJE / Decimal("100")).quantize(Decimal("0.01"))
+            if self.aplica_iva else Decimal("0.00")
+        )
+        return {
+            "base": base,
+            "impuesto": impuesto,
+            "total": (base + impuesto).quantize(Decimal("0.01")),
+        }
+
     def ingreso_mensual(self):
-        return self.precio_mensual
+        """Ingreso operativo antes de impuestos; el IVA no se considera utilidad."""
+        return Decimal(self.precio_mensual or 0).quantize(Decimal("0.01"))
 
     def frecuencia_completa(self):
         if self.frecuencia == "personalizado":
@@ -312,18 +346,22 @@ class Contrato(models.Model):
         else:
             valores = [self.precio_mensual]
 
-        return [
-            {
+        cuotas = []
+        for indice, ventana in enumerate(fechas, start=1):
+            desglose = self.desglose_valor(valores[indice - 1])
+            cuotas.append({
                 "cuota_numero": indice,
                 "total_cuotas": len(fechas),
                 "fecha_cobro_desde": ventana[0],
                 "fecha_vencimiento": ventana[1],
-                "valor": valores[indice - 1],
+                # "valor" permanece como base por compatibilidad con promociones.
+                "valor": desglose["base"],
+                "impuesto": desglose["impuesto"],
+                "total": desglose["total"],
                 "periodo_inicio": inicio,
                 "periodo_fin": fin,
-            }
-            for indice, ventana in enumerate(fechas, start=1)
-        ]
+            })
+        return cuotas
 
     def fecha_programada_facturacion(self, anio, mes):
         if not self.requiere_factura:
@@ -352,6 +390,10 @@ class Contrato(models.Model):
     def save(self, *args, **kwargs):
         if not self.fecha_inicio_original and self.fecha_inicio:
             self.fecha_inicio_original = self.fecha_inicio
+        # La fecha de inicio es la única fuente del día de corte del periodo.
+        # Evita configuraciones contradictorias entre "fecha de inicio" y "día de periodo".
+        if self.fecha_inicio:
+            self.periodo_dia_inicio = self.fecha_inicio.day
         self.ciudad = (self.ciudad or "").strip()
         self.sector_urbanizacion = (self.sector_urbanizacion or "").strip()
         self.direccion = (self.direccion or "").strip()
@@ -387,6 +429,10 @@ class Contrato(models.Model):
             self.facturacion_dia = None
             self.notificar_facturacion = False
             self.observaciones_facturacion = ""
+        else:
+            # Toda factura requerida genera aviso interno. La emisión se realiza
+            # externamente y luego se marca como realizada dentro de JVAQUA.
+            self.notificar_facturacion = True
         self.sincronizar_tipo_compatibilidad()
         super().save(*args, **kwargs)
 

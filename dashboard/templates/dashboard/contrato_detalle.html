@@ -107,8 +107,12 @@
       <div class="cd-card">
         <div class="cd-card-header"><div class="cd-card-title">📄 Información del contrato</div></div>
         <div class="cd-card-body">
-          <div class="detail-label">Cobro mensual al cliente</div>
-          <div class="contract-price">${{ contrato.precio_mensual|floatformat:2 }}</div>
+          <div class="detail-label">Valor mensual del contrato</div>
+          <div class="contract-price">${{ contrato.precio_mensual_total|floatformat:2 }}</div>
+          <div class="small text-muted mt-1">
+            Base ${{ contrato.precio_mensual|floatformat:2 }}
+            {% if contrato.aplica_iva %} · IVA 15% ${{ contrato.iva_mensual|floatformat:2 }}{% else %} · Sin IVA{% endif %}
+          </div>
           <div class="row g-3 mt-1">
             <div class="col-12 col-md-6"><div class="detail-label">Pago mensual al técnico</div><div class="detail-value">${{ contrato.valor_tecnico_mensual|floatformat:2 }}</div></div>
             <div class="col-12 col-md-6"><div class="detail-label">Margen bruto del contrato</div><div class="detail-value">${{ margen_bruto_contrato|floatformat:2 }}</div></div>
@@ -173,9 +177,9 @@
         <div class="col-12 col-md-3"><div class="detail-label">Regla de cobro</div><div class="detail-value">{{ contrato.get_programacion_cobro_display }}</div></div>
         <div class="col-12 col-md-3"><div class="detail-label">Facturación</div><div class="detail-value">{% if contrato.requiere_factura %}Sí · {{ contrato.get_momento_facturacion_display }}{% else %}No requiere factura{% endif %}</div></div>
         {% for cuota in calendario_cobros %}
-          <div class="col-12 col-md-4"><div class="detail-label">Cobro {{ cuota.cuota_numero }}/{{ cuota.total_cuotas }}</div><div class="detail-value">{% if cuota.fecha_cobro_desde != cuota.fecha_vencimiento %}Del {{ cuota.fecha_cobro_desde|date:"d/m/Y" }} al {{ cuota.fecha_vencimiento|date:"d/m/Y" }}{% else %}{{ cuota.fecha_vencimiento|date:"d/m/Y" }}{% endif %} · ${{ cuota.valor|floatformat:2 }}</div></div>
+          <div class="col-12 col-md-4"><div class="detail-label">Cobro {{ cuota.cuota_numero }}/{{ cuota.total_cuotas }}</div><div class="detail-value">{% if cuota.fecha_cobro_desde != cuota.fecha_vencimiento %}Del {{ cuota.fecha_cobro_desde|date:"d/m/Y" }} al {{ cuota.fecha_vencimiento|date:"d/m/Y" }}{% else %}{{ cuota.fecha_vencimiento|date:"d/m/Y" }}{% endif %} · ${{ cuota.total|floatformat:2 }}{% if contrato.aplica_iva %} <span class="small text-muted">(incl. IVA)</span>{% endif %}</div></div>
         {% endfor %}
-        <div class="col-12 col-md-4"><div class="detail-label">Factura programada</div><div class="detail-value">{% if fecha_facturacion_programada %}{{ fecha_facturacion_programada|date:"d/m/Y" }}{% else %}<span class="text-muted">No programada</span>{% endif %}</div></div>
+        <div class="col-12 col-md-4"><div class="detail-label">Aviso de facturación externa</div><div class="detail-value">{% if fecha_facturacion_programada %}{{ fecha_facturacion_programada|date:"d/m/Y" }} · se mantiene hasta marcar “Factura realizada”{% else %}<span class="text-muted">No programada</span>{% endif %}</div></div>
       </div>
     </div>
   </div>

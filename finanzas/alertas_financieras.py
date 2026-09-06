@@ -9,7 +9,8 @@ from django.utils import timezone
 
 from dashboard.models import Notificacion
 
-from .models import Factura, ObligacionTrabajador
+from .models import Factura, ObligacionTrabajador, AvisoFacturacion
+from .facturacion_externa import avisos_que_deben_alertar
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,8 @@ TIPOS_FINANCIEROS = {
     "cobro_hoy",
     "cobro_vencido",
     "cobro_proximo",
-    "factura_emitir",
+    "factura_emitir",  # legado: se limpia automáticamente
+    "factura_realizar",
     "nomina_pagar",
 }
 
@@ -126,22 +128,26 @@ def generar_alertas_financieras(*, enviar_push=True):
                 enviar_push=enviar_push,
             )
 
-        if (
-            factura.requiere_factura
-            and not factura.factura_enviada
-            and factura.fecha_facturacion_programada
-            and factura.fecha_facturacion_programada <= hoy
-        ):
-            tipo = "factura_emitir"
-            activas.add((tipo, factura.pk))
-            _crear_para_admins(
-                tipo=tipo,
-                referencia_id=factura.pk,
-                titulo="📄 Factura pendiente de emitir/enviar",
-                mensaje=f"{factura.cliente}: periodo {factura.periodo_label}.",
-                url=url,
-                enviar_push=enviar_push,
-            )
+
+    # Facturación tributaria: recordatorio independiente de Cartera.
+    # La factura se emite en un sistema externo y aquí solo se confirma la tarea.
+    for aviso in avisos_que_deben_alertar(hoy=hoy):
+        tipo = "factura_realizar"
+        activas.add((tipo, aviso.pk))
+        dias = (hoy - aviso.fecha_programada).days
+        estado_txt = (
+            f"atrasada {dias} día(s)"
+            if dias > 0
+            else ("para hoy" if dias == 0 else f"programada para {aviso.fecha_programada:%d/%m/%Y}")
+        )
+        _crear_para_admins(
+            tipo=tipo,
+            referencia_id=aviso.pk,
+            titulo="📄 Factura por realizar",
+            mensaje=f"{aviso.cliente}: {aviso.periodo_label} · {estado_txt}.",
+            url="/dashboard/finanzas/facturacion/",
+            enviar_push=enviar_push,
+        )
 
     for obligacion in obligaciones:
         if obligacion.saldo <= 0 or obligacion.fecha_pago_programada > hoy:

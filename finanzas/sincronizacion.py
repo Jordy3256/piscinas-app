@@ -118,6 +118,7 @@ def sincronizar_contrato_activo(contrato):
         precio_mensual = Decimal(contrato.precio_mensual or 0)
         proporcion = (Decimal(cuota["valor"]) / precio_mensual) if precio_mensual > 0 else Decimal("0")
         valor_neto = (Decimal(promo["total"]) * proporcion).quantize(Decimal("0.01"))
+        desglose = contrato.desglose_valor(valor_neto)
         descuento = max(Decimal(cuota["valor"]) - valor_neto, Decimal("0.00"))
 
         valores = {
@@ -129,8 +130,9 @@ def sincronizar_contrato_activo(contrato):
             "total_cuotas": cuota["total_cuotas"],
             "fecha_facturacion_programada": contrato.fecha_programada_facturacion(factura.periodo_anio, factura.periodo_mes),
             "requiere_factura": contrato.requiere_factura,
-            "subtotal": valor_neto,
-            "total": valor_neto,
+            "subtotal": desglose["base"],
+            "impuesto": desglose["impuesto"],
+            "total": desglose["total"],
             "valor_contractual": cuota["valor"],
             "descuento_promocion": descuento,
             "promocion": promo["promocion"],
@@ -156,7 +158,7 @@ def sincronizar_contrato_activo(contrato):
 
         if cambios:
             factura.save(update_fields=list(dict.fromkeys(cambios)) + ["actualizada_en"])
-            factura.items.update(precio_unitario=valor_neto, subtotal=valor_neto)
+            factura.items.update(precio_unitario=desglose["base"], subtotal=desglose["base"])
             factura.sincronizar_estado()
             resultado["facturas_actualizadas"] += 1
 

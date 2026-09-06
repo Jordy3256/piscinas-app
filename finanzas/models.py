@@ -446,6 +446,83 @@ class Factura(models.Model):
             super().save(update_fields=["numero", "actualizada_en"] if not es_nueva else ["numero"])
 
 
+
+class AvisoFacturacion(models.Model):
+    ESTADO_PENDIENTE = "pendiente"
+    ESTADO_REALIZADA = "realizada"
+    ESTADO_ANULADA = "anulada"
+    ESTADO_CHOICES = [
+        (ESTADO_PENDIENTE, "Pendiente"),
+        (ESTADO_REALIZADA, "Factura realizada"),
+        (ESTADO_ANULADA, "Anulada"),
+    ]
+
+    contrato = models.ForeignKey(
+        Contrato,
+        on_delete=models.CASCADE,
+        related_name="avisos_facturacion",
+    )
+    periodo_anio = models.PositiveIntegerField()
+    periodo_mes = models.PositiveSmallIntegerField()
+    periodo_inicio = models.DateField()
+    periodo_fin = models.DateField()
+    fecha_programada = models.DateField(db_index=True)
+    estado = models.CharField(
+        max_length=12,
+        choices=ESTADO_CHOICES,
+        default=ESTADO_PENDIENTE,
+        db_index=True,
+    )
+    realizada_en = models.DateTimeField(null=True, blank=True)
+    realizada_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="facturas_externas_realizadas",
+    )
+    creada_en = models.DateTimeField(auto_now_add=True)
+    actualizada_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["fecha_programada", "contrato__cliente__nombre", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["contrato", "periodo_anio", "periodo_mes"],
+                name="unique_aviso_facturacion_contrato_periodo",
+            )
+        ]
+        verbose_name = "Aviso de facturación"
+        verbose_name_plural = "Avisos de facturación"
+
+    @property
+    def cliente(self):
+        return self.contrato.cliente
+
+    @property
+    def periodo_label(self):
+        return f"{self.periodo_inicio:%d/%m/%Y} → {self.periodo_fin:%d/%m/%Y}"
+
+    @property
+    def fecha_alerta(self):
+        dias = int(self.contrato.notificacion_factura_dias_antes or 0)
+        from datetime import timedelta
+        return self.fecha_programada - timedelta(days=dias)
+
+    @property
+    def esta_atrasada(self):
+        return self.estado == self.ESTADO_PENDIENTE and self.fecha_programada < timezone.localdate()
+
+    def marcar_realizada(self, usuario=None):
+        self.estado = self.ESTADO_REALIZADA
+        self.realizada_en = timezone.now()
+        self.realizada_por = usuario
+        self.save(update_fields=["estado", "realizada_en", "realizada_por", "actualizada_en"])
+
+    def __str__(self):
+        return f"{self.contrato.cliente} · {self.periodo_mes:02d}/{self.periodo_anio}"
+
+
 class FacturaItem(models.Model):
     factura = models.ForeignKey(Factura, on_delete=models.CASCADE, related_name="items")
     descripcion = models.CharField(max_length=180)

@@ -118,7 +118,9 @@ def previsualizar_facturas_periodo(anio, mes):
                 if contrato.precio_mensual
                 else Decimal("0")
             )
-            valor_cuota = (promo_datos["total"] * proporcion).quantize(Decimal("0.01"))
+            valor_base_cuota = (promo_datos["total"] * proporcion).quantize(Decimal("0.01"))
+            desglose = contrato.desglose_valor(valor_base_cuota)
+            valor_cuota = desglose["total"]
             valor_total_periodo += valor_cuota
 
             ya_existe = Factura.objects.filter(
@@ -143,6 +145,8 @@ def previsualizar_facturas_periodo(anio, mes):
                 "total_cuotas": cuota["total_cuotas"],
                 "fecha_cobro": cuota["fecha_cobro_desde"],
                 "fecha_vencimiento": cuota["fecha_vencimiento"],
+                "valor_base": desglose["base"],
+                "impuesto": desglose["impuesto"],
                 "valor": valor_cuota,
                 "promocion": promo_datos["promocion"],
             })
@@ -172,8 +176,10 @@ def generar_factura_contrato(contrato, anio, mes, usuario=None):
     cuotas = contrato.calendario_cobros(anio, mes)
     for cuota in cuotas:
         proporcion = (cuota["valor"] / Decimal(contrato.precio_mensual or 1)) if contrato.precio_mensual else Decimal("0")
-        valor_cuota = (promo_datos["total"] * proporcion).quantize(Decimal("0.01"))
-        descuento_cuota = max(cuota["valor"] - valor_cuota, Decimal("0.00"))
+        valor_base_cuota = (promo_datos["total"] * proporcion).quantize(Decimal("0.01"))
+        desglose = contrato.desglose_valor(valor_base_cuota)
+        valor_cuota = desglose["total"]
+        descuento_cuota = max(cuota["valor"] - valor_base_cuota, Decimal("0.00"))
         factura, creada = Factura.objects.get_or_create(
             contrato=contrato,
             periodo_anio=anio,
@@ -189,9 +195,9 @@ def generar_factura_contrato(contrato, anio, mes, usuario=None):
                 "fecha_vencimiento": cuota["fecha_vencimiento"],
                 "fecha_facturacion_programada": fecha_facturacion,
                 "requiere_factura": contrato.requiere_factura,
-                "subtotal": valor_cuota,
-                "impuesto": Decimal("0.00"),
-                "total": valor_cuota,
+                "subtotal": desglose["base"],
+                "impuesto": desglose["impuesto"],
+                "total": desglose["total"],
                 "valor_contractual": cuota["valor"],
                 "descuento_promocion": descuento_cuota,
                 "promocion": promo_datos["promocion"],
@@ -208,7 +214,7 @@ def generar_factura_contrato(contrato, anio, mes, usuario=None):
                 factura=factura,
                 descripcion=descripcion,
                 cantidad=Decimal("1.00"),
-                precio_unitario=valor_cuota,
+                precio_unitario=desglose["base"],
             )
             creadas.append(factura)
     return creadas, len(creadas)

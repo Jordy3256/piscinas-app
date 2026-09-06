@@ -151,7 +151,7 @@
         <div class="fin-list">
           <a class="fin-item text-decoration-none text-reset" href="{% url 'finanzas_cartera' %}?estado=vencida"><div class="fin-dot dot-out">!</div><div class="fin-item-main"><div class="fin-item-title">Cobros vencidos</div><div class="fin-item-sub">Saldos fuera de fecha</div></div><strong class="fin-down">{{ total_cobros_vencidos }}</strong></a>
           <a class="fin-item text-decoration-none text-reset" href="{% url 'finanzas_cartera' %}"><div class="fin-dot dot-warn">$</div><div class="fin-item-main"><div class="fin-item-title">Cobros para hoy</div><div class="fin-item-sub">Gestiones disponibles</div></div><strong>{{ total_cobros_hoy }}</strong></a>
-          <a class="fin-item text-decoration-none text-reset" href="{% url 'finanzas_facturas' %}"><div class="fin-dot dot-warn">📄</div><div class="fin-item-main"><div class="fin-item-title">Facturas por emitir</div><div class="fin-item-sub">Programación vencida o de hoy</div></div><strong>{{ total_facturas_por_emitir }}</strong></a>
+          <a class="fin-item text-decoration-none text-reset" href="{% url 'finanzas_facturacion_pendiente' %}"><div class="fin-dot dot-warn">📄</div><div class="fin-item-main"><div class="fin-item-title">Facturas por realizar</div><div class="fin-item-sub">Programación vencida o de hoy</div></div><strong>{{ total_facturas_por_emitir }}</strong></a>
           <a class="fin-item text-decoration-none text-reset" href="{% url 'finanzas_nomina' %}?anio={{ anio }}&mes={{ mes }}"><div class="fin-dot dot-warn">👷</div><div class="fin-item-main"><div class="fin-item-title">Nómina por pagar</div><div class="fin-item-sub">Fechas programadas cumplidas</div></div><strong>{{ total_nomina_hoy }}</strong></a>
         </div>
       </article>

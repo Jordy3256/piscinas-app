@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Egreso, Factura, FacturaItem, Ingreso, MovimientoRecurrente, PagoFactura
+from .models import Egreso, Factura, FacturaItem, Ingreso, MovimientoRecurrente, PagoFactura, AvisoFacturacion
 
 
 @admin.register(Ingreso)
@@ -38,6 +38,15 @@ class FacturaAdmin(admin.ModelAdmin):
     search_fields = ("numero", "cliente__nombre")
     inlines = [FacturaItemInline]
 
+
+
+
+@admin.register(AvisoFacturacion)
+class AvisoFacturacionAdmin(admin.ModelAdmin):
+    list_display = ("contrato", "periodo_mes", "periodo_anio", "fecha_programada", "estado", "realizada_en")
+    list_filter = ("estado", "periodo_anio", "periodo_mes", "fecha_programada")
+    search_fields = ("contrato__cliente__nombre",)
+    readonly_fields = ("creada_en", "actualizada_en")
 
 @admin.register(PagoFactura)
 class PagoFacturaAdmin(admin.ModelAdmin):

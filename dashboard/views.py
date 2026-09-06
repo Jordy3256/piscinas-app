@@ -1677,13 +1677,13 @@ def _centro_acciones_contexto():
         and hoy < f.fecha_cobro_desde <= proximos_tres_dias
     ]
 
-    facturas_por_emitir = [
-        f for f in facturas_base
-        if f.requiere_factura
-        and not f.factura_enviada
-        and f.fecha_facturacion_programada
-        and f.fecha_facturacion_programada <= hoy
-    ]
+    # Facturación tributaria es una tarea independiente de Cartera.
+    # No depende de que exista una cuenta por cobrar materializada.
+    try:
+        from finanzas.facturacion_externa import avisos_que_deben_alertar
+        facturas_por_emitir = avisos_que_deben_alertar(hoy=hoy)
+    except Exception:
+        facturas_por_emitir = []
 
     obligaciones = list(
         ObligacionTrabajador.objects
@@ -7150,7 +7150,9 @@ def _validar_datos_contrato(request):
     tecnico_id = (request.POST.get("tecnico_designado") or "").strip()
     dias_visita = normalizar_dias(request.POST.getlist("dias_visita"))
     requiere_factura = request.POST.get("requiere_factura") == "on"
-    notificar_facturacion = request.POST.get("notificar_facturacion") == "on"
+    # Si requiere factura, el aviso interno siempre queda activo.
+    notificar_facturacion = requiere_factura
+    aplica_iva = request.POST.get("aplica_iva") == "on"
     momento_facturacion = (request.POST.get("momento_facturacion") or "").strip()
     quimicos_proveedor = (request.POST.get("quimicos_proveedor") or "jvaqua").strip()
     quimicos_almacenamiento = (request.POST.get("quimicos_almacenamiento") or "trabajador").strip()
@@ -7177,8 +7179,8 @@ def _validar_datos_contrato(request):
 
     campos_enteros = {}
     configuracion = [
-        ("periodo_dia_inicio", 1, 31, True), ("cobro_mes_desfase", 0, 2, True),
-        ("cobro_dia_1", 1, 31, programacion_cobro in {"dia_fijo", "dos_pagos"}),
+        ("periodo_dia_inicio", 1, 31, False), ("cobro_mes_desfase", 0, 2, False),
+        ("cobro_dia_1", 1, 31, programacion_cobro in {"dia_fijo", "dos_pagos", "personalizado"}),
         ("cobro_dia_2", 1, 31, programacion_cobro == "dos_pagos"),
         ("cobro_rango_desde", 1, 31, programacion_cobro == "rango_dias"),
         ("cobro_rango_hasta", 1, 31, programacion_cobro == "rango_dias"),
@@ -7232,7 +7234,14 @@ def _validar_datos_contrato(request):
         valor_tecnico_mensual = Decimal("0.00"); errores.append("El valor mensual del técnico debe ser cero o mayor.")
     if valor_tecnico_mensual and not tecnico_designado: errores.append("Debes seleccionar un técnico para asignarle un valor mensual.")
     fecha_inicio = parse_date(fecha_inicio_str)
-    if not fecha_inicio: errores.append("Debes seleccionar una fecha de inicio válida.")
+    if not fecha_inicio:
+        errores.append("Debes seleccionar una fecha de inicio válida.")
+    else:
+        # Una sola fuente para el ciclo comercial: la fecha de inicio.
+        campos_enteros["periodo_dia_inicio"] = fecha_inicio.day
+
+    if programacion_cobro in {"inicio_periodo", "cierre_periodo", "despues_cierre"}:
+        campos_enteros["cobro_mes_desfase"] = 0
 
     hora_visita_fija_obj = parse_time(hora_visita_fija) if hora_visita_fija else None
     ventana_visita_desde_obj = parse_time(ventana_visita_desde) if ventana_visita_desde else None
@@ -7260,7 +7269,8 @@ def _validar_datos_contrato(request):
         "tecnico_id": tecnico_id, "dias_visita": dias_visita, "programacion_cobro": programacion_cobro,
         "programacion_cobro_personalizada": programacion_personalizada, "porcentaje_primer_pago": porcentaje_primer_pago,
         "requiere_factura": requiere_factura, "momento_facturacion": momento_facturacion if requiere_factura else "",
-        "notificar_facturacion": notificar_facturacion if requiere_factura else False,
+        "notificar_facturacion": notificar_facturacion,
+        "aplica_iva": aplica_iva,
         "observaciones_facturacion": (request.POST.get("observaciones_facturacion") or "").strip(),
         "quimicos_proveedor": quimicos_proveedor,
         "quimicos_almacenamiento": quimicos_almacenamiento,
@@ -7922,6 +7932,7 @@ def contrato_crear_view(request):
         "programacion_cobro_personalizada": "",
         "requiere_factura": False, "momento_facturacion": "", "facturacion_dia": "",
         "facturacion_dias_antes": 0, "notificar_facturacion": False,
+        "aplica_iva": False,
         "notificacion_factura_dias_antes": 1, "observaciones_facturacion": "",
         "precio_mensual": "",
         "valor_tecnico_mensual": "",
@@ -7963,6 +7974,7 @@ def contrato_crear_view(request):
                 "notificacion_factura_dias_antes", "observaciones_facturacion")},
             "requiere_factura": validacion["requiere_factura"],
             "notificar_facturacion": validacion["notificar_facturacion"],
+            "aplica_iva": validacion["aplica_iva"],
             "precio_mensual": request.POST.get("precio_mensual", ""),
             "valor_tecnico_mensual": request.POST.get("valor_tecnico_mensual", ""),
             "fecha_inicio": request.POST.get(
@@ -8012,9 +8024,13 @@ def contrato_crear_view(request):
                 requiere_factura=validacion["requiere_factura"], momento_facturacion=validacion["momento_facturacion"],
                 facturacion_dia=validacion["facturacion_dia"], facturacion_dias_antes=validacion["facturacion_dias_antes"] or 0,
                 notificar_facturacion=validacion["notificar_facturacion"],
-                notificacion_factura_dias_antes=validacion["notificacion_factura_dias_antes"] or 1,
+                notificacion_factura_dias_antes=(
+                    validacion["notificacion_factura_dias_antes"]
+                    if validacion["notificacion_factura_dias_antes"] is not None else 1
+                ),
                 observaciones_facturacion=validacion["observaciones_facturacion"],
                 precio_mensual=validacion["precio_mensual"],
+                aplica_iva=validacion["aplica_iva"],
                 valor_tecnico_mensual=validacion["valor_tecnico_mensual"],
                 fecha_inicio=validacion["fecha_inicio"],
                 activo=validacion["activo"],
@@ -8130,6 +8146,7 @@ def contrato_editar_view(request, pk):
         "notificar_facturacion": contrato.notificar_facturacion,
         "notificacion_factura_dias_antes": contrato.notificacion_factura_dias_antes,
         "observaciones_facturacion": contrato.observaciones_facturacion,
+        "aplica_iva": contrato.aplica_iva,
         "precio_mensual": contrato.precio_mensual,
         "valor_tecnico_mensual": contrato.valor_tecnico_mensual,
         "fecha_inicio": contrato.fecha_inicio.isoformat(),
@@ -8201,6 +8218,7 @@ def contrato_editar_view(request, pk):
                 "notificacion_factura_dias_antes", "observaciones_facturacion")},
             "requiere_factura": validacion["requiere_factura"],
             "notificar_facturacion": validacion["notificar_facturacion"],
+            "aplica_iva": validacion["aplica_iva"],
             "precio_mensual": request.POST.get("precio_mensual", ""),
             "valor_tecnico_mensual": request.POST.get("valor_tecnico_mensual", ""),
             "fecha_inicio": request.POST.get(
@@ -8245,6 +8263,7 @@ def contrato_editar_view(request, pk):
                 "observaciones_facturacion"):
                 setattr(contrato, campo, validacion[campo])
             contrato.precio_mensual = validacion["precio_mensual"]
+            contrato.aplica_iva = validacion["aplica_iva"]
             contrato.valor_tecnico_mensual = validacion["valor_tecnico_mensual"]
             contrato.fecha_inicio = validacion["fecha_inicio"]
             contrato.activo = validacion["activo"]

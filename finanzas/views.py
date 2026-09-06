@@ -1,6 +1,5 @@
 from .models import ComprobanteServicio, DetalleComprobanteServicio
 from calendar import monthrange
-from calendar import monthrange
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -19,7 +18,7 @@ from django.utils.text import slugify
 from django.views.decorators.http import require_POST
 
 from .forms import EgresoForm, IngresoForm, PagoFacturaForm, PagoTrabajadorForm, PagoConsolidadoTrabajadorForm
-from .models import Egreso, Factura, Ingreso, PagoFactura, ObligacionTrabajador, PagoTrabajador, LotePagoTrabajador, AnticipoTrabajador
+from .models import Egreso, Factura, Ingreso, PagoFactura, ObligacionTrabajador, PagoTrabajador, LotePagoTrabajador, AnticipoTrabajador, AvisoFacturacion
 from clientes.models import Cliente, Ciudad
 from contratos.models import Contrato
 
@@ -28,6 +27,7 @@ from .cuentas_por_cobrar import MESES, generar_facturas_periodo, previsualizar_f
 from .servicios_financieros import obtener_resumen_financiero
 from .reconciliacion import reconciliar_cartera_nomina
 from .alertas_financieras import generar_alertas_financieras
+from .facturacion_externa import sincronizar_avisos_facturacion
 
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT
@@ -293,6 +293,75 @@ def movimiento_eliminar(request, tipo, pk):
         messages.success(request, "Movimiento eliminado correctamente.")
         return redirect("finanzas_movimientos")
     return render(request, "finanzas/eliminar.html", {"obj": obj, "tipo": tipo, "es_admin": True})
+
+
+@login_required
+def facturacion_pendiente_lista(request):
+    """Panel de recordatorios para facturas emitidas en un sistema externo."""
+    if not _es_admin(request.user):
+        return _denegado(request)
+
+    hoy = timezone.localdate()
+    sincronizar_avisos_facturacion(hoy=hoy)
+    estado = (request.GET.get("estado") or "pendiente").strip()
+
+    avisos = (
+        AvisoFacturacion.objects
+        .select_related("contrato", "contrato__cliente", "realizada_por")
+        .order_by("fecha_programada", "id")
+    )
+    if estado in {AvisoFacturacion.ESTADO_PENDIENTE, AvisoFacturacion.ESTADO_REALIZADA, AvisoFacturacion.ESTADO_ANULADA}:
+        avisos = avisos.filter(estado=estado)
+
+    pendientes = list(
+        AvisoFacturacion.objects
+        .filter(estado=AvisoFacturacion.ESTADO_PENDIENTE)
+        .select_related("contrato", "contrato__cliente")
+        .order_by("fecha_programada", "id")
+    )
+    alertables = [a for a in pendientes if a.fecha_alerta <= hoy]
+    atrasadas = [a for a in pendientes if a.fecha_programada < hoy]
+
+    return render(request, "finanzas/facturacion_pendiente.html", {
+        "avisos": avisos,
+        "estado": estado,
+        "hoy": hoy,
+        "cantidad_pendientes": len(pendientes),
+        "cantidad_alertables": len(alertables),
+        "cantidad_atrasadas": len(atrasadas),
+    })
+
+
+@login_required
+@require_POST
+def facturacion_marcar_realizada(request, pk):
+    if not _es_admin(request.user):
+        return _denegado(request)
+
+    aviso = get_object_or_404(
+        AvisoFacturacion.objects.select_related("contrato", "contrato__cliente"),
+        pk=pk,
+    )
+    if aviso.estado == AvisoFacturacion.ESTADO_PENDIENTE:
+        aviso.marcar_realizada(usuario=request.user)
+        # Elimina el aviso de campana inmediatamente; no hay que esperar otra carga.
+        try:
+            from dashboard.models import Notificacion
+            Notificacion.objects.filter(
+                tipo="factura_realizar",
+                referencia_id=aviso.pk,
+            ).delete()
+        except Exception:
+            pass
+        messages.success(
+            request,
+            f"Factura de {aviso.cliente} marcada como realizada. El recordatorio fue cerrado.",
+        )
+
+    destino = (request.POST.get("next") or "").strip()
+    if destino.startswith("/"):
+        return redirect(destino)
+    return redirect("finanzas_facturacion_pendiente")
 
 
 @login_required

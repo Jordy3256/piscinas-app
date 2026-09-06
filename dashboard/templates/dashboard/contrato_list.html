@@ -186,7 +186,7 @@
         <table class="table cp-table align-middle mb-0">
           <thead>
             <tr>
-              <th>Cliente</th><th>Frecuencia</th><th>Forma de pago</th><th>Precio mensual</th><th>Mantenimientos</th><th>Estado</th><th class="text-end">Acciones</th>
+              <th>Cliente</th><th>Frecuencia</th><th>Forma de pago</th><th>Valor mensual</th><th>Mantenimientos</th><th>Estado</th><th class="text-end">Acciones</th>
             </tr>
           </thead>
           <tbody>
@@ -195,7 +195,7 @@
                 <td><div class="cp-client-name">{{ contrato.cliente.nombre }}</div><div class="small text-muted">{{ contrato.cliente.telefono }}</div></td>
                 <td>{{ contrato.frecuencia_completa }}</td>
                 <td>{{ contrato.forma_pago_completa }}</td>
-                <td class="cp-price">${{ contrato.precio_mensual|floatformat:2 }}</td>
+                <td class="cp-price">${{ contrato.precio_mensual_total|floatformat:2 }}</td>
                 <td><span class="cp-badge cp-badge-light">{{ contrato.total_mantenimientos }}</span></td>
                 <td>
                   {% if contrato.activo %}
@@ -240,7 +240,7 @@
               <div class="small text-muted">Frecuencia</div><div class="mb-2 fw-semibold">{{ contrato.frecuencia_completa }}</div>
               <div class="small text-muted">Forma de pago</div><div class="mb-3 fw-semibold">{{ contrato.forma_pago_completa }}</div>
               <div class="row g-2 mb-3">
-                <div class="col-6"><div class="small text-muted">Precio mensual</div><div class="cp-price">${{ contrato.precio_mensual|floatformat:2 }}</div></div>
+                <div class="col-6"><div class="small text-muted">Valor mensual</div><div class="cp-price">${{ contrato.precio_mensual_total|floatformat:2 }}</div></div>
                 <div class="col-6"><div class="small text-muted">Mantenimientos</div><div class="fw-bold">{{ contrato.total_mantenimientos }}</div></div>
               </div>
               <div class="d-grid gap-2">

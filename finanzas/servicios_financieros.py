@@ -150,7 +150,7 @@ def obtener_resumen_financiero(anio: int, mes: int, ciudad: str = "") -> dict:
                 valor = Decimal(contrato.precio_mensual or 0)
                 if contrato.id in promos:
                     valor = promos[contrato.id].calcular(valor)["total"]
-                total_facturado += valor
+                total_facturado += contrato.desglose_valor(valor)["total"]
             if contrato.id not in ids_obligados:
                 total_nomina += Decimal(contrato.valor_tecnico_mensual or 0)
 
@@ -205,15 +205,17 @@ def obtener_resumen_financiero(anio: int, mes: int, ciudad: str = "") -> dict:
         if f.saldo > 0
         and (f.fecha_cobro_desde or f.fecha_vencimiento) <= hoy <= f.fecha_vencimiento
     ]
-    facturas_por_emitir = [
-        f
-        for f in facturas
-        if f.requiere_factura
-        and not f.factura_enviada
-        and f.fecha_facturacion_programada
-        and f.fecha_facturacion_programada <= hoy
-        and f.estado != Factura.ESTADO_ANULADA
-    ]
+    try:
+        from .facturacion_externa import avisos_que_deben_alertar
+        facturas_por_emitir = avisos_que_deben_alertar(hoy=hoy)
+        if ciudad:
+            facturas_por_emitir = [
+                a for a in facturas_por_emitir
+                if (a.contrato.ciudad_ref and a.contrato.ciudad_ref.nombre.lower() == ciudad.lower())
+                or (a.contrato.ciudad or "").lower() == ciudad.lower()
+            ]
+    except Exception:
+        facturas_por_emitir = []
     nomina_hoy = [
         o
         for o in obligaciones

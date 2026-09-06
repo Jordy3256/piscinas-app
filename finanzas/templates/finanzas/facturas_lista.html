@@ -51,7 +51,7 @@
             <td>{{ fila.periodo_inicio|date:"d/m/Y" }} → {{ fila.periodo_fin|date:"d/m/Y" }}</td>
             <td><strong>{{ fila.fecha_cobro|date:"d/m/Y" }}</strong>{% if fila.fecha_vencimiento != fila.fecha_cobro %}<div class="small text-muted">Hasta {{ fila.fecha_vencimiento|date:"d/m/Y" }}</div>{% endif %}</td>
             <td>{{ fila.cuota_numero }}/{{ fila.total_cuotas }}</td>
-            <td><strong>${{ fila.valor|floatformat:2 }}</strong>{% if fila.promocion %}<div class="small text-success">{{ fila.promocion.nombre }}</div>{% endif %}</td>
+            <td><strong>${{ fila.valor|floatformat:2 }}</strong>{% if fila.impuesto %}<div class="small text-muted">Base ${{ fila.valor_base|floatformat:2 }} + IVA ${{ fila.impuesto|floatformat:2 }}</div>{% endif %}{% if fila.promocion %}<div class="small text-success">{{ fila.promocion.nombre }}</div>{% endif %}</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -77,9 +77,9 @@
   </section>
 
   <section class="cx-card">
-    <div class="cx-row mb-3"><div><strong>Listado de cuentas</strong><div class="small text-muted">{{ total_registros }} registro{{ total_registros|pluralize }} encontrado{{ total_registros|pluralize }}</div></div><a class="btn btn-sm btn-outline-primary" href="{% url 'finanzas_facturas' %}">Ver lista completa</a></div>
+    <div class="cx-row mb-3"><div><strong>Listado de cuentas</strong><div class="small text-muted">{{ total_registros }} registro{{ total_registros|pluralize }} encontrado{{ total_registros|pluralize }}</div></div><div class="d-flex gap-2"><a class="btn btn-outline-primary" href="{% url 'finanzas_facturacion_pendiente' %}">🧾 Facturación externa</a><a class="btn btn-sm btn-outline-primary" href="{% url 'finanzas_facturas' %}">Ver lista completa</a></div></div>
     <form method="get" class="cx-filter mb-3">
-      <input class="wide" type="search" name="q" value="{{ q }}" placeholder="Cliente, teléfono o factura">
+      <input class="wide" type="search" name="q" value="{{ q }}" placeholder="Cliente, teléfono o cuenta">
       <select name="estado"><option value="">Todos los estados</option>{% for value,label in estados %}<option value="{{ value }}" {% if estado == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
       <input type="number" name="anio" value="{{ anio_filtro }}" min="2020" max="2100" placeholder="Todos">
       <input type="number" name="mes" value="{{ mes_filtro }}" min="1" max="12" placeholder="Todos">
@@ -87,7 +87,7 @@
     </form>
 
     <div class="cx-desktop">
-      <table class="cx-table"><thead><tr><th>Factura</th><th>Cliente</th><th>Periodo</th><th>Vence</th><th>Total</th><th>Cobrado / saldo</th><th>Estado</th><th></th></tr></thead><tbody>
+      <table class="cx-table"><thead><tr><th>Cuenta</th><th>Cliente</th><th>Periodo</th><th>Vence</th><th>Total</th><th>Cobrado / saldo</th><th>Estado</th><th></th></tr></thead><tbody>
       {% for factura in page_obj %}<tr>
         <td><strong>{{ factura.numero }}</strong></td><td>{{ factura.cliente.nombre }}<div class="small text-muted">{{ factura.cliente.telefono }}</div></td><td>{{ factura.periodo_label }}</td><td>{{ factura.fecha_vencimiento|date:"d/m/Y" }}</td><td>${{ factura.total_cobro|floatformat:2 }}</td>
         <td><strong>${{ factura.monto_pagado|floatformat:2 }}</strong> / ${{ factura.saldo|floatformat:2 }}<div class="cx-progress"><span style="width:{{ factura.porcentaje_pagado }}%"></span></div></td>

@@ -1,0 +1,80 @@
+{% extends "dashboard/base.html" %}
+{% load humanize %}
+{% block title %}Facturación pendiente | JVAQUA{% endblock %}
+
+{% block content %}
+<style>
+  .fx-wrap{max-width:1180px;margin:0 auto}
+  .fx-hero{background:linear-gradient(135deg,#0f172a,#123b62);color:#fff;border-radius:22px;padding:24px;margin-bottom:18px;box-shadow:0 14px 36px rgba(15,23,42,.12)}
+  .fx-hero h1{font-size:1.35rem;font-weight:800;margin:0 0 5px}
+  .fx-hero p{margin:0;color:rgba(255,255,255,.78)}
+  .fx-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:18px}
+  .fx-stat{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:13px}
+  .fx-stat strong{display:block;font-size:1.25rem}.fx-stat span{font-size:.82rem;color:rgba(255,255,255,.7)}
+  .fx-card{background:#fff;border:1px solid #e5edf5;border-radius:20px;overflow:hidden;box-shadow:0 8px 25px rgba(15,23,42,.05)}
+  .fx-toolbar{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:16px 18px;border-bottom:1px solid #edf2f7}
+  .fx-filters{display:flex;gap:8px;flex-wrap:wrap}.fx-filter{padding:8px 12px;border-radius:999px;border:1px solid #dce6ef;text-decoration:none;color:#42566d;font-weight:700;font-size:.85rem}.fx-filter.active{background:#0b69c7;color:#fff;border-color:#0b69c7}
+  .fx-row{display:grid;grid-template-columns:minmax(210px,1.5fr) minmax(185px,1fr) minmax(150px,.8fr) minmax(145px,.75fr) auto;gap:14px;align-items:center;padding:15px 18px;border-bottom:1px solid #edf2f7}
+  .fx-row:last-child{border-bottom:0}.fx-client{font-weight:800;color:#172b4d}.fx-meta{font-size:.82rem;color:#718096;margin-top:3px}
+  .fx-date{font-weight:800}.fx-overdue{color:#c53030}.fx-today{color:#b7791f}.fx-ok{color:#2f855a}
+  .fx-btn{border:0;background:#198754;color:#fff;font-weight:800;border-radius:12px;padding:9px 12px;white-space:nowrap}
+  .fx-empty{padding:36px 18px;text-align:center;color:#718096}
+  @media(max-width:800px){.fx-stats{grid-template-columns:1fr}.fx-row{grid-template-columns:1fr;gap:7px}.fx-toolbar{align-items:flex-start;flex-direction:column}}
+</style>
+
+<div class="fx-wrap">
+  <section class="fx-hero">
+    <h1>🧾 Facturación externa</h1>
+    <p>Este módulo no emite documentos tributarios. Solo te recuerda qué factura debes realizar en tu sistema externo y permite cerrar el aviso cuando ya fue hecha.</p>
+    <div class="fx-stats">
+      <div class="fx-stat"><strong>{{ cantidad_pendientes }}</strong><span>Pendientes totales</span></div>
+      <div class="fx-stat"><strong>{{ cantidad_alertables }}</strong><span>Ya requieren atención</span></div>
+      <div class="fx-stat"><strong>{{ cantidad_atrasadas }}</strong><span>Atrasadas</span></div>
+    </div>
+  </section>
+
+  <section class="fx-card">
+    <div class="fx-toolbar">
+      <div><strong>Control de facturación</strong><div class="small text-muted">Los periodos se generan desde la configuración comercial de cada contrato.</div></div>
+      <div class="fx-filters">
+        <a class="fx-filter {% if estado == 'pendiente' %}active{% endif %}" href="?estado=pendiente">Pendientes</a>
+        <a class="fx-filter {% if estado == 'realizada' %}active{% endif %}" href="?estado=realizada">Realizadas</a>
+        <a class="fx-filter {% if estado == 'anulada' %}active{% endif %}" href="?estado=anulada">Anuladas</a>
+      </div>
+    </div>
+
+    {% for aviso in avisos %}
+      <article class="fx-row">
+        <div>
+          <div class="fx-client">{{ aviso.cliente }}</div>
+          <div class="fx-meta">{{ aviso.contrato.forma_pago_completa }}</div>
+        </div>
+        <div>
+          <div class="small text-muted">Periodo del servicio</div>
+          <div>{{ aviso.periodo_inicio|date:"d/m/Y" }} → {{ aviso.periodo_fin|date:"d/m/Y" }}</div>
+        </div>
+        <div>
+          <div class="small text-muted">Fecha de facturación</div>
+          <div class="fx-date {% if aviso.estado == 'pendiente' and aviso.fecha_programada < hoy %}fx-overdue{% elif aviso.estado == 'pendiente' and aviso.fecha_programada == hoy %}fx-today{% else %}fx-ok{% endif %}">{{ aviso.fecha_programada|date:"d/m/Y" }}</div>
+        </div>
+        <div>
+          <div class="small text-muted">Estado</div>
+          <strong>{{ aviso.get_estado_display }}</strong>
+          {% if aviso.realizada_en %}<div class="fx-meta">{{ aviso.realizada_en|date:"d/m/Y H:i" }}</div>{% endif %}
+        </div>
+        <div>
+          {% if aviso.estado == 'pendiente' %}
+            <form method="post" action="{% url 'finanzas_facturacion_realizada' aviso.pk %}">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.get_full_path }}">
+              <button class="fx-btn" type="submit">✓ Factura realizada</button>
+            </form>
+          {% endif %}
+        </div>
+      </article>
+    {% empty %}
+      <div class="fx-empty">No hay registros para este estado.</div>
+    {% endfor %}
+  </section>
+</div>
+{% endblock %}
