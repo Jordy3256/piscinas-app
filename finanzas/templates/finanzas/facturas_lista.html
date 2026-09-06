@@ -27,16 +27,40 @@
   {% if vista_previa %}
   <section class="cx-card cx-preview">
     <div class="cx-row">
-      <div><h2 class="h5 fw-bold mb-1">Vista previa del periodo</h2><p class="text-muted mb-0">Confirma la información antes de crear las cuentas por cobrar.</p></div>
+      <div><h2 class="h5 fw-bold mb-1">Cuentas que se van a generar</h2><p class="text-muted mb-0">El mes seleccionado corresponde a la <strong>fecha real de cobro</strong>, no al mes en que inició el servicio.</p></div>
       <span class="cx-badge pendiente">{{ vista_previa.mes|stringformat:"02d" }}/{{ vista_previa.anio }}</span>
     </div>
     <div class="cx-preview-grid mt-3">
-      <div class="cx-preview-item"><span>Contratos facturables</span><strong>{{ vista_previa.contratos_activos }}</strong></div>
+      <div class="cx-preview-item"><span>Contratos con cobro este mes</span><strong>{{ vista_previa.contratos_con_cobro }}</strong></div>
       <div class="cx-preview-item"><span>Mensualidades nuevas</span><strong class="text-primary">{{ vista_previa.nuevas }}</strong></div>
       <div class="cx-preview-item"><span>Ya existentes</span><strong>{{ vista_previa.existentes }}</strong></div>
       <div class="cx-preview-item"><span>Valor por generar</span><strong class="text-success">${{ vista_previa.valor_nuevo|floatformat:2|intcomma }}</strong></div>
-      <div class="cx-preview-item"><span>Proyección del periodo</span><strong>${{ vista_previa.valor_total_periodo|floatformat:2|intcomma }}</strong></div>
+      <div class="cx-preview-item"><span>Total programado del mes</span><strong>${{ vista_previa.valor_total_periodo|floatformat:2|intcomma }}</strong></div>
     </div>
+
+    {% if vista_previa.contratos_nuevos %}
+    <div class="table-responsive mt-3">
+      <table class="cx-table bg-white rounded-4 overflow-hidden">
+        <thead>
+          <tr><th>Cliente</th><th>Periodo de servicio</th><th>Fecha de cobro</th><th>Cuota</th><th>Valor</th></tr>
+        </thead>
+        <tbody>
+          {% for fila in vista_previa.contratos_nuevos %}
+          <tr>
+            <td><strong>{{ fila.cliente.nombre }}</strong><div class="small text-muted">{{ fila.contrato.forma_pago_completa }}</div></td>
+            <td>{{ fila.periodo_inicio|date:"d/m/Y" }} → {{ fila.periodo_fin|date:"d/m/Y" }}</td>
+            <td><strong>{{ fila.fecha_cobro|date:"d/m/Y" }}</strong>{% if fila.fecha_vencimiento != fila.fecha_cobro %}<div class="small text-muted">Hasta {{ fila.fecha_vencimiento|date:"d/m/Y" }}</div>{% endif %}</td>
+            <td>{{ fila.cuota_numero }}/{{ fila.total_cuotas }}</td>
+            <td><strong>${{ fila.valor|floatformat:2 }}</strong>{% if fila.promocion %}<div class="small text-success">{{ fila.promocion.nombre }}</div>{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% elif vista_previa.nuevas == 0 %}
+    <div class="alert alert-light border mt-3 mb-0">No existen cuentas nuevas cuya fecha de cobro corresponda a este mes.</div>
+    {% endif %}
+
     <form method="post" action="{% url 'finanzas_facturas_generar' %}" class="cx-confirm">{% csrf_token %}
       <input type="hidden" name="anio" value="{{ vista_previa.anio }}"><input type="hidden" name="mes" value="{{ vista_previa.mes }}">
       <a class="btn btn-outline-secondary" href="{% url 'finanzas_facturas' %}?anio={{ vista_previa.anio }}&mes={{ vista_previa.mes }}">Cancelar</a>

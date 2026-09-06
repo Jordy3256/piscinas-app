@@ -82,9 +82,10 @@ except Exception:
 logger = logging.getLogger(__name__)
 
 try:
-    from asistente_tecnico.models import CasoAsistenteTecnico
+    from asistente_tecnico.models import CasoAsistenteTecnico, PerfilSuscriptor
 except Exception:
     CasoAsistenteTecnico = None
+    PerfilSuscriptor = None
 
 
 # -------------------
@@ -2833,6 +2834,43 @@ def dashboard_view(request):
         grafico_bi_contratos=json.dumps({"labels":[x["label"] for x in meses_bi],"activos":[x["activos"] for x in meses_bi],"altas":[x["altas"] for x in meses_bi],"bajas":[x["bajas"] for x in meses_bi]})
         grafico_bi_ciudades=json.dumps({"labels":[x["nombre"] for x in ranking_ciudades],"utilidad":[x["utilidad"] for x in ranking_ciudades],"margen":[x["margen"] for x in ranking_ciudades]})
 
+        # Crecimiento JVAQUA Digital · registros nuevos por mes.
+        digital_serie = []
+        if PerfilSuscriptor is not None:
+            digital_serie = []
+            for offset in range(11, -1, -1):
+                idx = base_mes.year * 12 + (base_mes.month - 1) - offset
+                yy = idx // 12
+                mm = idx % 12 + 1
+                ini = date(yy, mm, 1)
+                fin = date(yy, mm, monthrange(yy, mm)[1])
+                nuevos = PerfilSuscriptor.objects.filter(
+                    creado_en__date__range=(ini, fin)
+                ).count()
+                activos_digital = PerfilSuscriptor.objects.filter(
+                    estado="activo",
+                    creado_en__date__lte=fin,
+                ).filter(
+                    Q(acceso_hasta__isnull=True) | Q(acceso_hasta__gte=fin)
+                ).count()
+                digital_serie.append({
+                    "label": ini.strftime("%b %y"),
+                    "nuevos": nuevos,
+                    "activos": activos_digital,
+                })
+        grafico_bi_digital = json.dumps({
+            "labels": [x["label"] for x in digital_serie],
+            "nuevos": [x["nuevos"] for x in digital_serie],
+            "activos": [x["activos"] for x in digital_serie],
+        })
+        digital_nuevos_mes = digital_serie[-1]["nuevos"] if digital_serie else 0
+        digital_activos_actuales = (
+            PerfilSuscriptor.objects.filter(estado="activo")
+            .filter(Q(acceso_hasta__isnull=True) | Q(acceso_hasta__gte=hoy))
+            .count()
+            if PerfilSuscriptor is not None else 0
+        )
+
         # Cuando se selecciona una ciudad, los KPI ejecutivos principales también se sectorizan.
         if ciudad_obj:
             m_hoy = Mantenimiento.objects.filter(models.Q(contrato__ciudad_ref=ciudad_obj) | models.Q(contrato__ciudad_ref__isnull=True, cliente__ciudad_ref=ciudad_obj), fecha=hoy)
@@ -2987,6 +3025,7 @@ def dashboard_view(request):
             "salud_empresa": salud_empresa,
             "ciudades_dashboard": ciudades_dashboard, "ciudad_dashboard": ciudad_dashboard, "ciudad_obj": ciudad_obj,
             "grafico_bi_finanzas": grafico_bi_finanzas, "grafico_bi_contratos": grafico_bi_contratos, "grafico_bi_ciudades": grafico_bi_ciudades,
+            "grafico_bi_digital": grafico_bi_digital, "digital_nuevos_mes": digital_nuevos_mes, "digital_activos_actuales": digital_activos_actuales,
             "contratos_perdidos_mes": contratos_perdidos_mes, "facturacion_perdida_mes": facturacion_perdida_mes,
             "altas_mes_bi": altas_mes_bi, "crecimiento_neto_bi": crecimiento_neto_bi, "ranking_ciudades": ranking_ciudades,
             "mejor_ciudad": mejor_ciudad, "motivos_baja_bi": motivos_baja_bi,

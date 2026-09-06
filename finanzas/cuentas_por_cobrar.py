@@ -43,37 +43,121 @@ def contratos_facturables():
     )
 
 
+def _desplazar_mes(anio, mes, desplazamiento):
+    indice = (int(anio) * 12 + (int(mes) - 1)) + int(desplazamiento)
+    return indice // 12, indice % 12 + 1
+
+
+def cuotas_programadas_para_mes_cobro(contrato, anio_cobro, mes_cobro, meses_atras=12):
+    """
+    Devuelve únicamente las cuotas cuya FECHA REAL DE COBRO cae en el mes elegido.
+
+    El periodo de servicio y el mes de cobro no son necesariamente iguales.
+    Ejemplo:
+      contrato inicia 05/09/2026
+      cierre de periodo = 05/10/2026
+      al generar SEPTIEMBRE no se crea esa cuenta;
+      aparece al generar OCTUBRE.
+    """
+    resultado = []
+    vistos = set()
+
+    for desplazamiento in range(-meses_atras, 1):
+        periodo_anio, periodo_mes = _desplazar_mes(anio_cobro, mes_cobro, desplazamiento)
+        for cuota in contrato.calendario_cobros(periodo_anio, periodo_mes):
+            fecha = cuota.get("fecha_cobro_desde") or cuota.get("fecha_vencimiento")
+            if not fecha or fecha.year != int(anio_cobro) or fecha.month != int(mes_cobro):
+                continue
+
+            # No generar periodos que finalizaron antes de que el contrato exista.
+            if contrato.fecha_inicio and cuota["periodo_fin"] <= contrato.fecha_inicio:
+                continue
+
+            clave = (periodo_anio, periodo_mes, cuota["cuota_numero"])
+            if clave in vistos:
+                continue
+            vistos.add(clave)
+            resultado.append((periodo_anio, periodo_mes, cuota))
+
+    resultado.sort(
+        key=lambda x: (
+            x[2]["fecha_cobro_desde"],
+            x[0],
+            x[1],
+            x[2]["cuota_numero"],
+        )
+    )
+    return resultado
+
+
 def previsualizar_facturas_periodo(anio, mes):
     contratos = list(contratos_facturables())
-    existentes = set(
-        Factura.objects.filter(
-            contrato_id__in=[c.pk for c in contratos],
-            periodo_anio=anio,
-            periodo_mes=mes,
-        ).values_list("contrato_id", "cuota_numero")
-    )
-    nuevas = []
+    nuevas_detalle = []
+    existentes = 0
+    previstas = 0
     valor_nuevo = Decimal("0.00")
-    total_obligaciones = 0
+    valor_total_periodo = Decimal("0.00")
+    contratos_con_cobro = set()
+
     for contrato in contratos:
-        for cuota in contrato.calendario_cobros(anio, mes):
-            total_obligaciones += 1
-            clave = (contrato.pk, cuota["cuota_numero"])
-            if clave not in existentes:
-                nuevas.append((contrato, cuota))
-                promo_datos = valores_promocion(contrato, anio, mes)
-                proporcion = (cuota["valor"] / Decimal(contrato.precio_mensual or 1)) if contrato.precio_mensual else Decimal("0")
-                valor_nuevo += (promo_datos["total"] * proporcion).quantize(Decimal("0.01"))
+        promo_cache = {}
+        for periodo_anio, periodo_mes, cuota in cuotas_programadas_para_mes_cobro(
+            contrato, anio, mes
+        ):
+            previstas += 1
+            contratos_con_cobro.add(contrato.pk)
+
+            clave_periodo = (periodo_anio, periodo_mes)
+            if clave_periodo not in promo_cache:
+                promo_cache[clave_periodo] = valores_promocion(
+                    contrato, periodo_anio, periodo_mes
+                )
+            promo_datos = promo_cache[clave_periodo]
+            proporcion = (
+                cuota["valor"] / Decimal(contrato.precio_mensual or 1)
+                if contrato.precio_mensual
+                else Decimal("0")
+            )
+            valor_cuota = (promo_datos["total"] * proporcion).quantize(Decimal("0.01"))
+            valor_total_periodo += valor_cuota
+
+            ya_existe = Factura.objects.filter(
+                contrato=contrato,
+                periodo_anio=periodo_anio,
+                periodo_mes=periodo_mes,
+                cuota_numero=cuota["cuota_numero"],
+            ).exists()
+            if ya_existe:
+                existentes += 1
+                continue
+
+            valor_nuevo += valor_cuota
+            nuevas_detalle.append({
+                "contrato": contrato,
+                "cliente": contrato.cliente,
+                "periodo_anio": periodo_anio,
+                "periodo_mes": periodo_mes,
+                "periodo_inicio": cuota["periodo_inicio"],
+                "periodo_fin": cuota["periodo_fin"],
+                "cuota_numero": cuota["cuota_numero"],
+                "total_cuotas": cuota["total_cuotas"],
+                "fecha_cobro": cuota["fecha_cobro_desde"],
+                "fecha_vencimiento": cuota["fecha_vencimiento"],
+                "valor": valor_cuota,
+                "promocion": promo_datos["promocion"],
+            })
+
     return {
         "anio": anio,
         "mes": mes,
         "contratos_activos": len(contratos),
-        "obligaciones_previstas": total_obligaciones,
-        "nuevas": len(nuevas),
-        "existentes": len(existentes),
+        "contratos_con_cobro": len(contratos_con_cobro),
+        "obligaciones_previstas": previstas,
+        "nuevas": len(nuevas_detalle),
+        "existentes": existentes,
         "valor_nuevo": valor_nuevo,
-        "valor_total_periodo": sum((valores_promocion(c, anio, mes)["total"] for c in contratos), Decimal("0.00")),
-        "contratos_nuevos": nuevas,
+        "valor_total_periodo": valor_total_periodo,
+        "contratos_nuevos": nuevas_detalle,
     }
 
 
@@ -131,17 +215,54 @@ def generar_factura_contrato(contrato, anio, mes, usuario=None):
 
 
 def generar_facturas_periodo(anio, mes, usuario=None):
+    """
+    Genera exclusivamente cuentas cuya fecha programada de cobro cae dentro
+    del mes solicitado. El mes solicitado es MES DE COBRO, no mes de servicio.
+    """
     creadas = 0
     existentes = 0
     errores = []
     valor_generado = Decimal("0.00")
+    detalle_creadas = []
+
     for contrato in contratos_facturables():
         try:
-            previstas = len(contrato.calendario_cobros(anio, mes))
-            facturas, cantidad = generar_factura_contrato(contrato, anio, mes, usuario=usuario)
-            creadas += cantidad
-            existentes += previstas - cantidad
-            valor_generado += sum((f.total for f in facturas), Decimal("0.00"))
+            for periodo_anio, periodo_mes, cuota in cuotas_programadas_para_mes_cobro(
+                contrato, anio, mes
+            ):
+                factura_existente = Factura.objects.filter(
+                    contrato=contrato,
+                    periodo_anio=periodo_anio,
+                    periodo_mes=periodo_mes,
+                    cuota_numero=cuota["cuota_numero"],
+                ).first()
+                if factura_existente:
+                    existentes += 1
+                    continue
+
+                facturas, _ = generar_factura_contrato(
+                    contrato, periodo_anio, periodo_mes, usuario=usuario
+                )
+                # generar_factura_contrato puede crear más de una cuota del mismo
+                # periodo. Conservamos solamente como resultado del proceso las
+                # que corresponden al mes de cobro solicitado; las otras no deben
+                # existir todavía, por lo que se eliminan si fueron creadas aquí.
+                for factura in facturas:
+                    if factura.fecha_cobro_desde.year == int(anio) and factura.fecha_cobro_desde.month == int(mes):
+                        creadas += 1
+                        valor_generado += factura.total
+                        detalle_creadas.append(factura)
+                    else:
+                        factura.delete()
+
         except Exception as exc:
             errores.append(f"Contrato {contrato.pk}: {exc}")
-    return {"creadas": creadas, "existentes": existentes, "errores": errores, "valor_generado": valor_generado}
+
+    return {
+        "creadas": creadas,
+        "existentes": existentes,
+        "errores": errores,
+        "valor_generado": valor_generado,
+        "detalle_creadas": detalle_creadas,
+    }
+
