@@ -1563,12 +1563,244 @@ def _metas_empresa_contexto():
     }
 
 
+
+def _serie_evolutiva_contratos_metas(metas, hoy=None):
+    """
+    Reconstruye la evolución mensual de contratos desde el primer contrato
+    registrado hasta la última meta empresarial.
+
+    Azul  = contratos activos reales.
+    Rojo  = contratos iniciados que se encontraban perdidos/inactivos en ese corte.
+    Verde = trayectoria necesaria desde hoy para alcanzar cada meta futura.
+
+    La reconstrucción histórica contempla fecha de inicio, bajas y reactivaciones.
+    """
+    hoy = hoy or timezone.localdate()
+
+    contratos = list(
+        Contrato.objects.all()
+        .only(
+            "id", "fecha_inicio", "fecha_inicio_original",
+            "fecha_baja", "activo",
+        )
+        .order_by("id")
+    )
+    if not contratos:
+        return {
+            "labels": [],
+            "activos": [],
+            "perdidos": [],
+            "proyectados": [],
+            "inicio": None,
+            "fin": None,
+        }
+
+    reactivaciones_por_contrato = defaultdict(list)
+    for r in (
+        ReactivacionContrato.objects
+        .filter(contrato_id__in=[c.pk for c in contratos])
+        .only(
+            "contrato_id", "fecha_reactivacion",
+            "fecha_baja_anterior", "fecha_inicio_anterior", "fecha_inicio",
+        )
+        .order_by("contrato_id", "fecha_reactivacion", "id")
+    ):
+        reactivaciones_por_contrato[r.contrato_id].append(r)
+
+    vidas = []
+    primera_fecha = None
+
+    for contrato in contratos:
+        reactivaciones = reactivaciones_por_contrato.get(contrato.pk, [])
+
+        candidatos_inicio = [
+            contrato.fecha_inicio_original,
+            contrato.fecha_inicio,
+        ]
+        for r in reactivaciones:
+            candidatos_inicio.extend([
+                r.fecha_inicio_anterior,
+                r.fecha_inicio,
+                r.fecha_reactivacion,
+            ])
+        candidatos_inicio = [f for f in candidatos_inicio if f]
+        if not candidatos_inicio:
+            continue
+
+        inicio_original = min(candidatos_inicio)
+        primera_fecha = (
+            inicio_original
+            if primera_fecha is None
+            else min(primera_fecha, inicio_original)
+        )
+
+        intervalos = []
+        inicio_tramo = inicio_original
+
+        for r in reactivaciones:
+            baja = r.fecha_baja_anterior
+            if baja and baja > inicio_tramo:
+                intervalos.append((inicio_tramo, baja))
+            # La reactivación abre un nuevo tramo activo.
+            if r.fecha_reactivacion:
+                inicio_tramo = r.fecha_reactivacion
+            elif r.fecha_inicio:
+                inicio_tramo = r.fecha_inicio
+
+        fin_actual = None
+        if not contrato.activo:
+            fin_actual = contrato.fecha_baja
+
+        # Evitar tramos imposibles por registros históricos incompletos.
+        if fin_actual and fin_actual <= inicio_tramo:
+            fin_actual = None
+        intervalos.append((inicio_tramo, fin_actual))
+
+        vidas.append({
+            "inicio": inicio_original,
+            "intervalos": intervalos,
+        })
+
+    if not vidas or primera_fecha is None:
+        return {
+            "labels": [],
+            "activos": [],
+            "perdidos": [],
+            "proyectados": [],
+            "inicio": None,
+            "fin": None,
+        }
+
+    metas_ordenadas = sorted(
+        [m for m in metas if m.metrica == "contratos_activos"],
+        key=lambda m: (m.fecha_fin, m.pk),
+    )
+    ultima_fecha = max(
+        [m.fecha_fin for m in metas_ordenadas] or [hoy]
+    )
+    if ultima_fecha < hoy:
+        ultima_fecha = hoy
+
+    # Generar un punto por mes. El mes actual usa "hoy" para que el valor azul
+    # coincida exactamente con el Dashboard, no con una fecha futura del mes.
+    puntos = []
+    cursor = date(primera_fecha.year, primera_fecha.month, 1)
+    ultimo_mes = date(ultima_fecha.year, ultima_fecha.month, 1)
+    while cursor <= ultimo_mes:
+        fin_mes = date(cursor.year, cursor.month, monthrange(cursor.year, cursor.month)[1])
+        if cursor.year == hoy.year and cursor.month == hoy.month:
+            corte = hoy
+        else:
+            corte = min(fin_mes, ultima_fecha)
+        puntos.append((cursor, corte))
+        if cursor.month == 12:
+            cursor = date(cursor.year + 1, 1, 1)
+        else:
+            cursor = date(cursor.year, cursor.month + 1, 1)
+
+    def esta_activo_en(vida, corte):
+        for ini, fin in vida["intervalos"]:
+            if ini <= corte and (fin is None or corte < fin):
+                return True
+        return False
+
+    activos = []
+    perdidos = []
+    for _, corte in puntos:
+        if corte > hoy:
+            activos.append(None)
+            perdidos.append(None)
+            continue
+
+        iniciados = [v for v in vidas if v["inicio"] <= corte]
+        activos_corte = sum(1 for v in iniciados if esta_activo_en(v, corte))
+        perdidos_corte = max(len(iniciados) - activos_corte, 0)
+        activos.append(activos_corte)
+        perdidos.append(perdidos_corte)
+
+    actual_hoy = sum(1 for v in vidas if v["inicio"] <= hoy and esta_activo_en(v, hoy))
+
+    # Trayectoria verde: parte del dato real de hoy y llega de forma lineal
+    # a cada objetivo en su fecha exacta.
+    anclas = [(hoy, actual_hoy)]
+    for meta in metas_ordenadas:
+        if meta.fecha_fin > hoy:
+            anclas.append((meta.fecha_fin, meta.objetivo))
+
+    proyectados = []
+    for _, corte in puntos:
+        if corte < hoy or not anclas:
+            proyectados.append(None)
+            continue
+        if corte == hoy:
+            proyectados.append(actual_hoy)
+            continue
+
+        valor = None
+        for i in range(len(anclas) - 1):
+            fecha_a, valor_a = anclas[i]
+            fecha_b, valor_b = anclas[i + 1]
+            if fecha_a <= corte <= fecha_b:
+                total_dias = max((fecha_b - fecha_a).days, 1)
+                transcurridos = max((corte - fecha_a).days, 0)
+                proporcion = transcurridos / total_dias
+                valor = valor_a + ((valor_b - valor_a) * proporcion)
+                break
+        if valor is None and corte > anclas[-1][0]:
+            valor = anclas[-1][1]
+        proyectados.append(round(valor, 1) if valor is not None else None)
+
+    MESES_CORTOS = [
+        "", "Ene", "Feb", "Mar", "Abr", "May", "Jun",
+        "Jul", "Ago", "Sep", "Oct", "Nov", "Dic",
+    ]
+    labels = [
+        f"{MESES_CORTOS[mes.month]} {mes.year}"
+        for mes, _ in puntos
+    ]
+
+    return {
+        "labels": labels,
+        "activos": activos,
+        "perdidos": perdidos,
+        "proyectados": proyectados,
+        "inicio": primera_fecha,
+        "fin": ultima_fecha,
+        "actual": actual_hoy,
+        "perdidos_actual": next(
+            (valor for valor in reversed(perdidos) if valor is not None),
+            0,
+        ),
+        "objetivo_final": anclas[-1][1] if anclas else actual_hoy,
+    }
+
 @login_required
 def metas_empresa_view(request):
     if not es_admin(request.user):
         return render(request, "dashboard/no_autorizado.html", status=403)
+
+    hoy = timezone.localdate()
     contexto = _metas_empresa_contexto()
-    contexto["hoy"] = timezone.localdate()
+    metas_modelo = (
+        list(MetaEmpresa.objects.filter(estado__in=["activa", "cumplida"]).order_by("orden", "fecha_fin"))
+        if MetaEmpresa is not None else []
+    )
+    serie = _serie_evolutiva_contratos_metas(metas_modelo, hoy=hoy)
+
+    contexto.update({
+        "hoy": hoy,
+        "grafico_evolucion_contratos": json.dumps({
+            "labels": serie["labels"],
+            "activos": serie["activos"],
+            "perdidos": serie["perdidos"],
+            "proyectados": serie["proyectados"],
+        }),
+        "evolucion_inicio": serie.get("inicio"),
+        "evolucion_fin": serie.get("fin"),
+        "evolucion_activos_actual": serie.get("actual", 0),
+        "evolucion_perdidos_actual": serie.get("perdidos_actual", 0),
+        "evolucion_objetivo_final": serie.get("objetivo_final", 0),
+    })
     return render(request, "dashboard/metas_empresa.html", contexto)
 
 @login_required
