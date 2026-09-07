@@ -372,8 +372,15 @@ def facturas_lista(request):
     hoy = timezone.localdate()
     q = (request.GET.get("q") or "").strip()
     estado = (request.GET.get("estado") or "").strip()
-    anio_raw = (request.GET.get("anio") or "").strip()
-    mes_raw = (request.GET.get("mes") or "").strip()
+    # Al entrar a Cartera por primera vez mostramos únicamente el mes actual.
+    # Si el usuario ya envió filtros, respetamos exactamente su selección.
+    filtros_periodo_enviados = "anio" in request.GET or "mes" in request.GET
+    if filtros_periodo_enviados:
+        anio_raw = (request.GET.get("anio") or "").strip()
+        mes_raw = (request.GET.get("mes") or "").strip()
+    else:
+        anio_raw = str(hoy.year)
+        mes_raw = str(hoy.month)
 
     anio_filtro = None
     mes_filtro = None
@@ -387,9 +394,9 @@ def facturas_lista(request):
             if not 1 <= mes_filtro <= 12:
                 raise ValueError
     except (TypeError, ValueError):
-        messages.warning(request, "El periodo indicado no es válido; se mostró la lista completa.")
-        anio_filtro = None
-        mes_filtro = None
+        messages.warning(request, "El periodo indicado no es válido; se mostró el mes actual.")
+        anio_filtro = hoy.year
+        mes_filtro = hoy.month
 
     facturas_qs = (
         Factura.objects.select_related("cliente", "contrato")
