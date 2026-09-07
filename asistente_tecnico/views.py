@@ -8,7 +8,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Count, Q
-from django.http import HttpResponseForbidden, HttpResponseBadRequest
+from django.http import HttpResponseForbidden, JsonResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
@@ -1511,6 +1511,88 @@ def digital_soporte_view(request):
     })
 
 
+
+
+def _serializar_mensaje_soporte(mensaje):
+    adjuntos = []
+    for adjunto in mensaje.adjuntos.all():
+        try:
+            url = adjunto.archivo.url
+        except Exception:
+            url = ""
+        adjuntos.append({
+            "id": adjunto.pk,
+            "tipo": adjunto.tipo,
+            "nombre": adjunto.nombre_original or "Adjunto",
+            "url": url,
+        })
+    return {
+        "id": mensaje.pk,
+        "remitente": mensaje.remitente,
+        "texto": mensaje.texto or "",
+        "creado_en": timezone.localtime(mensaje.creado_en).strftime("%d/%m/%Y %H:%M"),
+        "adjuntos": adjuntos,
+    }
+
+
+@login_required
+def digital_soporte_mensajes_api(request, pk):
+    perfil = _suscriptor(request.user)
+    if not perfil:
+        return JsonResponse({"ok": False, "error": "No autorizado"}, status=403)
+
+    conversacion = get_object_or_404(
+        ConversacionSoporteDigital,
+        pk=pk,
+        suscriptor=perfil,
+    )
+    desde = request.GET.get("desde")
+    qs = conversacion.mensajes.prefetch_related("adjuntos").all()
+    try:
+        if desde:
+            qs = qs.filter(pk__gt=int(desde))
+    except (TypeError, ValueError):
+        pass
+
+    conversacion.mensajes.filter(
+        remitente="admin",
+        leido_cliente=False,
+    ).update(leido_cliente=True)
+
+    return JsonResponse({
+        "ok": True,
+        "estado": conversacion.estado,
+        "estado_label": conversacion.get_estado_display(),
+        "mensajes": [_serializar_mensaje_soporte(m) for m in qs],
+    })
+
+
+@login_required
+def soporte_admin_mensajes_api(request, pk):
+    if not _es_admin(request.user):
+        return JsonResponse({"ok": False, "error": "No autorizado"}, status=403)
+
+    conversacion = get_object_or_404(ConversacionSoporteDigital, pk=pk)
+    desde = request.GET.get("desde")
+    qs = conversacion.mensajes.prefetch_related("adjuntos").all()
+    try:
+        if desde:
+            qs = qs.filter(pk__gt=int(desde))
+    except (TypeError, ValueError):
+        pass
+
+    conversacion.mensajes.filter(
+        remitente="cliente",
+        leido_admin=False,
+    ).update(leido_admin=True)
+
+    return JsonResponse({
+        "ok": True,
+        "estado": conversacion.estado,
+        "estado_label": conversacion.get_estado_display(),
+        "mensajes": [_serializar_mensaje_soporte(m) for m in qs],
+    })
+
 @login_required
 @require_http_methods(["GET", "POST"])
 def digital_soporte_chat_view(request, pk):
@@ -1548,6 +1630,14 @@ def digital_soporte_chat_view(request, pk):
                 f"{request.user.get_full_name() or request.user.username}: {texto[:120] or 'envió un archivo'}",
                 url=f"/dashboard/asistente/administracion/soporte/{conversacion.pk}/",
             )
+            if request.headers.get("x-requested-with") == "XMLHttpRequest":
+                mensaje = MensajeSoporteDigital.objects.prefetch_related("adjuntos").get(pk=mensaje.pk)
+                return JsonResponse({
+                    "ok": True,
+                    "mensaje": _serializar_mensaje_soporte(mensaje),
+                    "estado": conversacion.estado,
+                    "estado_label": conversacion.get_estado_display(),
+                })
             return redirect("asistente_tecnico:digital_soporte_chat", pk=pk)
 
     return render(request, "asistente_tecnico/digital_soporte_chat.html", {
@@ -1628,6 +1718,14 @@ def soporte_admin_chat_view(request, pk):
                 mensaje=(texto[:180] or "Te enviamos un archivo en Soporte."),
                 programada_para=timezone.now(),
             )
+            if request.headers.get("x-requested-with") == "XMLHttpRequest":
+                mensaje = MensajeSoporteDigital.objects.prefetch_related("adjuntos").get(pk=mensaje.pk)
+                return JsonResponse({
+                    "ok": True,
+                    "mensaje": _serializar_mensaje_soporte(mensaje),
+                    "estado": conversacion.estado,
+                    "estado_label": conversacion.get_estado_display(),
+                })
             return redirect("asistente_tecnico:soporte_admin_chat", pk=pk)
 
     return render(request, "asistente_tecnico/soporte_admin_chat.html", {

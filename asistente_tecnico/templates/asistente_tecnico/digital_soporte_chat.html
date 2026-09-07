@@ -1,9 +1,118 @@
 {% extends 'asistente_tecnico/base_suscriptor.html' %}
-{% block title %}Conversación de soporte · JVAQUA Digital{% endblock %}
+{% block title %}Soporte JVAQUA{% endblock %}
 {% block extra_head %}<style>
-.chat-shell{max-width:900px;margin:auto}.chat-head{background:#fff;border:1px solid #e1edf3;border-radius:22px 22px 0 0;padding:16px 20px}.chat-body{background:#eef6f9;border-left:1px solid #e1edf3;border-right:1px solid #e1edf3;padding:20px;min-height:420px}.bubble-wrap{display:flex;margin:10px 0}.bubble-wrap.me{justify-content:flex-end}.bubble{max-width:78%;padding:11px 14px;border-radius:18px;background:#fff;box-shadow:0 2px 8px rgba(20,50,70,.06)}.bubble-wrap.me .bubble{background:#dff4ff}.bubble .time{font-size:.72rem;color:#718096;text-align:right;margin-top:5px}.media-preview{max-width:100%;max-height:360px;border-radius:12px;margin-top:8px}.chat-compose{background:#fff;border:1px solid #e1edf3;border-radius:0 0 22px 22px;padding:14px}.chat-compose textarea{resize:none}
+.chat-page{max-width:920px;margin:auto}
+.chat-shell{border-radius:28px;overflow:hidden;background:#fff;border:1px solid #dce9ef;box-shadow:0 20px 55px rgba(25,72,97,.10)}
+.chat-head{padding:17px 20px;background:linear-gradient(135deg,#ffffff,#eefaff);border-bottom:1px solid #e4eff4}
+.chat-profile{display:flex;align-items:center;gap:12px}.chat-avatar{width:46px;height:46px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(135deg,#087bb8,#00a8d6);color:#fff;font-size:1.25rem;box-shadow:0 7px 18px rgba(8,123,184,.23)}
+.chat-name{font-weight:800;color:#17334a}.chat-online{font-size:.78rem;color:#56808e}.online-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#22c55e;margin-right:4px}
+.chat-body{background:linear-gradient(rgba(239,247,250,.94),rgba(239,247,250,.94));padding:22px 18px;min-height:460px;max-height:62vh;overflow-y:auto;scroll-behavior:smooth}
+.chat-day{text-align:center;font-size:.74rem;color:#78909c;margin:8px 0 14px}
+.bubble-wrap{display:flex;margin:7px 0;animation:msgIn .16s ease}.bubble-wrap.me{justify-content:flex-end}
+.bubble{max-width:min(76%,650px);padding:10px 13px 7px;border-radius:17px 17px 17px 5px;background:#fff;box-shadow:0 2px 9px rgba(22,61,80,.07);color:#18384b;overflow-wrap:anywhere}
+.bubble-wrap.me .bubble{background:linear-gradient(135deg,#dff5ff,#cfefff);border-radius:17px 17px 5px 17px}
+.sender{font-size:.72rem;font-weight:800;color:#087bb8;margin-bottom:3px}.bubble-wrap.me .sender{display:none}.time{font-size:.67rem;color:#78909c;text-align:right;margin-top:4px}
+.media-preview{display:block;max-width:100%;max-height:370px;border-radius:13px;margin-top:7px;background:#dde8ed}
+.video-wrap{margin-top:7px}.file-link{display:flex;align-items:center;gap:7px;margin-top:8px;padding:9px 10px;border-radius:11px;background:#f5f9fb;text-decoration:none}
+.chat-compose{padding:12px;background:#fff;border-top:1px solid #e4edf1}
+.compose-box{display:flex;align-items:flex-end;gap:8px;background:#f5f8fa;border:1px solid #e0e9ed;border-radius:19px;padding:7px 8px 7px 12px}
+.compose-box textarea{border:0!important;background:transparent!important;box-shadow:none!important;resize:none;max-height:120px;padding:8px 2px}
+.attach-btn{width:40px;height:40px;border-radius:50%;border:0;background:transparent;color:#557985;display:grid;place-items:center;font-size:1.1rem;cursor:pointer}.attach-btn:hover{background:#e8f1f4}
+.send-btn{width:42px;height:42px;border:0;border-radius:50%;display:grid;place-items:center;background:#087bb8;color:#fff;font-size:1.05rem;box-shadow:0 6px 15px rgba(8,123,184,.22)}
+.send-btn:disabled{opacity:.55}.attachment-preview{font-size:.78rem;color:#557985;padding:6px 12px 0}
+.live-pill{font-size:.72rem;padding:5px 9px;border-radius:999px;background:#eafaf0;color:#247544;font-weight:700}
+@keyframes msgIn{from{transform:translateY(4px);opacity:.2}to{transform:none;opacity:1}}
+@media(max-width:640px){.chat-page{margin:-4px -8px 0}.chat-shell{border-radius:20px}.chat-body{min-height:55vh;max-height:62vh;padding:16px 10px}.bubble{max-width:86%}.chat-head{padding:13px}.chat-compose{padding:8px}}
 </style>{% endblock %}
-{% block content %}<div class="chat-shell"><div class="mb-3"><a href="{% url 'asistente_tecnico:digital_soporte' %}" class="text-decoration-none">← Volver a Soporte</a></div>
-<div class="chat-head d-flex justify-content-between gap-3"><div><strong>JVAQUA Soporte</strong><div class="small text-muted">{{ conversacion.get_categoria_display }}{% if conversacion.piscina %} · {{ conversacion.piscina.nombre }}{% endif %}</div></div><span class="badge align-self-start text-bg-light">{{ conversacion.get_estado_display }}</span></div>
-<div class="chat-body">{% for m in conversacion.mensajes.all %}<div class="bubble-wrap {% if m.remitente == 'cliente' %}me{% endif %}"><div class="bubble"><div class="small fw-bold mb-1">{% if m.remitente == 'cliente' %}Tú{% else %}JVAQUA{% endif %}</div>{% if m.texto %}<div>{{ m.texto|linebreaksbr }}</div>{% endif %}{% for a in m.adjuntos.all %}{% if a.tipo == 'imagen' %}<a href="{{ a.archivo.url }}" target="_blank"><img class="media-preview d-block" src="{{ a.archivo.url }}" alt="Imagen adjunta"></a>{% elif a.tipo == 'video' %}<video class="media-preview d-block" controls preload="metadata"><source src="{{ a.archivo.url }}"></video>{% else %}<a class="d-block mt-2" href="{{ a.archivo.url }}" target="_blank">📎 {{ a.nombre_original }}</a>{% endif %}{% endfor %}<div class="time">{{ m.creado_en|date:"d/m/Y H:i" }}</div></div></div>{% empty %}<div class="text-center text-muted">Sin mensajes.</div>{% endfor %}</div>
-<div class="chat-compose">{% if conversacion.estado == 'cerrada' %}<div class="alert alert-light border mb-0">Esta conversación fue cerrada. Puedes iniciar una nueva desde Soporte.</div>{% else %}<form method="post" enctype="multipart/form-data">{% csrf_token %}<textarea class="form-control mb-2" name="mensaje" rows="2" placeholder="Escribe un mensaje..."></textarea><div class="d-flex justify-content-between gap-2 align-items-center"><input class="form-control form-control-sm" style="max-width:430px" type="file" name="adjuntos" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime" multiple><button class="btn jd-btn jd-btn-primary"><i class="bi bi-send"></i> Enviar</button></div></form>{% endif %}</div></div>{% endblock %}
+{% block content %}
+<div class="chat-page">
+<div class="mb-3"><a href="{% url 'asistente_tecnico:digital_soporte' %}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> Todas mis conversaciones</a></div>
+<div class="chat-shell">
+  <div class="chat-head d-flex justify-content-between align-items-center gap-2">
+    <div class="chat-profile"><div class="chat-avatar"><i class="bi bi-headset"></i></div><div><div class="chat-name">Soporte JVAQUA</div><div class="chat-online"><span class="online-dot"></span>Equipo de soporte · {{ conversacion.get_categoria_display }}{% if conversacion.piscina %} · {{ conversacion.piscina.nombre }}{% endif %}</div></div></div>
+    <div class="text-end"><div class="live-pill"><i class="bi bi-broadcast"></i> En vivo</div><div id="chat-status" class="small text-muted mt-1">{{ conversacion.get_estado_display }}</div></div>
+  </div>
+  <div id="chat-body" class="chat-body" data-last-id="{% with ultimo=conversacion.mensajes.last %}{{ ultimo.pk|default:0 }}{% endwith %}">
+    <div class="chat-day">Conversación con JVAQUA</div>
+    {% for m in conversacion.mensajes.all %}
+      <div class="bubble-wrap {% if m.remitente == 'cliente' %}me{% endif %}" data-msg-id="{{ m.pk }}"><div class="bubble">
+        <div class="sender">{% if m.remitente == 'admin' %}JVAQUA{% else %}Tú{% endif %}</div>
+        {% if m.texto %}<div class="message-text">{{ m.texto|linebreaksbr }}</div>{% endif %}
+        {% for a in m.adjuntos.all %}
+          {% if a.tipo == 'imagen' %}<a href="{{ a.archivo.url }}" target="_blank"><img class="media-preview" src="{{ a.archivo.url }}" alt="Imagen adjunta"></a>
+          {% elif a.tipo == 'video' %}<div class="video-wrap"><video class="media-preview" controls preload="metadata"><source src="{{ a.archivo.url }}"></video></div>
+          {% else %}<a class="file-link" href="{{ a.archivo.url }}" target="_blank"><i class="bi bi-paperclip"></i>{{ a.nombre_original }}</a>{% endif %}
+        {% endfor %}
+        <div class="time">{{ m.creado_en|date:"d/m/Y H:i" }}</div>
+      </div></div>
+    {% endfor %}
+  </div>
+  <div class="chat-compose">
+  {% if conversacion.estado == 'cerrada' %}
+    <div class="alert alert-light border mb-0">Esta conversación fue cerrada. Puedes iniciar una nueva desde Soporte.</div>
+  {% else %}
+    <form id="chat-form" method="post" enctype="multipart/form-data">{% csrf_token %}
+      <div class="compose-box">
+        <label class="attach-btn" title="Adjuntar foto o video"><i class="bi bi-paperclip"></i><input id="chat-files" class="d-none" type="file" name="adjuntos" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime" multiple></label>
+        <textarea id="chat-text" class="form-control" name="mensaje" rows="1" placeholder="Escribe un mensaje..."></textarea>
+        <button id="chat-send" class="send-btn" type="submit" aria-label="Enviar"><i class="bi bi-send-fill"></i></button>
+      </div>
+      <div id="attachment-preview" class="attachment-preview d-none"></div>
+    </form>
+  {% endif %}
+  </div>
+</div>
+</div>
+<script>
+(function(){
+  const body=document.getElementById('chat-body'), form=document.getElementById('chat-form');
+  if(!body)return;
+  let lastId=parseInt(body.dataset.lastId||'0',10), polling=false;
+  const endpoint="{% url 'asistente_tecnico:digital_soporte_mensajes_api' conversacion.pk %}";
+  const status=document.getElementById('chat-status');
+
+  function esc(s){const d=document.createElement('div');d.textContent=s||'';return d.innerHTML}
+  function render(m){
+    if(document.querySelector('[data-msg-id="'+m.id+'"]'))return;
+    const wrap=document.createElement('div');wrap.className='bubble-wrap'+(m.remitente==='cliente'?' me':'');wrap.dataset.msgId=m.id;
+    let media='';
+    (m.adjuntos||[]).forEach(a=>{
+      if(a.tipo==='imagen')media+=`<a href="${esc(a.url)}" target="_blank"><img class="media-preview" src="${esc(a.url)}" alt="Imagen adjunta"></a>`;
+      else if(a.tipo==='video')media+=`<div class="video-wrap"><video class="media-preview" controls preload="metadata"><source src="${esc(a.url)}"></video></div>`;
+      else media+=`<a class="file-link" href="${esc(a.url)}" target="_blank"><i class="bi bi-paperclip"></i>${esc(a.nombre)}</a>`;
+    });
+    wrap.innerHTML=`<div class="bubble"><div class="sender">${m.remitente==='admin'?'JVAQUA':'Tú'}</div>${m.texto?`<div class="message-text">${esc(m.texto).replace(/\n/g,'<br>')}</div>`:''}${media}<div class="time">${esc(m.creado_en)}</div></div>`;
+    body.appendChild(wrap); lastId=Math.max(lastId,m.id); body.dataset.lastId=lastId; body.scrollTop=body.scrollHeight;
+  }
+  async function poll(){
+    if(polling || document.hidden)return;
+    polling=true;
+    try{
+      const r=await fetch(endpoint+'?desde='+lastId,{headers:{'X-Requested-With':'XMLHttpRequest'},cache:'no-store'});
+      if(r.ok){const data=await r.json();(data.mensajes||[]).forEach(render);if(status&&data.estado_label)status.textContent=data.estado_label;}
+    }catch(e){} finally{polling=false}
+  }
+  body.scrollTop=body.scrollHeight;
+  setInterval(poll,2500); document.addEventListener('visibilitychange',()=>{if(!document.hidden)poll()});
+
+  if(form){
+    const text=document.getElementById('chat-text'), files=document.getElementById('chat-files'), preview=document.getElementById('attachment-preview'), send=document.getElementById('chat-send');
+    text.addEventListener('input',()=>{text.style.height='auto';text.style.height=Math.min(text.scrollHeight,120)+'px'});
+    text.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();form.requestSubmit()}});
+    files.addEventListener('change',()=>{if(files.files.length){preview.textContent=files.files.length===1?files.files[0].name:files.files.length+' archivos seleccionados';preview.classList.remove('d-none')}else preview.classList.add('d-none')});
+    form.addEventListener('submit',async e=>{
+      e.preventDefault();
+      if(!text.value.trim()&&!files.files.length)return;
+      send.disabled=true;
+      try{
+        const r=await fetch(location.href,{method:'POST',body:new FormData(form),headers:{'X-Requested-With':'XMLHttpRequest'}});
+        const data=await r.json();
+        if(!r.ok||!data.ok)throw new Error(data.error||'No se pudo enviar');
+        render(data.mensaje); text.value='';text.style.height='auto';files.value='';preview.classList.add('d-none');
+        if(status&&data.estado_label)status.textContent=data.estado_label;
+      }catch(err){alert('No pudimos enviar el mensaje. Inténtalo nuevamente.')} finally{send.disabled=false}
+    });
+  }
+})();
+</script>
+{% endblock %}
