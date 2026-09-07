@@ -364,23 +364,49 @@ class Contrato(models.Model):
         return cuotas
 
     def fecha_programada_facturacion(self, anio, mes):
+        """
+        Fecha interna para recordar la emisión de la factura externa.
+
+        Debe ser tolerante a contratos históricos o configuraciones comerciales
+        incompletas: un contrato antiguo nunca debe tumbar todo el módulo de
+        Facturación Externa.
+        """
         if not self.requiere_factura:
             return None
+
         inicio, fin = self.periodo_servicio(anio, mes)
-        primer_cobro = self.calendario_cobros(anio, mes)[0]["fecha_cobro_desde"]
+        calendario = self.calendario_cobros(anio, mes)
+        primer_cobro = (
+            calendario[0].get("fecha_cobro_desde")
+            if calendario
+            else None
+        )
+        # Respaldo seguro para contratos históricos.
+        primer_cobro = primer_cobro or fin
+
         momento = self.momento_facturacion or "antes_cobro"
+        dias_antes = int(self.facturacion_dias_antes or 0)
+
         if momento == "antes_inicio":
-            return inicio - timedelta(days=int(self.facturacion_dias_antes or 0))
+            return inicio - timedelta(days=dias_antes)
         if momento == "inicio_periodo":
             return inicio
         if momento == "cierre_periodo":
             return fin
         if momento == "dia_fijo":
-            destino_anio, destino_mes = primer_cobro.year, primer_cobro.month
-            return _fecha_segura(destino_anio, destino_mes, self.facturacion_dia or 1)
+            return _fecha_segura(
+                primer_cobro.year,
+                primer_cobro.month,
+                self.facturacion_dia or primer_cobro.day,
+            )
         if momento == "antes_cobro":
-            return primer_cobro - timedelta(days=int(self.facturacion_dias_antes or 0))
-        return _fecha_segura(primer_cobro.year, primer_cobro.month, self.facturacion_dia or primer_cobro.day)
+            return primer_cobro - timedelta(days=dias_antes)
+
+        return _fecha_segura(
+            primer_cobro.year,
+            primer_cobro.month,
+            self.facturacion_dia or primer_cobro.day,
+        )
 
     def sincronizar_tipo_compatibilidad(self):
         equivalencias = {"1_semanal": "semanal", "2_semanales": "semanal", "3_semanales": "semanal", "quincenal": "quincenal", "personalizado": "variable"}

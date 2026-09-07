@@ -302,7 +302,19 @@ def facturacion_pendiente_lista(request):
         return _denegado(request)
 
     hoy = timezone.localdate()
-    sincronizar_avisos_facturacion(hoy=hoy)
+    resultado_sync = sincronizar_avisos_facturacion(hoy=hoy)
+    errores_sync = resultado_sync.get("errores", [])
+    if errores_sync:
+        ejemplos = ", ".join(
+            f"{item['cliente']} (contrato #{item['contrato_id']})"
+            for item in errores_sync[:3]
+        )
+        messages.warning(
+            request,
+            "Facturación abrió correctamente, pero hay "
+            f"{len(errores_sync)} contrato(s) con configuración histórica que "
+            f"deben revisarse: {ejemplos}.",
+        )
     estado = (request.GET.get("estado") or "pendiente").strip()
 
     avisos = (
