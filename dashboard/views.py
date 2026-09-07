@@ -1505,7 +1505,7 @@ def _clasificar_estado_trabajador(carga_hoy, atrasados, proximos):
 
 def _metas_empresa_contexto():
     hoy = timezone.localdate()
-    contratos_actuales = Contrato.objects.filter(activo=True).count()
+    contratos_actuales = Contrato.objects.filter(activo=True, fecha_inicio__lte=hoy).count()
     metas = (
         list(MetaEmpresa.objects.filter(estado__in=["activa", "cumplida"]).order_by("orden", "fecha_fin"))
         if MetaEmpresa is not None else []
@@ -1712,13 +1712,34 @@ def _serie_evolutiva_contratos_metas(metas, hoy=None):
             perdidos.append(None)
             continue
 
+        if corte == hoy:
+            # Corte actual = fuente de verdad del sistema.
+            activos.append(
+                Contrato.objects.filter(activo=True, fecha_inicio__lte=hoy).count()
+            )
+            perdidos.append(
+                Contrato.objects.filter(activo=False, fecha_inicio__lte=hoy).count()
+            )
+            continue
+
         iniciados = [v for v in vidas if v["inicio"] <= corte]
         activos_corte = sum(1 for v in iniciados if esta_activo_en(v, corte))
         perdidos_corte = max(len(iniciados) - activos_corte, 0)
         activos.append(activos_corte)
         perdidos.append(perdidos_corte)
 
-    actual_hoy = sum(1 for v in vidas if v["inicio"] <= hoy and esta_activo_en(v, hoy))
+    # El dato de HOY debe salir del estado real del contrato en la base,
+    # no de una reconstrucción histórica. Además, un contrato futuro marcado
+    # activo todavía no cuenta como contrato activo operativo.
+    actual_hoy = Contrato.objects.filter(
+        activo=True,
+        fecha_inicio__lte=hoy,
+    ).count()
+
+    perdidos_hoy = Contrato.objects.filter(
+        activo=False,
+        fecha_inicio__lte=hoy,
+    ).count()
 
     # Trayectoria verde: parte del dato real de hoy y llega de forma lineal
     # a cada objetivo en su fecha exacta.
@@ -1767,10 +1788,7 @@ def _serie_evolutiva_contratos_metas(metas, hoy=None):
         "inicio": primera_fecha,
         "fin": ultima_fecha,
         "actual": actual_hoy,
-        "perdidos_actual": next(
-            (valor for valor in reversed(perdidos) if valor is not None),
-            0,
-        ),
+        "perdidos_actual": perdidos_hoy,
         "objetivo_final": anclas[-1][1] if anclas else actual_hoy,
     }
 

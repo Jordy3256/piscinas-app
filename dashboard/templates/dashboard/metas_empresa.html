@@ -12,8 +12,117 @@
 .goal-legend-note{font-size:.78rem;color:#718096}
 @media(max-width:700px){.goal-chart-wrap{height:330px}.goal-stat .value{font-size:1.25rem}}
 </style>
+
+
+{% endblock %}
+{% block content %}
+<div class="container-fluid px-0">
+  <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+    <div>
+      <h2 class="fw-bold mb-1">Metas de crecimiento</h2>
+      <div class="text-muted">Seguimiento automático según los contratos activos reales del sistema.</div>
+    </div>
+    <div class="badge text-bg-primary fs-6 p-3">Contratos activos hoy: {{ contratos_activos_meta }}</div>
+  </div>
+
+  <div class="card border-0 shadow-sm goal-chart-card mb-4">
+    <div class="card-body p-3 p-md-4">
+      <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-3">
+        <div>
+          <div class="small text-muted fw-semibold">EVOLUCIÓN Y PROYECCIÓN</div>
+          <h4 class="fw-bold mb-1">Crecimiento de contratos JVAQUA</h4>
+          <div class="text-muted small">
+            Desde {{ evolucion_inicio|date:"d/m/Y" }} hasta {{ evolucion_fin|date:"d/m/Y" }}.
+            La proyección verde marca el ritmo necesario para alcanzar las metas.
+          </div>
+        </div>
+      </div>
+
+      <div class="row g-2 mb-3">
+        <div class="col-4">
+          <div class="goal-stat">
+            <div class="value" style="color:#2563eb">{{ evolucion_activos_actual }}</div>
+            <div class="label">Contratos activos vigentes hoy</div>
+          </div>
+        </div>
+        <div class="col-4">
+          <div class="goal-stat">
+            <div class="value" style="color:#dc2626">{{ evolucion_perdidos_actual }}</div>
+            <div class="label">Contratos inactivos/perdidos</div>
+          </div>
+        </div>
+        <div class="col-4">
+          <div class="goal-stat">
+            <div class="value" style="color:#16a34a">{{ evolucion_objetivo_final }}</div>
+            <div class="label">Meta final proyectada</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="goal-chart-wrap">
+        <canvas id="contractsGoalsChart"></canvas>
+      </div>
+      <div class="goal-legend-note mt-2">
+        “Perdidos” representa contratos que ya habían iniciado pero se encontraban inactivos en cada corte histórico; una reactivación vuelve a incorporarlos a la línea de activos.
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    {% for meta in metas_empresa %}
+    <div class="col-12 col-xl-4">
+      <div class="card border-0 shadow-sm h-100" style="border-radius:22px">
+        <div class="card-body p-4">
+          <div class="d-flex justify-content-between gap-3 mb-3">
+            <div>
+              <div class="small text-muted">{{ meta.obj.fecha_inicio|date:"d/m/Y" }} → {{ meta.obj.fecha_fin|date:"d/m/Y" }}</div>
+              <h5 class="fw-bold mb-0">{{ meta.obj.nombre }}</h5>
+            </div>
+            <div class="fs-2 fw-bold">{{ meta.obj.objetivo }}</div>
+          </div>
+
+          <div class="d-flex justify-content-between small mb-1">
+            <span>Progreso actual</span><strong>{{ meta.actual }} / {{ meta.obj.objetivo }}</strong>
+          </div>
+          <div class="progress mb-3" style="height:12px;border-radius:999px">
+            <div class="progress-bar" role="progressbar" style="width:{{ meta.progreso|floatformat:0 }}%"></div>
+          </div>
+
+          {% if meta.semaforo == "cumplida" %}
+            <div class="alert alert-success py-2">✓ Meta cumplida</div>
+          {% elif meta.futura %}
+            <div class="alert alert-light border py-2">Meta futura · planificación desde el objetivo anterior.</div>
+          {% endif %}
+
+          <div class="row g-2 text-center">
+            <div class="col-4"><div class="bg-light rounded-4 p-3"><div class="fw-bold fs-5">{{ meta.faltan }}</div><div class="small text-muted">Faltan</div></div></div>
+            <div class="col-4"><div class="bg-light rounded-4 p-3"><div class="fw-bold fs-5">{{ meta.por_mes|floatformat:1 }}</div><div class="small text-muted">Por mes</div></div></div>
+            <div class="col-4"><div class="bg-light rounded-4 p-3"><div class="fw-bold fs-5">{{ meta.por_semana|floatformat:1 }}</div><div class="small text-muted">Por semana</div></div></div>
+          </div>
+
+          {% if not meta.futura and meta.semaforo != "cumplida" %}
+          <div class="small text-muted mt-3">Quedan aproximadamente {{ meta.dias_restantes }} días para alcanzar esta meta.</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="card border-0 shadow-sm mt-4" style="border-radius:22px">
+    <div class="card-body p-4">
+      <h5 class="fw-bold">Ruta de crecimiento JVAQUA</h5>
+      <p class="text-muted mb-3">Las metas están encadenadas. El crecimiento planificado es:</p>
+      <div class="d-flex flex-wrap align-items-center gap-2 fs-5 fw-bold">
+        <span class="badge text-bg-light p-3">2026 · 60</span><span>→</span>
+        <span class="badge text-bg-light p-3">2027 · 150</span><span>→</span>
+        <span class="badge text-bg-light p-3">2028 · 350</span>
+      </div>
+    </div>
+  </div>
+</div>
 <script>
-(function(){
+document.addEventListener('DOMContentLoaded', function(){
   if(!window.Chart) return;
   const el=document.getElementById('contractsGoalsChart');
   if(!el) return;
@@ -96,114 +205,6 @@
       }
     }
   });
-})();
+});
 </script>
-
-{% endblock %}
-{% block content %}
-<div class="container-fluid px-0">
-  <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
-    <div>
-      <h2 class="fw-bold mb-1">Metas de crecimiento</h2>
-      <div class="text-muted">Seguimiento automático según los contratos activos reales del sistema.</div>
-    </div>
-    <div class="badge text-bg-primary fs-6 p-3">Contratos activos hoy: {{ contratos_activos_meta }}</div>
-  </div>
-
-  <div class="card border-0 shadow-sm goal-chart-card mb-4">
-    <div class="card-body p-3 p-md-4">
-      <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-3">
-        <div>
-          <div class="small text-muted fw-semibold">EVOLUCIÓN Y PROYECCIÓN</div>
-          <h4 class="fw-bold mb-1">Crecimiento de contratos JVAQUA</h4>
-          <div class="text-muted small">
-            Desde {{ evolucion_inicio|date:"d/m/Y" }} hasta {{ evolucion_fin|date:"d/m/Y" }}.
-            La proyección verde marca el ritmo necesario para alcanzar las metas.
-          </div>
-        </div>
-      </div>
-
-      <div class="row g-2 mb-3">
-        <div class="col-4">
-          <div class="goal-stat">
-            <div class="value" style="color:#2563eb">{{ evolucion_activos_actual }}</div>
-            <div class="label">Contratos activos hoy</div>
-          </div>
-        </div>
-        <div class="col-4">
-          <div class="goal-stat">
-            <div class="value" style="color:#dc2626">{{ evolucion_perdidos_actual }}</div>
-            <div class="label">Contratos perdidos</div>
-          </div>
-        </div>
-        <div class="col-4">
-          <div class="goal-stat">
-            <div class="value" style="color:#16a34a">{{ evolucion_objetivo_final }}</div>
-            <div class="label">Meta final proyectada</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="goal-chart-wrap">
-        <canvas id="contractsGoalsChart"></canvas>
-      </div>
-      <div class="goal-legend-note mt-2">
-        “Perdidos” representa contratos que ya habían iniciado pero se encontraban inactivos en cada corte histórico; una reactivación vuelve a incorporarlos a la línea de activos.
-      </div>
-    </div>
-  </div>
-
-  <div class="row g-3">
-    {% for meta in metas_empresa %}
-    <div class="col-12 col-xl-4">
-      <div class="card border-0 shadow-sm h-100" style="border-radius:22px">
-        <div class="card-body p-4">
-          <div class="d-flex justify-content-between gap-3 mb-3">
-            <div>
-              <div class="small text-muted">{{ meta.obj.fecha_inicio|date:"d/m/Y" }} → {{ meta.obj.fecha_fin|date:"d/m/Y" }}</div>
-              <h5 class="fw-bold mb-0">{{ meta.obj.nombre }}</h5>
-            </div>
-            <div class="fs-2 fw-bold">{{ meta.obj.objetivo }}</div>
-          </div>
-
-          <div class="d-flex justify-content-between small mb-1">
-            <span>Progreso actual</span><strong>{{ meta.actual }} / {{ meta.obj.objetivo }}</strong>
-          </div>
-          <div class="progress mb-3" style="height:12px;border-radius:999px">
-            <div class="progress-bar" role="progressbar" style="width:{{ meta.progreso|floatformat:0 }}%"></div>
-          </div>
-
-          {% if meta.semaforo == "cumplida" %}
-            <div class="alert alert-success py-2">✓ Meta cumplida</div>
-          {% elif meta.futura %}
-            <div class="alert alert-light border py-2">Meta futura · planificación desde el objetivo anterior.</div>
-          {% endif %}
-
-          <div class="row g-2 text-center">
-            <div class="col-4"><div class="bg-light rounded-4 p-3"><div class="fw-bold fs-5">{{ meta.faltan }}</div><div class="small text-muted">Faltan</div></div></div>
-            <div class="col-4"><div class="bg-light rounded-4 p-3"><div class="fw-bold fs-5">{{ meta.por_mes|floatformat:1 }}</div><div class="small text-muted">Por mes</div></div></div>
-            <div class="col-4"><div class="bg-light rounded-4 p-3"><div class="fw-bold fs-5">{{ meta.por_semana|floatformat:1 }}</div><div class="small text-muted">Por semana</div></div></div>
-          </div>
-
-          {% if not meta.futura and meta.semaforo != "cumplida" %}
-          <div class="small text-muted mt-3">Quedan aproximadamente {{ meta.dias_restantes }} días para alcanzar esta meta.</div>
-          {% endif %}
-        </div>
-      </div>
-    </div>
-    {% endfor %}
-  </div>
-
-  <div class="card border-0 shadow-sm mt-4" style="border-radius:22px">
-    <div class="card-body p-4">
-      <h5 class="fw-bold">Ruta de crecimiento JVAQUA</h5>
-      <p class="text-muted mb-3">Las metas están encadenadas. El crecimiento planificado es:</p>
-      <div class="d-flex flex-wrap align-items-center gap-2 fs-5 fw-bold">
-        <span class="badge text-bg-light p-3">2026 · 60</span><span>→</span>
-        <span class="badge text-bg-light p-3">2027 · 150</span><span>→</span>
-        <span class="badge text-bg-light p-3">2028 · 350</span>
-      </div>
-    </div>
-  </div>
-</div>
 {% endblock %}
