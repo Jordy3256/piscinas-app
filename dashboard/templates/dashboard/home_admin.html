@@ -84,20 +84,12 @@
 
 
 {% if metas_empresa %}
-<div class="card border-0 shadow-sm mb-3" style="border-radius:22px">
-  <div class="card-body p-3 p-md-4">
-    <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
-      <div><div class="small text-muted">CRECIMIENTO</div><h5 class="fw-bold mb-0">🎯 Metas JVAQUA</h5></div>
-      <a class="btn btn-sm btn-outline-primary" href="{% url 'metas_empresa' %}">Ver metas</a>
-    </div>
-    {% for meta in metas_empresa %}
-      {% if not meta.futura and meta.semaforo != "cumplida" %}
-      <div class="d-flex justify-content-between small mb-1"><span>{{ meta.obj.nombre }}</span><strong>{{ meta.actual }}/{{ meta.obj.objetivo }}</strong></div>
-      <div class="progress mb-2" style="height:9px"><div class="progress-bar" style="width:{{ meta.progreso|floatformat:0 }}%"></div></div>
-      <div class="small text-muted">Faltan {{ meta.faltan }} · ritmo necesario: {{ meta.por_mes|floatformat:1 }}/mes · {{ meta.por_semana|floatformat:1 }}/semana</div>
-      {% endif %}
-    {% endfor %}
-  </div>
+<div class="d-flex justify-content-end mb-2">
+  <a href="{% url 'metas_empresa' %}" class="text-decoration-none small text-muted">
+    <i class="bi bi-bullseye me-1"></i>
+    {% for meta in metas_empresa %}{% if not meta.futura and meta.semaforo != "cumplida" %}<strong class="text-dark">{{ meta.actual }}/{{ meta.obj.objetivo }}</strong> contratos · faltan {{ meta.faltan }} · {% endif %}{% endfor %}Ver metas
+    <i class="bi bi-chevron-right ms-1"></i>
+  </a>
 </div>
 {% endif %}
 <div class="action-center">
