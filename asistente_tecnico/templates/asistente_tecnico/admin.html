@@ -1,4 +1,5 @@
 {% extends base_template %}{% block title %}Administración del Asistente{% endblock %}{% block top_title %}🧠 Rendimiento del Asistente{% endblock %}{% block content %}<div class="mb-3 d-flex gap-2 flex-wrap">
+<a class="btn btn-success" href="{% url 'asistente_tecnico:soporte_admin_lista' %}">💬 Soporte Digital</a>
 <a class="btn btn-primary" href="{% url 'asistente_tecnico:digital_suscripciones_admin' %}">💳 Suscripciones Digital</a>
 <a class="btn btn-outline-primary" href="{% url 'asistente_tecnico:historial' %}">🧪 Casos</a>
 <a class="btn btn-outline-primary" href="{% url 'asistente_tecnico:cms_admin' %}">📚 Aprendizaje / Biblioteca</a>

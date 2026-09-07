@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import MotorRecomendacion, CasoAsistenteTecnico, ContenidoAcademia, ImagenContenidoAcademia, MaterialAudiovisualAcademia, VersionContenidoAcademia, ExperienciaConocimiento, PerfilSuscriptor, PiscinaSuscriptor, PlanMantenimientoPiscina, RegistroMantenimientoPiscina, SugerenciaDigital, SolicitudSuscripcionDigital
+from .models import MotorRecomendacion, CasoAsistenteTecnico, ContenidoAcademia, ImagenContenidoAcademia, MaterialAudiovisualAcademia, VersionContenidoAcademia, ExperienciaConocimiento, PerfilSuscriptor, PiscinaSuscriptor, PlanMantenimientoPiscina, RegistroMantenimientoPiscina, SugerenciaDigital, SolicitudSuscripcionDigital, ConversacionSoporteDigital, MensajeSoporteDigital, AdjuntoSoporteDigital
 
 
 @admin.register(MotorRecomendacion)
@@ -79,3 +79,20 @@ class SolicitudSuscripcionDigitalAdmin(admin.ModelAdmin):
         "suscriptor__user__last_name", "suscriptor__telefono",
     )
     readonly_fields = ("creada_en", "revisada_en")
+
+
+@admin.register(ConversacionSoporteDigital)
+class ConversacionSoporteDigitalAdmin(admin.ModelAdmin):
+    list_display = ("id", "suscriptor", "categoria", "estado", "ultimo_mensaje_en")
+    list_filter = ("categoria", "estado")
+    search_fields = ("suscriptor__user__username", "suscriptor__user__email", "asunto")
+
+
+@admin.register(MensajeSoporteDigital)
+class MensajeSoporteDigitalAdmin(admin.ModelAdmin):
+    list_display = ("conversacion", "remitente", "autor", "creado_en")
+    list_filter = ("remitente", "leido_admin", "leido_cliente")
+    search_fields = ("texto",)
+
+
+admin.site.register(AdjuntoSoporteDigital)

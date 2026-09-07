@@ -868,3 +868,74 @@ class SugerenciaDigital(models.Model):
 
     def __str__(self):
         return f"{self.suscriptor} · {self.get_categoria_display()}"
+
+
+class ConversacionSoporteDigital(models.Model):
+    CATEGORIAS = [
+        ("soporte_tecnico", "Soporte técnico de piscina"),
+        ("aquo", "AQUO / recomendaciones"),
+        ("plataforma", "Ayuda con JVAQUA Digital"),
+        ("suscripcion", "Suscripción / pago"),
+        ("sugerencia", "Sugerencia"),
+        ("otro", "Otro"),
+    ]
+    ESTADOS = [
+        ("abierta", "Abierta"),
+        ("espera_admin", "Esperando respuesta de JVAQUA"),
+        ("espera_cliente", "Esperando respuesta del cliente"),
+        ("cerrada", "Cerrada"),
+    ]
+    suscriptor = models.ForeignKey(PerfilSuscriptor, on_delete=models.CASCADE, related_name="conversaciones_soporte")
+    piscina = models.ForeignKey(PiscinaSuscriptor, on_delete=models.SET_NULL, null=True, blank=True, related_name="conversaciones_soporte")
+    categoria = models.CharField(max_length=24, choices=CATEGORIAS, default="soporte_tecnico", db_index=True)
+    asunto = models.CharField(max_length=160, blank=True, default="")
+    estado = models.CharField(max_length=20, choices=ESTADOS, default="espera_admin", db_index=True)
+    ultimo_mensaje_en = models.DateTimeField(default=timezone.now, db_index=True)
+    creada_en = models.DateTimeField(auto_now_add=True)
+    actualizada_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-ultimo_mensaje_en", "-id"]
+        verbose_name = "Conversación de soporte JVAQUA Digital"
+        verbose_name_plural = "Conversaciones de soporte JVAQUA Digital"
+
+    def __str__(self):
+        return f"#{self.pk} · {self.suscriptor.user} · {self.get_categoria_display()}"
+
+
+class MensajeSoporteDigital(models.Model):
+    REMITENTES = [("cliente", "Cliente"), ("admin", "JVAQUA")]
+    conversacion = models.ForeignKey(ConversacionSoporteDigital, on_delete=models.CASCADE, related_name="mensajes")
+    remitente = models.CharField(max_length=10, choices=REMITENTES, db_index=True)
+    autor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="mensajes_soporte_digital")
+    texto = models.TextField(blank=True, default="")
+    leido_cliente = models.BooleanField(default=False, db_index=True)
+    leido_admin = models.BooleanField(default=False, db_index=True)
+    creado_en = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["creado_en", "id"]
+        verbose_name = "Mensaje de soporte JVAQUA Digital"
+        verbose_name_plural = "Mensajes de soporte JVAQUA Digital"
+
+    def __str__(self):
+        return f"{self.conversacion} · {self.get_remitente_display()}"
+
+
+def soporte_adjunto_upload_to(instance, filename):
+    return f"jvaqua_digital/soporte/{instance.mensaje.conversacion_id}/{filename}"
+
+
+class AdjuntoSoporteDigital(models.Model):
+    TIPOS = [("imagen", "Imagen"), ("video", "Video"), ("archivo", "Archivo")]
+    mensaje = models.ForeignKey(MensajeSoporteDigital, on_delete=models.CASCADE, related_name="adjuntos")
+    archivo = models.FileField(upload_to=soporte_adjunto_upload_to)
+    tipo = models.CharField(max_length=12, choices=TIPOS, default="archivo")
+    nombre_original = models.CharField(max_length=255, blank=True, default="")
+    tamano = models.PositiveBigIntegerField(default=0)
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["id"]
+        verbose_name = "Adjunto de soporte JVAQUA Digital"
+        verbose_name_plural = "Adjuntos de soporte JVAQUA Digital"

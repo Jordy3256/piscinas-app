@@ -15,7 +15,7 @@ from django.views.decorators.http import require_http_methods
 
 from trabajadores.models import Trabajador
 from .engine import DEFAULT_RULES, calcular_recomendacion, diagnosticar_problema_tecnico, PROBLEMAS_TECNICOS
-from .models import CasoAsistenteTecnico, MotorRecomendacion, ContenidoAcademia, ProgresoContenidoAcademia, FavoritoContenidoAcademia, ConsultaContenidoAcademia, PerfilSuscriptor, PiscinaSuscriptor, PlanMantenimientoPiscina, RegistroMantenimientoPiscina, VisitaProgramadaPiscina, NotificacionDigital, SugerenciaDigital, SolicitudSuscripcionDigital
+from .models import CasoAsistenteTecnico, MotorRecomendacion, ContenidoAcademia, ProgresoContenidoAcademia, FavoritoContenidoAcademia, ConsultaContenidoAcademia, PerfilSuscriptor, PiscinaSuscriptor, PlanMantenimientoPiscina, RegistroMantenimientoPiscina, VisitaProgramadaPiscina, NotificacionDigital, SugerenciaDigital, SolicitudSuscripcionDigital, ConversacionSoporteDigital, MensajeSoporteDigital, AdjuntoSoporteDigital
 from .services import generar_recordatorios_seguimiento
 
 
@@ -1416,6 +1416,222 @@ def digital_piscina_detalle_view(request, pk):
         },
     )
 
+
+
+def _tipo_adjunto_soporte(archivo):
+    content_type = (getattr(archivo, "content_type", "") or "").lower()
+    if content_type.startswith("image/"):
+        return "imagen"
+    if content_type.startswith("video/"):
+        return "video"
+    return "archivo"
+
+
+def _guardar_adjuntos_soporte(mensaje, archivos):
+    # 30 MB por archivo: suficiente para fotos y videos cortos de soporte.
+    limite = 30 * 1024 * 1024
+    permitidos = {
+        "image/jpeg", "image/png", "image/webp", "image/gif",
+        "video/mp4", "video/webm", "video/quicktime",
+    }
+    for archivo in archivos:
+        content_type = (getattr(archivo, "content_type", "") or "").lower()
+        if content_type not in permitidos:
+            raise ValidationError("Solo se permiten imágenes JPG/PNG/WEBP/GIF y videos MP4/WEBM/MOV.")
+        if archivo.size > limite:
+            raise ValidationError("Cada archivo debe pesar máximo 30 MB.")
+        AdjuntoSoporteDigital.objects.create(
+            mensaje=mensaje,
+            archivo=archivo,
+            tipo=_tipo_adjunto_soporte(archivo),
+            nombre_original=(archivo.name or "")[:255],
+            tamano=archivo.size or 0,
+        )
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def digital_soporte_view(request):
+    perfil = _suscriptor(request.user)
+    if not perfil:
+        return HttpResponseForbidden("No autorizado")
+
+    conversaciones = perfil.conversaciones_soporte.prefetch_related("mensajes").all()
+    piscinas = perfil.piscinas.filter(activa=True)
+
+    if request.method == "POST":
+        texto = (request.POST.get("mensaje") or "").strip()
+        archivos = request.FILES.getlist("adjuntos")
+        categoria = (request.POST.get("categoria") or "soporte_tecnico").strip()
+        if categoria not in {x[0] for x in ConversacionSoporteDigital.CATEGORIAS}:
+            categoria = "otro"
+        piscina = None
+        piscina_id = request.POST.get("piscina_id")
+        if piscina_id:
+            piscina = piscinas.filter(pk=piscina_id).first()
+
+        if not texto and not archivos:
+            messages.error(request, "Escribe un mensaje o adjunta una foto/video.")
+        else:
+            with transaction.atomic():
+                conversacion = ConversacionSoporteDigital.objects.create(
+                    suscriptor=perfil,
+                    piscina=piscina,
+                    categoria=categoria,
+                    asunto=(texto[:120] if texto else "Archivo enviado a soporte"),
+                    estado="espera_admin",
+                )
+                mensaje = MensajeSoporteDigital.objects.create(
+                    conversacion=conversacion,
+                    remitente="cliente",
+                    autor=request.user,
+                    texto=texto,
+                    leido_cliente=True,
+                    leido_admin=False,
+                )
+                try:
+                    _guardar_adjuntos_soporte(mensaje, archivos)
+                except ValidationError as exc:
+                    transaction.set_rollback(True)
+                    messages.error(request, exc.messages[0])
+                    return redirect("asistente_tecnico:digital_soporte")
+                conversacion.ultimo_mensaje_en = mensaje.creado_en
+                conversacion.save(update_fields=["ultimo_mensaje_en", "actualizada_en"])
+            _notificar_admin_digital(
+                "Nuevo mensaje de soporte JVAQUA Digital",
+                f"{request.user.get_full_name() or request.user.username}: {texto[:120] or 'envió un archivo'}",
+                url=f"/dashboard/asistente/administracion/soporte/{conversacion.pk}/",
+            )
+            return redirect("asistente_tecnico:digital_soporte_chat", pk=conversacion.pk)
+
+    return render(request, "asistente_tecnico/digital_soporte.html", {
+        "perfil": perfil, "piscinas": piscinas,
+        "categorias_soporte": ConversacionSoporteDigital.CATEGORIAS,
+        "conversaciones": conversaciones,
+    })
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def digital_soporte_chat_view(request, pk):
+    perfil = _suscriptor(request.user)
+    if not perfil:
+        return HttpResponseForbidden("No autorizado")
+    conversacion = get_object_or_404(
+        ConversacionSoporteDigital.objects.select_related("piscina").prefetch_related("mensajes__adjuntos"),
+        pk=pk, suscriptor=perfil,
+    )
+    conversacion.mensajes.filter(remitente="admin", leido_cliente=False).update(leido_cliente=True)
+
+    if request.method == "POST":
+        texto = (request.POST.get("mensaje") or "").strip()
+        archivos = request.FILES.getlist("adjuntos")
+        if not texto and not archivos:
+            messages.error(request, "Escribe un mensaje o adjunta una foto/video.")
+        else:
+            with transaction.atomic():
+                mensaje = MensajeSoporteDigital.objects.create(
+                    conversacion=conversacion, remitente="cliente", autor=request.user,
+                    texto=texto, leido_cliente=True, leido_admin=False,
+                )
+                try:
+                    _guardar_adjuntos_soporte(mensaje, archivos)
+                except ValidationError as exc:
+                    transaction.set_rollback(True)
+                    messages.error(request, exc.messages[0])
+                    return redirect("asistente_tecnico:digital_soporte_chat", pk=pk)
+                conversacion.estado = "espera_admin"
+                conversacion.ultimo_mensaje_en = mensaje.creado_en
+                conversacion.save(update_fields=["estado", "ultimo_mensaje_en", "actualizada_en"])
+            _notificar_admin_digital(
+                "Respuesta de soporte JVAQUA Digital",
+                f"{request.user.get_full_name() or request.user.username}: {texto[:120] or 'envió un archivo'}",
+                url=f"/dashboard/asistente/administracion/soporte/{conversacion.pk}/",
+            )
+            return redirect("asistente_tecnico:digital_soporte_chat", pk=pk)
+
+    return render(request, "asistente_tecnico/digital_soporte_chat.html", {
+        "perfil": perfil, "conversacion": conversacion,
+    })
+
+
+@login_required
+def soporte_admin_lista_view(request):
+    if not _es_admin(request.user):
+        return HttpResponseForbidden("No autorizado")
+    estado = (request.GET.get("estado") or "abiertas").strip()
+    qs = ConversacionSoporteDigital.objects.select_related(
+        "suscriptor__user", "piscina"
+    ).annotate(
+        no_leidos=Count("mensajes", filter=Q(mensajes__remitente="cliente", mensajes__leido_admin=False))
+    )
+    if estado == "abiertas":
+        qs = qs.exclude(estado="cerrada")
+    elif estado in {x[0] for x in ConversacionSoporteDigital.ESTADOS}:
+        qs = qs.filter(estado=estado)
+    return render(request, "asistente_tecnico/soporte_admin_lista.html", {
+        "base_template": "dashboard/base_admin.html",
+        "conversaciones": qs,
+        "estado_filtro": estado,
+        "pendientes_soporte": qs.filter(estado="espera_admin").count(),
+    })
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def soporte_admin_chat_view(request, pk):
+    if not _es_admin(request.user):
+        return HttpResponseForbidden("No autorizado")
+    conversacion = get_object_or_404(
+        ConversacionSoporteDigital.objects.select_related(
+            "suscriptor__user", "piscina"
+        ).prefetch_related("mensajes__adjuntos"),
+        pk=pk,
+    )
+    conversacion.mensajes.filter(remitente="cliente", leido_admin=False).update(leido_admin=True)
+
+    if request.method == "POST":
+        accion = request.POST.get("accion")
+        if accion == "cerrar":
+            conversacion.estado = "cerrada"
+            conversacion.save(update_fields=["estado", "actualizada_en"])
+            messages.success(request, "Conversación cerrada.")
+            return redirect("asistente_tecnico:soporte_admin_lista")
+        if accion == "reabrir":
+            conversacion.estado = "espera_admin"
+            conversacion.save(update_fields=["estado", "actualizada_en"])
+            return redirect("asistente_tecnico:soporte_admin_chat", pk=pk)
+
+        texto = (request.POST.get("mensaje") or "").strip()
+        archivos = request.FILES.getlist("adjuntos")
+        if texto or archivos:
+            with transaction.atomic():
+                mensaje = MensajeSoporteDigital.objects.create(
+                    conversacion=conversacion, remitente="admin", autor=request.user,
+                    texto=texto, leido_admin=True, leido_cliente=False,
+                )
+                try:
+                    _guardar_adjuntos_soporte(mensaje, archivos)
+                except ValidationError as exc:
+                    transaction.set_rollback(True)
+                    messages.error(request, exc.messages[0])
+                    return redirect("asistente_tecnico:soporte_admin_chat", pk=pk)
+                conversacion.estado = "espera_cliente"
+                conversacion.ultimo_mensaje_en = mensaje.creado_en
+                conversacion.save(update_fields=["estado", "ultimo_mensaje_en", "actualizada_en"])
+            NotificacionDigital.objects.create(
+                suscriptor=conversacion.suscriptor,
+                tipo="general",
+                titulo="JVAQUA respondió tu mensaje",
+                mensaje=(texto[:180] or "Te enviamos un archivo en Soporte."),
+                url=f"/dashboard/asistente/digital/soporte/{conversacion.pk}/",
+            )
+            return redirect("asistente_tecnico:soporte_admin_chat", pk=pk)
+
+    return render(request, "asistente_tecnico/soporte_admin_chat.html", {
+        "base_template": "dashboard/base_admin.html",
+        "conversacion": conversacion,
+    })
 
 @login_required
 @require_http_methods(["GET", "POST"])
