@@ -1619,12 +1619,14 @@ def soporte_admin_chat_view(request, pk):
                 conversacion.estado = "espera_cliente"
                 conversacion.ultimo_mensaje_en = mensaje.creado_en
                 conversacion.save(update_fields=["estado", "ultimo_mensaje_en", "actualizada_en"])
+            # NotificacionDigital no posee campo URL y exige programada_para.
+            # Usamos el tipo existente "recordatorio" para no alterar el esquema.
             NotificacionDigital.objects.create(
                 suscriptor=conversacion.suscriptor,
-                tipo="general",
+                tipo="recordatorio",
                 titulo="JVAQUA respondió tu mensaje",
                 mensaje=(texto[:180] or "Te enviamos un archivo en Soporte."),
-                url=f"/dashboard/asistente/digital/soporte/{conversacion.pk}/",
+                programada_para=timezone.now(),
             )
             return redirect("asistente_tecnico:soporte_admin_chat", pk=pk)
 
