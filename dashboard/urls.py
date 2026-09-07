@@ -32,6 +32,7 @@ from .views import (
     ruta_matriz_google_view,
     ruta_resolver_coordenadas_view,
     dashboard_view,
+    metas_empresa_view,
     calculadora_quimicos_view,
     cotizador_inteligente_admin_view,
     mi_cuenta_trabajador_view,
@@ -558,4 +559,5 @@ urlpatterns = [
         movimiento_recurrente_eliminar_view,
         name="movimiento_recurrente_eliminar",
     ),
+    path("metas/", metas_empresa_view, name="metas_empresa"),
 ]

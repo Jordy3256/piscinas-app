@@ -73,6 +73,7 @@ try:
     from .models import Notificacion, MetaEmpresa
 except Exception:
     Notificacion = None
+    MetaEmpresa = None
 
 try:
     from .models import ActividadSistema
@@ -1505,7 +1506,10 @@ def _clasificar_estado_trabajador(carga_hoy, atrasados, proximos):
 def _metas_empresa_contexto():
     hoy = timezone.localdate()
     contratos_actuales = Contrato.objects.filter(activo=True).count()
-    metas = list(MetaEmpresa.objects.filter(estado__in=["activa", "cumplida"]).order_by("orden", "fecha_fin"))
+    metas = (
+        list(MetaEmpresa.objects.filter(estado__in=["activa", "cumplida"]).order_by("orden", "fecha_fin"))
+        if MetaEmpresa is not None else []
+    )
 
     resultado = []
     objetivo_anterior = 0
@@ -1893,6 +1897,8 @@ def inicio_view(request):
         except Exception:
             logger.exception("No se pudieron actualizar las alertas financieras al abrir el Centro de Acciones.")
         ctx.update(_centro_acciones_contexto())
+        if MetaEmpresa is not None:
+            ctx.update(_metas_empresa_contexto())
         return render(request, "dashboard/home_admin.html", ctx)
 
     if es_trabajador(request.user):
