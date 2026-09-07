@@ -70,7 +70,7 @@ except Exception:
     PushSubscription = None
 
 try:
-    from .models import Notificacion
+    from .models import Notificacion, MetaEmpresa
 except Exception:
     Notificacion = None
 
@@ -1501,6 +1501,72 @@ def _clasificar_estado_trabajador(carga_hoy, atrasados, proximos):
 # ==========================================================
 # PUSH
 # ==========================================================
+
+def _metas_empresa_contexto():
+    hoy = timezone.localdate()
+    contratos_actuales = Contrato.objects.filter(activo=True).count()
+    metas = list(MetaEmpresa.objects.filter(estado__in=["activa", "cumplida"]).order_by("orden", "fecha_fin"))
+
+    resultado = []
+    objetivo_anterior = 0
+    for meta in metas:
+        actual = contratos_actuales if meta.metrica == "contratos_activos" else 0
+        faltan = max(meta.objetivo - actual, 0)
+        dias_restantes = max((meta.fecha_fin - hoy).days, 0)
+        semanas_restantes = max(dias_restantes / 7, 0)
+        meses_restantes = max(dias_restantes / 30.4375, 0)
+
+        # Para metas futuras, el esfuerzo incremental parte del objetivo anterior,
+        # no del valor actual de hoy. Así 2027 = 150 - 60, 2028 = 350 - 150.
+        if hoy < meta.fecha_inicio:
+            base_calculo = objetivo_anterior
+            faltan_plan = max(meta.objetivo - base_calculo, 0)
+            duracion_dias = max((meta.fecha_fin - meta.fecha_inicio).days + 1, 1)
+            semanas_plan = duracion_dias / 7
+            meses_plan = duracion_dias / 30.4375
+        else:
+            faltan_plan = faltan
+            semanas_plan = semanas_restantes
+            meses_plan = meses_restantes
+
+        por_semana = (faltan_plan / semanas_plan) if semanas_plan > 0 else 0
+        por_mes = (faltan_plan / meses_plan) if meses_plan > 0 else 0
+        progreso = min((actual / meta.objetivo * 100) if meta.objetivo else 0, 100)
+
+        if actual >= meta.objetivo:
+            semaforo = "cumplida"
+        elif hoy > meta.fecha_fin:
+            semaforo = "atrasada"
+        else:
+            semaforo = "en_curso"
+
+        resultado.append({
+            "obj": meta,
+            "actual": actual,
+            "faltan": faltan,
+            "progreso": progreso,
+            "dias_restantes": dias_restantes,
+            "por_semana": por_semana,
+            "por_mes": por_mes,
+            "semaforo": semaforo,
+            "futura": hoy < meta.fecha_inicio,
+        })
+        objetivo_anterior = meta.objetivo
+
+    return {
+        "metas_empresa": resultado,
+        "contratos_activos_meta": contratos_actuales,
+    }
+
+
+@login_required
+def metas_empresa_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    contexto = _metas_empresa_contexto()
+    contexto["hoy"] = timezone.localdate()
+    return render(request, "dashboard/metas_empresa.html", contexto)
+
 @login_required
 @require_http_methods(["GET"])
 def vapid_public_key_view(request):

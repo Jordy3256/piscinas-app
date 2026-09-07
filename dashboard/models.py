@@ -104,3 +104,32 @@ class ActividadSistema(models.Model):
     def __str__(self):
         actor = self.user.username if self.user else "Sistema"
         return f"{actor} | {self.titulo} | {self.creada_en:%Y-%m-%d %H:%M}"
+
+class MetaEmpresa(models.Model):
+    METRICAS = [
+        ("contratos_activos", "Contratos activos"),
+    ]
+    ESTADOS = [
+        ("activa", "Activa"),
+        ("cumplida", "Cumplida"),
+        ("pausada", "Pausada"),
+    ]
+
+    nombre = models.CharField(max_length=140)
+    metrica = models.CharField(max_length=40, choices=METRICAS, default="contratos_activos", db_index=True)
+    objetivo = models.PositiveIntegerField()
+    fecha_inicio = models.DateField()
+    fecha_fin = models.DateField(db_index=True)
+    estado = models.CharField(max_length=12, choices=ESTADOS, default="activa", db_index=True)
+    orden = models.PositiveSmallIntegerField(default=0)
+    creada_en = models.DateTimeField(auto_now_add=True)
+    actualizada_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["orden", "fecha_fin", "id"]
+        verbose_name = "Meta empresarial"
+        verbose_name_plural = "Metas empresariales"
+
+    def __str__(self):
+        return f"{self.nombre} · {self.objetivo}"
+
