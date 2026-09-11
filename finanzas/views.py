@@ -684,6 +684,18 @@ def _fecha_pago_programada_contrato(contrato, anio, mes):
     """Calcula la fecha de nómina según la regla configurada para el trabajador."""
     trabajador = contrato.tecnico_designado
     periodo_inicio, periodo_fin = contrato.periodo_servicio(anio, mes)
+
+    # El pago semestral del cliente NO cambia la nómina: el técnico continúa
+    # generando una obligación cada mes. Si el trabajador estaba configurado
+    # para copiar las fechas de cobro del contrato, en esta modalidad usamos
+    # el cierre de cada periodo mensual para conservar la periodicidad mensual.
+    if (
+        contrato.programacion_cobro == "semestral_adelantado"
+        and trabajador
+        and trabajador.programacion_pago_nomina == "fecha_contratos"
+    ):
+        return periodo_fin
+
     if trabajador and trabajador.programacion_pago_nomina == "fin_periodo":
         return periodo_fin + timedelta(days=trabajador.dias_despues_fin_periodo or 0)
     if trabajador and trabajador.programacion_pago_nomina == "dia_fijo" and trabajador.dia_pago_nomina:

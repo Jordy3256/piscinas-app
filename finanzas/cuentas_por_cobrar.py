@@ -31,6 +31,8 @@ def valores_promocion(contrato, anio, mes):
 
 def fecha_vencimiento_contrato(contrato, anio, mes, cuota_numero=1):
     calendario = contrato.calendario_cobros(anio, mes)
+    if not calendario:
+        return None
     indice = min(max(int(cuota_numero or 1), 1), len(calendario)) - 1
     return calendario[indice]["fecha_vencimiento"]
 

@@ -309,6 +309,11 @@
 
               <div class="col-12">
                 <div class="cf-note" id="vista-previa-comercial">Completa la regla para visualizar cómo se generarán los próximos cobros.</div>
+                <div class="cf-note mt-2 d-none" id="resumen-semestral">
+                  <strong>Contrato anual con anticipos semestrales:</strong>
+                  el cliente paga 6 mensualidades al inicio y las siguientes 6 al comenzar el segundo semestre.
+                  La nómina del técnico continúa generándose mensualmente.
+                </div>
               </div>
             </div>
           </div>
@@ -378,7 +383,11 @@
               <div class="cf-note mb-3" id="resumen-iva">
                 <div class="d-flex justify-content-between"><span>Base</span><strong id="iva-base">$0.00</strong></div>
                 <div class="d-flex justify-content-between"><span>IVA 15%</span><strong id="iva-impuesto">$0.00</strong></div>
-                <div class="d-flex justify-content-between mt-1"><span>Total cliente</span><strong id="iva-total">$0.00</strong></div>
+                <div class="d-flex justify-content-between mt-1"><span>Total cliente / mes</span><strong id="iva-total">$0.00</strong></div>
+                <div class="border-top mt-2 pt-2 d-none" id="resumen-economico-semestral">
+                  <div class="d-flex justify-content-between"><span>Pago adelantado 6 meses</span><strong id="semestral-total">$0.00</strong></div>
+                  <div class="d-flex justify-content-between"><span>Valor anual</span><strong id="anual-total">$0.00</strong></div>
+                </div>
               </div>
               <label for="valor_tecnico_mensual" class="form-label">Pago mensual al técnico</label>
               <div class="input-group mb-3"><span class="input-group-text">$</span><input type="number" id="valor_tecnico_mensual" name="valor_tecnico_mensual" class="form-control" min="0" step="0.01" value="{{ datos_formulario.valor_tecnico_mensual|unlocalize }}" placeholder="0.00"></div>
@@ -540,6 +549,23 @@
     const fechaInicioContrato = document.getElementById("fecha_inicio");
     const precioMensual = document.getElementById("precio_mensual");
     const aplicaIva = document.getElementById("aplica_iva");
+    const resumenSemestral = document.getElementById("resumen-semestral");
+    const resumenEconomicoSemestral = document.getElementById("resumen-economico-semestral");
+
+    function esPagoSemestral(){
+      return (formaPagoSelect && formaPagoSelect.value === "semestral_adelantado") ||
+             (programacionCobro && programacionCobro.value === "semestral_adelantado");
+    }
+
+    function sincronizarPagoSemestral(origen){
+      if(!formaPagoSelect || !programacionCobro) return;
+      if(origen === "forma" && formaPagoSelect.value === "semestral_adelantado"){
+        programacionCobro.value = "semestral_adelantado";
+      }
+      if(origen === "programacion" && programacionCobro.value === "semestral_adelantado"){
+        formaPagoSelect.value = "semestral_adelantado";
+      }
+    }
 
     function actualizarCamposComerciales(){
       const regla = programacionCobro ? programacionCobro.value : "";
@@ -558,8 +584,15 @@
       if (preview && regla) {
         const texto = programacionCobro.options[programacionCobro.selectedIndex].text;
         const inicio = fechaInicioContrato && fechaInicioContrato.value ? fechaInicioContrato.value.split("-").reverse().join("/") : "la fecha de inicio";
-        preview.textContent = `Periodo mensual anclado en ${inicio}. Cartera generará la cuenta únicamente en el mes donde caiga la fecha real definida por: ${texto}.`;
+        if (regla === "semestral_adelantado") {
+          preview.textContent = `Contrato anual desde ${inicio}: Cartera generará únicamente 2 cuentas, cada una por 6 mensualidades adelantadas.`;
+        } else {
+          preview.textContent = `Periodo mensual anclado en ${inicio}. Cartera generará la cuenta únicamente en el mes donde caiga la fecha real definida por: ${texto}.`;
+        }
       }
+      const semestral = esPagoSemestral();
+      if(resumenSemestral) resumenSemestral.classList.toggle("d-none", !semestral);
+      if(resumenEconomicoSemestral) resumenEconomicoSemestral.classList.toggle("d-none", !semestral);
     }
 
     function actualizarResumenIva(){
@@ -573,9 +606,22 @@
       if(baseEl) baseEl.textContent = fmt(base);
       if(impuestoEl) impuestoEl.textContent = fmt(impuesto);
       if(totalEl) totalEl.textContent = fmt(total);
+      const semestralEl = document.getElementById("semestral-total");
+      const anualEl = document.getElementById("anual-total");
+      if(semestralEl) semestralEl.textContent = fmt(total * 6);
+      if(anualEl) anualEl.textContent = fmt(total * 12);
     }
 
-    if (programacionCobro) programacionCobro.addEventListener("change", actualizarCamposComerciales);
+    if (programacionCobro) programacionCobro.addEventListener("change", function(){
+      sincronizarPagoSemestral("programacion");
+      actualizarCamposComerciales();
+      actualizarResumenIva();
+    });
+    if (formaPagoSelect) formaPagoSelect.addEventListener("change", function(){
+      sincronizarPagoSemestral("forma");
+      actualizarCamposComerciales();
+      actualizarResumenIva();
+    });
     if (requiereFactura) requiereFactura.addEventListener("change", actualizarCamposComerciales);
     if (momentoFacturacion) momentoFacturacion.addEventListener("change", actualizarCamposComerciales);
     if (fechaInicioContrato) fechaInicioContrato.addEventListener("change", actualizarCamposComerciales);

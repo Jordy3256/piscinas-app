@@ -41,6 +41,7 @@ class Contrato(models.Model):
         ("quincenal", "Quincenal"),
         ("por_visita", "Por visita"),
         ("fin_mensualidad", "Fin de la mensualidad"),
+        ("semestral_adelantado", "Anual · 2 pagos semestrales adelantados"),
         ("personalizado", "Personalizado"),
     ]
 
@@ -51,6 +52,7 @@ class Contrato(models.Model):
         ("rango_dias", "Rango de días"),
         ("dos_pagos", "Dos pagos mensuales"),
         ("despues_cierre", "Días después del cierre"),
+        ("semestral_adelantado", "Pago semestral adelantado · 6 meses"),
         ("personalizado", "Personalizado"),
     ]
 
@@ -313,6 +315,57 @@ class Contrato(models.Model):
         programacion = self.programacion_cobro or "inicio_periodo"
         destino_anio, destino_mes = _mover_mes(anio, mes, int(self.cobro_mes_desfase or 0))
 
+        # Contrato anual con dos anticipos semestrales.
+        #
+        # Ejemplo: inicio 11/09/2026, valor mensual $55:
+        #   11/09/2026 -> $330 por 6 meses
+        #   11/03/2027 -> $330 por los siguientes 6 meses
+        # Después del segundo semestre no se generan más cuentas bajo esta
+        # modalidad; para continuar debe renovarse/actualizarse el contrato.
+        if programacion == "semestral_adelantado":
+            if not self.fecha_inicio:
+                return []
+
+            diferencia_meses = (
+                (int(anio) - self.fecha_inicio.year) * 12
+                + (int(mes) - self.fecha_inicio.month)
+            )
+            if diferencia_meses not in {0, 6}:
+                return []
+
+            cobro_anio, cobro_mes = _mover_mes(
+                self.fecha_inicio.year,
+                self.fecha_inicio.month,
+                diferencia_meses,
+            )
+            fecha_cobro = _fecha_segura(
+                cobro_anio,
+                cobro_mes,
+                self.fecha_inicio.day,
+            )
+            fin_anio, fin_mes = _mover_mes(cobro_anio, cobro_mes, 6)
+            fin_semestre = _fecha_segura(
+                fin_anio,
+                fin_mes,
+                self.fecha_inicio.day,
+            )
+
+            valor_semestral = (
+                Decimal(self.precio_mensual or 0) * Decimal("6")
+            ).quantize(Decimal("0.01"))
+            desglose = self.desglose_valor(valor_semestral)
+            return [{
+                "cuota_numero": 1,
+                "total_cuotas": 1,
+                "fecha_cobro_desde": fecha_cobro,
+                "fecha_vencimiento": fecha_cobro,
+                "valor": desglose["base"],
+                "impuesto": desglose["impuesto"],
+                "total": desglose["total"],
+                "periodo_inicio": fecha_cobro,
+                "periodo_fin": fin_semestre,
+            }]
+
         if programacion == "inicio_periodo":
             fechas = [(inicio, inicio)]
         elif programacion == "cierre_periodo":
@@ -376,6 +429,15 @@ class Contrato(models.Model):
 
         inicio, fin = self.periodo_servicio(anio, mes)
         calendario = self.calendario_cobros(anio, mes)
+
+        # En modalidad semestral solo hay dos eventos reales de cobro/facturación
+        # durante el año. Los demás meses no deben generar alertas de factura.
+        if self.programacion_cobro == "semestral_adelantado":
+            if not calendario:
+                return None
+            inicio = calendario[0]["periodo_inicio"]
+            fin = calendario[0]["periodo_fin"]
+
         primer_cobro = (
             calendario[0].get("fecha_cobro_desde")
             if calendario

@@ -67,6 +67,13 @@ def _fecha_nomina_segun_configuracion(contrato, anio, mes):
     trabajador = contrato.tecnico_designado
     periodo_inicio, periodo_fin = contrato.periodo_servicio(anio, mes)
 
+    if (
+        contrato.programacion_cobro == "semestral_adelantado"
+        and trabajador
+        and trabajador.programacion_pago_nomina == "fecha_contratos"
+    ):
+        return periodo_fin
+
     if trabajador and trabajador.programacion_pago_nomina == "fin_periodo":
         return periodo_fin + timedelta(days=trabajador.dias_despues_fin_periodo or 0)
     if trabajador and trabajador.programacion_pago_nomina == "dia_fijo" and trabajador.dia_pago_nomina:
