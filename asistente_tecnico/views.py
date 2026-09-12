@@ -141,83 +141,121 @@ def _academia_relacionada_con_diagnostico(resultado, limite=6):
 @login_required
 @require_http_methods(["GET", "POST"])
 def asistente_inicio_view(request):
-    # Los suscriptores usan el mismo Motor Técnico JVAQUA, pero a través
-    # de la experiencia guiada de JVAQUA Digital. Cualquier enlace antiguo
-    # al Asistente técnico se redirige aquí en lugar de devolver 403.
+    """
+    AQUO para técnicos JVAQUA.
+
+    Usa el mismo motor evolucionado de JVAQUA Digital, adaptado al flujo de
+    campo del trabajador: agua + problemas técnicos + biblioteca relacionada.
+    """
     if _es_suscriptor(request.user):
         return redirect("asistente_tecnico:digital_resolver")
     if not (_es_trabajador(request.user) or _es_admin(request.user)):
         return HttpResponseForbidden("No autorizado")
+
     _actualizar_recordatorios(request.user)
     motor = _motor_activo()
     resultado = None
     caso = None
 
+    categoria_consulta = (request.POST.get("categoria_consulta") or "agua").strip()
+    detalle_problema = (request.POST.get("detalle_problema") or "").strip()
+    metodo_volumen = (request.POST.get("metodo_volumen") or "volumen").strip()
+    origen_agua = (request.POST.get("origen_agua") or "potable").strip()
+    antecedente_hierro = (request.POST.get("antecedente_hierro") or "no_se").strip()
+
+    origenes_validos = {"potable", "pozo", "mixta", "otro"}
+    hierro_validos = {"no_se", "si", "no"}
+    if origen_agua not in origenes_validos:
+        origen_agua = "potable"
+    if antecedente_hierro not in hierro_validos:
+        antecedente_hierro = "no_se"
+
     if request.method == "POST":
-        metodo_volumen = (request.POST.get("metodo_volumen") or "volumen").strip()
-        try:
-            ph = Decimal((request.POST.get("ph") or "").replace(",", "."))
-            cloro = Decimal((request.POST.get("cloro") or "").replace(",", "."))
-
-            if metodo_volumen == "dimensiones":
-                largo = Decimal((request.POST.get("largo_m") or "").replace(",", "."))
-                ancho = Decimal((request.POST.get("ancho_m") or "").replace(",", "."))
-                profundidad = Decimal((request.POST.get("profundidad_m") or "").replace(",", "."))
-                if largo <= 0 or ancho <= 0 or profundidad <= 0:
-                    raise ValueError
-                volumen = (largo * ancho * profundidad).quantize(Decimal("0.01"))
+        if categoria_consulta != "agua":
+            if categoria_consulta not in PROBLEMAS_TECNICOS:
+                messages.error(request, "Selecciona el problema que deseas revisar con AQUO.")
             else:
-                volumen = Decimal((request.POST.get("volumen_m3") or "").replace(",", "."))
-        except (InvalidOperation, ValueError):
-            messages.error(
-                request,
-                "Revisa las medidas o el volumen, pH y cloro. Deben ser valores numéricos válidos.",
-            )
+                resultado = diagnosticar_problema_tecnico(categoria_consulta, detalle_problema)
         else:
-            estado = request.POST.get("estado_agua") or ""
-            tipo_piscina = request.POST.get("tipo_piscina") or ""
-            estados_validos = {x[0] for x in CasoAsistenteTecnico.ESTADO_AGUA_CHOICES}
-            tipos_validos = {x[0] for x in CasoAsistenteTecnico.TIPO_PISCINA_CHOICES}
-            errores = []
-            if volumen <= 0 or volumen > 5000:
-                errores.append("El volumen debe ser mayor que 0.")
-            if ph < 0 or ph > 14:
-                errores.append("El pH debe estar entre 0 y 14.")
-            if cloro < 0 or cloro > 20:
-                errores.append("El cloro debe estar entre 0 y 20 ppm.")
-            if estado not in estados_validos:
-                errores.append("Selecciona el estado del agua.")
-            if tipo_piscina not in tipos_validos:
-                errores.append("Selecciona el tipo de piscina.")
+            try:
+                ph = Decimal((request.POST.get("ph") or "").replace(",", "."))
+                cloro = Decimal((request.POST.get("cloro") or "").replace(",", "."))
 
-            if errores:
-                for error in errores:
-                    messages.error(request, error)
-            else:
-                resultado = calcular_recomendacion(volumen, ph, cloro, estado, tipo_piscina, motor.reglas)
-                caso = CasoAsistenteTecnico.objects.create(
-                    user=request.user,
-                    trabajador=_trabajador(request.user),
-                    motor=motor,
-                    volumen_m3=volumen,
-                    ph_inicial=ph,
-                    cloro_inicial=cloro,
-                    estado_agua=estado,
-                    tipo_piscina=tipo_piscina,
-                    diagnostico=resultado["diagnostico"],
-                    tipo_tratamiento=resultado["tipo_tratamiento"],
-                    prioridad=resultado["prioridad"],
-                    resumen=resultado["resumen"],
-                    protocolo=resultado["protocolo"],
-                    productos_sugeridos=resultado["productos_sugeridos"],
-                    explicaciones=resultado["explicaciones"],
-                    advertencias=resultado["advertencias"],
-                    foto_inicial=request.FILES.get("foto_inicial"),
-                    seguimiento_programado_para=timezone.now() + timedelta(hours=resultado["seguimiento_horas"]),
+                if metodo_volumen == "dimensiones":
+                    largo = Decimal((request.POST.get("largo_m") or "").replace(",", "."))
+                    ancho = Decimal((request.POST.get("ancho_m") or "").replace(",", "."))
+                    profundidad = Decimal((request.POST.get("profundidad_m") or "").replace(",", "."))
+                    if largo <= 0 or ancho <= 0 or profundidad <= 0:
+                        raise ValueError
+                    volumen = (largo * ancho * profundidad).quantize(Decimal("0.01"))
+                else:
+                    volumen = Decimal((request.POST.get("volumen_m3") or "").replace(",", "."))
+            except (InvalidOperation, ValueError):
+                messages.error(
+                    request,
+                    "Revisa volumen/dimensiones, pH y cloro. AQUO necesita valores válidos para calcular con seguridad.",
                 )
-                messages.success(request, f"Diagnóstico guardado como caso #{caso.pk}. El seguimiento se solicitará después de aproximadamente 24 horas.")
+            else:
+                estado = request.POST.get("estado_agua") or ""
+                tipo_piscina = request.POST.get("tipo_piscina") or ""
+                estados_validos = {x[0] for x in CasoAsistenteTecnico.ESTADO_AGUA_CHOICES}
+                tipos_validos = {x[0] for x in CasoAsistenteTecnico.TIPO_PISCINA_CHOICES}
+
+                errores = []
+                if volumen <= 0 or volumen > 5000:
+                    errores.append("El volumen debe ser mayor a 0 y razonable para una piscina.")
+                if ph < 0 or ph > 14:
+                    errores.append("El pH debe estar entre 0 y 14.")
+                if cloro < 0 or cloro > 20:
+                    errores.append("El cloro debe estar entre 0 y 20 ppm.")
+                if estado not in estados_validos:
+                    errores.append("Selecciona el estado actual del agua.")
+                if tipo_piscina not in tipos_validos:
+                    errores.append("Selecciona el tipo de piscina.")
+
+                if errores:
+                    for error in errores:
+                        messages.error(request, error)
+                else:
+                    resultado = calcular_recomendacion(
+                        volumen,
+                        ph,
+                        cloro,
+                        estado,
+                        tipo_piscina,
+                        motor.reglas,
+                        tipo_agua=origen_agua,
+                        antecedente_hierro=antecedente_hierro,
+                    )
+                    caso = CasoAsistenteTecnico.objects.create(
+                        user=request.user,
+                        trabajador=_trabajador(request.user),
+                        motor=motor,
+                        volumen_m3=volumen,
+                        ph_inicial=ph,
+                        cloro_inicial=cloro,
+                        estado_agua=estado,
+                        tipo_piscina=tipo_piscina,
+                        diagnostico=resultado["diagnostico"],
+                        tipo_tratamiento=resultado["tipo_tratamiento"],
+                        prioridad=resultado["prioridad"],
+                        resumen=resultado["resumen"],
+                        protocolo=resultado["protocolo"],
+                        productos_sugeridos=resultado["productos_sugeridos"],
+                        explicaciones=resultado["explicaciones"],
+                        advertencias=resultado["advertencias"],
+                        foto_inicial=request.FILES.get("foto_inicial"),
+                        seguimiento_programado_para=timezone.now() + timedelta(
+                            hours=resultado["seguimiento_horas"]
+                        ),
+                    )
+                    messages.success(
+                        request,
+                        f"AQUO guardó el diagnóstico como caso #{caso.pk}. Podrás verificar su evolución desde Mis casos.",
+                    )
 
     recientes = CasoAsistenteTecnico.objects.filter(user=request.user).select_related("motor")[:5]
+
     return render(request, "asistente_tecnico/inicio.html", {
         "base_template": _base_template(request.user),
         "resultado": resultado,
@@ -226,6 +264,12 @@ def asistente_inicio_view(request):
         "recientes": recientes,
         "estado_choices": CasoAsistenteTecnico.ESTADO_AGUA_CHOICES,
         "tipo_choices": CasoAsistenteTecnico.TIPO_PISCINA_CHOICES,
+        "problemas_tecnicos": PROBLEMAS_TECNICOS,
+        "categoria_consulta": categoria_consulta,
+        "detalle_problema": detalle_problema,
+        "metodo_volumen": metodo_volumen,
+        "origen_agua": origen_agua,
+        "antecedente_hierro": antecedente_hierro,
         "es_admin": _es_admin(request.user),
         "articulos_relacionados": _academia_relacionada_con_diagnostico(resultado),
     })

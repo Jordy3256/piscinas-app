@@ -462,6 +462,35 @@
 @media(max-width:390px){.mobile-orbit-item{width:72px}.mobile-orbit-item .orbit-label{display:block;max-width:72px;font-size:.58rem;padding:2px 5px}}
 .mobile-orbit-items.count-6 .mobile-orbit-item{width:48px}.mobile-orbit-items.count-6 .mobile-orbit-item:nth-child(1){--x:-118px}.mobile-orbit-items.count-6 .mobile-orbit-item:nth-child(2){--x:-91px}.mobile-orbit-items.count-6 .mobile-orbit-item:nth-child(5){--x:91px}.mobile-orbit-items.count-6 .mobile-orbit-item:nth-child(6){--x:118px}}
 
+
+    /* Navegación del trabajador · simple, premium y orientada a tareas */
+    .worker-context-wrap{
+      position:sticky;top:96px;z-index:1015;padding:7px 14px 0;
+    }
+    .worker-context{
+      display:flex;gap:5px;overflow-x:auto;padding:5px;
+      border:1px solid rgba(16,35,63,.08);border-radius:14px;
+      background:rgba(255,255,255,.92);box-shadow:0 7px 20px rgba(20,54,94,.06);
+      backdrop-filter:blur(14px);scrollbar-width:none;
+    }
+    .worker-context::-webkit-scrollbar{display:none}
+    .worker-context a{
+      display:inline-flex;align-items:center;gap:5px;min-height:34px;padding:6px 10px;
+      border-radius:10px;color:#5b6f84;text-decoration:none;white-space:nowrap;
+      font-size:.74rem;font-weight:850;
+    }
+    .worker-context a:hover,.worker-context a.active{
+      color:var(--jva-primary);background:var(--jva-primary-soft);
+    }
+    .worker-context a.primary{color:#fff;background:linear-gradient(135deg,#0b5ed7,#0787bf)}
+    .worker-menu-btn{
+      width:42px;height:42px;padding:0!important;display:grid!important;place-items:center;
+    }
+    @media(max-width:767.98px){
+      .worker-context-wrap{top:89px;padding:5px 10px 0}
+      .worker-context a{min-height:32px;padding:5px 9px;font-size:.69rem}
+    }
+
     .bottom-nav {
       position: fixed;
       right: 0;
@@ -718,6 +747,23 @@
       </div>
     </header>
 
+
+    {% if '/dashboard/asistente/' in request.path %}
+    <div class="worker-context-wrap">
+      <nav class="worker-context" aria-label="AQUO">
+        <a class="{% if request.resolver_match.url_name == 'inicio' %}active{% endif %}" href="{% url 'asistente_tecnico:inicio' %}"><i class="bi bi-stars"></i>AQUO</a>
+        <a href="{% url 'asistente_tecnico:historial' %}"><i class="bi bi-clock-history"></i>Mis casos</a>
+        <a href="{% url 'asistente_tecnico:academia_cms' %}?modo=aprender"><i class="bi bi-mortarboard"></i>Curso</a>
+        <a href="{% url 'asistente_tecnico:academia_cms' %}?modo=consultar"><i class="bi bi-book"></i>Biblioteca</a>
+      </nav>
+    </div>
+    {% elif '/dashboard/mi-inventario/' in request.path %}
+    <div class="worker-context-wrap"><nav class="worker-context" aria-label="Inventario">
+      <a class="active" href="{% url 'mi_inventario_trabajador' %}"><i class="bi bi-box-seam"></i>Mi inventario</a>
+      <a href="/dashboard/home/"><i class="bi bi-card-checklist"></i>Mi jornada</a>
+    </nav></div>
+    {% endif %}
+
     <main class="app-content">
       {% if messages %}
         {% for message in messages %}
@@ -732,43 +778,57 @@
     <nav class="bottom-nav" aria-label="Navegación principal">
       <div class="bottom-nav-panel">
         <div class="bottom-nav-links">
-          <a class="nav-item-app {% if request.path == '/dashboard/inicio/' %}active{% endif %}"
-             href="/dashboard/inicio/">
-            <i class="bi bi-house-door-fill"></i>
-            <span>Inicio</span>
+          <a class="nav-item-app {% if request.path == '/dashboard/inicio/' %}active{% endif %}" href="/dashboard/inicio/">
+            <i class="bi bi-house-door-fill"></i><span>Inicio</span>
           </a>
-
-          <a class="nav-item-app {% if request.path == '/dashboard/home/' or '/mantenimientos/' in request.path %}active{% endif %}"
-             href="/dashboard/home/">
-            <i class="bi bi-card-checklist"></i>
-            <span>Mantenimientos</span>
+          <a class="nav-item-app {% if request.path == '/dashboard/home/' or '/mantenimientos/' in request.path or '/dashboard/ordenes/' in request.path %}active{% endif %}" href="/dashboard/home/">
+            <i class="bi bi-card-checklist"></i><span>Mi jornada</span>
           </a>
-
-          <a class="nav-item-app {% if 'calculadora' in request.path %}active{% endif %}"
-             href="{% url 'calculadora_quimicos' %}">
-            <i class="bi bi-calculator-fill"></i>
-            <span>Calculadora</span>
+          <a class="nav-item-app {% if '/dashboard/asistente/' in request.path %}active{% endif %}" href="{% url 'asistente_tecnico:inicio' %}">
+            <i class="bi bi-stars"></i><span>AQUO</span>
           </a>
-
-          <a class="nav-item-app {% if '/dashboard/notificaciones/' in request.path %}active{% endif %}"
-             href="/dashboard/notificaciones/">
-            <i class="bi bi-bell-fill"></i>
-            <span>Notificaciones</span>
+          <a class="nav-item-app {% if '/dashboard/mi-inventario/' in request.path %}active{% endif %}" href="{% url 'mi_inventario_trabajador' %}">
+            <i class="bi bi-box-seam-fill"></i><span>Inventario</span>
+          </a>
+          <a class="nav-item-app {% if '/dashboard/mi-cuenta/' in request.path %}active{% endif %}" href="{% url 'mi_cuenta_trabajador' %}">
+            <i class="bi bi-person-circle"></i><span>Mi cuenta</span>
           </a>
         </div>
       </div>
     </nav>
 
-<nav class="mobile-orbit-nav" aria-label="Menú móvil"><div class="mobile-orbit-backdrop"></div><div class="mobile-orbit-items count-4">
+<nav class="mobile-orbit-nav" aria-label="Menú móvil">
+<div class="mobile-orbit-backdrop"></div>
+<div class="mobile-orbit-items count-5">
 <a class="mobile-orbit-item {% if request.path == '/dashboard/inicio/' %}active{% endif %}" href="/dashboard/inicio/"><span class="orbit-icon"><i class="bi bi-house-door-fill"></i></span><span class="orbit-label">Inicio</span></a>
-<a class="mobile-orbit-item {% if request.path == '/dashboard/home/' or '/mantenimientos/' in request.path or '/dashboard/ordenes/' in request.path %}active{% endif %}" href="/dashboard/home/"><span class="orbit-icon"><i class="bi bi-card-checklist"></i></span><span class="orbit-label">Mantenimientos</span></a>
-<a class="mobile-orbit-item {% if '/dashboard/asistente/' in request.path or 'calculadora' in request.path %}active{% endif %}" href="{% url 'asistente_tecnico:inicio' %}"><span class="orbit-icon"><i class="bi bi-stars"></i></span><span class="orbit-label">Asistente</span></a>
-<a class="mobile-orbit-item {% if '/dashboard/mi-inventario/' in request.path %}active{% endif %}" href="/dashboard/mi-inventario/"><span class="orbit-icon"><i class="bi bi-box-seam-fill"></i></span><span class="orbit-label">Inventario</span></a>
-</div><div class="mobile-orbit-dock"><button class="mobile-orbit-toggle" type="button" aria-label="Abrir menú" aria-expanded="false"><span class="orbit-grid">▦</span><span class="orbit-close">×</span></button></div></nav>
+<a class="mobile-orbit-item {% if request.path == '/dashboard/home/' or '/mantenimientos/' in request.path or '/dashboard/ordenes/' in request.path %}active{% endif %}" href="/dashboard/home/"><span class="orbit-icon"><i class="bi bi-card-checklist"></i></span><span class="orbit-label">Jornada</span></a>
+<a class="mobile-orbit-item {% if '/dashboard/asistente/' in request.path %}active{% endif %}" href="{% url 'asistente_tecnico:inicio' %}"><span class="orbit-icon"><i class="bi bi-stars"></i></span><span class="orbit-label">AQUO</span></a>
+<a class="mobile-orbit-item {% if '/dashboard/mi-inventario/' in request.path %}active{% endif %}" href="{% url 'mi_inventario_trabajador' %}"><span class="orbit-icon"><i class="bi bi-box-seam-fill"></i></span><span class="orbit-label">Inventario</span></a>
+<a class="mobile-orbit-item {% if '/dashboard/mi-cuenta/' in request.path %}active{% endif %}" href="{% url 'mi_cuenta_trabajador' %}"><span class="orbit-icon"><i class="bi bi-person-circle"></i></span><span class="orbit-label">Cuenta</span></a>
+</div>
+<div class="mobile-orbit-dock"><button class="mobile-orbit-toggle" type="button" aria-label="Abrir menú" aria-expanded="false"><span class="orbit-grid">▦</span><span class="orbit-close">×</span></button></div>
+</nav>
   </div>
 
   <div id="template-debug-badge">BASE_TRABAJADOR PREMIUM · 20260728</div>
 
+
+<div class="offcanvas offcanvas-end" tabindex="-1" id="workerLauncher" aria-labelledby="workerLauncherLabel" style="--bs-offcanvas-width:min(430px,94vw)">
+  <div class="offcanvas-header border-bottom">
+    <div><h5 class="offcanvas-title fw-bold" id="workerLauncherLabel">Mi espacio JVAQUA</h5><div class="small text-muted">Todo lo necesario para tu jornada.</div></div>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+  <div class="offcanvas-body bg-light">
+    <div class="d-grid gap-2">
+      <a class="card p-3 text-decoration-none" href="/dashboard/home/"><div class="d-flex gap-3 align-items-center"><div class="brand-mark" style="background:#edf5ff;color:#0b5ed7"><i class="bi bi-card-checklist"></i></div><div><strong class="text-dark">Mi jornada</strong><div class="small text-muted">Mantenimientos y órdenes asignadas</div></div></div></a>
+      <a class="card p-3 text-decoration-none" href="{% url 'asistente_tecnico:inicio' %}"><div class="d-flex gap-3 align-items-center"><div class="brand-mark" style="background:#eaf9ff;color:#0787bf"><i class="bi bi-stars"></i></div><div><strong class="text-dark">AQUO</strong><div class="small text-muted">Diagnóstico inteligente y guía técnica</div></div></div></a>
+      <a class="card p-3 text-decoration-none" href="{% url 'asistente_tecnico:academia_cms' %}?modo=aprender"><div class="d-flex gap-3 align-items-center"><div class="brand-mark" style="background:#f2efff;color:#6b4ad7"><i class="bi bi-mortarboard"></i></div><div><strong class="text-dark">Aprendizaje</strong><div class="small text-muted">Curso y biblioteca técnica JVAQUA</div></div></div></a>
+      <a class="card p-3 text-decoration-none" href="{% url 'mi_inventario_trabajador' %}"><div class="d-flex gap-3 align-items-center"><div class="brand-mark" style="background:#effaf5;color:#16875d"><i class="bi bi-box-seam"></i></div><div><strong class="text-dark">Mi inventario</strong><div class="small text-muted">Productos, cantidades e historial operativo</div></div></div></a>
+      <a class="card p-3 text-decoration-none" href="{% url 'mi_cuenta_trabajador' %}"><div class="d-flex gap-3 align-items-center"><div class="brand-mark" style="background:#fff6e8;color:#b7791f"><i class="bi bi-person-circle"></i></div><div><strong class="text-dark">Mi cuenta</strong><div class="small text-muted">Pagos y datos personales</div></div></div></a>
+      <a class="card p-3 text-decoration-none" href="/dashboard/notificaciones/"><div class="d-flex gap-3 align-items-center"><div class="brand-mark" style="background:#fff0f3;color:#c52d4a"><i class="bi bi-bell"></i></div><div><strong class="text-dark">Notificaciones</strong><div class="small text-muted">Avisos y recordatorios</div></div></div></a>
+    </div>
+  </div>
+</div>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 (function(){
