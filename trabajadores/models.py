@@ -15,6 +15,24 @@ class Trabajador(models.Model):
     ciudades_habilitadas = models.ManyToManyField(Ciudad, blank=True, related_name="trabajadores_habilitados")
     activo = models.BooleanField(default=True)
 
+
+    REMUNERACION_CHOICES = [
+        ("por_contrato", "Por contratos"),
+        ("mensual_fija", "Mensualidad fija"),
+    ]
+    tipo_remuneracion = models.CharField(
+        max_length=20,
+        choices=REMUNERACION_CHOICES,
+        default="por_contrato",
+        db_index=True,
+    )
+    sueldo_mensual_fijo = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+        help_text="Valor mensual fijo. Solo se usa cuando la remuneración es mensual fija.",
+    )
+
     FORMA_PAGO_CHOICES = [
         ("fin_mes", "Al finalizar el mes"),
         ("adelantado", "Por adelantado"),

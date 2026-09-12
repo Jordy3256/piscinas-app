@@ -672,7 +672,14 @@ class ObligacionTrabajador(models.Model):
     ]
 
     trabajador = models.ForeignKey("trabajadores.Trabajador", on_delete=models.PROTECT, related_name="obligaciones_pago")
-    contrato = models.ForeignKey(Contrato, on_delete=models.PROTECT, related_name="obligaciones_trabajador")
+    contrato = models.ForeignKey(
+        Contrato,
+        on_delete=models.PROTECT,
+        related_name="obligaciones_trabajador",
+        null=True,
+        blank=True,
+        help_text="Vacío cuando la obligación corresponde a una mensualidad fija del trabajador.",
+    )
     periodo_anio = models.PositiveIntegerField(db_index=True)
     periodo_mes = models.PositiveIntegerField(db_index=True)
     valor_acordado = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))])
@@ -699,12 +706,34 @@ class ObligacionTrabajador(models.Model):
 
     class Meta:
         ordering = ["-periodo_anio", "-periodo_mes", "trabajador__user__username", "id"]
-        constraints = [models.UniqueConstraint(fields=["contrato", "periodo_anio", "periodo_mes"], name="unique_obligacion_trabajador_periodo")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["contrato", "periodo_anio", "periodo_mes"],
+                name="unique_obligacion_trabajador_periodo",
+            ),
+            models.UniqueConstraint(
+                fields=["trabajador", "periodo_anio", "periodo_mes"],
+                condition=models.Q(contrato__isnull=True),
+                name="unique_nomina_fija_trabajador_periodo",
+            ),
+        ]
         verbose_name = "Obligación de pago a trabajador"
         verbose_name_plural = "Obligaciones de pago a trabajadores"
 
     def __str__(self):
-        return f"{self.trabajador} - {self.contrato.cliente} - {self.periodo_mes:02d}/{self.periodo_anio}"
+        if self.contrato_id:
+            return f"{self.trabajador} - {self.contrato.cliente} - {self.periodo_mes:02d}/{self.periodo_anio}"
+        return f"{self.trabajador} - Mensualidad fija - {self.periodo_mes:02d}/{self.periodo_anio}"
+
+    @property
+    def es_nomina_fija(self):
+        return self.contrato_id is None
+
+    @property
+    def concepto_origen(self):
+        if self.contrato_id:
+            return str(self.contrato.cliente)
+        return "Mensualidad fija"
 
     @property
     def periodo_label(self):
@@ -812,13 +841,23 @@ class PagoTrabajador(models.Model):
                 raise ValidationError({"monto": f"El pago no puede superar el saldo pendiente de ${saldo:.2f}."})
         super().save(*args, **kwargs)
         if self.activo and not self.lote_id:
+            if self.obligacion.contrato_id:
+                origen = str(self.obligacion.contrato.cliente)
+                ciudad = self.obligacion.contrato.cliente.ciudad or ""
+            else:
+                origen = "Mensualidad fija"
+                ciudad = (
+                    self.obligacion.trabajador.ciudad_principal.nombre
+                    if self.obligacion.trabajador.ciudad_principal_id
+                    else ""
+                )
             datos = {
-                "concepto": f"Pago a {self.obligacion.trabajador} - {self.obligacion.periodo_label} - {self.obligacion.contrato.cliente}",
+                "concepto": f"Pago a {self.obligacion.trabajador} - {self.obligacion.periodo_label} - {origen}",
                 "categoria": "tecnicos", "cantidad": 1, "costo_unitario": self.monto,
                 "total": self.monto, "monto_pagado": self.monto, "estado": Egreso.ESTADO_PAGADO,
                 "fecha": self.fecha, "metodo_pago": self.metodo_pago,
                 "proveedor": str(self.obligacion.trabajador),
-                "ciudad_proyecto": self.obligacion.contrato.cliente.ciudad or "",
+                "ciudad_proyecto": ciudad,
                 "comprobante": self.comprobante, "observaciones": self.observaciones,
                 "creado_por": self.creado_por,
             }

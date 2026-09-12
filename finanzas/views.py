@@ -26,6 +26,7 @@ from .cuentas_por_cobrar import MESES, generar_facturas_periodo, previsualizar_f
 
 from .servicios_financieros import obtener_resumen_financiero
 from .reconciliacion import reconciliar_cartera_nomina
+from .sincronizacion import materializar_nomina_fija_trabajador, sincronizar_modalidad_remuneracion_trabajador
 from .alertas_financieras import generar_alertas_financieras
 from .facturacion_externa import sincronizar_avisos_facturacion
 
@@ -748,6 +749,11 @@ def nomina_generar(request):
 
     for contrato in contratos:
         if (
+            contrato.tecnico_designado_id
+            and contrato.tecnico_designado.tipo_remuneracion == "mensual_fija"
+        ):
+            continue
+        if (
             not contrato.tecnico_designado_id
             or not contrato.valor_tecnico_mensual
             or contrato.valor_tecnico_mensual <= 0
@@ -815,6 +821,22 @@ def nomina_generar(request):
             creadas += int(created)
             omitidas += int(not created)
 
+    # Trabajadores con mensualidad fija: una sola obligación por mes,
+    # independientemente de contratos, mantenimientos u órdenes.
+    from trabajadores.models import Trabajador
+    fijos_creados = 0
+    for trabajador_fijo in Trabajador.objects.filter(
+        activo=True,
+        tipo_remuneracion="mensual_fija",
+        sueldo_mensual_fijo__gt=0,
+    ):
+        datos_fijos = materializar_nomina_fija_trabajador(
+            trabajador_fijo,
+            desde_fecha=date(anio, mes, 1),
+            horizonte_meses=0,
+        )
+        fijos_creados += datos_fijos.get("creadas", 0)
+
     # Los anticipos pendientes del periodo se descuentan automáticamente de la nómina
     # sin crear un segundo egreso: se reutiliza el egreso generado al registrar el anticipo.
     anticipos_aplicados = 0
@@ -874,7 +896,7 @@ def nomina_generar(request):
                 anticipo.fecha_descuento = timezone.localdate() if anticipo.descontado else None
                 anticipo.save(update_fields=["monto_descontado", "descontado", "fecha_descuento"])
                 anticipos_aplicados += 1
-    messages.success(request,f"Nómina por fecha de pago generada: {creadas} obligaciones nuevas, {omitidas} ya existentes, {sin_configurar} contratos sin técnico o valor configurado y {anticipos_aplicados} anticipos descontados.")
+    messages.success(request,f"Nómina actualizada: {creadas} obligaciones por contrato nuevas, {fijos_creados} mensualidades fijas nuevas, {omitidas} ya existentes, {sin_configurar} contratos sin técnico/valor y {anticipos_aplicados} anticipos descontados.")
     return redirect(f"/dashboard/finanzas/nomina/?anio={anio}&mes={mes}")
 
 def _nombre_trabajador(trabajador):
@@ -920,6 +942,20 @@ def trabajador_configuracion_pago(request, trabajador_pk):
             except (ValueError, TypeError):
                 messages.error(request, "El valor del anticipo no es válido.")
         else:
+            tipo_remuneracion = request.POST.get("tipo_remuneracion", "por_contrato")
+            if tipo_remuneracion not in {"por_contrato", "mensual_fija"}:
+                tipo_remuneracion = "por_contrato"
+            try:
+                sueldo_fijo = Decimal((request.POST.get("sueldo_mensual_fijo") or "0").replace(",", "."))
+            except Exception:
+                sueldo_fijo = Decimal("0.00")
+
+            if tipo_remuneracion == "mensual_fija" and sueldo_fijo <= 0:
+                messages.error(request, "Para usar mensualidad fija debes indicar un valor mensual mayor a $0.")
+                return redirect("finanzas_trabajador_configuracion_pago", trabajador_pk=trabajador.pk)
+
+            trabajador.tipo_remuneracion = tipo_remuneracion
+            trabajador.sueldo_mensual_fijo = sueldo_fijo if tipo_remuneracion == "mensual_fija" else Decimal("0.00")
             trabajador.forma_pago_nomina = request.POST.get("forma_pago_nomina", "fin_mes")
             trabajador.programacion_pago_nomina = request.POST.get("programacion_pago_nomina", "fecha_contratos")
             trabajador.modalidad_pago_nomina = request.POST.get("modalidad_pago_nomina", "unico")
@@ -955,17 +991,38 @@ def trabajador_configuracion_pago(request, trabajador_pk):
                     nueva_fecha = obligacion.periodo_servicio_fin + timedelta(
                         days=trabajador.dias_despues_fin_periodo or 0
                     )
-                else:
+                elif obligacion.contrato_id:
                     nueva_fecha = _fecha_pago_programada_contrato(
                         obligacion.contrato,
                         obligacion.periodo_anio,
                         obligacion.periodo_mes,
                     )
+                else:
+                    ultimo = monthrange(obligacion.periodo_anio, obligacion.periodo_mes)[1]
+                    if trabajador.programacion_pago_nomina == "dia_fijo" and trabajador.dia_pago_nomina:
+                        nueva_fecha = date(
+                            obligacion.periodo_anio,
+                            obligacion.periodo_mes,
+                            min(trabajador.dia_pago_nomina, ultimo),
+                        )
+                    elif trabajador.programacion_pago_nomina == "rango":
+                        dia = trabajador.dia_pago_hasta or trabajador.dia_pago_desde or ultimo
+                        nueva_fecha = date(
+                            obligacion.periodo_anio,
+                            obligacion.periodo_mes,
+                            min(dia, ultimo),
+                        )
+                    else:
+                        nueva_fecha = date(obligacion.periodo_anio, obligacion.periodo_mes, ultimo)
                 if obligacion.fecha_pago_programada != nueva_fecha:
                     obligacion.fecha_pago_programada = nueva_fecha
                     obligacion.save(update_fields=["fecha_pago_programada", "actualizada_en"])
 
-            messages.success(request, "Configuración de pago actualizada correctamente.")
+            sincronizar_modalidad_remuneracion_trabajador(trabajador)
+            if trabajador.tipo_remuneracion == "mensual_fija":
+                messages.success(request, f"Configuración actualizada. Nómina fija mensual: ${trabajador.sueldo_mensual_fijo:.2f}.")
+            else:
+                messages.success(request, "Configuración actualizada. La nómina vuelve a calcularse por contratos asignados.")
         return redirect("finanzas_trabajador_configuracion_pago", trabajador_pk=trabajador.pk)
     anticipos = trabajador.anticipos.select_related("egreso").all()[:30]
     return render(request, "finanzas/trabajador_configuracion_pago.html", {
@@ -1049,7 +1106,7 @@ def nomina_pago_consolidado_pdf(request, lote_pk):
     data=[["Cliente / contrato", "Periodo de servicio", "Valor aplicado"]]
     for pago in pagos:
         data.append([
-            str(pago.obligacion.contrato.cliente),
+            pago.obligacion.concepto_origen,
             pago.obligacion.periodo_servicio_label,
             f"${pago.monto:.2f}",
         ])
@@ -1491,7 +1548,7 @@ def pago_trabajador_comprobante_pdf(request, pago_pk):
     if not _es_admin(request.user): return _denegado(request)
     pago=get_object_or_404(PagoTrabajador.objects.select_related("obligacion__trabajador", "obligacion__contrato__cliente"), pk=pago_pk)
     o=pago.obligacion
-    resumen=[("Comprobante", f"PAG-{pago.pk:06d}"),("Trabajador", str(o.trabajador)),("Cliente / contrato", str(o.contrato.cliente)),("Periodo", o.periodo_label),("Fecha", pago.fecha.strftime("%d/%m/%Y")),("Forma de pago", pago.get_metodo_pago_display()),("Referencia", pago.referencia or "—"),("Valor pagado", f"${pago.monto:.2f}"),("Saldo actual", f"${o.saldo:.2f}")]
+    resumen=[("Comprobante", f"PAG-{pago.pk:06d}"),("Trabajador", str(o.trabajador)),("Origen", o.concepto_origen),("Periodo", o.periodo_label),("Fecha", pago.fecha.strftime("%d/%m/%Y")),("Forma de pago", pago.get_metodo_pago_display()),("Referencia", pago.referencia or "—"),("Valor pagado", f"${pago.monto:.2f}"),("Saldo actual", f"${o.saldo:.2f}")]
     return _pdf_response(f"pago-trabajador-{pago.pk:06d}.pdf", "JVAQUA · Comprobante de pago", "Pago operativo a trabajador", [], ["Detalle"], resumen)
 
 
@@ -1507,7 +1564,7 @@ def calendario_financiero(request):
     for f in Factura.objects.filter(fecha_vencimiento__range=(inicio,fin)).exclude(estado=Factura.ESTADO_ANULADA).select_related("cliente"):
         eventos.append({"fecha":f.fecha_vencimiento,"tipo":"Cobro programado","detalle":f.cliente.nombre,"valor":f.saldo,"estado":f.estado_visual})
     for o in ObligacionTrabajador.objects.filter(fecha_pago_programada__range=(inicio,fin)).exclude(estado=ObligacionTrabajador.ESTADO_ANULADO).select_related("trabajador","contrato__cliente"):
-        eventos.append({"fecha":o.fecha_pago_programada,"tipo":"Pago a trabajador","detalle":f"{o.trabajador} · {o.contrato.cliente}","valor":o.saldo,"estado":o.estado})
+        eventos.append({"fecha":o.fecha_pago_programada,"tipo":"Pago a trabajador","detalle":f"{o.trabajador} · {o.concepto_origen}","valor":o.saldo,"estado":o.estado})
     for i in Ingreso.objects.filter(fecha__range=(inicio,fin)).exclude(estado=Ingreso.ESTADO_ANULADO): eventos.append({"fecha":i.fecha,"tipo":"Ingreso realizado","detalle":i.concepto,"valor":i.monto_pagado,"estado":"pagado"})
     for e in Egreso.objects.filter(fecha__range=(inicio,fin)).exclude(estado=Egreso.ESTADO_ANULADO): eventos.append({"fecha":e.fecha,"tipo":"Egreso realizado","detalle":e.concepto,"valor":e.monto_pagado,"estado":"pagado"})
     eventos.sort(key=lambda x:(x["fecha"],x["tipo"],x["detalle"]))

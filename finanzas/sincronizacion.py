@@ -139,9 +139,13 @@ def _materializar_nomina_periodo(contrato, anio, mes, periodo_inicio, periodo_fi
     """
     Crea/actualiza la obligación mensual del técnico.
 
-    La forma de pago del cliente no altera esta periodicidad: incluso contratos
-    semestrales/anuales mantienen Nómina mensual.
+    Si el trabajador usa mensualidad fija, los contratos dejan de originar
+    obligaciones individuales; su nómina se materializa una sola vez por mes.
     """
+    trabajador = contrato.tecnico_designado
+    if trabajador and trabajador.tipo_remuneracion == "mensual_fija":
+        return None, False
+
     if (
         not contrato.tecnico_designado_id
         or not contrato.valor_tecnico_mensual
@@ -194,6 +198,159 @@ def _materializar_nomina_periodo(contrato, anio, mes, periodo_inicio, periodo_fi
 
     return obligacion, False
 
+
+
+def _fecha_nomina_fija(trabajador, anio, mes):
+    """Fecha programada para una mensualidad fija sin depender de contratos."""
+    ultimo = monthrange(anio, mes)[1]
+    programacion = trabajador.programacion_pago_nomina or "fin_periodo"
+
+    if programacion == "dia_fijo" and trabajador.dia_pago_nomina:
+        return date(anio, mes, min(trabajador.dia_pago_nomina, ultimo))
+
+    if programacion == "rango":
+        dia = trabajador.dia_pago_hasta or trabajador.dia_pago_desde or ultimo
+        return date(anio, mes, min(dia, ultimo))
+
+    # "fecha_contratos" no aplica a un sueldo fijo; se interpreta como fin de mes.
+    return date(anio, mes, ultimo) + timedelta(
+        days=(trabajador.dias_despues_fin_periodo or 0)
+        if programacion == "fin_periodo"
+        else 0
+    )
+
+
+@transaction.atomic
+def materializar_nomina_fija_trabajador(
+    trabajador,
+    *,
+    desde_fecha=None,
+    horizonte_meses=12,
+):
+    """
+    Genera una sola obligación mensual para un trabajador con sueldo fijo.
+
+    No depende de contratos, mantenimientos ni órdenes asignadas.
+    El historial pagado nunca se modifica.
+    """
+    if (
+        not trabajador.activo
+        or trabajador.tipo_remuneracion != "mensual_fija"
+        or not trabajador.sueldo_mensual_fijo
+        or trabajador.sueldo_mensual_fijo <= 0
+    ):
+        return {"creadas": 0, "actualizadas": 0}
+
+    hoy = timezone.localdate()
+    desde_fecha = desde_fecha or hoy
+    if trabajador.fecha_ingreso and trabajador.fecha_ingreso > desde_fecha:
+        desde_fecha = trabajador.fecha_ingreso
+
+    creadas = 0
+    actualizadas = 0
+
+    # Retira obligaciones por contrato futuras/no pagadas desde el mes actual.
+    corte = date(desde_fecha.year, desde_fecha.month, 1)
+    for obligacion in trabajador.obligaciones_pago.filter(
+        contrato__isnull=False,
+        periodo_servicio_fin__gte=corte,
+    ).prefetch_related("pagos"):
+        if obligacion.pagos.filter(activo=True).exists():
+            continue
+        obligacion.delete()
+
+    for offset in range(0, max(int(horizonte_meses), 0) + 1):
+        anio, mes = _mover_mes(desde_fecha.year, desde_fecha.month, offset)
+        inicio = date(anio, mes, 1)
+        fin = date(anio, mes, monthrange(anio, mes)[1])
+
+        if trabajador.fecha_ingreso and fin < trabajador.fecha_ingreso:
+            continue
+
+        fecha_pago = _fecha_nomina_fija(trabajador, anio, mes)
+        obligacion, creada = ObligacionTrabajador.objects.get_or_create(
+            trabajador=trabajador,
+            contrato=None,
+            periodo_anio=anio,
+            periodo_mes=mes,
+            defaults={
+                "valor_acordado": trabajador.sueldo_mensual_fijo,
+                "periodo_servicio_inicio": inicio,
+                "periodo_servicio_fin": fin,
+                "fecha_pago_programada": fecha_pago,
+                "observaciones": "Mensualidad fija del trabajador.",
+            },
+        )
+        creadas += int(creada)
+
+        if creada or obligacion.pagos.filter(activo=True).exists():
+            continue
+
+        cambios = []
+        valores = {
+            "valor_acordado": trabajador.sueldo_mensual_fijo,
+            "periodo_servicio_inicio": inicio,
+            "periodo_servicio_fin": fin,
+            "fecha_pago_programada": fecha_pago,
+            "observaciones": "Mensualidad fija del trabajador.",
+        }
+        for campo, valor in valores.items():
+            if getattr(obligacion, campo) != valor:
+                setattr(obligacion, campo, valor)
+                cambios.append(campo)
+        if obligacion.estado == ObligacionTrabajador.ESTADO_ANULADO:
+            obligacion.estado = ObligacionTrabajador.ESTADO_PENDIENTE
+            cambios.append("estado")
+        if cambios:
+            obligacion.save(update_fields=list(dict.fromkeys(cambios)) + ["actualizada_en"])
+            obligacion.sincronizar_estado()
+            actualizadas += 1
+
+    return {"creadas": creadas, "actualizadas": actualizadas}
+
+
+@transaction.atomic
+def sincronizar_modalidad_remuneracion_trabajador(trabajador):
+    """
+    Conserva histórico pagado y adapta únicamente la nómina pendiente/futura
+    cuando se cambia entre pago por contratos y mensualidad fija.
+    """
+    hoy = timezone.localdate()
+    corte = date(hoy.year, hoy.month, 1)
+
+    if trabajador.tipo_remuneracion == "mensual_fija":
+        return materializar_nomina_fija_trabajador(
+            trabajador,
+            desde_fecha=hoy,
+            horizonte_meses=12,
+        )
+
+    # Vuelta a pago por contratos: retira mensualidades fijas no pagadas desde
+    # el mes actual. Las obligaciones históricas/pagadas se conservan.
+    for obligacion in trabajador.obligaciones_pago.filter(
+        contrato__isnull=True,
+        periodo_servicio_fin__gte=corte,
+    ).prefetch_related("pagos"):
+        if obligacion.pagos.filter(activo=True).exists():
+            continue
+        obligacion.delete()
+
+    # La señal/edición de cada contrato seguirá manteniendo la nómina por
+    # contrato. Aquí regeneramos de inmediato los contratos activos asignados.
+    from contratos.models import Contrato
+    resultado = {"creadas": 0, "actualizadas": 0}
+    for contrato in Contrato.objects.filter(
+        activo=True,
+        tecnico_designado=trabajador,
+    ):
+        datos = sincronizar_contrato_activo(
+            contrato,
+            desde_fecha=hoy,
+            horizonte_meses=12,
+        )
+        resultado["creadas"] += int(datos.get("obligaciones_creadas", 0))
+        resultado["actualizadas"] += int(datos.get("obligaciones_actualizadas", 0))
+    return resultado
 
 def materializar_finanzas_contrato(
     contrato,
@@ -316,6 +473,13 @@ def sincronizar_contrato_activo(contrato, *, desde_fecha=None, horizonte_meses=1
 
     for obligacion in ObligacionTrabajador.objects.filter(contrato=contrato).prefetch_related("pagos"):
         if obligacion.pagos.filter(activo=True).exists():
+            continue
+
+        if (
+            contrato.tecnico_designado_id
+            and contrato.tecnico_designado.tipo_remuneracion == "mensual_fija"
+        ):
+            obligacion.delete()
             continue
 
         # Si se retiró técnico/valor, las obligaciones que todavía no han cerrado
