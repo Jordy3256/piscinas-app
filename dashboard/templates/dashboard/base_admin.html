@@ -794,6 +794,84 @@
       }
     }
 
+
+    /* JVAQUA · Navegación premium unificada */
+    .jv-nav-trigger{
+      min-width:42px!important;width:42px;padding:0!important;font-size:1.05rem!important;
+    }
+    .jv-context-wrap{
+      position:sticky;top:82px;z-index:1020;
+      padding:8px 12px 0;
+      pointer-events:none;
+    }
+    .jv-context-nav{
+      max-width:1296px;margin:0 auto;padding:6px;
+      display:flex;align-items:center;gap:5px;overflow-x:auto;
+      border:1px solid rgba(230,235,242,.96);border-radius:15px;
+      background:rgba(255,255,255,.92);box-shadow:0 7px 22px rgba(21,34,56,.07);
+      backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+      scrollbar-width:none;pointer-events:auto;
+    }
+    .jv-context-nav::-webkit-scrollbar{display:none}
+    .jv-context-label{
+      padding:0 9px;color:#8190a1;font-size:.67rem;font-weight:900;
+      letter-spacing:.07em;text-transform:uppercase;white-space:nowrap;
+    }
+    .jv-context-nav a{
+      display:inline-flex;align-items:center;gap:5px;min-height:34px;padding:6px 10px;
+      border-radius:10px;color:#526171;text-decoration:none;white-space:nowrap;
+      font-size:.76rem;font-weight:800;
+    }
+    .jv-context-nav a:hover{color:var(--jv-primary);background:var(--jv-primary-soft)}
+    .jv-context-nav a.is-primary{color:#fff;background:linear-gradient(135deg,var(--jv-primary),#087bbf)}
+
+    .jv-launcher.offcanvas{
+      --bs-offcanvas-width:min(520px,94vw);
+      border-left:0;background:#f6f9fc;
+    }
+    .jv-launcher .offcanvas-header{padding:1.15rem 1.2rem;border-bottom:1px solid var(--jv-border);background:#fff}
+    .jv-launcher-title{font-size:1.08rem;font-weight:900;color:var(--jv-dark)}
+    .jv-launcher-sub{margin-top:2px;color:var(--jv-muted);font-size:.76rem}
+    .jv-launcher-body{padding:1rem 1.05rem 1.5rem}
+    .jv-launch-group{margin-bottom:1rem}
+    .jv-launch-kicker{margin:0 0 .45rem .15rem;color:#8290a0;font-size:.67rem;font-weight:900;letter-spacing:.08em;text-transform:uppercase}
+    .jv-launch-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.55rem}
+    .jv-launch-link{
+      display:flex;align-items:center;gap:.7rem;min-height:64px;padding:.72rem;
+      border:1px solid #e4eaf1;border-radius:15px;background:#fff;color:var(--jv-dark);
+      text-decoration:none;box-shadow:0 4px 13px rgba(21,34,56,.035);
+    }
+    .jv-launch-link:hover{transform:translateY(-2px);border-color:rgba(11,94,215,.24);color:var(--jv-primary);box-shadow:0 9px 20px rgba(21,34,56,.08)}
+    .jv-launch-icon{width:38px;height:38px;flex:0 0 38px;display:grid;place-items:center;border-radius:12px;background:#f0f6ff;font-size:1rem}
+    .jv-launch-name{display:block;font-size:.8rem;font-weight:900}
+    .jv-launch-desc{display:block;margin-top:2px;color:#7a8797;font-size:.65rem;line-height:1.2}
+
+    .jv-quick-fab{position:fixed;right:24px;bottom:92px;z-index:1040}
+    .jv-quick-toggle{
+      width:56px;height:56px;border:5px solid rgba(255,255,255,.95);border-radius:50%;
+      color:#fff;background:linear-gradient(145deg,#0b6fe8,#0787bf);
+      box-shadow:0 14px 32px rgba(4,77,165,.28);font-size:1.45rem;font-weight:500;
+    }
+    .jv-quick-menu{
+      position:absolute;right:0;bottom:66px;width:255px;padding:8px;
+      border:1px solid var(--jv-border);border-radius:17px;background:rgba(255,255,255,.98);
+      box-shadow:0 16px 42px rgba(21,34,56,.18);opacity:0;visibility:hidden;
+      transform:translateY(8px) scale(.98);transition:.18s;
+    }
+    .jv-quick-fab.is-open .jv-quick-menu{opacity:1;visibility:visible;transform:none}
+    .jv-quick-head{padding:7px 8px 8px;color:#8290a0;font-size:.66rem;font-weight:900;letter-spacing:.07em;text-transform:uppercase}
+    .jv-quick-menu a{display:flex;align-items:center;gap:.65rem;padding:.66rem .7rem;border-radius:11px;color:var(--jv-dark);text-decoration:none;font-size:.78rem;font-weight:800}
+    .jv-quick-menu a:hover{color:var(--jv-primary);background:var(--jv-primary-soft)}
+
+    @media(max-width:767.98px){
+      .jv-context-wrap{top:70px;padding:6px 8px 0}
+      .jv-context-nav{border-radius:13px}
+      .jv-context-label{display:none}
+      .jv-context-nav a{min-height:32px;padding:5px 9px;font-size:.7rem}
+      .jv-launch-grid{grid-template-columns:1fr}
+      .jv-quick-fab{display:none}
+    }
+
     @media (prefers-reduced-motion: reduce) {
       *,
       *::before,
@@ -836,6 +914,12 @@
 
             <div class="d-flex gap-2 align-items-center topbar-actions">
             {% block top_actions %}
+              <button class="btn btn-outline-secondary btn-sm jv-nav-trigger"
+                      type="button"
+                      data-bs-toggle="offcanvas"
+                      data-bs-target="#jvModuleLauncher"
+                      aria-controls="jvModuleLauncher"
+                      title="Explorar módulos">☰</button>
               <div class="dropdown">
                 <a class="btn btn-outline-secondary btn-sm notif-btn dropdown-toggle"
                    href="#"
@@ -884,6 +968,57 @@
       </div>
     </div>
 
+
+    {% if '/dashboard/clientes/' in request.path or '/dashboard/contratos/' in request.path %}
+    <div class="jv-context-wrap"><nav class="jv-context-nav" aria-label="Gestión comercial">
+      <span class="jv-context-label">Comercial</span>
+      <a href="{% url 'cliente_list' %}">👥 Clientes</a>
+      <a href="{% url 'contrato_list' %}">📄 Contratos</a>
+      <a href="{% url 'cliente_crear' %}">＋ Cliente</a>
+      <a class="is-primary" href="{% url 'contrato_crear' %}">＋ Contrato</a>
+    </nav></div>
+    {% elif '/dashboard/finanzas/' in request.path %}
+    <div class="jv-context-wrap"><nav class="jv-context-nav" aria-label="Finanzas">
+      <span class="jv-context-label">Finanzas</span>
+      <a href="{% url 'flujo_mensual' %}">Resumen</a>
+      <a href="{% url 'finanzas_cartera' %}">Cartera</a>
+      <a href="{% url 'finanzas_nomina' %}">Nómina</a>
+      <a href="{% url 'finanzas_facturacion_pendiente' %}">Facturación</a>
+      <a href="{% url 'finanzas_movimientos' %}">Movimientos</a>
+      <a href="{% url 'finanzas_comprobantes_servicio' %}">Comprobantes</a>
+    </nav></div>
+    {% elif '/dashboard/inventario/' in request.path %}
+    <div class="jv-context-wrap"><nav class="jv-context-nav" aria-label="Inventario">
+      <span class="jv-context-label">Inventario</span>
+      <a href="{% url 'inventario' %}">Centro logístico</a>
+      <a href="{% url 'inventario_productos' %}">Productos</a>
+      <a href="{% url 'inventario_historial' %}">Movimientos</a>
+    </nav></div>
+    {% elif '/dashboard/operativo/' in request.path or '/dashboard/mantenimientos/' in request.path or '/dashboard/trabajadores/' in request.path or '/dashboard/ordenes/' in request.path %}
+    <div class="jv-context-wrap"><nav class="jv-context-nav" aria-label="Operación">
+      <span class="jv-context-label">Operación</span>
+      <a href="{% url 'admin_operativo' %}">Agenda operativa</a>
+      <a href="{% url 'trabajadores_list' %}">Trabajadores</a>
+      <a href="{% url 'mantenimiento_historial' %}">Historial</a>
+      <a href="{% url 'ordenes_trabajo:lista' %}">Órdenes</a>
+    </nav></div>
+    {% elif '/dashboard/asistente/administracion/' in request.path %}
+    <div class="jv-context-wrap"><nav class="jv-context-nav" aria-label="JVAQUA Digital">
+      <span class="jv-context-label">Digital</span>
+      <a href="{% url 'asistente_tecnico:admin' %}">AQUO</a>
+      <a href="{% url 'asistente_tecnico:cms_admin' %}">Aprendizaje</a>
+      <a href="{% url 'asistente_tecnico:soporte_admin_lista' %}">Soporte</a>
+      <a href="{% url 'asistente_tecnico:digital_suscripciones_admin' %}">Suscripciones</a>
+    </nav></div>
+    {% elif request.path == '/dashboard/' or request.path == '/dashboard/home/' or '/dashboard/metas/' in request.path %}
+    <div class="jv-context-wrap"><nav class="jv-context-nav" aria-label="Dirección">
+      <span class="jv-context-label">Dirección</span>
+      <a href="{% url 'dashboard' %}">Dashboard</a>
+      <a href="{% url 'metas_empresa' %}">Metas</a>
+      <a href="{% url 'reporte_ganancias' %}">Rentabilidad</a>
+    </nav></div>
+    {% endif %}
+
     <div class="container page-content">
       {% if messages %}
         <div class="mb-3">
@@ -909,8 +1044,8 @@
           <a class="btn flex-fill {% if '/dashboard/operativo/' in request.path %}nav-active{% endif %}" href="/dashboard/operativo/">
             <span class="nav-icon">🧑‍💼</span><span>Operativo</span>
           </a>
-          <a class="btn flex-fill {% if '/dashboard/contratos/' in request.path %}nav-active{% endif %}" href="/dashboard/contratos/">
-            <span class="nav-icon">📄</span><span>Contratos</span>
+          <a class="btn flex-fill {% if '/dashboard/clientes/' in request.path or '/dashboard/contratos/' in request.path %}nav-active{% endif %}" href="/dashboard/clientes/">
+            <span class="nav-icon">👥</span><span>Clientes</span>
           </a>
           <a class="btn flex-fill {% if '/dashboard/inventario/' in request.path %}nav-active{% endif %}" href="/dashboard/inventario/">
             <span class="nav-icon">📦</span><span>Inventario</span>
@@ -926,14 +1061,76 @@
       </div>
     </div>
 
-<nav class="mobile-orbit-nav" aria-label="Menú móvil"><div class="mobile-orbit-backdrop"></div><div class="mobile-orbit-items count-5">
+<nav class="mobile-orbit-nav" aria-label="Menú móvil"><div class="mobile-orbit-backdrop"></div><div class="mobile-orbit-items count-6">
 <a class="mobile-orbit-item {% if request.path == '/dashboard/inicio/' %}active{% endif %}" href="/dashboard/inicio/"><span class="orbit-icon">🏠</span><span class="orbit-label">Inicio</span></a>
 <a class="mobile-orbit-item {% if request.path == '/dashboard/' or request.path == '/dashboard/home/' %}active{% endif %}" href="/dashboard/"><span class="orbit-icon">📊</span><span class="orbit-label">Dashboard</span></a>
+<a class="mobile-orbit-item {% if '/dashboard/clientes/' in request.path or '/dashboard/contratos/' in request.path %}active{% endif %}" href="/dashboard/clientes/"><span class="orbit-icon">👥</span><span class="orbit-label">Clientes</span></a>
 <a class="mobile-orbit-item {% if '/dashboard/operativo/' in request.path or '/dashboard/ordenes/' in request.path or '/dashboard/mantenimientos/' in request.path %}active{% endif %}" href="/dashboard/operativo/"><span class="orbit-icon">⚙️</span><span class="orbit-label">Operativo</span></a>
 <a class="mobile-orbit-item {% if '/dashboard/inventario/' in request.path %}active{% endif %}" href="/dashboard/inventario/"><span class="orbit-icon">📦</span><span class="orbit-label">Inventario</span></a>
 <a class="mobile-orbit-item {% if '/dashboard/finanzas/' in request.path %}active{% endif %}" href="/dashboard/finanzas/flujo/"><span class="orbit-icon">💰</span><span class="orbit-label">Finanzas</span></a>
 </div><div class="mobile-orbit-dock"><button class="mobile-orbit-toggle" type="button" aria-label="Abrir menú" aria-expanded="false"><span class="orbit-grid">▦</span><span class="orbit-close">×</span></button></div></nav>
   </div>
+
+
+<div class="offcanvas offcanvas-end jv-launcher" tabindex="-1" id="jvModuleLauncher" aria-labelledby="jvModuleLauncherLabel">
+  <div class="offcanvas-header">
+    <div>
+      <div class="jv-launcher-title" id="jvModuleLauncherLabel">Explorar JVAQUA</div>
+      <div class="jv-launcher-sub">Todo el sistema organizado por lo que necesitas hacer.</div>
+    </div>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+  <div class="offcanvas-body jv-launcher-body">
+    <div class="jv-launch-group">
+      <div class="jv-launch-kicker">Trabajo diario</div>
+      <div class="jv-launch-grid">
+        <a class="jv-launch-link" href="{% url 'inicio' %}"><span class="jv-launch-icon">🏠</span><span><span class="jv-launch-name">Inicio</span><span class="jv-launch-desc">Pendientes y prioridades de hoy</span></span></a>
+        <a class="jv-launch-link" href="{% url 'admin_operativo' %}"><span class="jv-launch-icon">⚙️</span><span><span class="jv-launch-name">Operativo</span><span class="jv-launch-desc">Agenda, servicios y asignaciones</span></span></a>
+        <a class="jv-launch-link" href="{% url 'cliente_list' %}"><span class="jv-launch-icon">👥</span><span><span class="jv-launch-name">Clientes y contratos</span><span class="jv-launch-desc">Gestión comercial en un solo lugar</span></span></a>
+        <a class="jv-launch-link" href="{% url 'flujo_mensual' %}"><span class="jv-launch-icon">💰</span><span><span class="jv-launch-name">Finanzas</span><span class="jv-launch-desc">Cartera, nómina y movimientos</span></span></a>
+        <a class="jv-launch-link" href="{% url 'inventario' %}"><span class="jv-launch-icon">📦</span><span><span class="jv-launch-name">Inventario</span><span class="jv-launch-desc">Stock, técnicos y trazabilidad</span></span></a>
+        <a class="jv-launch-link" href="{% url 'trabajadores_list' %}"><span class="jv-launch-icon">👷</span><span><span class="jv-launch-name">Equipo</span><span class="jv-launch-desc">Trabajadores y expedientes</span></span></a>
+      </div>
+    </div>
+    <div class="jv-launch-group">
+      <div class="jv-launch-kicker">Dirección</div>
+      <div class="jv-launch-grid">
+        <a class="jv-launch-link" href="{% url 'dashboard' %}"><span class="jv-launch-icon">📊</span><span><span class="jv-launch-name">Dashboard ejecutivo</span><span class="jv-launch-desc">Indicadores y decisiones</span></span></a>
+        <a class="jv-launch-link" href="{% url 'metas_empresa' %}"><span class="jv-launch-icon">🎯</span><span><span class="jv-launch-name">Metas</span><span class="jv-launch-desc">Objetivos y crecimiento</span></span></a>
+        <a class="jv-launch-link" href="{% url 'reporte_ganancias' %}"><span class="jv-launch-icon">📈</span><span><span class="jv-launch-name">Rentabilidad</span><span class="jv-launch-desc">Ganancias y márgenes</span></span></a>
+      </div>
+    </div>
+    <div class="jv-launch-group">
+      <div class="jv-launch-kicker">JVAQUA Digital</div>
+      <div class="jv-launch-grid">
+        <a class="jv-launch-link" href="{% url 'asistente_tecnico:admin' %}"><span class="jv-launch-icon">🧠</span><span><span class="jv-launch-name">AQUO</span><span class="jv-launch-desc">Casos y recomendaciones</span></span></a>
+        <a class="jv-launch-link" href="{% url 'asistente_tecnico:cms_admin' %}"><span class="jv-launch-icon">📚</span><span><span class="jv-launch-name">Aprendizaje</span><span class="jv-launch-desc">Curso y biblioteca técnica</span></span></a>
+        <a class="jv-launch-link" href="{% url 'asistente_tecnico:soporte_admin_lista' %}"><span class="jv-launch-icon">💬</span><span><span class="jv-launch-name">Soporte</span><span class="jv-launch-desc">Conversaciones con clientes</span></span></a>
+        <a class="jv-launch-link" href="{% url 'asistente_tecnico:digital_suscripciones_admin' %}"><span class="jv-launch-icon">💳</span><span><span class="jv-launch-name">Suscripciones</span><span class="jv-launch-desc">Altas, pagos y renovaciones</span></span></a>
+      </div>
+    </div>
+    <div class="jv-launch-group mb-0">
+      <div class="jv-launch-kicker">Más herramientas</div>
+      <div class="jv-launch-grid">
+        <a class="jv-launch-link" href="{% url 'actividad_historial' %}"><span class="jv-launch-icon">🕘</span><span><span class="jv-launch-name">Actividad</span><span class="jv-launch-desc">Trazabilidad del sistema</span></span></a>
+        <a class="jv-launch-link" href="/dashboard/notificaciones/"><span class="jv-launch-icon">🔔</span><span><span class="jv-launch-name">Notificaciones</span><span class="jv-launch-desc">Bandeja e historial</span></span></a>
+        <a class="jv-launch-link" href="/admin/"><span class="jv-launch-icon">⚙️</span><span><span class="jv-launch-name">Configuración avanzada</span><span class="jv-launch-desc">Administración técnica</span></span></a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="jv-quick-fab" id="jvQuickFab">
+  <div class="jv-quick-menu">
+    <div class="jv-quick-head">Crear o registrar</div>
+    <a href="{% url 'cliente_crear' %}"><span>👤</span> Nuevo cliente</a>
+    <a href="{% url 'contrato_crear' %}"><span>📄</span> Nuevo contrato</a>
+    <a href="{% url 'finanzas_ingreso_nuevo' %}"><span>↗️</span> Nuevo ingreso</a>
+    <a href="{% url 'finanzas_egreso_nuevo' %}"><span>↘️</span> Nuevo egreso</a>
+    <a href="{% url 'asistente_tecnico:admin' %}"><span>🧠</span> Abrir AQUO</a>
+  </div>
+  <button class="jv-quick-toggle" type="button" aria-label="Acciones rápidas" aria-expanded="false">＋</button>
+</div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
@@ -947,6 +1144,18 @@
   toggle.addEventListener('click',()=>nav.classList.contains('is-open')?close():open());
   backdrop.addEventListener('click',close);
   nav.querySelectorAll('.mobile-orbit-item').forEach(a=>a.addEventListener('click',close));
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')close()});
+})();
+</script>
+<script>
+(function(){
+  const fab=document.getElementById('jvQuickFab');
+  if(!fab)return;
+  const btn=fab.querySelector('.jv-quick-toggle');
+  const close=()=>{fab.classList.remove('is-open');btn.setAttribute('aria-expanded','false')};
+  btn.addEventListener('click',(e)=>{e.stopPropagation();const open=fab.classList.toggle('is-open');btn.setAttribute('aria-expanded',open?'true':'false')});
+  fab.addEventListener('click',e=>e.stopPropagation());
+  document.addEventListener('click',close);
   document.addEventListener('keydown',e=>{if(e.key==='Escape')close()});
 })();
 </script>
