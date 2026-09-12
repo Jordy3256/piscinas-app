@@ -67,3 +67,15 @@ body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,
 }
 @media(max-width:390px){.login-panel{padding-left:12px;padding-right:12px}.login-card{padding-left:17px;padding-right:17px}.login-card h2{font-size:1.55rem}}
 @media(prefers-reduced-motion:reduce){.water-lines i{animation:none}.login-submit{transition:none}}
+
+
+/* v3.10.43 · refinamiento premium de acceso público */
+.brand-feature{padding:10px 12px;border:1px solid rgba(255,255,255,.1);border-radius:14px;background:rgba(255,255,255,.055);backdrop-filter:blur(8px)}
+.brand-feature div{min-width:0}.brand-feature strong{display:block;font-size:.82rem}.brand-feature small{display:block;margin-top:2px;color:rgba(255,255,255,.58);font-size:.67rem;font-weight:600}
+.login-card{position:relative;overflow:hidden}
+.login-card::before{content:"";position:absolute;inset:0 0 auto;height:4px;background:linear-gradient(90deg,#0757b8,#08a9c7,#72e2e8)}
+.login-register{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:18px;padding:14px 15px;border:1px solid #e2eaf2;border-radius:16px;background:linear-gradient(145deg,#fbfdff,#f2f8fd)}
+.login-register span{display:block;color:#304862;font-size:.76rem;font-weight:850}.login-register small{display:block;margin-top:2px;color:#8594a5;font-size:.66rem}
+.login-register a{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;color:var(--login-blue);text-decoration:none;font-size:.75rem;font-weight:900}
+.login-register a:hover{gap:9px}
+@media(max-width:460px){.login-register{align-items:flex-start;flex-direction:column}.login-register a{width:100%;justify-content:center;padding-top:7px;border-top:1px solid #e7edf3}}

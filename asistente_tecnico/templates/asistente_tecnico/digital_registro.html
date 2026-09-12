@@ -1,21 +1,177 @@
-{% load static %}<!doctype html>
-<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+{% load static %}
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Crear cuenta · JVAQUA Digital</title>
+<meta name="description" content="Crea tu cuenta en JVAQUA Digital y accede a AQUO, planes inteligentes, curso y biblioteca técnica.">
+<meta name="theme-color" content="#062f70">
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
 <style>
-body{background:linear-gradient(145deg,#eaf8ff,#f8fcff 48%,#eefaf6);color:#173d52}.wrap{max-width:980px;margin:auto}.brand{font-weight:900;font-size:1.45rem}.cardx{border:1px solid #dceaf1;border-radius:26px;background:#fff;box-shadow:0 18px 55px rgba(19,67,94,.09)}.plan{border:2px solid #e1ebf1;border-radius:18px;padding:15px;height:100%;cursor:pointer}.plan:has(input:checked){border-color:#087ac1;background:#eff9ff}.price{font-size:1.55rem;font-weight:900;color:#0871b2}.form-control{border-radius:13px;padding:.78rem .9rem}
-</style></head><body><main class="container py-4 py-md-5"><div class="wrap">
-<div class="d-flex justify-content-between align-items-center mb-4"><div class="brand">JVAQUA <span class="text-primary">Digital</span></div><a href="/login/" class="btn btn-outline-secondary rounded-pill">Ya tengo cuenta</a></div>
-<div class="row g-4"><div class="col-lg-5"><div class="cardx p-4 h-100"><div class="text-primary fw-bold small">EMPIEZA HOY</div><h1 class="fw-bold mt-1">Crea tu cuenta</h1><p class="text-muted">Accede a AQUO, Curso, Biblioteca, Plan Semanal y el historial independiente de cada piscina.</p>
-<div class="alert alert-info border-0 rounded-4"><strong>Pago manual seguro:</strong> crea tu cuenta, elige tu plan y luego verás todas las cuentas oficiales de JVAQUA para realizar el pago.</div>
-<div class="small text-muted">Tu información y tus piscinas permanecen guardadas aunque la suscripción venza. Al renovar recuperas el acceso.</div></div></div>
-<div class="col-lg-7"><form method="post" class="cardx p-4">{% csrf_token %}
-<h4 class="fw-bold mb-3">Datos de registro</h4>{% if messages %}{% for message in messages %}<div class="alert alert-{{ message.tags }}">{{ message }}</div>{% endfor %}{% endif %}
-<div class="row g-3"><div class="col-md-6"><label class="form-label fw-semibold">Nombre</label><input class="form-control" name="nombre" value="{{ request.POST.nombre }}" required></div>
-<div class="col-md-6"><label class="form-label fw-semibold">Apellido</label><input class="form-control" name="apellido" value="{{ request.POST.apellido }}"></div>
-<div class="col-md-6"><label class="form-label fw-semibold">Correo</label><input class="form-control" type="email" name="correo" value="{{ request.POST.correo }}" required></div>
-<div class="col-md-6"><label class="form-label fw-semibold">WhatsApp / teléfono</label><input class="form-control" name="telefono" value="{{ request.POST.telefono }}" required></div>
-<div class="col-md-6"><label class="form-label fw-semibold">Contraseña</label><input class="form-control" type="password" name="password" required></div>
-<div class="col-md-6"><label class="form-label fw-semibold">Repetir contraseña</label><input class="form-control" type="password" name="password2" required></div></div>
-<h5 class="fw-bold mt-4">Elige tu plan</h5><div class="row g-2">{% for p in planes %}<div class="col-md-4"><label class="plan d-block"><input class="form-check-input me-1" type="radio" name="plan" value="{{ p.codigo }}" {% if plan_inicial == p.codigo %}checked{% endif %}><strong class="d-block mt-2">{{ p.nombre }}</strong><div class="price">${{ p.precio }}</div><small class="text-muted">por mes · hasta {{ p.piscinas }} piscina{% if p.piscinas != 1 %}s{% endif %}</small></label></div>{% endfor %}</div>
-<button class="btn btn-primary w-100 py-3 rounded-4 fw-bold mt-4">Crear cuenta y continuar al pago</button></form></div></div></div></main></body></html>
+:root{
+  --jd-blue:#0868e8;--jd-deep:#052d67;--jd-cyan:#0cb4ce;--jd-ink:#10273b;--jd-muted:#72879a;
+  --jd-line:#dfeaf2;--jd-soft:#f5faff;
+}
+*{box-sizing:border-box}
+html,body{min-height:100%;margin:0}
+body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--jd-ink);background:#eef7fd;-webkit-font-smoothing:antialiased}
+.reg-page{min-height:100vh;min-height:100dvh;display:grid;grid-template-columns:minmax(330px,.78fr) minmax(620px,1.22fr);position:relative;overflow:hidden}
+.reg-page:before{content:"";position:fixed;inset:0;pointer-events:none;background:
+ radial-gradient(circle at 11% 12%,rgba(80,218,236,.2),transparent 29%),
+ radial-gradient(circle at 92% 6%,rgba(8,104,232,.11),transparent 28%),
+ linear-gradient(135deg,#edf9ff,#f8fbfe 52%,#eefbf7)}
+.reg-side{position:relative;z-index:1;min-height:100vh;display:flex;flex-direction:column;justify-content:space-between;padding:clamp(30px,4.7vw,68px);overflow:hidden;color:#fff;background:linear-gradient(155deg,#052e6c 0%,#075cb8 58%,#0796bb 100%)}
+.reg-side:before,.reg-side:after{content:"";position:absolute;border-radius:50%;pointer-events:none}
+.reg-side:before{width:420px;height:420px;right:-220px;top:-170px;background:radial-gradient(circle,rgba(83,231,241,.28),transparent 67%)}
+.reg-side:after{width:540px;height:220px;left:-100px;bottom:8%;border:1px solid rgba(255,255,255,.12);transform:rotate(-8deg)}
+.brand{position:relative;z-index:1;display:flex;align-items:center;gap:12px}.brand-mark{width:50px;height:50px;display:grid;place-items:center;border-radius:16px;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.12);font-weight:950;letter-spacing:-.06em}.brand-name{font-weight:950;letter-spacing:.16em;font-size:.92rem}.brand-sub{margin-top:2px;color:rgba(255,255,255,.62);font-size:.66rem;font-weight:700;letter-spacing:.05em}
+.side-main{position:relative;z-index:1;max-width:520px;margin:auto 0}.side-pill{display:inline-flex;align-items:center;gap:7px;padding:7px 10px;border:1px solid rgba(255,255,255,.18);border-radius:999px;background:rgba(255,255,255,.1);font-size:.7rem;font-weight:850;letter-spacing:.07em;text-transform:uppercase}.side-pill i{color:#83f0e8}.side-main h1{margin:18px 0 12px;font-size:clamp(2.2rem,4.4vw,4.25rem);line-height:1;letter-spacing:-.055em;font-weight:950}.side-main h1 span{display:block;color:#8ce9ef}.side-main>p{max-width:500px;margin:0;color:rgba(255,255,255,.76);font-size:1rem;line-height:1.6}
+.side-benefits{display:grid;gap:9px;margin-top:26px}.benefit{display:flex;align-items:center;gap:11px;padding:10px 11px;border:1px solid rgba(255,255,255,.1);border-radius:14px;background:rgba(255,255,255,.06)}.benefit i{width:34px;height:34px;display:grid;place-items:center;border-radius:11px;background:rgba(255,255,255,.12);color:#8ff1f0}.benefit strong{display:block;font-size:.78rem}.benefit small{display:block;margin-top:2px;color:rgba(255,255,255,.57);font-size:.65rem}.side-foot{position:relative;z-index:1;color:rgba(255,255,255,.54);font-size:.69rem}
+.reg-main{position:relative;z-index:2;padding:32px clamp(28px,5vw,74px);display:flex;align-items:center;justify-content:center}
+.reg-shell{width:min(100%,830px)}
+.reg-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}.reg-step{display:flex;align-items:center;gap:8px;color:#6f8497;font-size:.7rem;font-weight:800}.reg-step span{display:grid;place-items:center;width:27px;height:27px;border-radius:9px;background:#e8f3ff;color:#0871d9}.back-login{display:inline-flex;align-items:center;gap:7px;padding:8px 11px;border:1px solid #dbe6ef;border-radius:12px;background:rgba(255,255,255,.72);color:#51677b;text-decoration:none;font-size:.72rem;font-weight:800}.back-login:hover{color:var(--jd-blue);border-color:#bcd7ef}
+.reg-card{position:relative;overflow:hidden;border:1px solid rgba(28,77,109,.1);border-radius:28px;background:rgba(255,255,255,.96);box-shadow:0 30px 80px rgba(18,63,94,.12)}.reg-card:before{content:"";position:absolute;inset:0 0 auto;height:4px;background:linear-gradient(90deg,#0765df,#08b2cf,#6de1e5)}
+.reg-head{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;padding:26px 28px 20px;border-bottom:1px solid #edf2f6}.reg-eyebrow{margin-bottom:6px;color:#0874d7;font-size:.7rem;font-weight:900;letter-spacing:.1em;text-transform:uppercase}.reg-head h2{margin:0;font-size:clamp(1.55rem,3vw,2.2rem);font-weight:950;letter-spacing:-.035em}.reg-head p{max-width:430px;margin:7px 0 0;color:#7a8c9d;font-size:.82rem;line-height:1.5}.secure-note{display:flex;align-items:center;gap:6px;white-space:nowrap;color:#668094;font-size:.66rem;font-weight:750}.secure-note i{color:#1f9b72}
+.reg-body{padding:24px 28px 28px}.section-label{display:flex;align-items:center;gap:8px;margin:2px 0 12px;color:#314d63;font-size:.78rem;font-weight:900}.section-label span{display:grid;place-items:center;width:25px;height:25px;border-radius:8px;background:#edf6ff;color:#0873d6;font-size:.69rem}
+.field{position:relative}.field label{margin-bottom:6px;color:#445e73;font-size:.71rem;font-weight:850}.field .form-control{height:49px;padding:0 13px 0 42px;border:1px solid #dce6ef;border-radius:14px;background:#fbfdff;color:#18374b;box-shadow:none}.field .form-control:focus{border-color:rgba(8,104,232,.45);background:#fff;box-shadow:0 0 0 .22rem rgba(8,104,232,.09)}.field-icon{position:absolute;left:14px;bottom:14px;color:#8399ac;font-size:.88rem;pointer-events:none}.password-field .form-control{padding-right:45px}.pass-toggle{position:absolute;right:8px;bottom:6px;width:36px;height:36px;border:0;border-radius:10px;background:transparent;color:#7890a3}.pass-toggle:hover{background:#eef5fa;color:#0868e8}
+.plan-area{margin-top:24px;padding-top:20px;border-top:1px solid #edf2f5}.plans{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.plan{position:relative;min-height:150px;padding:15px;border:1.5px solid #dfe8ef;border-radius:18px;background:#fff;cursor:pointer;transition:.17s ease}.plan:hover{transform:translateY(-2px);border-color:#b9d6ec;box-shadow:0 10px 23px rgba(18,79,123,.08)}.plan:has(input:checked){border-color:#0873dc;background:linear-gradient(145deg,#f1f8ff,#f7fdff);box-shadow:0 12px 28px rgba(8,104,232,.11)}.plan input{position:absolute;top:14px;right:14px}.plan-tag{display:inline-block;padding:4px 7px;border-radius:999px;background:#edf6ff;color:#0a72c6;font-size:.58rem;font-weight:900;letter-spacing:.05em;text-transform:uppercase}.plan-name{margin-top:14px;font-size:.86rem;font-weight:900}.price{margin-top:3px;color:#0871c7;font-size:1.7rem;font-weight:950;letter-spacing:-.04em}.price small{font-size:.65rem;color:#8091a0;font-weight:700;letter-spacing:0}.plan-copy{margin-top:4px;color:#718598;font-size:.67rem;line-height:1.35}.plan-feature{margin-top:8px;color:#42627a;font-size:.63rem;font-weight:750}
+.reg-actions{display:flex;align-items:center;gap:14px;margin-top:22px}.submit{min-height:54px;flex:1;border:0;border-radius:15px;background:linear-gradient(135deg,#0868e8,#0799c1);color:#fff;font-weight:900;box-shadow:0 14px 28px rgba(8,104,232,.22);transition:.17s}.submit:hover{transform:translateY(-1px);box-shadow:0 17px 34px rgba(8,104,232,.27)}.fineprint{max-width:220px;color:#8494a2;font-size:.61rem;line-height:1.45}
+.mobile-brand{display:none}
+@media(max-width:980px){.reg-page{grid-template-columns:1fr}.reg-side{display:none}.reg-main{min-height:100dvh;padding:22px}.mobile-brand{display:flex;align-items:center;gap:9px;margin-bottom:14px}.mobile-brand .brand-mark{width:40px;height:40px;border:0;background:linear-gradient(145deg,#0759b9,#08a7c5);color:#fff;border-radius:12px}.mobile-brand strong{display:block;color:#075ab9;font-size:.82rem;letter-spacing:.1em}.mobile-brand small{display:block;color:#7a8d9e;font-size:.62rem}.reg-shell{max-width:760px}}
+@media(max-width:700px){.reg-main{padding:14px}.reg-top{margin-bottom:10px}.reg-step{display:none}.reg-card{border-radius:22px}.reg-head{padding:20px 18px 16px}.secure-note{display:none}.reg-body{padding:18px}.plans{grid-template-columns:1fr}.plan{min-height:0}.reg-actions{flex-direction:column}.submit{width:100%}.fineprint{max-width:none;text-align:center}.back-login{font-size:.67rem}}
+@media(max-width:430px){.reg-main{padding:10px}.reg-head h2{font-size:1.5rem}.reg-body{padding:15px}.field .form-control{height:47px}}
+</style>
+</head>
+<body>
+<div class="reg-page">
+  <aside class="reg-side">
+    <div class="brand">
+      <div class="brand-mark">JV</div>
+      <div><div class="brand-name">JVAQUA</div><div class="brand-sub">DIGITAL · INTELIGENCIA PARA TU PISCINA</div></div>
+    </div>
+
+    <div class="side-main">
+      <div class="side-pill"><i class="bi bi-stars"></i> Empieza hoy</div>
+      <h1>Tu piscina puede ser <span>mucho más simple.</span></h1>
+      <p>JVAQUA Digital reúne inteligencia, planificación y conocimiento técnico en una sola experiencia.</p>
+
+      <div class="side-benefits">
+        <div class="benefit"><i class="bi bi-stars"></i><div><strong>AQUO inteligente</strong><small>Diagnóstico, recomendaciones y dosificaciones.</small></div></div>
+        <div class="benefit"><i class="bi bi-calendar2-check"></i><div><strong>Plan semanal</strong><small>Qué hacer en cada visita y cuánto aplicar.</small></div></div>
+        <div class="benefit"><i class="bi bi-mortarboard"></i><div><strong>Aprende mientras cuidas</strong><small>Curso completo y biblioteca técnica JVAQUA.</small></div></div>
+        <div class="benefit"><i class="bi bi-clock-history"></i><div><strong>Historial por piscina</strong><small>Conserva la información incluso si tu suscripción vence.</small></div></div>
+      </div>
+    </div>
+
+    <div class="side-foot">© 2026 JVAQUA · Tecnología y conocimiento para piscinas</div>
+  </aside>
+
+  <main class="reg-main">
+    <div class="reg-shell">
+      <div class="mobile-brand">
+        <div class="brand-mark">JV</div>
+        <div><strong>JVAQUA DIGITAL</strong><small>Inteligencia para tu piscina</small></div>
+      </div>
+
+      <div class="reg-top">
+        <div class="reg-step"><span>1</span> Crea tu cuenta <i class="bi bi-chevron-right"></i> <span>2</span> Realiza el pago <i class="bi bi-chevron-right"></i> <span>3</span> Activación</div>
+        <a class="back-login" href="/login/"><i class="bi bi-arrow-left"></i> Ya tengo cuenta</a>
+      </div>
+
+      <form method="post" class="reg-card" id="digitalRegisterForm">
+        {% csrf_token %}
+        <div class="reg-head">
+          <div>
+            <div class="reg-eyebrow">Tu acceso a JVAQUA Digital</div>
+            <h2>Crea tu cuenta</h2>
+            <p>Completa tus datos, selecciona el plan que necesitas y continúa al pago seguro.</p>
+          </div>
+          <div class="secure-note"><i class="bi bi-shield-check"></i> Información protegida</div>
+        </div>
+
+        <div class="reg-body">
+          {% if messages %}{% for message in messages %}<div class="alert alert-{{ message.tags }} border-0 rounded-4">{{ message }}</div>{% endfor %}{% endif %}
+
+          <div class="section-label"><span>01</span> Datos personales</div>
+          <div class="row g-3">
+            <div class="col-md-6 field">
+              <label for="regNombre">Nombre</label><i class="bi bi-person field-icon"></i>
+              <input id="regNombre" class="form-control" name="nombre" value="{{ request.POST.nombre }}" autocomplete="given-name" required placeholder="Tu nombre">
+            </div>
+            <div class="col-md-6 field">
+              <label for="regApellido">Apellido</label><i class="bi bi-person field-icon"></i>
+              <input id="regApellido" class="form-control" name="apellido" value="{{ request.POST.apellido }}" autocomplete="family-name" placeholder="Tu apellido">
+            </div>
+            <div class="col-md-6 field">
+              <label for="regCorreo">Correo</label><i class="bi bi-envelope field-icon"></i>
+              <input id="regCorreo" class="form-control" type="email" name="correo" value="{{ request.POST.correo }}" autocomplete="email" required placeholder="nombre@correo.com">
+            </div>
+            <div class="col-md-6 field">
+              <label for="regTelefono">WhatsApp / teléfono</label><i class="bi bi-whatsapp field-icon"></i>
+              <input id="regTelefono" class="form-control" name="telefono" value="{{ request.POST.telefono }}" autocomplete="tel" required placeholder="+593 ...">
+            </div>
+            <div class="col-md-6 field password-field">
+              <label for="regPassword">Contraseña</label><i class="bi bi-shield-lock field-icon"></i>
+              <input id="regPassword" class="form-control" type="password" name="password" autocomplete="new-password" required placeholder="Crea una contraseña">
+              <button type="button" class="pass-toggle" data-target="regPassword" aria-label="Mostrar contraseña"><i class="bi bi-eye"></i></button>
+            </div>
+            <div class="col-md-6 field password-field">
+              <label for="regPassword2">Repetir contraseña</label><i class="bi bi-shield-check field-icon"></i>
+              <input id="regPassword2" class="form-control" type="password" name="password2" autocomplete="new-password" required placeholder="Repítela">
+              <button type="button" class="pass-toggle" data-target="regPassword2" aria-label="Mostrar contraseña"><i class="bi bi-eye"></i></button>
+            </div>
+          </div>
+
+          <div class="plan-area">
+            <div class="section-label"><span>02</span> Elige tu plan</div>
+            <div class="plans">
+              {% for p in planes %}
+              <label class="plan">
+                <input class="form-check-input" type="radio" name="plan" value="{{ p.codigo }}" {% if plan_inicial == p.codigo %}checked{% endif %}>
+                {% if p.codigo == 'individual' %}<span class="plan-tag">Para empezar</span>{% elif p.codigo == 'esencial' %}<span class="plan-tag">Más flexible</span>{% else %}<span class="plan-tag">Profesional</span>{% endif %}
+                <div class="plan-name">{{ p.nombre }}</div>
+                <div class="price">${{ p.precio }} <small>/ mes</small></div>
+                <div class="plan-copy">Hasta {{ p.piscinas }} piscina{% if p.piscinas != 1 %}s{% endif %}</div>
+                <div class="plan-feature"><i class="bi bi-check2 text-success me-1"></i>AQUO + Curso + Biblioteca + Plan Semanal</div>
+              </label>
+              {% endfor %}
+            </div>
+          </div>
+
+          <div class="reg-actions">
+            <button class="submit" id="registerSubmit" type="submit"><span>Crear cuenta y continuar al pago</span> <i class="bi bi-arrow-right ms-1"></i></button>
+            <div class="fineprint"><i class="bi bi-lock-fill me-1"></i>El pago se realiza después del registro mediante las cuentas oficiales de JVAQUA.</div>
+          </div>
+        </div>
+      </form>
+    </div>
+  </main>
+</div>
+
+<script>
+(function(){
+  document.querySelectorAll('.pass-toggle').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const input=document.getElementById(btn.dataset.target);
+      if(!input)return;
+      const show=input.type==='password';
+      input.type=show?'text':'password';
+      const icon=btn.querySelector('i');
+      if(icon){icon.classList.toggle('bi-eye',!show);icon.classList.toggle('bi-eye-slash',show)}
+      btn.setAttribute('aria-label',show?'Ocultar contraseña':'Mostrar contraseña');
+      input.focus({preventScroll:true});
+    });
+  });
+  const form=document.getElementById('digitalRegisterForm');
+  form?.addEventListener('submit',()=>{
+    const b=document.getElementById('registerSubmit');
+    if(!b)return;
+    b.disabled=true;
+    b.innerHTML='<span class="spinner-border spinner-border-sm me-2"></span>Creando tu cuenta…';
+  });
+})();
+</script>
+</body>
+</html>
