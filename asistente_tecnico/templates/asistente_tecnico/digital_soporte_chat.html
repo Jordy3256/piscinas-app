@@ -26,6 +26,7 @@
 </style>{% endblock %}
 {% block content %}
 <div class="chat-page">
+<div class="d-flex justify-content-end mb-2"><span id="support-limit-pill" class="badge text-bg-light border text-secondary">{{ limite_soporte.restantes }} de {{ limite_soporte.limite }} mensajes disponibles hoy</span></div>
 <div class="mb-3"><a href="{% url 'asistente_tecnico:digital_soporte' %}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> Todas mis conversaciones</a></div>
 <div class="chat-shell">
   <div class="chat-head d-flex justify-content-between align-items-center gap-2">
@@ -89,7 +90,8 @@
     polling=true;
     try{
       const r=await fetch(endpoint+'?desde='+lastId,{headers:{'X-Requested-With':'XMLHttpRequest'},cache:'no-store'});
-      if(r.ok){const data=await r.json();(data.mensajes||[]).forEach(render);if(status&&data.estado_label)status.textContent=data.estado_label;}
+      if(r.ok){const data=await r.json();(data.mensajes||[]).forEach(render);if(status&&data.estado_label)status.textContent=data.estado_label;
+        if(data.limite_soporte){const pill=document.getElementById('support-limit-pill');if(pill)pill.textContent=data.limite_soporte.restantes+' de '+data.limite_soporte.limite+' mensajes disponibles hoy';}}
     }catch(e){} finally{polling=false}
   }
   body.scrollTop=body.scrollHeight;
@@ -110,7 +112,7 @@
         if(!r.ok||!data.ok)throw new Error(data.error||'No se pudo enviar');
         render(data.mensaje); text.value='';text.style.height='auto';files.value='';preview.classList.add('d-none');
         if(status&&data.estado_label)status.textContent=data.estado_label;
-      }catch(err){alert('No pudimos enviar el mensaje. Inténtalo nuevamente.')} finally{send.disabled=false}
+      }catch(err){alert(err.message||'No pudimos enviar el mensaje. Inténtalo nuevamente.')} finally{send.disabled=false}
     });
   }
 })();

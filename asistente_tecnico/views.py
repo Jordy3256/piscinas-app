@@ -1202,9 +1202,9 @@ def academia_pdf_manual_view(request):
 
 def _planes_digitales():
     return [
-        {"codigo": "individual", "nombre": "Individual", "precio": Decimal("4.99"), "piscinas": 1},
-        {"codigo": "esencial", "nombre": "Esencial", "precio": Decimal("7.99"), "piscinas": 3},
-        {"codigo": "profesional", "nombre": "Profesional", "precio": Decimal("19.99"), "piscinas": 30},
+        {"codigo": "individual", "nombre": "Individual", "precio": Decimal("4.99"), "piscinas": 1, "soporte_mensajes": 5},
+        {"codigo": "esencial", "nombre": "Esencial", "precio": Decimal("7.99"), "piscinas": 3, "soporte_mensajes": 10},
+        {"codigo": "profesional", "nombre": "Profesional", "precio": Decimal("19.99"), "piscinas": 30, "soporte_mensajes": 50},
     ]
 
 
@@ -1494,6 +1494,109 @@ def _guardar_adjuntos_soporte(mensaje, archivos):
         )
 
 
+def _estado_limite_soporte(perfil):
+    usados = perfil.mensajes_soporte_hoy
+    limite = perfil.limite_mensajes_soporte_diario
+    return {
+        "usados": usados,
+        "limite": limite,
+        "restantes": max(0, limite - usados),
+        "agotado": usados >= limite,
+    }
+
+
+def _respuesta_limite_soporte(request, perfil, *, ajax=False):
+    estado = _estado_limite_soporte(perfil)
+    texto = (
+        f"Alcanzaste el límite diario de {estado['limite']} mensajes de soporte "
+        f"incluidos en tu {perfil.get_plan_display()}. Podrás volver a escribir mañana."
+    )
+    if ajax or request.headers.get("x-requested-with") == "XMLHttpRequest":
+        return JsonResponse({
+            "ok": False,
+            "error": texto,
+            "codigo": "limite_soporte_diario",
+            "limite": estado["limite"],
+            "usados": estado["usados"],
+            "restantes": 0,
+        }, status=429)
+    messages.warning(request, texto)
+    return None
+
+
+@login_required
+def digital_soporte_burbuja_api(request):
+    perfil = _suscriptor(request.user)
+    if not perfil:
+        return JsonResponse({"ok": False, "error": "No autorizado"}, status=403)
+
+    no_leidos = MensajeSoporteDigital.objects.filter(
+        conversacion__suscriptor=perfil,
+        remitente="admin",
+        leido_cliente=False,
+    ).count()
+    conversacion = (
+        perfil.conversaciones_soporte.exclude(estado="cerrada").order_by("-ultimo_mensaje_en", "-id").first()
+    )
+    if not conversacion and no_leidos:
+        conversacion = perfil.conversaciones_soporte.order_by("-ultimo_mensaje_en", "-id").first()
+
+    limite = _estado_limite_soporte(perfil)
+    return JsonResponse({
+        "ok": True,
+        "visible": bool(conversacion),
+        "conversacion_id": conversacion.pk if conversacion else None,
+        "url": (
+            f"/dashboard/asistente/digital/soporte/{conversacion.pk}/?support_float=1"
+            if conversacion else ""
+        ),
+        "url_completa": (
+            f"/dashboard/asistente/digital/soporte/{conversacion.pk}/"
+            if conversacion else "/dashboard/asistente/digital/soporte/"
+        ),
+        "no_leidos": no_leidos,
+        "limite": limite,
+    })
+
+
+@login_required
+def soporte_admin_burbuja_api(request):
+    if not _es_admin(request.user):
+        return JsonResponse({"ok": False, "error": "No autorizado"}, status=403)
+
+    qs = ConversacionSoporteDigital.objects.annotate(
+        no_leidos=Count(
+            "mensajes",
+            filter=Q(mensajes__remitente="cliente", mensajes__leido_admin=False),
+        )
+    ).filter(no_leidos__gt=0).select_related("suscriptor__user").order_by("-ultimo_mensaje_en", "-id")
+    conversacion = qs.first()
+    total_no_leidos = MensajeSoporteDigital.objects.filter(
+        remitente="cliente",
+        leido_admin=False,
+    ).count()
+
+    return JsonResponse({
+        "ok": True,
+        "visible": bool(conversacion),
+        "conversacion_id": conversacion.pk if conversacion else None,
+        "url": (
+            f"/dashboard/asistente/administracion/soporte/{conversacion.pk}/?support_float=1"
+            if conversacion else ""
+        ),
+        "url_completa": (
+            f"/dashboard/asistente/administracion/soporte/{conversacion.pk}/"
+            if conversacion else "/dashboard/asistente/administracion/soporte/"
+        ),
+        "no_leidos": total_no_leidos,
+        "cliente": (
+            conversacion.suscriptor.user.get_full_name()
+            or conversacion.suscriptor.user.username
+            if conversacion else ""
+        ),
+    })
+
+
 @login_required
 @require_http_methods(["GET", "POST"])
 def digital_soporte_view(request):
@@ -1517,6 +1620,8 @@ def digital_soporte_view(request):
 
         if not texto and not archivos:
             messages.error(request, "Escribe un mensaje o adjunta una foto/video.")
+        elif _estado_limite_soporte(perfil)["agotado"]:
+            _respuesta_limite_soporte(request, perfil)
         else:
             with transaction.atomic():
                 conversacion = ConversacionSoporteDigital.objects.create(
@@ -1553,6 +1658,7 @@ def digital_soporte_view(request):
         "perfil": perfil, "piscinas": piscinas,
         "categorias_soporte": ConversacionSoporteDigital.CATEGORIAS,
         "conversaciones": conversaciones,
+        "limite_soporte": _estado_limite_soporte(perfil),
     })
 
 
@@ -1640,6 +1746,7 @@ def soporte_admin_mensajes_api(request, pk):
 
 @login_required
 @require_http_methods(["GET", "POST"])
+@xframe_options_sameorigin
 def digital_soporte_chat_view(request, pk):
     perfil = _suscriptor(request.user)
     if not perfil:
@@ -1655,6 +1762,10 @@ def digital_soporte_chat_view(request, pk):
         archivos = request.FILES.getlist("adjuntos")
         if not texto and not archivos:
             messages.error(request, "Escribe un mensaje o adjunta una foto/video.")
+        elif _estado_limite_soporte(perfil)["agotado"]:
+            limite_response = _respuesta_limite_soporte(request, perfil)
+            if limite_response:
+                return limite_response
         else:
             with transaction.atomic():
                 mensaje = MensajeSoporteDigital.objects.create(
@@ -1682,11 +1793,14 @@ def digital_soporte_chat_view(request, pk):
                     "mensaje": _serializar_mensaje_soporte(mensaje),
                     "estado": conversacion.estado,
                     "estado_label": conversacion.get_estado_display(),
+                    "limite_soporte": _estado_limite_soporte(perfil),
                 })
             return redirect("asistente_tecnico:digital_soporte_chat", pk=pk)
 
     return render(request, "asistente_tecnico/digital_soporte_chat.html", {
-        "perfil": perfil, "conversacion": conversacion,
+        "perfil": perfil,
+        "conversacion": conversacion,
+        "limite_soporte": _estado_limite_soporte(perfil),
     })
 
 
@@ -1714,6 +1828,7 @@ def soporte_admin_lista_view(request):
 
 @login_required
 @require_http_methods(["GET", "POST"])
+@xframe_options_sameorigin
 def soporte_admin_chat_view(request, pk):
     if not _es_admin(request.user):
         return HttpResponseForbidden("No autorizado")

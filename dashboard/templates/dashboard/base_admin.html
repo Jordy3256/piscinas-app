@@ -895,7 +895,7 @@
   <script src="{% static 'dashboard/jvaqua-semantic-colors.js' %}?v=20260830-1" defer></script>
 </head>
 
-<body class="app-body">
+<body class="app-body {% if request.GET.support_float == '1' %}support-float-mode{% endif %}">
   <div class="app-shell">
 
     <div class="topbar">
@@ -1573,5 +1573,38 @@
   </script>
 
   {% block extra_js %}{% endblock %}
+
+{% if request.GET.support_float != '1' %}
+<style>
+.admin-support-root{position:fixed;z-index:1095;inset:0;pointer-events:none;display:none}.admin-support-root.is-visible{display:block}.admin-support-root.is-open .admin-support-panel{opacity:1;visibility:visible;transform:none}
+.admin-support-bubble{position:fixed;right:18px;bottom:95px;width:62px;height:62px;border:4px solid #fff;border-radius:50%;background:linear-gradient(145deg,#17324d,#087bb8);color:#fff;box-shadow:0 14px 34px rgba(16,50,80,.32);pointer-events:auto;cursor:pointer;font-size:1.45rem;animation:adminSupportPulse 1.8s infinite}
+.admin-support-badge{position:absolute;right:-4px;top:-5px;min-width:23px;height:23px;padding:0 5px;border-radius:999px;background:#dc3545;border:2px solid #fff;color:#fff;font-size:.68rem;font-weight:900;display:grid;place-items:center}
+.admin-support-panel{position:fixed;right:18px;bottom:168px;width:min(440px,calc(100vw - 28px));height:min(660px,calc(100vh - 115px));border:1px solid #dde8ef;border-radius:24px;background:#fff;box-shadow:0 24px 70px rgba(15,45,79,.27);overflow:hidden;pointer-events:auto;opacity:0;visibility:hidden;transform:translateY(12px) scale(.97);transition:.2s ease}
+.admin-support-head{height:56px;padding:8px 9px 8px 14px;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,#17324d,#087bb8);color:#fff}.admin-support-head strong{font-size:.82rem}.admin-support-head small{display:block;font-size:.66rem;opacity:.82}
+.admin-support-actions{display:flex;gap:5px}.admin-support-actions button,.admin-support-actions a{width:34px;height:34px;border:0;border-radius:11px;display:grid;place-items:center;background:rgba(255,255,255,.14);color:#fff!important;text-decoration:none}
+.admin-support-frame{width:100%;height:calc(100% - 56px);border:0;background:#f5f9fc}@keyframes adminSupportPulse{50%{box-shadow:0 14px 36px rgba(8,123,184,.5),0 0 0 9px rgba(8,123,184,.09)}}
+@media(max-width:600px){.admin-support-bubble{right:14px;bottom:92px}.admin-support-panel{left:8px;right:8px;bottom:86px;width:auto;height:calc(100vh - 105px)}}
+</style>
+<div class="admin-support-root" id="adminSupportRoot">
+ <button class="admin-support-bubble" id="adminSupportBubble" type="button"><i class="bi bi-chat-dots-fill"></i><span class="admin-support-badge" id="adminSupportBadge">1</span></button>
+ <section class="admin-support-panel">
+  <header class="admin-support-head"><div><strong>Nuevo mensaje de soporte</strong><small id="adminSupportClient">JVAQUA Digital</small></div><div class="admin-support-actions"><a id="adminSupportFull" href="{% url 'asistente_tecnico:soporte_admin_lista' %}"><i class="bi bi-arrows-fullscreen"></i></a><button id="adminSupportMin" type="button"><i class="bi bi-dash-lg"></i></button><button id="adminSupportClose" type="button"><i class="bi bi-x-lg"></i></button></div></header>
+  <div id="adminSupportMount" style="height:calc(100% - 56px)"></div>
+ </section>
+</div>
+<script>
+(function(){
+ const root=document.getElementById('adminSupportRoot'),bubble=document.getElementById('adminSupportBubble'),mount=document.getElementById('adminSupportMount'),badge=document.getElementById('adminSupportBadge'),full=document.getElementById('adminSupportFull'),client=document.getElementById('adminSupportClient');
+ if(!root)return;let frame=null,currentId=null,currentUrl='',hiddenForId=null;
+ const endpoint="{% url 'asistente_tecnico:soporte_admin_burbuja_api' %}";
+ function open(){if(!currentId)return;if(!frame||frame.dataset.id!==String(currentId)){mount.innerHTML='';frame=document.createElement('iframe');frame.className='admin-support-frame';frame.dataset.id=String(currentId);frame.src=currentUrl;mount.appendChild(frame)}root.classList.add('is-open')}
+ function hide(){root.classList.remove('is-open')}
+ async function poll(){try{const r=await fetch(endpoint,{headers:{'X-Requested-With':'XMLHttpRequest'},cache:'no-store'});if(!r.ok)return;const d=await r.json();currentId=d.conversacion_id;currentUrl=d.url||'';badge.textContent=d.no_leidos||0;if(client)client.textContent=d.cliente||'JVAQUA Digital';if(full&&d.url_completa)full.href=d.url_completa;if(d.visible&&String(hiddenForId)!==String(currentId)){root.classList.add('is-visible')}else if(!d.visible){root.classList.remove('is-visible');hide();hiddenForId=null}}catch(e){}}
+ bubble.addEventListener('click',()=>root.classList.contains('is-open')?hide():open());document.getElementById('adminSupportMin')?.addEventListener('click',hide);document.getElementById('adminSupportClose')?.addEventListener('click',()=>{hiddenForId=currentId;hide();root.classList.remove('is-visible')});
+ setInterval(poll,5000);poll();
+})();
+</script>
+{% endif %}
+
 </body>
 </html>

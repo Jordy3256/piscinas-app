@@ -508,6 +508,7 @@ class PerfilSuscriptor(models.Model):
         "profesional": Decimal("19.99"),
     }
     LIMITES = {"individual": 1, "esencial": 3, "profesional": 30}
+    LIMITES_MENSAJES_SOPORTE = {"individual": 5, "esencial": 10, "profesional": 50}
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="perfil_suscriptor")
     estado = models.CharField(max_length=20, choices=ESTADOS, default="pendiente", db_index=True)
     plan = models.CharField(max_length=30, choices=PLANES, default="individual")
@@ -536,6 +537,26 @@ class PerfilSuscriptor(models.Model):
     @property
     def precio_mensual(self):
         return self.PRECIOS.get(self.plan, Decimal("4.99"))
+
+    @property
+    def limite_mensajes_soporte_diario(self):
+        return self.LIMITES_MENSAJES_SOPORTE.get(self.plan, 5)
+
+    def mensajes_soporte_en_fecha(self, fecha=None):
+        fecha = fecha or timezone.localdate()
+        return MensajeSoporteDigital.objects.filter(
+            conversacion__suscriptor=self,
+            remitente="cliente",
+            creado_en__date=fecha,
+        ).count()
+
+    @property
+    def mensajes_soporte_hoy(self):
+        return self.mensajes_soporte_en_fecha()
+
+    @property
+    def mensajes_soporte_restantes_hoy(self):
+        return max(0, self.limite_mensajes_soporte_diario - self.mensajes_soporte_hoy)
 
     @property
     def dias_restantes(self):

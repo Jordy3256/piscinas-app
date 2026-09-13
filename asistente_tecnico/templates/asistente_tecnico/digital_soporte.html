@@ -3,7 +3,11 @@
 {% block extra_head %}<style>
 .support-shell{max-width:980px;margin:auto}.support-hero{background:linear-gradient(135deg,#e8f8ff 0%,#f7fcff 52%,#fff 100%);border:1px solid #d7ebf5;border-radius:28px;padding:26px;box-shadow:0 18px 50px rgba(31,84,112,.08)}.support-avatar{width:62px;height:62px;border-radius:20px;display:grid;place-items:center;background:#087bb8;color:#fff;font-size:1.65rem;box-shadow:0 10px 25px rgba(8,123,184,.25)}.support-online{padding:8px 12px;background:#fff;border:1px solid #dfecef;border-radius:999px;font-size:.83rem;font-weight:700;color:#35616d}.support-card{border:1px solid #e2edf3;border-radius:20px;background:#fff}.support-row{display:flex;justify-content:space-between;gap:16px;padding:16px;border-bottom:1px solid #edf2f5;text-decoration:none;color:inherit}.support-row:last-child{border:0}.support-row:hover{background:#f8fcfe}.status-dot{width:9px;height:9px;border-radius:50%;background:#16a34a;display:inline-block}.attach-note{font-size:.82rem;color:#718096}
 </style>{% endblock %}
-{% block content %}<div class="support-shell">
+{% block content %}
+<div class="alert alert-light border rounded-4 mb-3 d-flex justify-content-between align-items-center gap-3 flex-wrap">
+  <div><strong>Soporte incluido en {{ perfil.get_plan_display }}</strong><div class="small text-muted">Puedes enviar hasta {{ limite_soporte.limite }} mensajes por día.</div></div>
+  <div class="text-end"><strong>{{ limite_soporte.restantes }}</strong><div class="small text-muted">mensajes disponibles hoy</div></div>
+</div><div class="support-shell">
 <section class="support-hero mb-3">
 <div class="d-flex align-items-center gap-3 flex-wrap">
   <div class="support-avatar"><i class="bi bi-headset"></i></div>
