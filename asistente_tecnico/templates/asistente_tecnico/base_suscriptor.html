@@ -142,6 +142,8 @@
   transition:background .15s ease,transform .15s ease
 }
 .support-actions button:hover,.support-actions a:hover{background:rgba(255,255,255,.22);transform:translateY(-1px)}
+.jv-svg-icon{width:17px;height:17px;display:block;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.support-head-avatar .jv-svg-icon{width:21px;height:21px}
 .support-mount{height:calc(100% - 74px);background:#eef5f8}
 .support-frame{display:block;width:100%;height:100%;border:0;background:#eef5f8}
 
@@ -171,16 +173,16 @@
 <section id="supportPanel" class="support-panel" aria-label="Chat de soporte JVAQUA">
   <header class="support-head">
     <div class="support-head-main">
-      <div class="support-head-avatar"><i class="bi bi-headset"></i></div>
+      <div class="support-head-avatar"><svg class="jv-svg-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13v-1a8 8 0 0 1 16 0v1"/><path d="M4 13h2a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a1 1 0 0 1-1-1v-6Z"/><path d="M20 13h-2a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h1a1 1 0 0 0 1-1v-6Z"/><path d="M16 20c-1 1-2.3 1.5-4 1.5"/></svg></div>
       <div class="support-head-copy">
         <strong id="supportTitle">Soporte JVAQUA</strong>
         <small><span class="support-live-dot"></span><span id="supportSubtitle">Equipo de soporte · En línea</span></small>
       </div>
     </div>
     <div class="support-actions">
-      <a id="supportFull" href="{% url 'asistente_tecnico:digital_soporte' %}" title="Abrir conversación completa"><i class="bi bi-arrows-angle-expand"></i></a>
-      <button id="supportMin" type="button" title="Minimizar"><i class="bi bi-dash-lg"></i></button>
-      <button id="supportClose" type="button" title="Cerrar burbuja"><i class="bi bi-x-lg"></i></button>
+      <a id="supportFull" href="{% url 'asistente_tecnico:digital_soporte' %}" title="Abrir conversación completa"><svg class="jv-svg-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5"/><path d="M16 3h5v5"/><path d="M8 21H3v-5"/><path d="M16 21h5v-5"/><path d="m3 8 5-5"/><path d="m21 8-5-5"/><path d="m3 16 5 5"/><path d="m21 16-5 5"/></svg></a>
+      <button id="supportMin" type="button" title="Minimizar"><svg class="jv-svg-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button>
+      <button id="supportClose" type="button" title="Cerrar burbuja"><svg class="jv-svg-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12"/><path d="M18 6 6 18"/></svg></button>
     </div>
   </header>
   <div id="supportMount" class="support-mount"></div>

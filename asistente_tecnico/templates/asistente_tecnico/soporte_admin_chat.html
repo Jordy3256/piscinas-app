@@ -69,6 +69,11 @@
 }
 .send-btn:disabled{opacity:.55}
 .attachment-preview{font-size:.74rem;color:#557985;padding:6px 10px 0}
+.chat-svg-icon{width:19px;height:19px;display:block;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.chat-inline-icon{width:16px;height:16px;display:inline-block;vertical-align:-3px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.send-btn .chat-svg-icon{width:18px;height:18px;stroke-width:2.15}
+.attach-btn .chat-svg-icon{width:19px;height:19px}
+
 .live-pill{
   font-size:.68rem;padding:5px 9px;border-radius:999px;background:#eafaf0;
   color:#247544;font-weight:800
@@ -106,12 +111,67 @@
 }
 </style>{% endblock %}
 {% block content %}
+{% if request.GET.support_float == '1' %}
+<style id="support-float-hard-reset">
+html,body{height:100%!important;min-height:100%!important;overflow:hidden!important}
+body.support-float-mode .jd-top,
+body.support-float-mode .jd-bottom,
+body.support-float-mode .topbar,
+body.support-float-mode .bottom-nav,
+body.support-float-mode .mobile-orbit-nav,
+body.support-float-mode .mobile-orbit-dock,
+body.support-float-mode .mobile-orbit-toggle,
+body.support-float-mode .mobile-orbit-items,
+body.support-float-mode .mobile-orbit-backdrop,
+body.support-float-mode .jv-context-wrap,
+body.support-float-mode .jv-quick-fab,
+body.support-float-mode .jv-quick-toggle,
+body.support-float-mode .jv-quick-menu,
+body.support-float-mode .jv-launcher,
+body.support-float-mode #jvModuleLauncher,
+body.support-float-mode .spacer-bottom{display:none!important}
+
+body.support-float-mode .app-shell,
+body.support-float-mode .jd-shell,
+body.support-float-mode .page-content,
+body.support-float-mode .jd-content{
+  margin:0!important;padding:0!important;max-width:none!important;width:100%!important;
+  min-height:0!important;height:100%!important
+}
+body.support-float-mode .chat-page{
+  position:fixed!important;inset:0!important;width:100%!important;height:100%!important;
+  margin:0!important;padding:0!important;max-width:none!important;z-index:2147483000!important;
+  background:#eef5f8!important
+}
+body.support-float-mode .chat-shell{
+  position:absolute!important;inset:0!important;width:100%!important;height:100%!important;
+  min-height:0!important;max-height:none!important;margin:0!important;border:0!important;
+  border-radius:0!important;box-shadow:none!important;display:flex!important;flex-direction:column!important
+}
+body.support-float-mode .chat-head{display:none!important}
+body.support-float-mode .chat-body{
+  flex:1 1 0!important;min-height:0!important;height:auto!important;max-height:none!important;
+  overflow-y:auto!important;padding:14px 11px!important
+}
+body.support-float-mode .chat-compose{
+  display:block!important;visibility:visible!important;position:relative!important;flex:0 0 auto!important;
+  width:100%!important;margin:0!important;padding:8px 8px calc(8px + env(safe-area-inset-bottom))!important;
+  background:#fff!important;border-top:1px solid #dbe7ec!important;z-index:10!important
+}
+body.support-float-mode .compose-box{display:flex!important;width:100%!important}
+body.support-float-mode #chat-form{display:block!important;width:100%!important;margin:0!important}
+body.support-float-mode #chat-text{display:block!important;visibility:visible!important;min-width:0!important}
+body.support-float-mode #chat-send{display:grid!important;visibility:visible!important}
+body.support-float-mode .bubble{max-width:88%!important}
+</style>
+{% endif %}
+
 <div class="chat-page">
-<div class="mb-3"><a href="{% url 'asistente_tecnico:soporte_admin_lista' %}" class="text-decoration-none small"><i class="bi bi-arrow-left"></i> Conversaciones de soporte</a></div>
+<div class="mb-3"><a href="{% url 'asistente_tecnico:soporte_admin_lista' %}" class="text-decoration-none small"><svg class="chat-inline-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg> Conversaciones de soporte</a></div>
 <div class="chat-shell">
   <div class="chat-head d-flex justify-content-between align-items-center gap-2">
-    <div class="chat-profile"><div class="chat-avatar"><i class="bi bi-person-fill"></i></div><div><div class="chat-name">{{ conversacion.suscriptor.user.get_full_name|default:conversacion.suscriptor.user.username }}</div><div class="chat-online"><span class="online-dot"></span>{{ conversacion.suscriptor.user.email }} · {{ conversacion.get_categoria_display }}{% if conversacion.piscina %} · {{ conversacion.piscina.nombre }}{% endif %}</div></div></div>
-    <div class="text-end"><div class="live-pill"><i class="bi bi-broadcast"></i> En vivo</div><div id="chat-status" class="small text-muted mt-1">{{ conversacion.get_estado_display }}</div></div>
+    <div class="chat-profile"><div class="chat-avatar"><span style="font-weight:900;font-size:.78rem">JV</span></div><div><div class="chat-name">{{ conversacion.suscriptor.user.get_full_name|default:conversacion.suscriptor.user.username }}</div><div class="chat-online"><span class="online-dot"></span>{{ conversacion.suscriptor.user.email }} · {{ conversacion.get_categoria_display }}{% if conversacion.piscina %} · {{ conversacion.piscina.nombre }}{% endif %}</div></div></div>
+    <div class="text-end"><div class="live-pill"><span class="online-dot"></span> En vivo</div><div id="chat-status" class="small text-muted mt-1">{{ conversacion.get_estado_display }}</div></div>
   </div>
   <div id="chat-body" class="chat-body" data-last-id="{% with ultimo=conversacion.mensajes.last %}{{ ultimo.pk|default:0 }}{% endwith %}">
     <div class="chat-day">Conversación con JVAQUA</div>
@@ -134,13 +194,13 @@
   {% else %}
     <form id="chat-form" method="post" enctype="multipart/form-data">{% csrf_token %}
       <div class="compose-box">
-        <label class="attach-btn" title="Adjuntar foto o video"><i class="bi bi-paperclip"></i><input id="chat-files" class="d-none" type="file" name="adjuntos" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime" multiple></label>
+        <label class="attach-btn" title="Adjuntar foto o video"><svg class="chat-svg-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m21.4 11.6-8.5 8.5a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 1 1-2.8-2.8l8.5-8.5"/></svg><input id="chat-files" class="d-none" type="file" name="adjuntos" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime" multiple></label>
         <textarea id="chat-text" class="form-control" name="mensaje" rows="1" placeholder="Escribe un mensaje..."></textarea>
-        <button id="chat-send" class="send-btn" type="submit" aria-label="Enviar"><i class="bi bi-send-fill"></i></button>
+        <button id="chat-send" class="send-btn" type="submit" aria-label="Enviar"><svg class="chat-svg-icon send-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 2 11 13"/><path d="m22 2-7 20-4-9-9-4Z"/></svg></button>
       </div>
       <div id="attachment-preview" class="attachment-preview d-none"></div>
     </form>
-    <form method="post" class="text-end mt-2">{% csrf_token %}<button class="btn btn-sm btn-link text-muted text-decoration-none" name="accion" value="cerrar"><i class="bi bi-check2-circle"></i> Cerrar conversación</button></form>
+    <form method="post" class="text-end mt-2">{% csrf_token %}<button class="btn btn-sm btn-link text-muted text-decoration-none" name="accion" value="cerrar">✓ Cerrar conversación</button></form>
   {% endif %}
   </div>
 </div>
