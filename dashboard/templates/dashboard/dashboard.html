@@ -27,7 +27,8 @@
   .pill{display:inline-flex;align-items:center;padding:.24rem .48rem;border-radius:999px;font-size:.64rem;font-weight:800}.pill.red{background:rgba(217,75,85,.1);color:var(--ed-red)}.pill.yellow{background:rgba(217,149,8,.1);color:#ad7200}.pill.green{background:rgba(20,132,95,.1);color:var(--ed-green)}.pill.blue{background:rgba(8,101,217,.09);color:var(--ed-blue)}
   .progress-thin{height:6px;background:#edf2f7;border-radius:999px;overflow:hidden;margin-top:.35rem}.progress-thin span{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--ed-blue),var(--ed-aqua))}
   .empty-state{padding:1.25rem;text-align:center;color:var(--ed-muted);font-size:.8rem}.profit-positive{color:var(--ed-green)!important}.profit-negative{color:var(--ed-red)!important}
-  @media(max-width:1100px){.exec-grid.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.exec-grid.two{grid-template-columns:1fr}.exec-grid.equal{grid-template-columns:1fr}}
+.exec-command{display:grid;grid-template-columns:1.15fr .85fr;gap:.85rem;margin-bottom:.85rem}.exec-command-card{background:#fff;border:1px solid var(--ed-line);border-radius:20px;padding:1rem 1.05rem;box-shadow:0 9px 24px rgba(18,46,77,.05)}.exec-command-top{display:flex;justify-content:space-between;gap:.75rem;align-items:flex-start}.exec-command-num{font-size:1.75rem;font-weight:900;letter-spacing:-.05em;color:var(--ed-navy)}.exec-command-label{font-size:.72rem;color:var(--ed-muted);font-weight:750}.exec-health-badges{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.65rem}.exec-health-badge{padding:.28rem .52rem;border-radius:999px;font-size:.68rem;font-weight:850}.exec-health-badge.red{background:#fee2e2;color:#b91c1c}.exec-health-badge.yellow{background:#fef3c7;color:#92400e}.exec-health-badge.blue{background:#dbeafe;color:#1d4ed8}.exec-goal-line{height:8px;background:#edf2f7;border-radius:999px;overflow:hidden;margin:.65rem 0 .45rem}.exec-goal-line span{display:block;height:100%;background:linear-gradient(90deg,var(--ed-blue),var(--ed-aqua));border-radius:999px}
+  @media(max-width:1100px){.exec-command{grid-template-columns:1fr}.exec-grid.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.exec-grid.two{grid-template-columns:1fr}.exec-grid.equal{grid-template-columns:1fr}}
   @media(max-width:700px){.exec-hero{padding:1.05rem;border-radius:19px}.exec-hero-main{display:block}.health-card{min-width:0;margin-top:.85rem}.exec-grid.kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:.65rem}.exec-card{border-radius:17px}.exec-card-body{padding:.85rem}.kpi{min-height:116px}.kpi .value{font-size:1.28rem}.kpi .icon{width:34px;height:34px;right:.8rem;top:.8rem}.mini-stats{grid-template-columns:repeat(3,minmax(0,1fr))}.chart-wrap{height:220px}.section-space{margin-top:.7rem}}
 </style>
 
@@ -48,6 +49,40 @@
   </section>
 
   <section class="exec-card mb-3"><div class="exec-card-body"><form method="get" class="d-flex flex-wrap align-items-end gap-2"><div><div class="exec-kicker mb-1">Vista territorial</div><select name="ciudad" class="form-select" onchange="this.form.submit()"><option value="">🌎 Todas las ciudades</option>{% for c in ciudades_dashboard %}<option value="{{ c.id }}" {% if ciudad_dashboard == c.id|stringformat:'s' %}selected{% endif %}>📍 {{ c.nombre }}</option>{% endfor %}</select></div><div class="ms-auto text-end"><div class="small text-muted">Analizando</div><strong>{{ ciudad_obj.nombre|default:"JVAQUA nacional" }}</strong></div></form></div></section>
+
+  <section class="exec-command">
+    <div class="exec-command-card">
+      <div class="exec-command-top">
+        <div>
+          <div class="exec-kicker mb-1">Salud del sistema</div>
+          <div class="exec-command-num">{{ salud_erp.total_afectados }}</div>
+          <div class="exec-command-label">registros que requieren revisión</div>
+        </div>
+        <a class="exec-link" href="{% url 'salud_erp' %}">Abrir Centro de Salud →</a>
+      </div>
+      <div class="exec-health-badges">
+        <span class="exec-health-badge red">{{ salud_erp.criticas }} críticas</span>
+        <span class="exec-health-badge yellow">{{ salud_erp.atencion }} atención</span>
+        <span class="exec-health-badge blue">{{ salud_erp.avisos }} avisos</span>
+      </div>
+    </div>
+    <div class="exec-command-card">
+      <div class="exec-command-top">
+        <div>
+          <div class="exec-kicker mb-1">Crecimiento de contratos</div>
+          <div class="exec-command-num">{{ total_contratos_activos }}</div>
+          <div class="exec-command-label">contratos activos actualmente</div>
+        </div>
+        <a class="exec-link" href="{% url 'metas_empresa' %}">Ver metas →</a>
+      </div>
+      {% if metas_ejecutivas.meta_principal %}
+        <div class="exec-goal-line"><span style="width:{{ metas_ejecutivas.meta_principal.porcentaje|default:0 }}%"></span></div>
+        <div class="small text-muted">Objetivo: {{ metas_ejecutivas.meta_principal.valor_objetivo }} contratos · {{ metas_ejecutivas.meta_principal.porcentaje|default:0|floatformat:1 }}% alcanzado</div>
+      {% else %}
+        <div class="small text-muted mt-2">Consulta la evolución y los objetivos definidos para JVAQUA.</div>
+      {% endif %}
+    </div>
+  </section>
 
   <div class="exec-grid kpis mb-3"><div class="exec-card kpi"><div class="exec-card-body"><div class="icon">📈</div><div class="label">Altas este mes</div><div class="value">{{ altas_mes_bi }}</div><div class="foot">Nuevos contratos del período</div></div></div><div class="exec-card kpi"><div class="exec-card-body"><div class="icon">📉</div><div class="label">Contratos perdidos</div><div class="value">{{ contratos_perdidos_mes }}</div><div class="foot">${{ facturacion_perdida_mes|floatformat:2 }} / mes perdido</div></div></div><div class="exec-card kpi"><div class="exec-card-body"><div class="icon">⚡</div><div class="label">Crecimiento neto</div><div class="value {% if crecimiento_neto_bi >= 0 %}profit-positive{% else %}profit-negative{% endif %}">{% if crecimiento_neto_bi > 0 %}+{% endif %}{{ crecimiento_neto_bi }}</div><div class="foot">Altas menos bajas</div></div></div><div class="exec-card kpi"><div class="exec-card-body"><div class="icon">🏆</div><div class="label">Mejor contribución</div><div class="value" style="font-size:1.25rem">{{ mejor_ciudad.nombre|default:"—" }}</div><div class="foot">{% if mejor_ciudad %}${{ mejor_ciudad.utilidad|floatformat:0 }} utilidad base · {{ mejor_ciudad.margen }}% margen{% endif %}</div></div></div></div>
 

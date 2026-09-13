@@ -3010,8 +3010,10 @@ def dashboard_view(request):
             ],
         }
 
-        # ================= Dashboard Ejecutivo v2.1 =================
+        # ================= Dashboard Ejecutivo 2.0 =================
         acciones = _centro_acciones_contexto()
+        salud_erp = diagnosticar_salud_erp(hoy=hoy)
+        metas_ejecutivas = _metas_empresa_contexto() if MetaEmpresa is not None else {}
 
         productos_criticos_qs = (
             Insumo.objects
@@ -3193,14 +3195,25 @@ def dashboard_view(request):
             ingreso_mensual=cqs.aggregate(v=Sum("precio_mensual"))["v"] or Decimal("0")
             tecnico = Decimal("0.00")
             contratos_ciudad = list(cqs.select_related("tecnico_designado"))
-            conteo_fijos_ciudad = defaultdict(int)
-            for c in contratos_ciudad:
-                if c.tecnico_designado and c.tecnico_designado.tipo_remuneracion == "mensual_fija":
-                    conteo_fijos_ciudad[c.tecnico_designado_id] += 1
+            # El sueldo fijo se distribuye entre TODOS los contratos activos
+            # asignados al trabajador, no solo entre los contratos de esta ciudad.
+            # Así la suma de ciudades nunca duplica el costo mensual del técnico.
+            ids_fijos_ciudad = {
+                c.tecnico_designado_id
+                for c in contratos_ciudad
+                if c.tecnico_designado and c.tecnico_designado.tipo_remuneracion == "mensual_fija"
+            }
+            conteo_fijos_global = {
+                trabajador_id: Contrato.objects.filter(
+                    activo=True,
+                    tecnico_designado_id=trabajador_id,
+                ).count()
+                for trabajador_id in ids_fijos_ciudad
+            }
             for c in contratos_ciudad:
                 trabajador = c.tecnico_designado
                 if trabajador and trabajador.tipo_remuneracion == "mensual_fija":
-                    cantidad = conteo_fijos_ciudad.get(trabajador.pk, 0)
+                    cantidad = conteo_fijos_global.get(trabajador.pk, 0)
                     if cantidad:
                         tecnico += (Decimal(trabajador.sueldo_mensual_fijo or 0) / Decimal(cantidad))
                 else:
@@ -3404,6 +3417,8 @@ def dashboard_view(request):
             "asistente_pendientes": asistente_pendientes,
             "asistente_tasa_exito": asistente_tasa_exito,
             "salud_empresa": salud_empresa,
+            "salud_erp": salud_erp,
+            "metas_ejecutivas": metas_ejecutivas,
             "ciudades_dashboard": ciudades_dashboard, "ciudad_dashboard": ciudad_dashboard, "ciudad_obj": ciudad_obj,
             "grafico_bi_finanzas": grafico_bi_finanzas, "grafico_bi_contratos": grafico_bi_contratos, "grafico_bi_ciudades": grafico_bi_ciudades,
             "grafico_bi_digital": grafico_bi_digital, "digital_nuevos_mes": digital_nuevos_mes, "digital_activos_actuales": digital_activos_actuales,
