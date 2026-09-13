@@ -882,7 +882,30 @@
         transition-duration: .01ms !important;
       }
     }
-  </style>
+  
+    /* Soporte flotante embebido: el chat dentro de la burbuja no debe mostrar navegación del ERP. */
+    .support-float-mode .topbar,
+    .support-float-mode .bottom-nav,
+    .support-float-mode .mobile-orbit-nav,
+    .support-float-mode .mobile-orbit-dock,
+    .support-float-mode .mobile-orbit-toggle,
+    .support-float-mode .jv-context-wrap,
+    .support-float-mode .jv-quick-fab,
+    .support-float-mode .jv-quick-toggle,
+    .support-float-mode .jv-launcher,
+    .support-float-mode #jvModuleLauncher {
+      display: none !important;
+    }
+    .support-float-mode .page-content {
+      max-width: none !important;
+      padding: 8px !important;
+      margin: 0 !important;
+    }
+    .support-float-mode .spacer-bottom {
+      display: none !important;
+      height: 0 !important;
+    }
+</style>
 
 
   <link rel="manifest" href="/dashboard/manifest.json?v=20260311-10">
@@ -1594,14 +1617,96 @@
 </div>
 <script>
 (function(){
- const root=document.getElementById('adminSupportRoot'),bubble=document.getElementById('adminSupportBubble'),mount=document.getElementById('adminSupportMount'),badge=document.getElementById('adminSupportBadge'),full=document.getElementById('adminSupportFull'),client=document.getElementById('adminSupportClient');
- if(!root)return;let frame=null,currentId=null,currentUrl='',hiddenForId=null;
+ const root=document.getElementById('adminSupportRoot');
+ const bubble=document.getElementById('adminSupportBubble');
+ const mount=document.getElementById('adminSupportMount');
+ const badge=document.getElementById('adminSupportBadge');
+ const full=document.getElementById('adminSupportFull');
+ const client=document.getElementById('adminSupportClient');
+ if(!root||!bubble)return;
+
+ let frame=null;
+ let currentId=null;
+ let currentUrl='';
+ let activeId=null;
+ let dismissedId=null;
+ let dismissedUnread=0;
  const endpoint="{% url 'asistente_tecnico:soporte_admin_burbuja_api' %}";
- function open(){if(!currentId)return;if(!frame||frame.dataset.id!==String(currentId)){mount.innerHTML='';frame=document.createElement('iframe');frame.className='admin-support-frame';frame.dataset.id=String(currentId);frame.src=currentUrl;mount.appendChild(frame)}root.classList.add('is-open')}
- function hide(){root.classList.remove('is-open')}
- async function poll(){try{const r=await fetch(endpoint,{headers:{'X-Requested-With':'XMLHttpRequest'},cache:'no-store'});if(!r.ok)return;const d=await r.json();currentId=d.conversacion_id;currentUrl=d.url||'';badge.textContent=d.no_leidos||0;if(client)client.textContent=d.cliente||'JVAQUA Digital';if(full&&d.url_completa)full.href=d.url_completa;if(d.visible&&String(hiddenForId)!==String(currentId)){root.classList.add('is-visible')}else if(!d.visible){root.classList.remove('is-visible');hide();hiddenForId=null}}catch(e){}}
- bubble.addEventListener('click',()=>root.classList.contains('is-open')?hide():open());document.getElementById('adminSupportMin')?.addEventListener('click',hide);document.getElementById('adminSupportClose')?.addEventListener('click',()=>{hiddenForId=currentId;hide();root.classList.remove('is-visible')});
- setInterval(poll,5000);poll();
+
+ function openPanel(){
+   const id=currentId||activeId;
+   if(!id)return;
+   if(!frame||frame.dataset.id!==String(id)){
+     if(!currentUrl)return;
+     mount.innerHTML='';
+     frame=document.createElement('iframe');
+     frame.className='admin-support-frame';
+     frame.dataset.id=String(id);
+     frame.src=currentUrl;
+     frame.title='Soporte JVAQUA';
+     mount.appendChild(frame);
+   }
+   activeId=id;
+   root.classList.add('is-visible','is-open');
+ }
+
+ function minimize(){
+   root.classList.remove('is-open');
+ }
+
+ async function poll(){
+   try{
+     const r=await fetch(endpoint,{
+       headers:{'X-Requested-With':'XMLHttpRequest'},
+       cache:'no-store'
+     });
+     if(!r.ok)return;
+     const d=await r.json();
+     const unread=parseInt(d.no_leidos||0,10);
+     badge.textContent=unread;
+
+     if(d.conversacion_id){
+       currentId=d.conversacion_id;
+       currentUrl=d.url||currentUrl;
+       if(full&&d.url_completa)full.href=d.url_completa;
+       if(client)client.textContent=d.cliente||'JVAQUA Digital';
+     }
+
+     if(d.visible){
+       const nuevoTrasCerrar =
+         String(dismissedId)!==String(d.conversacion_id) ||
+         unread>dismissedUnread;
+       if(nuevoTrasCerrar){
+         activeId=d.conversacion_id;
+         dismissedId=null;
+         dismissedUnread=0;
+         root.classList.add('is-visible');
+       }
+     }
+
+     // Al abrir el iframe, el chat marca el mensaje como leído.
+     // La burbuja debe seguir visible hasta que administración la cierre.
+     if(activeId){
+       root.classList.add('is-visible');
+     }else if(!d.visible){
+       root.classList.remove('is-visible','is-open');
+     }
+   }catch(e){}
+ }
+
+ bubble.addEventListener('click',()=>{
+   root.classList.contains('is-open') ? minimize() : openPanel();
+ });
+ document.getElementById('adminSupportMin')?.addEventListener('click',minimize);
+ document.getElementById('adminSupportClose')?.addEventListener('click',()=>{
+   dismissedId=activeId||currentId;
+   dismissedUnread=parseInt(badge.textContent||'0',10);
+   activeId=null;
+   minimize();
+   root.classList.remove('is-visible');
+ });
+ setInterval(poll,5000);
+ poll();
 })();
 </script>
 {% endif %}
