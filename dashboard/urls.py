@@ -36,6 +36,7 @@ from .views import (
     salud_erp_view,
     inteligencia_rentabilidad_view,
     inteligencia_crecimiento_view,
+    aquo_ejecutivo_view,
     calculadora_quimicos_view,
     cotizador_inteligente_admin_view,
     mi_cuenta_trabajador_view,
@@ -279,6 +280,11 @@ urlpatterns = [
         "inteligencia/crecimiento/",
         inteligencia_crecimiento_view,
         name="inteligencia_crecimiento",
+    ),
+    path(
+        "inteligencia/aquo-ejecutivo/",
+        aquo_ejecutivo_view,
+        name="aquo_ejecutivo",
     ),
     path("herramientas/cotizador-inteligente/", cotizador_inteligente_admin_view, name="cotizador_inteligente_admin"),
     path(

@@ -92,6 +92,7 @@ except Exception:
 from .salud_erp import diagnosticar_salud_erp
 from .inteligencia_rentabilidad import analizar_rentabilidad
 from .inteligencia_crecimiento import analizar_crecimiento_retencion
+from .aquo_ejecutivo import responder_aquo_ejecutivo
 
 # -------------------
 # Helpers de roles
@@ -3799,6 +3800,32 @@ def marcar_todas_leidas_view(request):
 
 
 
+
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def aquo_ejecutivo_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    ciudad_id = (request.POST.get("ciudad") if request.method == "POST" else request.GET.get("ciudad") or "").strip()
+    ciudad_obj = Ciudad.objects.filter(pk=ciudad_id, activa=True).first() if ciudad_id.isdigit() else None
+    pregunta = (request.POST.get("pregunta") or "").strip() if request.method == "POST" else ""
+    resultado = None
+    if pregunta:
+        resultado = responder_aquo_ejecutivo(
+            pregunta,
+            hoy=timezone.localdate(),
+            ciudad=ciudad_obj,
+        )
+    return render(request, "dashboard/aquo_ejecutivo.html", {
+        "pregunta": pregunta,
+        "resultado": resultado,
+        "ciudad_obj": ciudad_obj,
+        "ciudades": Ciudad.objects.filter(activa=True).order_by("orden", "nombre"),
+        "es_admin": True,
+    })
 
 
 @login_required
