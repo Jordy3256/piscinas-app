@@ -1,0 +1,62 @@
+{% extends "dashboard/base_admin.html" %}
+{% block title %}Centro de Inteligencias | JVAQUA ERP{% endblock %}
+{% block top_title %}Centro de Inteligencias{% endblock %}
+{% block content %}
+<style>
+.ci-shell{--navy:#17324d;--blue:#0865d9;--muted:#68788b;--line:#e5edf5;max-width:1180px;margin:auto}
+.ci-hero{padding:1.35rem 1.45rem;border:1px solid var(--line);border-radius:24px;background:linear-gradient(135deg,#fff,#edf7ff);box-shadow:0 12px 34px rgba(17,45,76,.06)}
+.ci-kicker{font-size:.68rem;font-weight:950;letter-spacing:.1em;text-transform:uppercase;color:var(--blue)}
+.ci-title{margin:.2rem 0 .35rem;font-size:1.75rem;font-weight:950;color:var(--navy)}
+.ci-sub{max-width:760px;font-size:.82rem;color:var(--muted)}
+.ci-highlight{display:grid;grid-template-columns:repeat(2,1fr);gap:.8rem;margin:1rem 0}
+.ci-highlight a,.ci-card{position:relative;display:block;text-decoration:none;color:inherit;border:1px solid var(--line);border-radius:20px;background:#fff;box-shadow:0 8px 22px rgba(17,45,76,.045);transition:.18s ease}
+.ci-highlight a{padding:1.05rem 1.1rem;background:linear-gradient(145deg,#fff,#f5faff)}
+.ci-highlight a:hover,.ci-card:hover{transform:translateY(-2px);border-color:rgba(8,101,217,.26);box-shadow:0 12px 28px rgba(17,45,76,.09)}
+.ci-icon{width:46px;height:46px;border-radius:15px;display:grid;place-items:center;background:#edf6ff;font-size:1.35rem;margin-bottom:.7rem}
+.ci-name{font-size:.95rem;font-weight:950;color:var(--navy)}
+.ci-desc{margin-top:.24rem;font-size:.73rem;line-height:1.45;color:var(--muted)}
+.ci-arrow{position:absolute;right:1rem;top:1rem;color:var(--blue)}
+.ci-section-title{margin:1.1rem 0 .55rem;font-size:.73rem;font-weight:950;letter-spacing:.08em;text-transform:uppercase;color:#50677c}
+.ci-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.7rem}
+.ci-card{padding:.95rem}
+.ci-foot{margin-top:1rem;padding:.9rem 1rem;border-radius:17px;background:#f6f9fc;color:var(--muted);font-size:.72rem}
+@media(max-width:850px){.ci-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:600px){.ci-highlight,.ci-grid{grid-template-columns:1fr}.ci-title{font-size:1.45rem}.ci-hero{padding:1.05rem}}
+</style>
+<div class="ci-shell">
+  <section class="ci-hero">
+    <div class="ci-kicker">Dirección · Inteligencia Empresarial</div>
+    <h1 class="ci-title">Centro de Inteligencias JVAQUA</h1>
+    <div class="ci-sub">Todas las herramientas de análisis ejecutivo están concentradas aquí. Entra únicamente a la inteligencia que necesites sin recargar el panel principal de accesos.</div>
+  </section>
+
+  <div class="ci-highlight">
+    {% for m in modulos %}
+      {% if m.destacado %}
+      <a href="{% url m.url %}">
+        <span class="ci-arrow"><i class="bi bi-arrow-up-right"></i></span>
+        <div class="ci-icon">{{ m.icono }}</div>
+        <div class="ci-name">{{ m.titulo }}</div>
+        <div class="ci-desc">{{ m.descripcion }}</div>
+      </a>
+      {% endif %}
+    {% endfor %}
+  </div>
+
+  <div class="ci-section-title">Inteligencias especializadas</div>
+  <div class="ci-grid">
+    {% for m in modulos %}
+      {% if not m.destacado %}
+      <a class="ci-card" href="{% url m.url %}">
+        <span class="ci-arrow"><i class="bi bi-chevron-right"></i></span>
+        <div class="ci-icon">{{ m.icono }}</div>
+        <div class="ci-name">{{ m.titulo }}</div>
+        <div class="ci-desc">{{ m.descripcion }}</div>
+      </a>
+      {% endif %}
+    {% endfor %}
+  </div>
+
+  <div class="ci-foot"><i class="bi bi-info-circle me-1"></i>AQUO Ejecutivo y el Centro de Decisiones ya cruzan los datos de estas inteligencias. Los módulos especializados sirven para profundizar cuando necesites revisar el detalle.</div>
+</div>
+{% endblock %}

@@ -1010,13 +1010,14 @@
       <a href="{% url 'asistente_tecnico:soporte_admin_lista' %}">Soporte</a>
       <a href="{% url 'asistente_tecnico:digital_suscripciones_admin' %}">Suscripciones</a>
     </nav></div>
-    {% elif request.path == '/dashboard/' or request.path == '/dashboard/home/' or '/dashboard/metas/' in request.path or '/dashboard/salud-erp/' in request.path %}
+    {% elif request.path == '/dashboard/' or request.path == '/dashboard/home/' or '/dashboard/metas/' in request.path or '/dashboard/salud-erp/' in request.path or '/dashboard/inteligencia/' in request.path %}
     <div class="jv-context-wrap"><nav class="jv-context-nav" aria-label="Dirección">
       <span class="jv-context-label">Dirección</span>
       <a href="{% url 'dashboard' %}">Dashboard</a>
       <a href="{% url 'metas_empresa' %}">Metas</a>
       <a href="{% url 'reporte_ganancias' %}">Rentabilidad</a>
       <a href="{% url 'salud_erp' %}">Salud ERP</a>
+      <a href="{% url 'centro_inteligencias' %}">Inteligencias</a>
     </nav></div>
     {% endif %}
 
@@ -1100,13 +1101,7 @@
         <a class="jv-launch-link" href="{% url 'metas_empresa' %}"><span class="jv-launch-icon">🎯</span><span><span class="jv-launch-name">Metas</span><span class="jv-launch-desc">Objetivos y crecimiento</span></span></a>
         <a class="jv-launch-link" href="{% url 'reporte_ganancias' %}"><span class="jv-launch-icon">📈</span><span><span class="jv-launch-name">Rentabilidad</span><span class="jv-launch-desc">Ganancias y márgenes</span></span></a>
         <a class="jv-launch-link" href="{% url 'salud_erp' %}"><span class="jv-launch-icon">🩺</span><span><span class="jv-launch-name">Salud del ERP</span><span class="jv-launch-desc">Detecta inconsistencias y riesgos</span></span></a>
-        <a class="jv-launch-link" href="{% url 'inteligencia_rentabilidad' %}"><span class="jv-launch-icon">🧠</span><span><span class="jv-launch-name">Inteligencia de Rentabilidad</span><span class="jv-launch-desc">Contratos, ciudades y técnicos</span></span></a>
-        <a class="jv-launch-link" href="{% url 'inteligencia_crecimiento' %}"><span class="jv-launch-icon">📈</span><span><span class="jv-launch-name">Crecimiento y Retención</span><span class="jv-launch-desc">Altas, bajas y recuperaciones</span></span></a>
-        <a class="jv-launch-link" href="{% url 'aquo_ejecutivo' %}"><span class="jv-launch-icon">💧</span><span><span class="jv-launch-name">AQUO Ejecutivo</span><span class="jv-launch-desc">Pregunta a los datos del ERP</span></span></a>
-        <a class="jv-launch-link" href="{% url 'centro_decisiones' %}"><span class="jv-launch-icon">🎯</span><span><span class="jv-launch-name">Centro de Decisiones</span><span class="jv-launch-desc">Prioridades, impacto y acciones</span></span></a>
-        <a class="jv-launch-link" href="{% url 'inteligencia_cartera' %}"><span class="jv-launch-icon">💳</span><span><span class="jv-launch-name">Inteligencia de Cartera</span><span class="jv-launch-desc">Riesgo, antigüedad y prioridad de cobro</span></span></a>
-        <a class="jv-launch-link" href="{% url 'inteligencia_operativa' %}"><span class="jv-launch-icon">⚙️</span><span><span class="jv-launch-name">Inteligencia Operativa</span><span class="jv-launch-desc">Cumplimiento, carga y riesgo de servicio</span></span></a>
-        <a class="jv-launch-link" href="{% url 'inteligencia_inventario' %}"><span class="jv-launch-icon">📦</span><span><span class="jv-launch-name">Inteligencia de Inventario</span><span class="jv-launch-desc">Consumo, autonomía y desviaciones</span></span></a>
+        <a class="jv-launch-link" href="{% url 'centro_inteligencias' %}"><span class="jv-launch-icon">🧠</span><span><span class="jv-launch-name">Centro de Inteligencias</span><span class="jv-launch-desc">AQUO, decisiones y análisis especializados</span></span></a>
       </div>
     </div>
     <div class="jv-launch-group">

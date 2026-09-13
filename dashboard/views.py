@@ -3810,6 +3810,71 @@ def marcar_todas_leidas_view(request):
 
 
 
+
+@login_required
+def centro_inteligencias_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    modulos = [
+        {
+            "icono": "💧",
+            "titulo": "AQUO Ejecutivo",
+            "descripcion": "Pregunta a los datos del ERP y cruza información empresarial.",
+            "url": "aquo_ejecutivo",
+            "grupo": "Dirección",
+            "destacado": True,
+        },
+        {
+            "icono": "🎯",
+            "titulo": "Centro de Decisiones",
+            "descripcion": "Ordena riesgos, impacto y acciones que requieren atención.",
+            "url": "centro_decisiones",
+            "grupo": "Dirección",
+            "destacado": True,
+        },
+        {
+            "icono": "💰",
+            "titulo": "Rentabilidad",
+            "descripcion": "Margen por contrato, ciudad y trabajador, con señales de pérdida.",
+            "url": "inteligencia_rentabilidad",
+            "grupo": "Finanzas",
+        },
+        {
+            "icono": "📈",
+            "titulo": "Crecimiento y Retención",
+            "descripcion": "Altas, bajas, recuperaciones, retención y crecimiento neto.",
+            "url": "inteligencia_crecimiento",
+            "grupo": "Comercial",
+        },
+        {
+            "icono": "💳",
+            "titulo": "Cartera y Cobranza",
+            "descripcion": "Antigüedad, morosidad y clientes que conviene cobrar primero.",
+            "url": "inteligencia_cartera",
+            "grupo": "Finanzas",
+        },
+        {
+            "icono": "⚙️",
+            "titulo": "Operación",
+            "descripcion": "Cumplimiento, atrasos, carga de trabajo e incidencias de servicio.",
+            "url": "inteligencia_operativa",
+            "grupo": "Operación",
+        },
+        {
+            "icono": "📦",
+            "titulo": "Inventario y Consumo",
+            "descripcion": "Stock, autonomía, consumo químico y desviaciones por contrato.",
+            "url": "inteligencia_inventario",
+            "grupo": "Operación",
+        },
+    ]
+    return render(request, "dashboard/centro_inteligencias.html", {
+        "modulos": modulos,
+        "es_admin": True,
+    })
+
+
 @login_required
 def inteligencia_inventario_view(request):
     if not es_admin(request.user):
