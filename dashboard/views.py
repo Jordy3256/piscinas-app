@@ -2409,7 +2409,7 @@ def trabajador_expediente_pdf_view(request, pk):
         section('Mantenimientos',['Fecha','Cliente','Estado'],[[m.fecha.strftime('%d/%m/%Y'),str(m.cliente),m.get_estado_display()] for m in ctx['mantenimientos']], [28*mm,105*mm,30*mm])
         section('Órdenes de trabajo',['Fecha','Trabajo','Estado'],[[o.fecha.strftime('%d/%m/%Y'),o.descripcion_corta,o.get_estado_display()] for o in ctx['ordenes']], [28*mm,105*mm,30*mm])
     if seccion in ('completo','nomina','finanzas'):
-        section('Pagos',['Fecha','Contrato / período','Monto'],[[p.fecha.strftime('%d/%m/%Y'),f"{p.obligacion.contrato.cliente} · {p.obligacion.periodo_label}",f"${p.monto:.2f}"] for p in ctx['pagos']], [28*mm,105*mm,30*mm])
+        section('Pagos',['Fecha','Origen / período','Monto'],[[p.fecha.strftime('%d/%m/%Y'),f"{p.obligacion.concepto_origen} · {p.obligacion.periodo_label}",f"${p.monto:.2f}"] for p in ctx['pagos']], [28*mm,105*mm,30*mm])
     if seccion in ('completo','inventario'):
         section('Inventario asignado',['Producto','Cantidad','Unidad'],[[x.insumo.nombre,f"{x.stock:.3f}",x.insumo.unidad_corta] for x in ctx['inventario']], [105*mm,30*mm,28*mm])
         section('Consumos registrados',['Fecha','Producto','Cantidad'],[[u.mantenimiento.fecha.strftime('%d/%m/%Y'),u.insumo.nombre,f"{u.cantidad_mostrada} {u.unidad_mostrada}"] for u in ctx['usos']], [28*mm,105*mm,30*mm])
@@ -3075,9 +3075,46 @@ def dashboard_view(request):
         ingreso_contratos_proyectado = Decimal("0.00")
         nomina_contratos_proyectada = Decimal("0.00")
         quimicos_mes_total = Decimal("0.00")
+
+        # Trabajadores con sueldo fijo: su costo mensual no debe sumarse una vez
+        # por contrato. Para analizar rentabilidad por contrato se reparte entre
+        # sus contratos activos; si no tienen contratos, queda como costo fijo
+        # no asignado y aun así se descuenta del margen global.
+        contratos_por_trabajador_fijo = defaultdict(int)
+        sueldos_fijos = {}
+        for contrato in contratos_activos_qs:
+            trabajador = contrato.tecnico_designado
+            if trabajador and trabajador.tipo_remuneracion == "mensual_fija":
+                contratos_por_trabajador_fijo[trabajador.pk] += 1
+                sueldos_fijos[trabajador.pk] = Decimal(trabajador.sueldo_mensual_fijo or 0)
+
+        trabajadores_fijos_activos = Trabajador.objects.filter(
+            activo=True,
+            tipo_remuneracion="mensual_fija",
+            sueldo_mensual_fijo__gt=0,
+        )
+        costo_fijo_total = sum(
+            (Decimal(t.sueldo_mensual_fijo or 0) for t in trabajadores_fijos_activos),
+            Decimal("0.00"),
+        )
+        costo_fijo_asignado = Decimal("0.00")
+
         for contrato in contratos_activos_qs:
             ingreso = Decimal(contrato.precio_mensual or 0)
-            tecnico = Decimal(contrato.valor_tecnico_mensual or 0)
+            trabajador = contrato.tecnico_designado
+
+            if trabajador and trabajador.tipo_remuneracion == "mensual_fija":
+                cantidad = contratos_por_trabajador_fijo.get(trabajador.pk, 0)
+                tecnico = (
+                    Decimal(trabajador.sueldo_mensual_fijo or 0) / Decimal(cantidad)
+                    if cantidad
+                    else Decimal("0.00")
+                )
+                tecnico = tecnico.quantize(Decimal("0.01"))
+                costo_fijo_asignado += tecnico
+            else:
+                tecnico = Decimal(contrato.valor_tecnico_mensual or 0)
+
             quimicos = Decimal(consumos_contrato.get(contrato.id, Decimal("0.00")) or 0)
             margen = ingreso - tecnico - quimicos
             ingreso_contratos_proyectado += ingreso
@@ -3091,6 +3128,12 @@ def dashboard_view(request):
                 "margen": margen,
                 "margen_pct": round((margen / ingreso) * 100, 1) if ingreso else 0,
             })
+
+        # Sueldos fijos de trabajadores sin contratos activos no desaparecen:
+        # siguen siendo un costo operativo real de la empresa.
+        costo_fijo_no_asignado = max(costo_fijo_total - costo_fijo_asignado, Decimal("0.00"))
+        nomina_contratos_proyectada += costo_fijo_no_asignado
+
         rentabilidad_contratos.sort(key=lambda x: x["margen"], reverse=True)
         top_rentabilidad_contratos = rentabilidad_contratos[:5]
         margen_operativo_base = ingreso_contratos_proyectado - nomina_contratos_proyectada - quimicos_mes_total
@@ -3146,7 +3189,21 @@ def dashboard_view(request):
         for ciudad in ciudades_dashboard:
             cqs=Contrato.objects.filter(models.Q(ciudad_ref=ciudad) | models.Q(ciudad_ref__isnull=True, cliente__ciudad_ref=ciudad),activo=True)
             ingreso_mensual=cqs.aggregate(v=Sum("precio_mensual"))["v"] or Decimal("0")
-            tecnico=cqs.aggregate(v=Sum("valor_tecnico_mensual"))["v"] or Decimal("0")
+            tecnico = Decimal("0.00")
+            contratos_ciudad = list(cqs.select_related("tecnico_designado"))
+            conteo_fijos_ciudad = defaultdict(int)
+            for c in contratos_ciudad:
+                if c.tecnico_designado and c.tecnico_designado.tipo_remuneracion == "mensual_fija":
+                    conteo_fijos_ciudad[c.tecnico_designado_id] += 1
+            for c in contratos_ciudad:
+                trabajador = c.tecnico_designado
+                if trabajador and trabajador.tipo_remuneracion == "mensual_fija":
+                    cantidad = conteo_fijos_ciudad.get(trabajador.pk, 0)
+                    if cantidad:
+                        tecnico += (Decimal(trabajador.sueldo_mensual_fijo or 0) / Decimal(cantidad))
+                else:
+                    tecnico += Decimal(c.valor_tecnico_mensual or 0)
+            tecnico = tecnico.quantize(Decimal("0.01"))
             utilidad_base=ingreso_mensual-tecnico
             ranking_ciudades.append({"id":ciudad.id,"nombre":ciudad.nombre,"contratos":cqs.count(),"ingreso":float(ingreso_mensual),"utilidad":float(utilidad_base),"margen":round(float(utilidad_base/ingreso_mensual*100),1) if ingreso_mensual else 0,"ticket":round(float(ingreso_mensual/cqs.count()),2) if cqs.count() else 0})
         ranking_ciudades.sort(key=lambda x:x["utilidad"],reverse=True)

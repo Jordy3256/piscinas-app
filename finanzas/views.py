@@ -1243,7 +1243,7 @@ def nomina_trabajador_pdf(request, trabajador_pk):
         for pago, obligacion in sorted(pagos_activos, key=lambda x: (x[0].fecha, x[0].pk)):
             pagos_data.append([
                 pago.fecha.strftime("%d/%m/%Y"),
-                Paragraph(str(obligacion.contrato.cliente), styles["Celda"]),
+                Paragraph(obligacion.concepto_origen, styles["Celda"]),
                 pago.get_metodo_pago_display(),
                 Paragraph(pago.referencia or "-", styles["Celda"]),
                 Paragraph(f"${pago.monto:.2f}", styles["CeldaDerecha"]),

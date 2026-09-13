@@ -158,7 +158,7 @@ def generar_alertas_financieras(*, enviar_push=True):
             tipo=tipo,
             referencia_id=obligacion.pk,
             titulo="🔵 Pago de nómina pendiente",
-            mensaje=f"{obligacion.trabajador}: ${obligacion.saldo:.2f} por {obligacion.contrato.cliente}.",
+            mensaje=f"{obligacion.trabajador}: ${obligacion.saldo:.2f} · {obligacion.concepto_origen}.",
             url=f"/dashboard/finanzas/nomina/?anio={obligacion.periodo_anio}&mes={obligacion.periodo_mes}",
             enviar_push=enviar_push,
         )

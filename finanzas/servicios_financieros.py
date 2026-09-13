@@ -97,7 +97,12 @@ def obtener_resumen_financiero(anio: int, mes: int, ciudad: str = "") -> dict:
                 lote__isnull=False,
                 lote__activo=True,
                 fecha__range=(inicio, fin),
-                obligacion__contrato__ciudad_ref__nombre__iexact=ciudad,
+            ).filter(
+                Q(obligacion__contrato__ciudad_ref__nombre__iexact=ciudad)
+                | Q(obligacion__contrato__ciudad__iexact=ciudad)
+                | Q(obligacion__contrato__cliente__ciudad_ref__nombre__iexact=ciudad)
+                | Q(obligacion__contrato__cliente__ciudad__iexact=ciudad)
+                | Q(obligacion__contrato__isnull=True, obligacion__trabajador__ciudad_principal__nombre__iexact=ciudad)
             ).aggregate(valor=Sum("monto"))["valor"] or CERO
         )
 
@@ -124,7 +129,13 @@ def obtener_resumen_financiero(anio: int, mes: int, ciudad: str = "") -> dict:
 
     if ciudad:
         facturas = facturas.filter(Q(contrato__ciudad_ref__nombre__iexact=ciudad) | Q(contrato__ciudad__iexact=ciudad) | Q(cliente__ciudad_ref__nombre__iexact=ciudad) | Q(cliente__ciudad__iexact=ciudad)).distinct()
-        obligaciones = obligaciones.filter(Q(contrato__ciudad_ref__nombre__iexact=ciudad) | Q(contrato__ciudad__iexact=ciudad) | Q(contrato__cliente__ciudad_ref__nombre__iexact=ciudad) | Q(contrato__cliente__ciudad__iexact=ciudad)).distinct()
+        obligaciones = obligaciones.filter(
+            Q(contrato__ciudad_ref__nombre__iexact=ciudad)
+            | Q(contrato__ciudad__iexact=ciudad)
+            | Q(contrato__cliente__ciudad_ref__nombre__iexact=ciudad)
+            | Q(contrato__cliente__ciudad__iexact=ciudad)
+            | Q(contrato__isnull=True, trabajador__ciudad_principal__nombre__iexact=ciudad)
+        ).distinct()
         ingresos_manuales = ingresos_manuales.filter(
             Q(contrato__ciudad_ref__nombre__iexact=ciudad) | Q(contrato__ciudad__iexact=ciudad) | Q(cliente__ciudad_ref__nombre__iexact=ciudad) | Q(cliente__ciudad__iexact=ciudad) | Q(ciudad__iexact=ciudad)
         ).distinct()
@@ -152,7 +163,9 @@ def obtener_resumen_financiero(anio: int, mes: int, ciudad: str = "") -> dict:
                     valor = promos[contrato.id].calcular(valor)["total"]
                 total_facturado += contrato.desglose_valor(valor)["total"]
             if contrato.id not in ids_obligados:
-                total_nomina += Decimal(contrato.valor_tecnico_mensual or 0)
+                trabajador = contrato.tecnico_designado
+                if not trabajador or trabajador.tipo_remuneracion != "mensual_fija":
+                    total_nomina += Decimal(contrato.valor_tecnico_mensual or 0)
 
     ingresos_esperados = total_facturado + total_ingresos_manuales
 

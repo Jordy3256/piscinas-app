@@ -22,7 +22,7 @@
       <form method="post" action="{% url 'finanzas_nomina_generar' %}" class="row g-2 align-items-end" onsubmit="return confirm('Se generarán los pagos de nómina programados para: {{ mes|stringformat:'02d' }}/{{ anio }}. ¿Deseas continuar?');">
         {% csrf_token %}
         <input type="hidden" name="anio" value="{{ anio }}"><input type="hidden" name="mes" value="{{ mes }}">
-        <div class="col-12"><div class="periodo-activo mb-2">Mes de pago seleccionado: {{ mes|stringformat:'02d' }}/{{ anio }}</div><button class="btn btn-primary w-100">⚙️ Generar nómina de este mes de pago</button></div>
+        <div class="col-12"><div class="periodo-activo mb-2">Mes de pago seleccionado: {{ mes|stringformat:'02d' }}/{{ anio }}</div><button class="btn btn-primary w-100">⚙️ Revisar y sincronizar nómina de este mes de pago</button></div>
       </form>
     </div>
   </div>
