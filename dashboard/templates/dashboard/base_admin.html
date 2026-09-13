@@ -899,8 +899,9 @@
     }
     .support-float-mode .page-content {
       max-width: none !important;
-      padding: 8px !important;
+      padding: 0 !important;
       margin: 0 !important;
+      width: 100% !important;
     }
     .support-float-mode .spacer-bottom {
       display: none !important;
@@ -1601,10 +1602,113 @@
 {% if request.GET.support_float != '1' %}
 {{ soporte_admin_inicial|json_script:"support-admin-initial-data" }}
 <style>
-.admin-chat-dock{position:fixed;right:15px;bottom:88px;z-index:1095;display:flex;flex-direction:column-reverse;gap:8px;align-items:flex-end;pointer-events:none;touch-action:none;user-select:none;-webkit-user-select:none}.admin-chat-mini{position:relative;width:54px;height:54px;touch-action:none;user-select:none;-webkit-user-select:none;border:4px solid #fff;border-radius:50%;background:linear-gradient(145deg,#17324d,#087bb8);color:#fff;box-shadow:0 12px 30px rgba(16,50,80,.29);pointer-events:auto;cursor:grab;display:grid;place-items:center;font-weight:900}.admin-chat-mini:active{cursor:grabbing}.admin-chat-mini .initials{font-size:.78rem}.admin-chat-mini .count{position:absolute;right:-5px;top:-6px;min-width:22px;height:22px;padding:0 5px;border-radius:999px;background:#dc3545;border:2px solid #fff;color:#fff;font-size:.64rem;font-weight:900;display:none;place-items:center}.admin-chat-mini.unread .count{display:grid}.admin-chat-mini.unread{animation:adminPulse 1.7s infinite}.admin-chat-mini.active{outline:3px solid rgba(8,123,184,.18)}.admin-chat-panel{position:fixed;right:81px;bottom:88px;z-index:1094;width:min(330px,calc(100vw - 105px));height:min(460px,calc(100vh - 165px));border:1px solid #dde8ef;border-radius:20px;background:#fff;box-shadow:0 22px 60px rgba(15,45,79,.25);overflow:hidden;opacity:0;visibility:hidden;transform:translateY(10px) scale(.98);transition:.18s}.admin-chat-panel.open{opacity:1;visibility:visible;transform:none}.admin-chat-head{height:52px;padding:7px 8px 7px 12px;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,#17324d,#087bb8);color:#fff}.admin-chat-head strong{font-size:.78rem}.admin-chat-head small{display:block;font-size:.6rem;opacity:.82;max-width:190px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.admin-chat-actions{display:flex;gap:4px}.admin-chat-actions button,.admin-chat-actions a{width:31px;height:31px;border:0;border-radius:9px;display:grid;place-items:center;background:rgba(255,255,255,.14);color:#fff!important;text-decoration:none}.admin-chat-frame{display:block;width:100%;height:calc(100% - 52px);border:0;background:#f5f9fc}@keyframes adminPulse{50%{box-shadow:0 13px 34px rgba(8,123,184,.48),0 0 0 8px rgba(8,123,184,.09)}}@media(max-width:600px){.admin-chat-dock{right:11px;bottom:88px}.admin-chat-panel{left:8px;right:8px;bottom:82px;width:auto;height:calc(100vh - 102px)}}
+.admin-chat-dock{
+  position:fixed;right:18px;bottom:92px;z-index:1095;
+  display:flex;flex-direction:column-reverse;gap:10px;align-items:flex-end;
+  pointer-events:none;touch-action:none;user-select:none;-webkit-user-select:none
+}
+.admin-chat-mini{
+  position:relative;width:58px;height:58px;touch-action:none;user-select:none;
+  -webkit-user-select:none;border:3px solid #fff;border-radius:50%;
+  background:linear-gradient(145deg,#15334e 0%,#0a679c 56%,#0789b3 100%);
+  color:#fff;box-shadow:0 14px 32px rgba(16,50,80,.31);
+  pointer-events:auto;cursor:grab;display:grid;place-items:center;font-weight:900;
+  transition:transform .16s ease,box-shadow .16s ease
+}
+.admin-chat-mini:hover{transform:translateY(-2px);box-shadow:0 18px 38px rgba(16,50,80,.38)}
+.admin-chat-mini:active{cursor:grabbing;transform:scale(.97)}
+.admin-chat-mini .initials{font-size:.78rem;letter-spacing:.02em}
+.admin-chat-mini .count{
+  position:absolute;right:-5px;top:-6px;min-width:23px;height:23px;padding:0 6px;
+  border-radius:999px;background:#e11d48;border:2px solid #fff;color:#fff;
+  font-size:.65rem;font-weight:900;display:none;place-items:center;
+  box-shadow:0 4px 12px rgba(225,29,72,.32)
+}
+.admin-chat-mini.unread .count{display:grid}
+.admin-chat-mini.unread{animation:adminPulse 1.8s infinite}
+.admin-chat-mini.active{outline:3px solid rgba(8,123,184,.18)}
+
+.admin-chat-panel{
+  position:fixed;right:88px;bottom:90px;z-index:1094;
+  width:min(410px,calc(100vw - 118px));height:min(630px,calc(100vh - 128px));
+  border:1px solid rgba(199,218,229,.95);border-radius:25px;background:#fff;
+  box-shadow:0 28px 80px rgba(15,45,79,.28),0 4px 18px rgba(15,45,79,.08);
+  overflow:hidden;opacity:0;visibility:hidden;transform:translateY(12px) scale(.985);
+  transition:opacity .18s ease,transform .18s ease,visibility .18s ease
+}
+.admin-chat-panel.open{opacity:1;visibility:visible;transform:none}
+.admin-chat-head{
+  height:74px;padding:11px 11px 11px 14px;display:flex;align-items:center;
+  justify-content:space-between;gap:10px;
+  background:linear-gradient(135deg,#112c46 0%,#0b547f 52%,#087da9 100%);
+  color:#fff;border-bottom:1px solid rgba(255,255,255,.12)
+}
+.admin-chat-head-main{display:flex;align-items:center;gap:10px;min-width:0}
+.admin-chat-head-avatar{
+  width:43px;height:43px;border-radius:50%;display:grid;place-items:center;flex:0 0 auto;
+  background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.28);
+  font-size:.82rem;font-weight:900;letter-spacing:.02em
+}
+.admin-chat-head-copy{min-width:0}
+.admin-chat-head strong{
+  display:block;font-size:.88rem;font-weight:850;line-height:1.2;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis
+}
+.admin-chat-head small{
+  display:flex;align-items:center;gap:5px;font-size:.67rem;opacity:.88;
+  max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:3px
+}
+.admin-chat-live-dot{width:7px;height:7px;border-radius:50%;background:#69f0ae;box-shadow:0 0 0 3px rgba(105,240,174,.13);flex:0 0 auto}
+.admin-chat-actions{display:flex;gap:5px;flex:0 0 auto}
+.admin-chat-actions button,.admin-chat-actions a{
+  width:32px;height:32px;border:0;border-radius:10px;display:grid;place-items:center;
+  background:rgba(255,255,255,.12);color:#fff!important;text-decoration:none;
+  transition:background .15s ease,transform .15s ease
+}
+.admin-chat-actions button:hover,.admin-chat-actions a:hover{background:rgba(255,255,255,.22);transform:translateY(-1px)}
+.admin-chat-mount{height:calc(100% - 74px);background:#eef5f8}
+.admin-chat-frame{display:block;width:100%;height:100%;border:0;background:#eef5f8}
+
+@keyframes adminPulse{
+  50%{box-shadow:0 15px 36px rgba(8,123,184,.46),0 0 0 8px rgba(8,123,184,.09)}
+}
+@media(max-width:700px){
+  .admin-chat-dock{right:12px;bottom:88px}
+  .admin-chat-mini{width:55px;height:55px}
+  .admin-chat-panel{
+    left:8px!important;right:8px!important;bottom:76px;
+    width:auto!important;height:min(76vh,640px);border-radius:22px
+  }
+  .admin-chat-head{height:68px;padding:9px 9px 9px 12px}
+  .admin-chat-head-avatar{width:39px;height:39px}
+  .admin-chat-head strong{font-size:.84rem}
+  .admin-chat-head small{max-width:175px;font-size:.63rem}
+  .admin-chat-mount{height:calc(100% - 68px)}
+}
+@media(max-width:420px){
+  .admin-chat-panel{left:5px!important;right:5px!important;bottom:72px;height:78vh;border-radius:20px}
+  .admin-chat-actions button,.admin-chat-actions a{width:30px;height:30px}
+  .admin-chat-head small{max-width:130px}
+}
 </style>
 <div id="adminChatDock" class="admin-chat-dock"></div>
-<section id="adminChatPanel" class="admin-chat-panel"><header class="admin-chat-head"><div><strong id="adminChatTitle">Soporte JVAQUA</strong><small id="adminChatSubtitle">Conversación</small></div><div class="admin-chat-actions"><a id="adminChatFull" href="{% url 'asistente_tecnico:soporte_admin_lista' %}" title="Abrir completo"><i class="bi bi-arrows-fullscreen"></i></a><button id="adminChatMin" type="button" title="Minimizar"><i class="bi bi-dash-lg"></i></button><button id="adminChatClose" type="button" title="Cerrar burbuja"><i class="bi bi-x-lg"></i></button></div></header><div id="adminChatMount" style="height:calc(100% - 52px)"></div></section>
+<section id="adminChatPanel" class="admin-chat-panel" aria-label="Chat de soporte">
+  <header class="admin-chat-head">
+    <div class="admin-chat-head-main">
+      <div id="adminChatAvatar" class="admin-chat-head-avatar">JV</div>
+      <div class="admin-chat-head-copy">
+        <strong id="adminChatTitle">Soporte JVAQUA</strong>
+        <small><span class="admin-chat-live-dot"></span><span id="adminChatSubtitle">Conversación de soporte</span></small>
+      </div>
+    </div>
+    <div class="admin-chat-actions">
+      <a id="adminChatFull" href="{% url 'asistente_tecnico:soporte_admin_lista' %}" title="Abrir conversación completa"><i class="bi bi-arrows-angle-expand"></i></a>
+      <button id="adminChatMin" type="button" title="Minimizar"><i class="bi bi-dash-lg"></i></button>
+      <button id="adminChatClose" type="button" title="Cerrar burbuja"><i class="bi bi-x-lg"></i></button>
+    </div>
+  </header>
+  <div id="adminChatMount" class="admin-chat-mount"></div>
+</section>
 <script>
 (function(){
   const dock=document.getElementById('adminChatDock');
@@ -1630,9 +1734,8 @@
   let opened=new Set();
   let dismissedAt={};
   try{
-    opened=new Set(
-      JSON.parse(sessionStorage.getItem('jvaqua_admin_support_open')||'[]').map(String)
-    );
+    // Nunca restauramos chats antiguos al entrar/navegar en Administración.
+    sessionStorage.removeItem('jvaqua_admin_support_open');
     dismissedAt=JSON.parse(
       sessionStorage.getItem('jvaqua_admin_support_dismissed_at')||'{}'
     ) || {};
@@ -1652,10 +1755,6 @@
 
   function saveState(){
     try{
-      sessionStorage.setItem(
-        'jvaqua_admin_support_open',
-        JSON.stringify([...opened].slice(-5))
-      );
       sessionStorage.setItem(
         'jvaqua_admin_support_dismissed_at',
         JSON.stringify(dismissedAt)
@@ -1727,6 +1826,8 @@
     active=sid;
     title.textContent=c.titulo||'Cliente';
     subtitle.textContent=c.subtitulo||c.estado_label||'';
+    const headAvatar=document.getElementById('adminChatAvatar');
+    if(headAvatar)headAvatar.textContent=initials(c.titulo);
     full.href=c.url_completa;
 
     c.no_leidos=0;
