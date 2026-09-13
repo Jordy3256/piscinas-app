@@ -107,7 +107,7 @@ def _respuesta_salud(s):
         f"El Centro de Salud del ERP reporta {h['criticas']} incidencias críticas, "
         f"{h['atencion']} de atención y {h['avisos']} avisos, afectando {h['total_afectados']} registros."
     )
-    detalle=[f"{x['titulo']}: {x['cantidad']}" for x in h.get("incidencias", [])[:6]]
+    detalle=[f"{x['titulo']}: {x['cantidad']}" for x in h.get("items", [])[:6]]
     return texto, detalle, "Abre el Centro de Salud y resuelve primero las incidencias críticas."
 
 
@@ -142,31 +142,138 @@ def _respuesta_resumen(s):
     return texto, prioridades, "Atiende primero pérdida de margen, cartera vencida y errores críticos del ERP."
 
 
+def _normalizar(texto):
+    texto = (texto or "").lower()
+    reemplazos = str.maketrans("áéíóúüñ", "aeiouun")
+    return re.sub(r"\s+", " ", texto.translate(reemplazos)).strip()
+
+
+INTENCIONES = {
+    "rentabilidad": (
+        "rentab", "margen", "ganancia", "utilidad", "perdida", "perdiendo",
+        "rentable", "costo", "contratos malos", "contratos en riesgo",
+    ),
+    "crecimiento": (
+        "crec", "retenci", "alta", "baja", "recuper", "cancel", "clientes perdidos",
+        "contratos perdidos", "nuevos contratos",
+    ),
+    "cartera": (
+        "cartera", "cobro", "cobrar", "vencid", "deben", "cuentas por cobrar",
+        "moros", "morosidad", "pagos de clientes",
+    ),
+    "nomina": (
+        "nomina", "sueldo", "salario", "pago trabajadores", "pagar trabajadores",
+        "obligaciones trabajadores",
+    ),
+    "salud": (
+        "salud", "error", "problema", "incidencia", "alerta", "fallo",
+        "inconsistencia", "revisar hoy", "prioridad", "prioridades",
+    ),
+    "ciudades": (
+        "ciudad", "guayaquil", "quito", "cuenca", "manta", "portoviejo",
+        "samborondon", "duran", "azogues", "gualaceo", "crucita", "playas",
+        "santa elena",
+    ),
+}
+
+
+def _detectar_intenciones(pregunta):
+    q = _normalizar(pregunta)
+    detectadas = []
+    for tipo, palabras in INTENCIONES.items():
+        if any(p in q for p in palabras):
+            detectadas.append(tipo)
+
+    # Preguntas ejecutivas amplias deben cruzar información, no caer en un único módulo.
+    if any(p in q for p in (
+        "como esta jvaqua", "como estamos", "resumen", "situacion",
+        "que debo hacer", "que deberia hacer", "que revisar", "prioridades",
+        "decision", "decisiones", "estado de la empresa",
+    )):
+        return ["resumen"]
+
+    return detectadas or ["resumen"]
+
+
+def _prioridades_cruzadas(snapshot):
+    r = snapshot["rentabilidad"]
+    c = snapshot["crecimiento"]["actual"]
+    h = snapshot["salud"]
+    prioridades = []
+
+    if r["en_perdida"]:
+        prioridades.append((100, f"Rentabilidad: {r['en_perdida']} contrato(s) están generando pérdida."))
+    if r["criticos"]:
+        prioridades.append((90, f"Margen: {r['criticos']} contrato(s) tienen margen crítico menor al 15%."))
+    if snapshot["cartera_vencida"] > 0:
+        prioridades.append((85, f"Cartera: {_fmt(snapshot['cartera_vencida'])} está vencida y requiere gestión de cobro."))
+    if h["criticas"]:
+        prioridades.append((80, f"ERP: existen {h['criticas']} incidencia(s) crítica(s) que pueden afectar la operación."))
+    if c["crecimiento_neto"] < 0:
+        prioridades.append((75, f"Crecimiento: el balance mensual es {c['crecimiento_neto']:+d} contratos."))
+    if c["retencion"] < 95:
+        prioridades.append((70, f"Retención: está en {c['retencion']}%, por debajo de la referencia ejecutiva del 95%."))
+    if snapshot["nomina_pendiente"] > 0:
+        prioridades.append((45, f"Nómina: quedan {_fmt(snapshot['nomina_pendiente'])} pendientes del mes."))
+
+    prioridades.sort(key=lambda x: x[0], reverse=True)
+    return [texto for _, texto in prioridades[:5]] or [
+        "Los indicadores principales no muestran una prioridad crítica inmediata."
+    ]
+
+
+def _bloque_por_tipo(tipo, snapshot):
+    return {
+        "rentabilidad": _respuesta_rentabilidad,
+        "crecimiento": _respuesta_crecimiento,
+        "cartera": _respuesta_cartera,
+        "nomina": _respuesta_nomina,
+        "salud": _respuesta_salud,
+        "ciudades": _respuesta_ciudades,
+        "resumen": _respuesta_resumen,
+    }[tipo](snapshot)
+
+
 def responder_aquo_ejecutivo(pregunta, *, hoy=None, ciudad=None):
-    q=re.sub(r"\s+"," ",(pregunta or "").strip().lower())
-    snapshot=construir_snapshot_ejecutivo(hoy=hoy, ciudad=ciudad)
+    """
+    AQUO Ejecutivo 2.0.
 
-    if any(k in q for k in ("rentab","margen","ganancia","perdiendo dinero","pérdida","utilidad","contratos malos")):
-        tipo="rentabilidad"; respuesta=_respuesta_rentabilidad(snapshot)
-    elif any(k in q for k in ("crec","retenci","alta","baja","recuper","cancel","perdidos")):
-        tipo="crecimiento"; respuesta=_respuesta_crecimiento(snapshot)
-    elif any(k in q for k in ("cartera","cobro","cobrar","vencid","deben","cuentas por cobrar")):
-        tipo="cartera"; respuesta=_respuesta_cartera(snapshot)
-    elif any(k in q for k in ("nómina","nomina","trabajador","pagar","sueldo")):
-        tipo="nomina"; respuesta=_respuesta_nomina(snapshot)
-    elif any(k in q for k in ("salud","error","problema","incidencia","revisar hoy","alerta")):
-        tipo="salud"; respuesta=_respuesta_salud(snapshot)
-    elif any(k in q for k in ("ciudad","guayaquil","quito","cuenca","manta","portoviejo","samborond")):
-        tipo="ciudades"; respuesta=_respuesta_ciudades(snapshot)
+    Interpreta una pregunta administrativa, detecta una o varias áreas y arma
+    una respuesta cruzada exclusivamente con datos calculados desde el ERP.
+    No modifica información ni inventa valores.
+    """
+    snapshot = construir_snapshot_ejecutivo(hoy=hoy, ciudad=ciudad)
+    intenciones = _detectar_intenciones(pregunta)
+
+    if intenciones == ["resumen"]:
+        texto, detalle, recomendacion = _respuesta_resumen(snapshot)
+        detalle = _prioridades_cruzadas(snapshot)
+        tipo = "resumen ejecutivo"
+    elif len(intenciones) == 1:
+        tipo = intenciones[0]
+        texto, detalle, recomendacion = _bloque_por_tipo(tipo, snapshot)
     else:
-        tipo="resumen"; respuesta=_respuesta_resumen(snapshot)
+        # Respuesta multiárea: conserva una síntesis corta por cada dimensión
+        # detectada y termina con prioridades calculadas globalmente.
+        partes = []
+        detalle = []
+        for tipo_detectado in intenciones[:4]:
+            bloque_texto, bloque_detalle, _ = _bloque_por_tipo(tipo_detectado, snapshot)
+            partes.append(bloque_texto)
+            for item in bloque_detalle[:2]:
+                detalle.append(item)
+        texto = " ".join(partes)
+        prioridades = _prioridades_cruzadas(snapshot)
+        detalle.extend(prioridades)
+        recomendacion = prioridades[0]
+        tipo = "análisis cruzado"
 
-    texto, detalle, recomendacion=respuesta
     return {
         "tipo": tipo,
+        "intenciones": intenciones,
         "pregunta": pregunta,
         "respuesta": texto,
-        "detalle": detalle,
+        "detalle": detalle[:10],
         "recomendacion": recomendacion,
         "snapshot": snapshot,
     }

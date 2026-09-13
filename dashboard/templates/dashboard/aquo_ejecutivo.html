@@ -6,7 +6,7 @@
 .aq{--n:#17324d;--b:#0865d9;--a:#0aa6c7;--m:#68788b;--l:#e7edf5}.aq-hero,.aq-card{background:#fff;border:1px solid var(--l);border-radius:22px;box-shadow:0 10px 28px rgba(18,46,77,.06)}.aq-hero{padding:1.35rem;background:linear-gradient(135deg,#fff,#f0f8ff 62%,#e9fcff)}.aq-k{font-size:.72rem;letter-spacing:.09em;text-transform:uppercase;font-weight:900;color:var(--b)}.aq-title{font-size:1.75rem;font-weight:900;color:var(--n);margin:.25rem 0}.aq-sub{font-size:.84rem;color:var(--m);max-width:760px}.aq-card{padding:1rem 1.05rem}.aq-form{display:grid;grid-template-columns:1fr 210px auto;gap:.6rem}.aq-input{border:1px solid #dce6f0;border-radius:14px;padding:.78rem .9rem;width:100%;outline:none}.aq-input:focus{border-color:var(--b);box-shadow:0 0 0 3px rgba(8,101,217,.08)}.aq-btn{border:0;border-radius:14px;padding:.72rem 1rem;background:linear-gradient(135deg,var(--b),var(--a));color:#fff;font-weight:850}.aq-chips{display:flex;gap:.45rem;flex-wrap:wrap;margin-top:.7rem}.aq-chip{border:1px solid var(--l);background:#f8fbff;color:var(--n);border-radius:999px;padding:.38rem .65rem;font-size:.7rem;font-weight:750;cursor:pointer}.aq-answer{border-left:4px solid var(--a)}.aq-answer h3{font-size:1rem;font-weight:900;color:var(--n)}.aq-answer p{color:#34495e;font-size:.88rem;line-height:1.6}.aq-detail{padding:.55rem .65rem;border-radius:12px;background:#f7f9fc;margin:.4rem 0;font-size:.78rem;color:#42566c}.aq-rec{margin-top:.75rem;padding:.75rem;border-radius:14px;background:#edf8ff;color:#17466f;font-size:.8rem}.aq-note{font-size:.7rem;color:var(--m);margin-top:.7rem}@media(max-width:760px){.aq-form{grid-template-columns:1fr}.aq-title{font-size:1.45rem}}
 </style>
 <div class="aq">
-<section class="aq-hero mb-3"><div class="aq-k">JVAQUA · Inteligencia Empresarial</div><h1 class="aq-title">AQUO Ejecutivo</h1><div class="aq-sub">Consulta los datos reales registrados en el ERP. AQUO resume rentabilidad, crecimiento, cartera, nómina, ciudades y salud del sistema para ayudarte a decidir qué revisar primero.</div></section>
+<section class="aq-hero mb-3"><div class="aq-k">JVAQUA · Inteligencia Empresarial</div><h1 class="aq-title">AQUO Ejecutivo</h1><div class="aq-sub">Haz preguntas administrativas en lenguaje natural. AQUO puede cruzar rentabilidad, crecimiento, cartera, nómina, ciudades y salud del ERP en una misma respuesta y ordenar las prioridades.</div></section>
 <section class="aq-card mb-3">
 <form method="post">{% csrf_token %}<div class="aq-form">
 <input id="aqPregunta" class="aq-input" name="pregunta" value="{{ pregunta }}" placeholder="Ej.: ¿Qué contratos están perdiendo dinero?" required>
@@ -19,8 +19,9 @@
 <button class="aq-chip" type="button" data-q="¿Cómo está la cartera vencida?">Cartera</button>
 <button class="aq-chip" type="button" data-q="¿Qué ciudad es más rentable?">Ciudades</button>
 <button class="aq-chip" type="button" data-q="¿Qué debo revisar hoy?">Qué revisar hoy</button>
+<button class="aq-chip" type="button" data-q="Compara crecimiento, rentabilidad y cartera y dime qué debería priorizar.">Análisis cruzado</button>
 </div>
-<div class="aq-note">Esta versión responde con reglas ejecutivas explicables sobre información del ERP; no inventa cifras ni modifica registros.</div>
+<div class="aq-note">AQUO 2.0 interpreta consultas libres y puede combinar varias áreas. Todas las cifras provienen del ERP; esta versión analiza y recomienda, pero no modifica registros.</div>
 </section>
 {% if resultado %}
 <section class="aq-card aq-answer">
