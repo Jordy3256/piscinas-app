@@ -60,6 +60,66 @@ def _notificar_admin_digital(titulo, mensaje, url="/dashboard/asistente/administ
         pass
 
 
+def _sincronizar_notificacion_admin_soporte():
+    """
+    Mantiene UNA sola notificación de administración para Soporte Digital.
+
+    Mientras existan mensajes de clientes pendientes de leer, cada administrador
+    tiene una única notificación agregada. Cuando ya no quedan pendientes,
+    la notificación se elimina.
+    """
+    try:
+        from dashboard.models import Notificacion
+
+        User = get_user_model()
+        admins = User.objects.filter(
+            Q(is_superuser=True)
+            | Q(is_staff=True)
+            | Q(groups__name__in=["Administradores", "Administrador", "Admins", "Adimistradores"])
+        ).distinct()
+
+        pendientes = MensajeSoporteDigital.objects.filter(
+            remitente="cliente",
+            leido_admin=False,
+        )
+        total = pendientes.count()
+        conversaciones = pendientes.values("conversacion_id").distinct().count()
+
+        for admin_user in admins:
+            # Limpia avisos antiguos por mensaje de las versiones anteriores.
+            Notificacion.objects.filter(
+                user=admin_user,
+                tipo="general",
+                titulo__icontains="soporte JVAQUA Digital",
+            ).exclude(referencia_id=-9001).delete()
+
+            if total:
+                Notificacion.objects.update_or_create(
+                    user=admin_user,
+                    tipo="general",
+                    referencia_id=-9001,
+                    defaults={
+                        "titulo": "Mensajes pendientes de soporte",
+                        "mensaje": (
+                            f"Tienes {total} mensaje(s) pendiente(s) en "
+                            f"{conversaciones} conversación(es) de JVAQUA Digital."
+                        ),
+                        "url": "/dashboard/asistente/administracion/soporte/",
+                        "leida": False,
+                        "leida_en": None,
+                    },
+                )
+            else:
+                Notificacion.objects.filter(
+                    user=admin_user,
+                    tipo="general",
+                    referencia_id=-9001,
+                ).delete()
+    except Exception:
+        # El flujo de soporte no debe romperse por un aviso administrativo.
+        pass
+
+
 def _suscriptor(user):
     if not user.is_authenticated:
         return None
@@ -1641,11 +1701,7 @@ def digital_soporte_view(request):
                     return redirect("asistente_tecnico:digital_soporte")
                 conversacion.ultimo_mensaje_en = mensaje.creado_en
                 conversacion.save(update_fields=["ultimo_mensaje_en", "actualizada_en"])
-            _notificar_admin_digital(
-                "Nuevo mensaje de soporte JVAQUA Digital",
-                f"{request.user.get_full_name() or request.user.username}: {texto[:120] or 'envió un archivo'}",
-                url=f"/dashboard/asistente/administracion/soporte/{conversacion.pk}/",
-            )
+            _sincronizar_notificacion_admin_soporte()
             return redirect("asistente_tecnico:digital_soporte_chat", pk=conversacion.pk)
 
     return render(request, "asistente_tecnico/digital_soporte.html", {
@@ -1730,6 +1786,7 @@ def soporte_admin_mensajes_api(request, pk):
         remitente="cliente",
         leido_admin=False,
     ).update(leido_admin=True)
+    _sincronizar_notificacion_admin_soporte()
 
     return JsonResponse({
         "ok": True,
@@ -1775,11 +1832,7 @@ def digital_soporte_chat_view(request, pk):
                 conversacion.estado = "espera_admin"
                 conversacion.ultimo_mensaje_en = mensaje.creado_en
                 conversacion.save(update_fields=["estado", "ultimo_mensaje_en", "actualizada_en"])
-            _notificar_admin_digital(
-                "Respuesta de soporte JVAQUA Digital",
-                f"{request.user.get_full_name() or request.user.username}: {texto[:120] or 'envió un archivo'}",
-                url=f"/dashboard/asistente/administracion/soporte/{conversacion.pk}/",
-            )
+            _sincronizar_notificacion_admin_soporte()
             if request.headers.get("x-requested-with") == "XMLHttpRequest":
                 mensaje = MensajeSoporteDigital.objects.prefetch_related("adjuntos").get(pk=mensaje.pk)
                 return JsonResponse({
@@ -1833,6 +1886,7 @@ def soporte_admin_chat_view(request, pk):
         pk=pk,
     )
     conversacion.mensajes.filter(remitente="cliente", leido_admin=False).update(leido_admin=True)
+    _sincronizar_notificacion_admin_soporte()
 
     if request.method == "POST":
         accion = request.POST.get("accion")

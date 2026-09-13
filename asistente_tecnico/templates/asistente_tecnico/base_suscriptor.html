@@ -49,6 +49,8 @@
 .support-float-mode .mobile-orbit-nav,
 .support-float-mode .mobile-orbit-dock,
 .support-float-mode .mobile-orbit-toggle,
+.support-float-mode .mobile-orbit-items,
+.support-float-mode .mobile-orbit-backdrop,
 .support-float-mode .bottom-nav,
 .support-float-mode .jv-quick-fab,
 .support-float-mode .jv-quick-toggle{display:none!important}
@@ -87,8 +89,23 @@
  function destroy(){if(frame){frame.remove();frame=null}mount.innerHTML=''}
  function min(){panel.classList.remove('open');destroy();active=null;render()}
  function openChat(id){const c=map.get(String(id));if(!c)return;active=String(id);title.textContent=c.titulo;subtitle.textContent=c.subtitulo||c.estado_label;full.href=c.url_completa;destroy();frame=document.createElement('iframe');frame.className='support-frame';frame.src=c.url;frame.title='Soporte JVAQUA';mount.appendChild(frame);panel.classList.add('open');render()}
- function render(){dock.innerHTML='';[...map.values()].slice(0,5).reverse().forEach(c=>{const b=document.createElement('button');b.type='button';b.className='support-mini'+(c.no_leidos>0?' unread':'')+(String(c.id)===active?' active':'');b.title=c.subtitulo||'Soporte';b.innerHTML='<i class="bi bi-headset"></i><span class="count">'+(c.no_leidos||0)+'</span>';b.onclick=()=>String(c.id)===active&&panel.classList.contains('open')?min():openChat(c.id);dock.appendChild(b)})}
- async function poll(){try{const r=await fetch(endpoint,{headers:{'X-Requested-With':'XMLHttpRequest'},cache:'no-store'});if(!r.ok)return;const d=await r.json();map=new Map((d.conversaciones||[]).map(c=>[String(c.id),c]));(d.conversaciones||[]).forEach(c=>{last[c.id]=c.no_leidos});render()}catch(e){}}
+ function render(){dock.innerHTML='';[...map.values()].slice(0,5).reverse().forEach(c=>{const b=document.createElement('button');b.type='button';b.className='support-mini'+(c.no_leidos>0?' unread':'')+(String(c.id)===active?' active':'');b.title=c.subtitulo||'Soporte';b.innerHTML='<span style="font-size:1.2rem;line-height:1">💬</span><span class="count">'+(c.no_leidos||0)+'</span>';b.onclick=()=>String(c.id)===active&&panel.classList.contains('open')?min():openChat(c.id);dock.appendChild(b)})}
+ async function poll(){try{
+   const r=await fetch(endpoint,{headers:{'X-Requested-With':'XMLHttpRequest'},cache:'no-store'});
+   if(!r.ok)return;
+   const d=await r.json();
+   const incoming=d.conversaciones||[];
+   map=new Map(incoming.map(c=>[String(c.id),c]));
+   incoming.forEach(c=>{
+     const before=last[c.id]||0;
+     if(c.no_leidos>before){
+       // Nueva respuesta: la burbuja queda visible y resaltada.
+       if(String(active)!==String(c.id)) active=null;
+     }
+     last[c.id]=c.no_leidos;
+   });
+   render();
+ }catch(e){}}
  document.getElementById('supportMin')?.addEventListener('click',min);setInterval(poll,4000);poll();
 })();
 </script>
