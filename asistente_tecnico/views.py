@@ -12,6 +12,7 @@ from django.http import HttpResponseForbidden, JsonResponse, HttpResponseBadRequ
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 
 from trabajadores.models import Trabajador
 from .engine import DEFAULT_RULES, calcular_recomendacion, diagnosticar_problema_tecnico, PROBLEMAS_TECNICOS
@@ -2240,6 +2241,7 @@ def digital_notificaciones_leer_todas_view(request):
 
 @login_required
 @require_http_methods(["GET", "POST"])
+@xframe_options_sameorigin
 def digital_resolver_view(request):
     perfil=_suscriptor(request.user)
     if not perfil: return HttpResponseForbidden("No autorizado")

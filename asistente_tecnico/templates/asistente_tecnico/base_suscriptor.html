@@ -72,8 +72,8 @@
 .aquo-float-bubble{position:fixed;right:18px;bottom:100px;width:66px;height:66px;border:4px solid #fff;border-radius:50%;padding:0;background:linear-gradient(145deg,#0b6fe8,#0787bf);box-shadow:0 14px 34px rgba(4,77,165,.34);pointer-events:auto;cursor:grab;touch-action:none;overflow:hidden;transition:box-shadow .18s ease,transform .18s ease}
 .aquo-float-bubble:active{cursor:grabbing;transform:scale(.97)}
 .aquo-float-bubble:hover{box-shadow:0 18px 42px rgba(4,77,165,.42)}
-.aquo-float-bubble .aquo-mini-avatar{width:100%;height:100%;display:grid;place-items:center;overflow:hidden}
-.aquo-float-bubble .aquo-mini-avatar img,.aquo-float-bubble .aquo-mini-avatar svg{max-width:100%;max-height:100%;object-fit:contain}
+.aquo-float-bubble .aquo-mini-avatar{width:100%;height:100%;display:block;overflow:hidden;background:#dff4ff}
+.aquo-float-bubble .aquo-mini-face{display:block;width:100%;height:100%;object-fit:cover;object-position:center 18%;transform:scale(1.05)}
 .aquo-float-pulse{position:absolute;right:1px;bottom:2px;width:15px;height:15px;border-radius:50%;background:#22c55e;border:3px solid #fff}
 .aquo-float-panel{position:fixed;right:18px;bottom:176px;width:min(430px,calc(100vw - 28px));height:min(680px,calc(100vh - 120px));border:1px solid rgba(13,83,151,.18);border-radius:24px;background:#fff;box-shadow:0 24px 70px rgba(15,45,79,.27);overflow:hidden;pointer-events:auto;opacity:0;transform:translateY(14px) scale(.97);visibility:hidden;transition:.2s ease}
 .aquo-float-root.is-open .aquo-float-panel{opacity:1;transform:none;visibility:visible}
@@ -91,7 +91,7 @@
 </style>
 <div class="aquo-float-root" id="aquoFloatRoot" aria-live="polite">
   <button class="aquo-float-bubble" id="aquoFloatBubble" type="button" aria-label="Abrir AQUO flotante" title="AQUO · Asistente">
-    <span class="aquo-mini-avatar">{% include 'asistente_tecnico/partials/aqua_hero.html' %}</span>
+    <span class="aquo-mini-avatar"><img class="aquo-mini-face" src="{% static 'asistente_tecnico/characters/aquo-avatar-hq.webp' %}" alt="AQUO"></span>
     <span class="aquo-float-pulse"></span>
   </button>
   <div class="aquo-float-tip">Continuar con AQUO</div>
@@ -103,7 +103,9 @@
         <button id="aquoFloatMinimize" type="button" title="Minimizar"><i class="bi bi-dash-lg"></i></button>
       </div>
     </header>
-    <div id="aquoFloatFrameMount" style="height:calc(100% - 55px)"></div>
+    <div id="aquoFloatFrameMount" style="height:calc(100% - 55px);position:relative">
+      <div id="aquoFloatLoading" style="position:absolute;inset:0;display:grid;place-items:center;background:#f5f9fc;color:#607d91;font-size:.78rem;font-weight:750"><span><i class="bi bi-stars me-1"></i>Cargando AQUO...</span></div>
+    </div>
   </section>
 </div>
 <script>
@@ -130,6 +132,7 @@
     frame.title='AQUO · Asistente Inteligente';
     frame.src=resolverUrl();
     frame.setAttribute('loading','eager');
+    frame.addEventListener('load',()=>{const loading=document.getElementById('aquoFloatLoading');if(loading)loading.style.display='none'});
     mount.appendChild(frame);
   }
   function placePanel(){
