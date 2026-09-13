@@ -39,6 +39,7 @@ from .views import (
     aquo_ejecutivo_view,
     centro_decisiones_view,
     inteligencia_cartera_view,
+    inteligencia_operativa_view,
     calculadora_quimicos_view,
     cotizador_inteligente_admin_view,
     mi_cuenta_trabajador_view,
@@ -294,6 +295,7 @@ urlpatterns = [
         name="centro_decisiones",
     ),
     path("inteligencia/cartera/", inteligencia_cartera_view, name="inteligencia_cartera"),
+    path("inteligencia/operativa/", inteligencia_operativa_view, name="inteligencia_operativa"),
     path("herramientas/cotizador-inteligente/", cotizador_inteligente_admin_view, name="cotizador_inteligente_admin"),
     path(
         "herramientas/calculadora-quimicos/",

@@ -1,0 +1,36 @@
+{% extends "dashboard/base_admin.html" %}
+{% block title %}Inteligencia Operativa | JVAQUA ERP{% endblock %}
+{% block top_title %}Inteligencia Operativa{% endblock %}
+{% block content %}
+<style>
+.io{--n:#17324d;--b:#0865d9;--m:#6c7c8e;--l:#e5edf5;--r:#c93645;--y:#c78308;--g:#16805e}.hero,.cardx{background:#fff;border:1px solid var(--l);border-radius:21px;box-shadow:0 9px 25px rgba(17,45,76,.05)}.hero{padding:1.2rem;background:linear-gradient(135deg,#fff,#f1f8ff)}.k{font-size:.69rem;font-weight:900;letter-spacing:.09em;text-transform:uppercase;color:var(--b)}.title{font-size:1.65rem;font-weight:950;color:var(--n);margin:.2rem 0}.sub{font-size:.76rem;color:var(--m)}.grid{display:grid;grid-template-columns:repeat(5,1fr);gap:.6rem}.cardx{padding:.9rem}.val{font-size:1.35rem;font-weight:950;color:var(--n)}.two{display:grid;grid-template-columns:1.25fr .75fr;gap:.7rem}.rowx{display:grid;grid-template-columns:1.3fr .65fr .65fr .65fr .7fr;gap:.45rem;align-items:center;padding:.68rem 0;border-bottom:1px solid var(--l);font-size:.71rem}.rowx:last-child{border-bottom:0}.badge{font-size:.61rem;font-weight:900;border-radius:999px;padding:.28rem .42rem;background:#f2f6fa}.critico{color:var(--r)}.atencion{color:var(--y)}.saludable{color:var(--g)}.signal{padding:.65rem;border-radius:12px;margin-bottom:.5rem;font-size:.72rem}.signal.critico{background:#fee7e9}.signal.atencion{background:#fff3d8}.signal.saludable{background:#e6f7ef}.risk{display:block;padding:.62rem;border:1px solid var(--l);border-radius:12px;margin-bottom:.45rem;text-decoration:none;color:inherit}.risk strong{font-size:.73rem;color:var(--n)}.risk span{font-size:.67rem;color:var(--m)}.cities{display:grid;grid-template-columns:repeat(3,1fr);gap:.55rem}.city{background:#f7f9fc;border-radius:13px;padding:.65rem}.city strong{font-size:.82rem;color:var(--n)}@media(max-width:1000px){.grid{grid-template-columns:repeat(3,1fr)}.cities{grid-template-columns:repeat(2,1fr)}}@media(max-width:800px){.two{grid-template-columns:1fr}.rowx{grid-template-columns:1fr 1fr}.rowx .wide{grid-column:1/-1}}@media(max-width:560px){.grid{grid-template-columns:1fr 1fr}.cities{grid-template-columns:1fr}.title{font-size:1.4rem}}</style>
+<div class="io">
+<section class="hero mb-3"><div class="d-flex flex-wrap justify-content-between gap-2 align-items-end"><div><div class="k">Operación · Inteligencia Empresarial</div><h1 class="title">Inteligencia Operativa</h1><div class="sub">Cumplimiento de mantenimientos, carga por trabajador, incidencias recurrentes y riesgos de servicio.</div></div><form method="get"><select name="ciudad" class="form-select form-select-sm" onchange="this.form.submit()"><option value="">Toda JVAQUA</option>{% for c in ciudades %}<option value="{{ c.id }}" {% if ciudad_obj.id == c.id %}selected{% endif %}>{{ c.nombre }}</option>{% endfor %}</select></form></div></section>
+
+<div class="grid mb-3">
+<div class="cardx"><div class="sub">Programados este mes</div><div class="val">{{ analisis.programados_mes }}</div></div>
+<div class="cardx"><div class="sub">Realizados</div><div class="val">{{ analisis.realizados_mes }}</div></div>
+<div class="cardx"><div class="sub">Atrasados</div><div class="val">{{ analisis.atrasados }}</div></div>
+<div class="cardx"><div class="sub">Cumplimiento</div><div class="val">{{ analisis.cumplimiento }}%</div></div>
+<div class="cardx"><div class="sub">Próximos 7 días</div><div class="val">{{ analisis.proximos_7 }}</div><div class="sub">Hoy: {{ analisis.hoy_realizados }}/{{ analisis.hoy_total }} realizados</div></div>
+</div>
+
+<div class="two mb-3">
+<section class="cardx"><div class="k mb-2">Rendimiento por trabajador</div>
+{% for x in analisis.trabajadores %}
+<div class="rowx"><div class="wide"><strong>{{ x.trabajador.user.get_full_name|default:x.trabajador.user.username }}</strong></div><div>{{ x.realizados }}/{{ x.programados }} realizados</div><div>{{ x.atrasados }} atraso(s)</div><div>{{ x.proximos_7 }} próximos</div><div><span class="badge {{ x.nivel }}">{{ x.cumplimiento }}%</span></div></div>
+{% empty %}<div class="sub">Todavía no hay datos operativos para el período.</div>{% endfor %}
+</section>
+<aside class="cardx"><div class="k mb-2">Señales operativas</div>{% for s in analisis.senales %}<div class="signal {{ s.nivel }}"><strong>{{ s.titulo }}</strong><br>{{ s.texto }}</div>{% endfor %}</aside>
+</div>
+
+<div class="two mb-3">
+<section class="cardx"><div class="k mb-2">Riesgos de servicio</div>
+{% for r in analisis.riesgos %}<a class="risk" href="{{ r.url }}"><strong class="{{ r.nivel }}">{{ r.titulo }}</strong><br><span>{{ r.texto }}</span></a>{% empty %}<div class="sub">No se detectan riesgos operativos prioritarios.</div>{% endfor %}
+</section>
+<aside class="cardx"><div class="k mb-2">Carga próximos 7 días</div>{% for x in analisis.carga %}<div class="risk"><strong>{{ x.trabajador.user.get_full_name|default:x.trabajador.user.username }}</strong><br><span>{{ x.total }} mantenimiento(s) · carga {{ x.nivel }}</span></div>{% empty %}<div class="sub">No hay carga futura registrada.</div>{% endfor %}</aside>
+</div>
+
+<section class="cardx"><div class="k mb-2">Productividad por ciudad</div><div class="cities">{% for x in analisis.ranking_ciudades %}<div class="city"><strong>{{ x.nombre }}</strong><br><span class="sub">{{ x.realizados }}/{{ x.programados }} realizados · {{ x.atrasados }} atraso(s)</span><br><span class="badge {% if x.cumplimiento < 90 %}critico{% elif x.cumplimiento < 97 %}atencion{% else %}saludable{% endif %}">{{ x.cumplimiento }}%</span></div>{% empty %}<div class="sub">Sin información territorial.</div>{% endfor %}</div></section>
+</div>
+{% endblock %}
