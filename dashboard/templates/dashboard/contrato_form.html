@@ -395,7 +395,27 @@
 
               <label for="fecha_inicio" class="form-label">Fecha de inicio <span class="text-danger">*</span></label>
               <input type="date" id="fecha_inicio" name="fecha_inicio" class="form-control" value="{{ datos_formulario.fecha_inicio }}" required>
-              <div class="form-text">Esta fecha define automáticamente el inicio y cierre de cada periodo mensual.</div>
+              <div class="form-text mb-3">Esta fecha define automáticamente el inicio y cierre de cada periodo mensual.</div>
+
+              <div class="row g-2">
+                <div class="col-7">
+                  <label for="vigencia_meses" class="form-label">Vigencia contractual</label>
+                  <select id="vigencia_meses" name="vigencia_meses" class="form-select">
+                    <option value="" {% if not datos_formulario.vigencia_meses %}selected{% endif %}>Indefinida</option>
+                    <option value="6" {% if datos_formulario.vigencia_meses|stringformat:"s" == "6" %}selected{% endif %}>6 meses</option>
+                    <option value="12" {% if datos_formulario.vigencia_meses|stringformat:"s" == "12" %}selected{% endif %}>12 meses · 1 año</option>
+                    <option value="24" {% if datos_formulario.vigencia_meses|stringformat:"s" == "24" %}selected{% endif %}>24 meses · 2 años</option>
+                    {% if datos_formulario.vigencia_meses and datos_formulario.vigencia_meses != 6 and datos_formulario.vigencia_meses != 12 and datos_formulario.vigencia_meses != 24 %}
+                    <option value="{{ datos_formulario.vigencia_meses }}" selected>{{ datos_formulario.vigencia_meses }} meses</option>
+                    {% endif %}
+                  </select>
+                </div>
+                <div class="col-5">
+                  <label for="aviso_vencimiento_dias" class="form-label">Avisar antes</label>
+                  <div class="input-group"><input type="number" min="0" max="365" id="aviso_vencimiento_dias" name="aviso_vencimiento_dias" class="form-control" value="{{ datos_formulario.aviso_vencimiento_dias|default:30 }}"><span class="input-group-text">días</span></div>
+                </div>
+              </div>
+              <div class="cf-note mt-2">Los contratos con pago semestral adelantado se consideran anuales y usarán 12 meses si no seleccionas otra vigencia.</div>
             </div>
           </div>
 

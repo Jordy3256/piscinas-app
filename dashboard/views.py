@@ -53,7 +53,7 @@ from finanzas.models import (
     PromocionContrato,
 )
 from clientes.models import Cliente, Ciudad
-from contratos.models import Contrato, ReactivacionContrato, CotizacionMantenimiento, EquipamientoContrato
+from contratos.models import Contrato, ReactivacionContrato, CotizacionMantenimiento, EquipamientoContrato, RenovacionContrato
 from ordenes_trabajo.models import OrdenTrabajo
 from contratos.programacion import (
     DIAS_SEMANA,
@@ -7524,6 +7524,7 @@ def _validar_datos_contrato(request):
     precio_mensual_str = (request.POST.get("precio_mensual") or "").strip()
     valor_tecnico_str = (request.POST.get("valor_tecnico_mensual") or "0").strip()
     fecha_inicio_str = (request.POST.get("fecha_inicio") or "").strip()
+    vigencia_raw = (request.POST.get("vigencia_meses") or "").strip()
     activo = request.POST.get("activo") == "on"
     generacion_automatica = request.POST.get("generacion_automatica") == "on"
     tecnico_id = (request.POST.get("tecnico_designado") or "").strip()
@@ -7567,6 +7568,7 @@ def _validar_datos_contrato(request):
         ("facturacion_dia", 1, 31, requiere_factura and momento_facturacion in {"dia_fijo", "personalizado"}),
         ("facturacion_dias_antes", 0, 365, False),
         ("notificacion_factura_dias_antes", 0, 365, False),
+        ("aviso_vencimiento_dias", 0, 365, False),
     ]
     for nombre, minimo, maximo, obligatorio in configuracion:
         try: campos_enteros[nombre] = _entero_post(request, nombre, minimo, maximo, obligatorio)
@@ -7619,6 +7621,18 @@ def _validar_datos_contrato(request):
         # Una sola fuente para el ciclo comercial: la fecha de inicio.
         campos_enteros["periodo_dia_inicio"] = fecha_inicio.day
 
+    vigencia_meses = None
+    if vigencia_raw:
+        try:
+            vigencia_meses = int(vigencia_raw)
+            if not 1 <= vigencia_meses <= 120:
+                raise ValueError
+        except (TypeError, ValueError):
+            vigencia_meses = None
+            errores.append("La vigencia debe estar entre 1 y 120 meses.")
+    if programacion_cobro == "semestral_adelantado" and not vigencia_meses:
+        vigencia_meses = 12
+
     if programacion_cobro in {"inicio_periodo", "cierre_periodo", "despues_cierre"}:
         campos_enteros["cobro_mes_desfase"] = 0
 
@@ -7643,7 +7657,10 @@ def _validar_datos_contrato(request):
         "errores": errores, "cliente": cliente, "frecuencia": frecuencia,
         "frecuencia_personalizada": frecuencia_personalizada, "forma_pago": forma_pago,
         "forma_pago_personalizada": forma_pago_personalizada, "precio_mensual": precio_mensual,
-        "valor_tecnico_mensual": valor_tecnico_mensual, "fecha_inicio": fecha_inicio, "activo": activo,
+        "valor_tecnico_mensual": valor_tecnico_mensual, "fecha_inicio": fecha_inicio,
+        "vigencia_meses": vigencia_meses,
+        "aviso_vencimiento_dias": campos_enteros.get("aviso_vencimiento_dias") or 30,
+        "activo": activo,
         "generacion_automatica": generacion_automatica, "tecnico_designado": tecnico_designado,
         "tecnico_id": tecnico_id, "dias_visita": dias_visita, "programacion_cobro": programacion_cobro,
         "programacion_cobro_personalizada": programacion_personalizada, "porcentaje_primer_pago": porcentaje_primer_pago,
@@ -8316,6 +8333,8 @@ def contrato_crear_view(request):
         "precio_mensual": "",
         "valor_tecnico_mensual": "",
         "fecha_inicio": timezone.localdate().isoformat(),
+        "vigencia_meses": "",
+        "aviso_vencimiento_dias": 30,
         "activo": True,
         "generacion_automatica": True,
         "tecnico_id": "",
@@ -8360,6 +8379,8 @@ def contrato_crear_view(request):
                 "fecha_inicio",
                 "",
             ),
+            "vigencia_meses": request.POST.get("vigencia_meses", ""),
+            "aviso_vencimiento_dias": request.POST.get("aviso_vencimiento_dias", "30"),
             "activo": validacion["activo"],
             "generacion_automatica": validacion["generacion_automatica"],
             "tecnico_id": validacion["tecnico_id"],
@@ -8412,6 +8433,8 @@ def contrato_crear_view(request):
                 aplica_iva=validacion["aplica_iva"],
                 valor_tecnico_mensual=validacion["valor_tecnico_mensual"],
                 fecha_inicio=validacion["fecha_inicio"],
+                vigencia_meses=validacion["vigencia_meses"],
+                aviso_vencimiento_dias=validacion["aviso_vencimiento_dias"],
                 activo=validacion["activo"],
                 tecnico_designado=validacion["tecnico_designado"],
                 dias_visita=validacion["dias_visita"],
@@ -8529,6 +8552,8 @@ def contrato_editar_view(request, pk):
         "precio_mensual": contrato.precio_mensual,
         "valor_tecnico_mensual": contrato.valor_tecnico_mensual,
         "fecha_inicio": contrato.fecha_inicio.isoformat(),
+        "vigencia_meses": contrato.vigencia_meses or "",
+        "aviso_vencimiento_dias": contrato.aviso_vencimiento_dias,
         "activo": contrato.activo,
         "generacion_automatica": contrato.generacion_automatica,
         "tecnico_id": str(contrato.tecnico_designado_id or ""),
@@ -8604,6 +8629,8 @@ def contrato_editar_view(request, pk):
                 "fecha_inicio",
                 "",
             ),
+            "vigencia_meses": request.POST.get("vigencia_meses", ""),
+            "aviso_vencimiento_dias": request.POST.get("aviso_vencimiento_dias", "30"),
             "activo": validacion["activo"],
             "generacion_automatica": validacion["generacion_automatica"],
             "tecnico_id": validacion["tecnico_id"],
@@ -8645,6 +8672,8 @@ def contrato_editar_view(request, pk):
             contrato.aplica_iva = validacion["aplica_iva"]
             contrato.valor_tecnico_mensual = validacion["valor_tecnico_mensual"]
             contrato.fecha_inicio = validacion["fecha_inicio"]
+            contrato.vigencia_meses = validacion["vigencia_meses"]
+            contrato.aviso_vencimiento_dias = validacion["aviso_vencimiento_dias"]
             contrato.activo = validacion["activo"]
             contrato.tecnico_designado = validacion["tecnico_designado"]
             contrato.dias_visita = validacion["dias_visita"]
@@ -8848,6 +8877,7 @@ def contrato_detalle_view(request, pk):
             "proxima_reposicion_dias": proxima_reposicion_dias,
             "insumos_inventario": insumos_inventario,
             "promociones_contrato": contrato.promociones.all()[:12],
+            "renovaciones_contrato": contrato.renovaciones.select_related("registrada_por").all()[:12],
             "es_admin": True,
         },
     )
@@ -9274,6 +9304,84 @@ def contrato_reactivar_view(request, pk):
         "formas_pago": Contrato.FORMA_PAGO_CHOICES, "programaciones_cobro": Contrato.PROGRAMACION_COBRO_CHOICES,
         "dias_semana": DIAS_SEMANA.items(), "datos": datos, "next": siguiente, "es_admin": True,
     })
+
+
+@login_required
+@require_http_methods(["POST"])
+def contrato_renovar_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    contrato = get_object_or_404(
+        Contrato.objects.select_related("cliente", "tecnico_designado"),
+        pk=pk,
+    )
+    try:
+        meses = int(request.POST.get("vigencia_meses") or contrato.vigencia_meses or 12)
+        if not 1 <= meses <= 120:
+            raise ValueError
+    except (TypeError, ValueError):
+        messages.error(request, "Selecciona una vigencia válida para la renovación.")
+        return redirect("contrato_detalle", pk=contrato.pk)
+
+    hoy = timezone.localdate()
+    inicio_anterior = contrato.fecha_inicio
+    fin_anterior = contrato.fecha_fin_contrato
+
+    # Si existe un ciclo vigente/vencido, el siguiente inicia al día siguiente.
+    # Si el contrato era indefinido, inicia hoy manteniendo el historial original.
+    nuevo_inicio = (
+        fin_anterior + timedelta(days=1)
+        if fin_anterior
+        else max(hoy, contrato.fecha_inicio)
+    )
+
+    with transaction.atomic():
+        contrato.fecha_inicio = nuevo_inicio
+        contrato.vigencia_meses = meses
+        contrato.activo = True
+        contrato.fecha_baja = None
+        contrato.motivo_baja = ""
+        contrato.motivo_baja_detalle = ""
+        contrato.programado_hasta = None
+        contrato.save()
+
+        RenovacionContrato.objects.create(
+            contrato=contrato,
+            registrada_por=request.user,
+            fecha_renovacion=hoy,
+            inicio_anterior=inicio_anterior,
+            fin_anterior=fin_anterior,
+            nuevo_inicio=contrato.fecha_inicio,
+            nuevo_fin=contrato.fecha_fin_contrato,
+            vigencia_meses=meses,
+            observaciones=(request.POST.get("observaciones") or "").strip()[:250],
+        )
+
+        if contrato.generacion_automatica:
+            resultado = generar_mantenimientos_contrato(
+                contrato,
+                desde=contrato.fecha_inicio,
+                reconciliar=True,
+            )
+        else:
+            resultado = {"creados": 0, "errores": []}
+
+    _registrar_actividad(
+        user=request.user,
+        titulo="Contrato renovado",
+        descripcion=(
+            f"{request.user.username} renovó el contrato de {contrato.cliente} "
+            f"por {meses} mes(es), desde {contrato.fecha_inicio:%d/%m/%Y}."
+        ),
+        url=f"/dashboard/contratos/{contrato.pk}/",
+    )
+    messages.success(
+        request,
+        f"Contrato renovado hasta {contrato.fecha_fin_contrato:%d/%m/%Y}. "
+        f"Se programaron {resultado.get('creados', 0)} mantenimientos.",
+    )
+    return redirect("contrato_detalle", pk=contrato.pk)
 
 
 @login_required

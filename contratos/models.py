@@ -157,6 +157,25 @@ class Contrato(models.Model):
     valor_tecnico_mensual = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     fecha_inicio = models.DateField()
     fecha_inicio_original = models.DateField(null=True, blank=True, db_index=True)
+
+    # Vigencia contractual. Vacío = contrato indefinido.
+    vigencia_meses = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1), MaxValueValidator(120)],
+        help_text="Duración contractual en meses. Vacío significa vigencia indefinida.",
+    )
+    fecha_fin_contrato = models.DateField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="Último día vigente del ciclo contractual actual.",
+    )
+    aviso_vencimiento_dias = models.PositiveSmallIntegerField(
+        default=30,
+        validators=[MinValueValidator(0), MaxValueValidator(365)],
+        help_text="Días de anticipación para advertir que el contrato está por vencer.",
+    )
     tecnico_designado = models.ForeignKey(
         Trabajador,
         on_delete=models.SET_NULL,
@@ -244,6 +263,39 @@ class Contrato(models.Model):
     piscina_filtracion = models.CharField(max_length=100, blank=True, default="")
     piscina_desinfeccion = models.CharField(max_length=100, blank=True, default="")
     piscina_observaciones = models.TextField(blank=True, default="")
+
+    def calcular_fecha_fin_contrato(self):
+        """Último día del ciclo de vigencia actual."""
+        if not self.fecha_inicio or not self.vigencia_meses:
+            return None
+        anio, mes = _mover_mes(
+            self.fecha_inicio.year,
+            self.fecha_inicio.month,
+            int(self.vigencia_meses),
+        )
+        siguiente_ciclo = _fecha_segura(anio, mes, self.fecha_inicio.day)
+        return siguiente_ciclo - timedelta(days=1)
+
+    @property
+    def vigencia_definida(self):
+        return bool(self.vigencia_meses and self.fecha_fin_contrato)
+
+    @property
+    def dias_para_vencer(self):
+        if not self.fecha_fin_contrato:
+            return None
+        return (self.fecha_fin_contrato - date.today()).days
+
+    @property
+    def estado_vigencia(self):
+        if not self.fecha_fin_contrato:
+            return "indefinido"
+        dias = self.dias_para_vencer
+        if dias is not None and dias < 0:
+            return "vencido"
+        if dias is not None and dias <= int(self.aviso_vencimiento_dias or 30):
+            return "por_vencer"
+        return "vigente"
 
     @property
     def iva_mensual(self):
@@ -478,6 +530,16 @@ class Contrato(models.Model):
     def save(self, *args, **kwargs):
         if not self.fecha_inicio_original and self.fecha_inicio:
             self.fecha_inicio_original = self.fecha_inicio
+
+        # La modalidad semestral adelantada representa un compromiso anual.
+        # Si se crea sin vigencia explícita, se establece automáticamente en 12 meses.
+        if self.programacion_cobro == "semestral_adelantado" and not self.vigencia_meses:
+            self.vigencia_meses = 12
+
+        if self.vigencia_meses and self.fecha_inicio:
+            self.fecha_fin_contrato = self.calcular_fecha_fin_contrato()
+        else:
+            self.fecha_fin_contrato = None
         # La fecha de inicio es la única fuente del día de corte del periodo.
         # Evita configuraciones contradictorias entre "fecha de inicio" y "día de periodo".
         if self.fecha_inicio:
@@ -531,6 +593,39 @@ class Contrato(models.Model):
         verbose_name = "Contrato"
         verbose_name_plural = "Contratos"
         ordering = ["-activo", "cliente__nombre", "id"]
+
+
+
+
+class RenovacionContrato(models.Model):
+    contrato = models.ForeignKey(
+        Contrato,
+        on_delete=models.CASCADE,
+        related_name="renovaciones",
+    )
+    registrada_por = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="renovaciones_contrato_registradas",
+    )
+    fecha_renovacion = models.DateField(default=date.today, db_index=True)
+    inicio_anterior = models.DateField()
+    fin_anterior = models.DateField(null=True, blank=True)
+    nuevo_inicio = models.DateField()
+    nuevo_fin = models.DateField(null=True, blank=True)
+    vigencia_meses = models.PositiveSmallIntegerField(null=True, blank=True)
+    observaciones = models.CharField(max_length=250, blank=True, default="")
+    creada_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-fecha_renovacion", "-id"]
+        verbose_name = "Renovación de contrato"
+        verbose_name_plural = "Renovaciones de contratos"
+
+    def __str__(self):
+        return f"{self.contrato} · renovación {self.fecha_renovacion:%d/%m/%Y}"
 
 
 class ReactivacionContrato(models.Model):

@@ -50,6 +50,7 @@ from .views import (
     contrato_crear_view,
     contrato_editar_view,
     contrato_reactivar_view,
+    contrato_renovar_view,
     contrato_promocion_nueva_view,
     contrato_detalle_view,
     inventario_contrato_trabajador_view,
@@ -313,6 +314,11 @@ urlpatterns = [
         "contratos/<int:pk>/reactivar/",
         contrato_reactivar_view,
         name="contrato_reactivar",
+    ),
+    path(
+        "contratos/<int:pk>/renovar/",
+        contrato_renovar_view,
+        name="contrato_renovar",
     ),
     path(
         "contratos/<int:pk>/regenerar-programacion/",

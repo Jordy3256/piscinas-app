@@ -172,6 +172,12 @@ def generar_mantenimientos_contrato(contrato, desde=None, hasta=None, reconcilia
     inicio = desde or max(contrato.fecha_inicio, hoy)
     fin = hasta or sumar_un_mes(inicio)
 
+    # Nunca programar servicios fuera de la vigencia contractual.
+    if contrato.fecha_fin_contrato:
+        if inicio > contrato.fecha_fin_contrato:
+            return {"creados": 0, "existentes": 0, "eliminados": 0, "hasta": contrato.fecha_fin_contrato, "errores": []}
+        fin = min(fin, contrato.fecha_fin_contrato)
+
     eliminados = 0
     if reconciliar:
         eliminados, _ = Mantenimiento.objects.filter(
@@ -255,6 +261,8 @@ def mantener_programacion_automatica(horizonte_dias=14):
     creados = 0
     errores = []
     for contrato in contratos:
+        if contrato.fecha_fin_contrato and contrato.fecha_fin_contrato < hoy:
+            continue
         if contrato.programado_hasta and contrato.programado_hasta > limite:
             continue
 
@@ -264,6 +272,8 @@ def mantener_programacion_automatica(horizonte_dias=14):
             else max(contrato.fecha_inicio, hoy)
         )
         hasta = sumar_un_mes(desde)
+        if contrato.fecha_fin_contrato:
+            hasta = min(hasta, contrato.fecha_fin_contrato)
         resultado = generar_mantenimientos_contrato(
             contrato,
             desde=desde,
