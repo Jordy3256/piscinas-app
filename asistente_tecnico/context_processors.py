@@ -20,8 +20,10 @@ def _es_admin(user):
 
 def _payload_cliente(perfil):
     resultado = []
-    for conv in perfil.conversaciones_soporte.exclude(estado="cerrada").order_by("-ultimo_mensaje_en", "-id")[:5]:
+    for conv in perfil.conversaciones_soporte.exclude(estado="cerrada").order_by("-ultimo_mensaje_en", "-id")[:8]:
         no_leidos = conv.mensajes.filter(remitente="admin", leido_cliente=False).count()
+        if no_leidos <= 0:
+            continue
         resultado.append({
             "id": conv.pk,
             "titulo": "Soporte JVAQUA",
@@ -40,9 +42,11 @@ def _payload_admin():
     for conv in (
         ConversacionSoporteDigital.objects.exclude(estado="cerrada")
         .select_related("suscriptor__user")
-        .order_by("-ultimo_mensaje_en", "-id")[:8]
+        .order_by("-ultimo_mensaje_en", "-id")[:12]
     ):
         no_leidos = conv.mensajes.filter(remitente="cliente", leido_admin=False).count()
+        if no_leidos <= 0:
+            continue
         user = conv.suscriptor.user
         resultado.append({
             "id": conv.pk,

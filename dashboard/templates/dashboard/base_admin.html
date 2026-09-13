@@ -1615,7 +1615,19 @@
  (Array.isArray(initial)?initial:[]).forEach(c=>{last[c.id]=c.no_leidos||0;if((c.no_leidos||0)>0)opened.add(String(c.id))});
  function save(){sessionStorage.setItem('jvaqua_admin_support_open',JSON.stringify([...opened]))}function destroy(){if(frame){frame.remove();frame=null}mount.innerHTML=''}function min(){panel.classList.remove('open');destroy();active=null;render()}function initials(x){return(x||'JV').split(/\s+/).filter(Boolean).slice(0,2).map(y=>y[0]).join('').toUpperCase()}
  function openChat(id){const c=map.get(String(id));if(!c)return;const sid=String(id);opened.add(sid);save();active=sid;title.textContent=c.titulo;subtitle.textContent=c.subtitulo||c.estado_label;full.href=c.url_completa;destroy();frame=document.createElement('iframe');frame.className='admin-chat-frame';frame.src=c.url;frame.title='Soporte JVAQUA';mount.appendChild(frame);panel.classList.add('open');render()}
- function render(){dock.innerHTML='';[...map.values()].slice(0,5).reverse().forEach(c=>{const b=document.createElement('button');b.type='button';b.className='admin-chat-mini'+(c.no_leidos>0?' unread':'')+(String(c.id)===active?' active':'');b.title=(c.titulo||'Cliente')+' · '+(c.subtitulo||'');b.innerHTML='<span class="initials">'+initials(c.titulo)+'</span><span class="count">'+(c.no_leidos||0)+'</span>';b.onclick=()=>String(c.id)===active&&panel.classList.contains('open')?min():openChat(c.id);dock.appendChild(b)})}
+ function render(){
+   dock.innerHTML='';
+   [...map.values()].filter(c=>(c.no_leidos||0)>0 || opened.has(String(c.id))).slice(0,5).reverse().forEach(c=>{
+     const b=document.createElement('button');
+     b.type='button';
+     b.className='admin-chat-mini'+((c.no_leidos||0)>0?' unread':'')+(String(c.id)===active?' active':'');
+     b.title=(c.titulo||'Cliente')+' · '+(c.subtitulo||'');
+     b.innerHTML='<span class="initials">'+initials(c.titulo)+'</span><span class="count">'+(c.no_leidos||0)+'</span>';
+     const count=b.querySelector('.count'); if(count) count.style.display=(c.no_leidos||0)>0?'grid':'none';
+     b.onclick=()=>String(c.id)===active&&panel.classList.contains('open')?min():openChat(c.id);
+     dock.appendChild(b)
+   })
+ }
  async function poll(){try{const r=await fetch(endpoint,{headers:{'X-Requested-With':'XMLHttpRequest'},cache:'no-store'});if(!r.ok)return;const d=await r.json();map=new Map((d.conversaciones||[]).map(c=>[String(c.id),c]));(d.conversaciones||[]).forEach(c=>{if(c.no_leidos>(last[c.id]||0))opened.add(String(c.id));last[c.id]=c.no_leidos});save();render()}catch(e){}}
  document.getElementById('adminChatMin')?.addEventListener('click',min);render();setInterval(poll,4000);poll();
 })();

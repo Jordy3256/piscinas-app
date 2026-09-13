@@ -1,3 +1,4 @@
+from django.urls import reverse
 from datetime import timedelta, datetime, time
 from decimal import Decimal, InvalidOperation
 
@@ -1719,7 +1720,9 @@ def digital_soporte_view(request):
                 conversacion.ultimo_mensaje_en = mensaje.creado_en
                 conversacion.save(update_fields=["ultimo_mensaje_en", "actualizada_en"])
             _sincronizar_notificacion_admin_soporte()
-            return redirect("asistente_tecnico:digital_soporte_chat", pk=conversacion.pk)
+            return redirect(
+                f"{reverse('asistente_tecnico:digital_soporte_chat', args=[conversacion.pk])}?support_started=1"
+            )
 
     return render(request, "asistente_tecnico/digital_soporte.html", {
         "perfil": perfil, "piscinas": piscinas,

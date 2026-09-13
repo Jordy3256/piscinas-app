@@ -68,6 +68,20 @@
 (function(){
   const body=document.getElementById('chat-body'), form=document.getElementById('chat-form');
   if(!body)return;
+
+  const supportFloatMode = new URLSearchParams(location.search).get('support_float') === '1';
+  const supportStarted = new URLSearchParams(location.search).get('support_started') === '1';
+  const supportConversationId = "{{ conversacion.pk }}";
+
+  function rememberSupportBubble(){
+    if(supportFloatMode)return;
+    try{
+      const ids=JSON.parse(sessionStorage.getItem('jvaqua_client_support_open')||'[]').map(String);
+      if(!ids.includes(String(supportConversationId))) ids.push(String(supportConversationId));
+      sessionStorage.setItem('jvaqua_client_support_open',JSON.stringify(ids.slice(-5)));
+    }catch(e){}
+  }
+  if(supportStarted) rememberSupportBubble();
   let lastId=parseInt(body.dataset.lastId||'0',10), polling=false;
   const endpoint="{% url 'asistente_tecnico:digital_soporte_mensajes_api' conversacion.pk %}";
   const status=document.getElementById('chat-status');
@@ -110,7 +124,7 @@
         const r=await fetch(location.href,{method:'POST',body:new FormData(form),headers:{'X-Requested-With':'XMLHttpRequest'}});
         const data=await r.json();
         if(!r.ok||!data.ok)throw new Error(data.error||'No se pudo enviar');
-        render(data.mensaje); text.value='';text.style.height='auto';files.value='';preview.classList.add('d-none');
+        render(data.mensaje); rememberSupportBubble(); text.value='';text.style.height='auto';files.value='';preview.classList.add('d-none');
         if(status&&data.estado_label)status.textContent=data.estado_label;
       }catch(err){alert(err.message||'No pudimos enviar el mensaje. Inténtalo nuevamente.')} finally{send.disabled=false}
     });

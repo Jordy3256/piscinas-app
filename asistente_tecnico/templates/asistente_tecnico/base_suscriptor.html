@@ -89,11 +89,25 @@
  const endpoint="{% url 'asistente_tecnico:digital_soporte_burbuja_api' %}";
  const initial=JSON.parse(document.getElementById('support-client-initial-data')?.textContent||'[]');
  let map=new Map((Array.isArray(initial)?initial:[]).map(c=>[String(c.id),c])),active=null,frame=null,last={};
- (Array.isArray(initial)?initial:[]).forEach(c=>{last[c.id]=c.no_leidos||0});
+ let opened=new Set(JSON.parse(sessionStorage.getItem('jvaqua_client_support_open')||'[]').map(String));
+ (Array.isArray(initial)?initial:[]).forEach(c=>{last[c.id]=c.no_leidos||0;if((c.no_leidos||0)>0)opened.add(String(c.id))});
+ function saveOpened(){sessionStorage.setItem('jvaqua_client_support_open',JSON.stringify([...opened].slice(-5)))}
  function destroy(){if(frame){frame.remove();frame=null}mount.innerHTML=''}
  function min(){panel.classList.remove('open');destroy();active=null;render()}
- function openChat(id){const c=map.get(String(id));if(!c)return;active=String(id);title.textContent=c.titulo;subtitle.textContent=c.subtitulo||c.estado_label;full.href=c.url_completa;destroy();frame=document.createElement('iframe');frame.className='support-frame';frame.src=c.url;frame.title='Soporte JVAQUA';mount.appendChild(frame);panel.classList.add('open');render()}
- function render(){dock.innerHTML='';[...map.values()].slice(0,5).reverse().forEach(c=>{const b=document.createElement('button');b.type='button';b.className='support-mini'+(c.no_leidos>0?' unread':'')+(String(c.id)===active?' active':'');b.title=c.subtitulo||'Soporte';b.innerHTML='<span style="font-size:1.2rem;line-height:1">💬</span><span class="count">'+(c.no_leidos||0)+'</span>';b.onclick=()=>String(c.id)===active&&panel.classList.contains('open')?min():openChat(c.id);dock.appendChild(b)})}
+ function openChat(id){const c=map.get(String(id));if(!c)return;opened.add(String(id));saveOpened();active=String(id);title.textContent=c.titulo;subtitle.textContent=c.subtitulo||c.estado_label;full.href=c.url_completa;destroy();frame=document.createElement('iframe');frame.className='support-frame';frame.src=c.url;frame.title='Soporte JVAQUA';mount.appendChild(frame);panel.classList.add('open');render()}
+ function render(){
+   dock.innerHTML='';
+   [...map.values()].filter(c=>(c.no_leidos||0)>0 || opened.has(String(c.id))).slice(0,5).reverse().forEach(c=>{
+     const b=document.createElement('button');
+     b.type='button';
+     b.className='support-mini'+((c.no_leidos||0)>0?' unread':'')+(String(c.id)===active?' active':'');
+     b.title=c.subtitulo||'Soporte';
+     b.innerHTML='<span style="font-size:1.2rem;line-height:1">💬</span><span class="count">'+(c.no_leidos||0)+'</span>';
+     const count=b.querySelector('.count'); if(count) count.style.display=(c.no_leidos||0)>0?'grid':'none';
+     b.onclick=()=>String(c.id)===active&&panel.classList.contains('open')?min():openChat(c.id);
+     dock.appendChild(b);
+   })
+ }
  async function poll(){try{
    const r=await fetch(endpoint,{headers:{'X-Requested-With':'XMLHttpRequest'},cache:'no-store'});
    if(!r.ok)return;
@@ -102,11 +116,12 @@
    map=new Map(incoming.map(c=>[String(c.id),c]));
    incoming.forEach(c=>{
      const before=last[c.id]||0;
-     if(c.no_leidos>before){
-       // Nueva respuesta: la burbuja queda visible y resaltada.
+     if((c.no_leidos||0)>before){
+       opened.add(String(c.id));
+       saveOpened();
        if(String(active)!==String(c.id)) active=null;
      }
-     last[c.id]=c.no_leidos;
+     last[c.id]=c.no_leidos||0;
    });
    render();
  }catch(e){}}
