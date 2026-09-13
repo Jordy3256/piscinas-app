@@ -89,6 +89,8 @@ except Exception:
     PerfilSuscriptor = None
 
 
+from .salud_erp import diagnosticar_salud_erp
+
 # -------------------
 # Helpers de roles
 # -------------------
@@ -3776,6 +3778,23 @@ def marcar_todas_leidas_view(request):
 
     return JsonResponse({"ok": True})
 
+
+
+
+@login_required
+def salud_erp_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    diagnostico = diagnosticar_salud_erp(hoy=timezone.localdate())
+    return render(
+        request,
+        "dashboard/salud_erp.html",
+        {
+            "diagnostico": diagnostico,
+            "es_admin": True,
+        },
+    )
 
 @login_required
 def actividad_historial_view(request):

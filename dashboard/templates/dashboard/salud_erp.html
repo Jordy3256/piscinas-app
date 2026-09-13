@@ -1,0 +1,93 @@
+{% extends "dashboard/base_admin.html" %}
+{% block title %}Salud del ERP · JVAQUA{% endblock %}
+
+{% block content %}
+<style>
+  .health-wrap{max-width:1180px;margin:0 auto}
+  .health-hero{position:relative;overflow:hidden;border-radius:24px;padding:24px;background:linear-gradient(135deg,#0f172a,#123f6b 68%,#0e7490);color:#fff;box-shadow:0 18px 42px rgba(15,23,42,.16)}
+  .health-hero:after{content:"";position:absolute;width:300px;height:300px;border-radius:50%;right:-100px;top:-150px;background:rgba(255,255,255,.08)}
+  .health-kicker{font-size:.76rem;font-weight:900;letter-spacing:.14em;text-transform:uppercase;color:#93c5fd}
+  .health-title{font-size:clamp(1.7rem,4vw,2.45rem);font-weight:900;letter-spacing:-.045em;margin:.35rem 0 .4rem}
+  .health-sub{max-width:760px;color:rgba(255,255,255,.78);margin:0}
+  .health-score{min-width:190px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);border-radius:18px;padding:15px 17px;backdrop-filter:blur(10px)}
+  .health-score strong{display:block;font-size:1.7rem;line-height:1;font-weight:900}
+  .health-score span{font-size:.82rem;color:rgba(255,255,255,.75)}
+  .health-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:16px}
+  .hs-card{background:#fff;border:1px solid #e5eaf0;border-radius:18px;padding:16px;box-shadow:0 5px 16px rgba(15,23,42,.05)}
+  .hs-card small{display:block;color:#64748b;font-weight:700;margin-bottom:4px}
+  .hs-card strong{font-size:1.65rem;letter-spacing:-.04em}
+  .health-list{display:grid;gap:12px;margin-top:16px}
+  .health-item{background:#fff;border:1px solid #e5eaf0;border-radius:18px;padding:17px;box-shadow:0 5px 16px rgba(15,23,42,.05);display:flex;gap:15px;align-items:center}
+  .health-dot{width:46px;height:46px;border-radius:15px;display:flex;align-items:center;justify-content:center;font-weight:900;flex:0 0 auto}
+  .health-item.critica .health-dot{background:#fee2e2;color:#b91c1c}
+  .health-item.atencion .health-dot{background:#fef3c7;color:#92400e}
+  .health-item.aviso .health-dot{background:#dbeafe;color:#1d4ed8}
+  .health-main{min-width:0;flex:1}
+  .health-name{font-weight:900;color:#172033;margin:0 0 3px}
+  .health-desc{color:#64748b;font-size:.88rem;margin:0}
+  .health-count{font-size:1.45rem;font-weight:900;letter-spacing:-.04em;min-width:44px;text-align:center}
+  .health-empty{background:linear-gradient(135deg,#ecfdf5,#f0fdfa);border:1px solid #bbf7d0;border-radius:20px;padding:28px;text-align:center;margin-top:16px}
+  .health-empty .big{font-size:2.3rem}
+  @media(max-width:768px){
+    .health-summary{grid-template-columns:repeat(2,1fr)}
+    .health-item{align-items:flex-start;flex-wrap:wrap}
+    .health-item .btn{width:100%}
+    .health-score{width:100%}
+  }
+</style>
+
+<div class="health-wrap">
+  <section class="health-hero">
+    <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap position-relative" style="z-index:1">
+      <div>
+        <div class="health-kicker">Control interno · JVAQUA ERP</div>
+        <h1 class="health-title">Centro de Salud del ERP</h1>
+        <p class="health-sub">Detecta automáticamente inconsistencias que pueden afectar contratos, operación, cobros, nómina, inventario y datos maestros. Solo muestra puntos que requieren una acción.</p>
+      </div>
+      <div class="health-score">
+        <strong>{{ diagnostico.etiqueta }}</strong>
+        <span>Revisión {{ diagnostico.fecha|date:"d/m/Y" }}</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="health-summary">
+    <div class="hs-card"><small>Incidencias críticas</small><strong class="{% if diagnostico.criticas %}text-danger{% else %}text-success{% endif %}">{{ diagnostico.criticas }}</strong></div>
+    <div class="hs-card"><small>Requieren atención</small><strong class="{% if diagnostico.atencion %}text-warning{% else %}text-success{% endif %}">{{ diagnostico.atencion }}</strong></div>
+    <div class="hs-card"><small>Avisos preventivos</small><strong class="{% if diagnostico.avisos %}text-primary{% else %}text-success{% endif %}">{{ diagnostico.avisos }}</strong></div>
+    <div class="hs-card"><small>Registros afectados</small><strong>{{ diagnostico.total_afectados }}</strong></div>
+  </section>
+
+  {% if diagnostico.items %}
+  <div class="d-flex justify-content-between align-items-center gap-2 mt-4 mb-2">
+    <div>
+      <h5 class="fw-bold mb-0">Qué necesita atención</h5>
+      <div class="small text-muted">{{ diagnostico.total_items }} tipo{{ diagnostico.total_items|pluralize }} de incidencia detectado{{ diagnostico.total_items|pluralize }}</div>
+    </div>
+    <a href="{% url 'salud_erp' %}" class="btn btn-outline-primary btn-sm">↻ Volver a revisar</a>
+  </div>
+
+  <section class="health-list">
+    {% for item in diagnostico.items %}
+      <article class="health-item {{ item.severidad }}">
+        <div class="health-dot">
+          {% if item.severidad == "critica" %}!{% elif item.severidad == "atencion" %}△{% else %}i{% endif %}
+        </div>
+        <div class="health-main">
+          <h3 class="health-name">{{ item.titulo }}</h3>
+          <p class="health-desc">{{ item.descripcion }}</p>
+        </div>
+        <div class="health-count">{{ item.cantidad }}</div>
+        <a class="btn {% if item.severidad == 'critica' %}btn-danger{% elif item.severidad == 'atencion' %}btn-warning{% else %}btn-outline-primary{% endif %} btn-sm" href="{{ item.url }}">{{ item.accion }}</a>
+      </article>
+    {% endfor %}
+  </section>
+  {% else %}
+  <section class="health-empty">
+    <div class="big">✓</div>
+    <h4 class="fw-bold mt-2">El ERP está saludable</h4>
+    <p class="text-muted mb-0">No se detectaron inconsistencias operativas, financieras o de inventario que requieran intervención.</p>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

@@ -33,6 +33,7 @@ from .views import (
     ruta_resolver_coordenadas_view,
     dashboard_view,
     metas_empresa_view,
+    salud_erp_view,
     calculadora_quimicos_view,
     cotizador_inteligente_admin_view,
     mi_cuenta_trabajador_view,
@@ -261,6 +262,11 @@ urlpatterns = [
         "inicio/",
         inicio_view,
         name="inicio",
+    ),
+    path(
+        "salud-erp/",
+        salud_erp_view,
+        name="salud_erp",
     ),
     path("herramientas/cotizador-inteligente/", cotizador_inteligente_admin_view, name="cotizador_inteligente_admin"),
     path(
