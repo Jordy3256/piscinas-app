@@ -364,6 +364,12 @@ class Contrato(models.Model):
     def calendario_cobros(self, anio, mes):
         """Devuelve cuotas para el periodo indicado sin escribir en la base."""
         inicio, fin = self.periodo_servicio(anio, mes)
+
+        # Un ciclo que empieza después del vencimiento contractual no puede
+        # producir nuevos cobros. Lo ya emitido/pagado permanece como historial.
+        if self.fecha_fin_contrato and inicio > self.fecha_fin_contrato:
+            return []
+
         programacion = self.programacion_cobro or "inicio_periodo"
         destino_anio, destino_mes = _mover_mes(anio, mes, int(self.cobro_mes_desfase or 0))
 

@@ -1,0 +1,13 @@
+PROCESO DIARIO JVAQUA
+
+Comando:
+python manage.py procesar_jvaqua_diario
+
+Para una ejecución de prueba sin push:
+python manage.py procesar_jvaqua_diario --sin-push
+
+En Render se recomienda crear un Cron Job diario con:
+python manage.py procesar_jvaqua_diario
+
+Hora sugerida: una vez al día, madrugada de Ecuador.
+El comando es idempotente y puede ejecutarse nuevamente sin duplicar documentos.

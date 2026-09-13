@@ -132,6 +132,10 @@ def _periodos_a_materializar(contrato, desde_fecha=None, horizonte_meses=12):
         if contrato.fecha_inicio and periodo_fin <= contrato.fecha_inicio:
             continue
 
+        # Tampoco materializamos ciclos que comienzan después del vencimiento.
+        if contrato.fecha_fin_contrato and periodo_inicio > contrato.fecha_fin_contrato:
+            break
+
         yield anio, mes, periodo_inicio, periodo_fin
 
 
