@@ -93,6 +93,7 @@ from .salud_erp import diagnosticar_salud_erp
 from .inteligencia_rentabilidad import analizar_rentabilidad
 from .inteligencia_crecimiento import analizar_crecimiento_retencion
 from .aquo_ejecutivo import responder_aquo_ejecutivo
+from .centro_decisiones import construir_centro_decisiones
 
 # -------------------
 # Helpers de roles
@@ -3801,6 +3802,26 @@ def marcar_todas_leidas_view(request):
 
 
 
+
+
+
+@login_required
+def centro_decisiones_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    ciudad_id = (request.GET.get("ciudad") or "").strip()
+    ciudad_obj = Ciudad.objects.filter(pk=ciudad_id, activa=True).first() if ciudad_id.isdigit() else None
+    centro = construir_centro_decisiones(
+        hoy=timezone.localdate(),
+        ciudad=ciudad_obj,
+    )
+    return render(request, "dashboard/centro_decisiones.html", {
+        "centro": centro,
+        "ciudad_obj": ciudad_obj,
+        "ciudades": Ciudad.objects.filter(activa=True).order_by("orden", "nombre"),
+        "es_admin": True,
+    })
 
 
 @login_required
