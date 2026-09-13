@@ -1525,37 +1525,47 @@ def _respuesta_limite_soporte(request, perfil, *, ajax=False):
 
 
 @login_required
+def _soporte_conversacion_payload(conversacion, *, admin=False):
+    no_leidos = int(getattr(conversacion, "no_leidos", 0) or 0)
+    if admin:
+        usuario = conversacion.suscriptor.user
+        titulo = usuario.get_full_name() or usuario.username
+        base = f"/dashboard/asistente/administracion/soporte/{conversacion.pk}/"
+    else:
+        titulo = "Soporte JVAQUA"
+        base = f"/dashboard/asistente/digital/soporte/{conversacion.pk}/"
+    return {
+        "id": conversacion.pk,
+        "titulo": titulo,
+        "subtitulo": (conversacion.asunto or conversacion.get_categoria_display())[:80],
+        "no_leidos": no_leidos,
+        "estado": conversacion.estado,
+        "estado_label": conversacion.get_estado_display(),
+        "url": base + "?support_float=1",
+        "url_completa": base,
+    }
+
+
+@login_required
 def digital_soporte_burbuja_api(request):
     perfil = _suscriptor(request.user)
     if not perfil:
         return JsonResponse({"ok": False, "error": "No autorizado"}, status=403)
-
-    no_leidos = MensajeSoporteDigital.objects.filter(
-        conversacion__suscriptor=perfil,
-        remitente="admin",
-        leido_cliente=False,
-    ).count()
-    conversacion = (
-        perfil.conversaciones_soporte.exclude(estado="cerrada").order_by("-ultimo_mensaje_en", "-id").first()
+    conversaciones = list(
+        perfil.conversaciones_soporte.exclude(estado="cerrada")
+        .annotate(no_leidos=Count(
+            "mensajes",
+            filter=Q(mensajes__remitente="admin", mensajes__leido_cliente=False),
+        ))
+        .order_by("-ultimo_mensaje_en", "-id")[:5]
     )
-    if not conversacion and no_leidos:
-        conversacion = perfil.conversaciones_soporte.order_by("-ultimo_mensaje_en", "-id").first()
-
-    limite = _estado_limite_soporte(perfil)
+    payload = [_soporte_conversacion_payload(c, admin=False) for c in conversaciones]
     return JsonResponse({
         "ok": True,
-        "visible": bool(conversacion),
-        "conversacion_id": conversacion.pk if conversacion else None,
-        "url": (
-            f"/dashboard/asistente/digital/soporte/{conversacion.pk}/?support_float=1"
-            if conversacion else ""
-        ),
-        "url_completa": (
-            f"/dashboard/asistente/digital/soporte/{conversacion.pk}/"
-            if conversacion else "/dashboard/asistente/digital/soporte/"
-        ),
-        "no_leidos": no_leidos,
-        "limite": limite,
+        "visible": bool(payload),
+        "conversaciones": payload,
+        "no_leidos": sum(x["no_leidos"] for x in payload),
+        "limite": _estado_limite_soporte(perfil),
     })
 
 
@@ -1563,37 +1573,21 @@ def digital_soporte_burbuja_api(request):
 def soporte_admin_burbuja_api(request):
     if not _es_admin(request.user):
         return JsonResponse({"ok": False, "error": "No autorizado"}, status=403)
-
-    qs = ConversacionSoporteDigital.objects.annotate(
-        no_leidos=Count(
+    conversaciones = list(
+        ConversacionSoporteDigital.objects.exclude(estado="cerrada")
+        .annotate(no_leidos=Count(
             "mensajes",
             filter=Q(mensajes__remitente="cliente", mensajes__leido_admin=False),
-        )
-    ).filter(no_leidos__gt=0).select_related("suscriptor__user").order_by("-ultimo_mensaje_en", "-id")
-    conversacion = qs.first()
-    total_no_leidos = MensajeSoporteDigital.objects.filter(
-        remitente="cliente",
-        leido_admin=False,
-    ).count()
-
+        ))
+        .select_related("suscriptor__user")
+        .order_by("-ultimo_mensaje_en", "-id")[:8]
+    )
+    payload = [_soporte_conversacion_payload(c, admin=True) for c in conversaciones]
     return JsonResponse({
         "ok": True,
-        "visible": bool(conversacion),
-        "conversacion_id": conversacion.pk if conversacion else None,
-        "url": (
-            f"/dashboard/asistente/administracion/soporte/{conversacion.pk}/?support_float=1"
-            if conversacion else ""
-        ),
-        "url_completa": (
-            f"/dashboard/asistente/administracion/soporte/{conversacion.pk}/"
-            if conversacion else "/dashboard/asistente/administracion/soporte/"
-        ),
-        "no_leidos": total_no_leidos,
-        "cliente": (
-            conversacion.suscriptor.user.get_full_name()
-            or conversacion.suscriptor.user.username
-            if conversacion else ""
-        ),
+        "visible": any(x["no_leidos"] > 0 for x in payload),
+        "conversaciones": payload,
+        "no_leidos": sum(x["no_leidos"] for x in payload),
     })
 
 
@@ -2351,6 +2345,31 @@ def digital_notificaciones_leer_todas_view(request):
         programada_para__lte=timezone.now(),
         leida=False,
     ).update(leida=True)
+    return redirect("asistente_tecnico:digital_notificaciones")
+
+
+@login_required
+@require_http_methods(["POST"])
+def digital_notificacion_eliminar_view(request, pk):
+    perfil = _suscriptor(request.user)
+    if not perfil:
+        return HttpResponseForbidden("No autorizado")
+    get_object_or_404(NotificacionDigital, pk=pk, suscriptor=perfil).delete()
+    messages.success(request, "Notificación eliminada.")
+    return redirect("asistente_tecnico:digital_notificaciones")
+
+
+@login_required
+@require_http_methods(["POST"])
+def digital_notificaciones_eliminar_todas_view(request):
+    perfil = _suscriptor(request.user)
+    if not perfil:
+        return HttpResponseForbidden("No autorizado")
+    NotificacionDigital.objects.filter(
+        suscriptor=perfil,
+        programada_para__lte=timezone.now(),
+    ).delete()
+    messages.success(request, "Se eliminaron tus notificaciones.")
     return redirect("asistente_tecnico:digital_notificaciones")
 
 

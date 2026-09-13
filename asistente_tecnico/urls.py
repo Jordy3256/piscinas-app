@@ -25,6 +25,8 @@ urlpatterns = [
     path("digital/notificaciones/", views.digital_notificaciones_view, name="digital_notificaciones"),
     path("digital/notificaciones/<int:pk>/leer/", views.digital_notificacion_leer_view, name="digital_notificacion_leer"),
     path("digital/notificaciones/leer-todas/", views.digital_notificaciones_leer_todas_view, name="digital_notificaciones_leer_todas"),
+    path("digital/notificaciones/<int:pk>/eliminar/", views.digital_notificacion_eliminar_view, name="digital_notificacion_eliminar"),
+    path("digital/notificaciones/eliminar-todas/", views.digital_notificaciones_eliminar_todas_view, name="digital_notificaciones_eliminar_todas"),
     path("", views.asistente_inicio_view, name="inicio"),
     path("historial/", views.asistente_historial_view, name="historial"),
     # Compatibilidad: la biblioteca antigua redirige conceptualmente a la biblioteca técnica nueva.

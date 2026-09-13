@@ -1599,114 +1599,19 @@
 
 {% if request.GET.support_float != '1' %}
 <style>
-.admin-support-root{position:fixed;z-index:1095;inset:0;pointer-events:none;display:none}.admin-support-root.is-visible{display:block}.admin-support-root.is-open .admin-support-panel{opacity:1;visibility:visible;transform:none}
-.admin-support-bubble{position:fixed;right:18px;bottom:95px;width:62px;height:62px;border:4px solid #fff;border-radius:50%;background:linear-gradient(145deg,#17324d,#087bb8);color:#fff;box-shadow:0 14px 34px rgba(16,50,80,.32);pointer-events:auto;cursor:pointer;font-size:1.45rem;animation:adminSupportPulse 1.8s infinite}
-.admin-support-badge{position:absolute;right:-4px;top:-5px;min-width:23px;height:23px;padding:0 5px;border-radius:999px;background:#dc3545;border:2px solid #fff;color:#fff;font-size:.68rem;font-weight:900;display:grid;place-items:center}
-.admin-support-panel{position:fixed;right:18px;bottom:168px;width:min(440px,calc(100vw - 28px));height:min(660px,calc(100vh - 115px));border:1px solid #dde8ef;border-radius:24px;background:#fff;box-shadow:0 24px 70px rgba(15,45,79,.27);overflow:hidden;pointer-events:auto;opacity:0;visibility:hidden;transform:translateY(12px) scale(.97);transition:.2s ease}
-.admin-support-head{height:56px;padding:8px 9px 8px 14px;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,#17324d,#087bb8);color:#fff}.admin-support-head strong{font-size:.82rem}.admin-support-head small{display:block;font-size:.66rem;opacity:.82}
-.admin-support-actions{display:flex;gap:5px}.admin-support-actions button,.admin-support-actions a{width:34px;height:34px;border:0;border-radius:11px;display:grid;place-items:center;background:rgba(255,255,255,.14);color:#fff!important;text-decoration:none}
-.admin-support-frame{width:100%;height:calc(100% - 56px);border:0;background:#f5f9fc}@keyframes adminSupportPulse{50%{box-shadow:0 14px 36px rgba(8,123,184,.5),0 0 0 9px rgba(8,123,184,.09)}}
-@media(max-width:600px){.admin-support-bubble{right:14px;bottom:92px}.admin-support-panel{left:8px;right:8px;bottom:86px;width:auto;height:calc(100vh - 105px)}}
+.admin-chat-dock{position:fixed;right:15px;bottom:88px;z-index:1095;display:flex;flex-direction:column-reverse;gap:8px;align-items:flex-end;pointer-events:none}.admin-chat-mini{position:relative;width:54px;height:54px;border:4px solid #fff;border-radius:50%;background:linear-gradient(145deg,#17324d,#087bb8);color:#fff;box-shadow:0 12px 30px rgba(16,50,80,.29);pointer-events:auto;cursor:pointer;display:grid;place-items:center;font-weight:900}.admin-chat-mini .initials{font-size:.78rem}.admin-chat-mini .count{position:absolute;right:-5px;top:-6px;min-width:22px;height:22px;padding:0 5px;border-radius:999px;background:#dc3545;border:2px solid #fff;color:#fff;font-size:.64rem;font-weight:900;display:none;place-items:center}.admin-chat-mini.unread .count{display:grid}.admin-chat-mini.unread{animation:adminPulse 1.7s infinite}.admin-chat-mini.active{outline:3px solid rgba(8,123,184,.18)}.admin-chat-panel{position:fixed;right:81px;bottom:88px;z-index:1094;width:min(355px,calc(100vw - 105px));height:min(505px,calc(100vh - 145px));border:1px solid #dde8ef;border-radius:20px;background:#fff;box-shadow:0 22px 60px rgba(15,45,79,.25);overflow:hidden;opacity:0;visibility:hidden;transform:translateY(10px) scale(.98);transition:.18s}.admin-chat-panel.open{opacity:1;visibility:visible;transform:none}.admin-chat-head{height:52px;padding:7px 8px 7px 12px;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,#17324d,#087bb8);color:#fff}.admin-chat-head strong{font-size:.78rem}.admin-chat-head small{display:block;font-size:.6rem;opacity:.82;max-width:190px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.admin-chat-actions{display:flex;gap:4px}.admin-chat-actions button,.admin-chat-actions a{width:31px;height:31px;border:0;border-radius:9px;display:grid;place-items:center;background:rgba(255,255,255,.14);color:#fff!important;text-decoration:none}.admin-chat-frame{display:block;width:100%;height:calc(100% - 52px);border:0;background:#f5f9fc}@keyframes adminPulse{50%{box-shadow:0 13px 34px rgba(8,123,184,.48),0 0 0 8px rgba(8,123,184,.09)}}@media(max-width:600px){.admin-chat-dock{right:11px;bottom:88px}.admin-chat-panel{left:8px;right:8px;bottom:82px;width:auto;height:calc(100vh - 102px)}}
 </style>
-<div class="admin-support-root" id="adminSupportRoot">
- <button class="admin-support-bubble" id="adminSupportBubble" type="button"><i class="bi bi-chat-dots-fill"></i><span class="admin-support-badge" id="adminSupportBadge">1</span></button>
- <section class="admin-support-panel">
-  <header class="admin-support-head"><div><strong>Nuevo mensaje de soporte</strong><small id="adminSupportClient">JVAQUA Digital</small></div><div class="admin-support-actions"><a id="adminSupportFull" href="{% url 'asistente_tecnico:soporte_admin_lista' %}"><i class="bi bi-arrows-fullscreen"></i></a><button id="adminSupportMin" type="button"><i class="bi bi-dash-lg"></i></button><button id="adminSupportClose" type="button"><i class="bi bi-x-lg"></i></button></div></header>
-  <div id="adminSupportMount" style="height:calc(100% - 56px)"></div>
- </section>
-</div>
+<div id="adminChatDock" class="admin-chat-dock"></div>
+<section id="adminChatPanel" class="admin-chat-panel"><header class="admin-chat-head"><div><strong id="adminChatTitle">Soporte JVAQUA</strong><small id="adminChatSubtitle">Conversación</small></div><div class="admin-chat-actions"><a id="adminChatFull" href="{% url 'asistente_tecnico:soporte_admin_lista' %}" title="Abrir completo"><i class="bi bi-arrows-fullscreen"></i></a><button id="adminChatMin" type="button" title="Minimizar"><i class="bi bi-dash-lg"></i></button></div></header><div id="adminChatMount" style="height:calc(100% - 52px)"></div></section>
 <script>
 (function(){
- const root=document.getElementById('adminSupportRoot');
- const bubble=document.getElementById('adminSupportBubble');
- const mount=document.getElementById('adminSupportMount');
- const badge=document.getElementById('adminSupportBadge');
- const full=document.getElementById('adminSupportFull');
- const client=document.getElementById('adminSupportClient');
- if(!root||!bubble)return;
-
- let frame=null;
- let currentId=null;
- let currentUrl='';
- let activeId=null;
- let dismissedId=null;
- let dismissedUnread=0;
- const endpoint="{% url 'asistente_tecnico:soporte_admin_burbuja_api' %}";
-
- function openPanel(){
-   const id=currentId||activeId;
-   if(!id)return;
-   if(!frame||frame.dataset.id!==String(id)){
-     if(!currentUrl)return;
-     mount.innerHTML='';
-     frame=document.createElement('iframe');
-     frame.className='admin-support-frame';
-     frame.dataset.id=String(id);
-     frame.src=currentUrl;
-     frame.title='Soporte JVAQUA';
-     mount.appendChild(frame);
-   }
-   activeId=id;
-   root.classList.add('is-visible','is-open');
- }
-
- function minimize(){
-   root.classList.remove('is-open');
- }
-
- async function poll(){
-   try{
-     const r=await fetch(endpoint,{
-       headers:{'X-Requested-With':'XMLHttpRequest'},
-       cache:'no-store'
-     });
-     if(!r.ok)return;
-     const d=await r.json();
-     const unread=parseInt(d.no_leidos||0,10);
-     badge.textContent=unread;
-
-     if(d.conversacion_id){
-       currentId=d.conversacion_id;
-       currentUrl=d.url||currentUrl;
-       if(full&&d.url_completa)full.href=d.url_completa;
-       if(client)client.textContent=d.cliente||'JVAQUA Digital';
-     }
-
-     if(d.visible){
-       const nuevoTrasCerrar =
-         String(dismissedId)!==String(d.conversacion_id) ||
-         unread>dismissedUnread;
-       if(nuevoTrasCerrar){
-         activeId=d.conversacion_id;
-         dismissedId=null;
-         dismissedUnread=0;
-         root.classList.add('is-visible');
-       }
-     }
-
-     // Al abrir el iframe, el chat marca el mensaje como leído.
-     // La burbuja debe seguir visible hasta que administración la cierre.
-     if(activeId){
-       root.classList.add('is-visible');
-     }else if(!d.visible){
-       root.classList.remove('is-visible','is-open');
-     }
-   }catch(e){}
- }
-
- bubble.addEventListener('click',()=>{
-   root.classList.contains('is-open') ? minimize() : openPanel();
- });
- document.getElementById('adminSupportMin')?.addEventListener('click',minimize);
- document.getElementById('adminSupportClose')?.addEventListener('click',()=>{
-   dismissedId=activeId||currentId;
-   dismissedUnread=parseInt(badge.textContent||'0',10);
-   activeId=null;
-   minimize();
-   root.classList.remove('is-visible');
- });
- setInterval(poll,5000);
- poll();
+ const dock=document.getElementById('adminChatDock'),panel=document.getElementById('adminChatPanel'),mount=document.getElementById('adminChatMount'),title=document.getElementById('adminChatTitle'),subtitle=document.getElementById('adminChatSubtitle'),full=document.getElementById('adminChatFull');if(!dock||!panel)return;
+ const endpoint="{% url 'asistente_tecnico:soporte_admin_burbuja_api' %}";let map=new Map(),active=null,frame=null;let opened=new Set(JSON.parse(sessionStorage.getItem('jvaqua_admin_support_open')||'[]').map(String)),last={};
+ function save(){sessionStorage.setItem('jvaqua_admin_support_open',JSON.stringify([...opened]))}function destroy(){if(frame){frame.remove();frame=null}mount.innerHTML=''}function min(){panel.classList.remove('open');destroy();active=null;render()}function initials(x){return(x||'JV').split(/\s+/).filter(Boolean).slice(0,2).map(y=>y[0]).join('').toUpperCase()}
+ function openChat(id){const c=map.get(String(id));if(!c)return;const sid=String(id);opened.add(sid);save();active=sid;title.textContent=c.titulo;subtitle.textContent=c.subtitulo||c.estado_label;full.href=c.url_completa;destroy();frame=document.createElement('iframe');frame.className='admin-chat-frame';frame.src=c.url;frame.title='Soporte JVAQUA';mount.appendChild(frame);panel.classList.add('open');render()}
+ function render(){dock.innerHTML='';[...map.values()].filter(c=>c.no_leidos>0||opened.has(String(c.id))).slice(0,5).reverse().forEach(c=>{const b=document.createElement('button');b.type='button';b.className='admin-chat-mini'+(c.no_leidos>0?' unread':'')+(String(c.id)===active?' active':'');b.title=(c.titulo||'Cliente')+' · '+(c.subtitulo||'');b.innerHTML='<span class="initials">'+initials(c.titulo)+'</span><span class="count">'+(c.no_leidos||0)+'</span>';b.onclick=()=>String(c.id)===active&&panel.classList.contains('open')?min():openChat(c.id);dock.appendChild(b)})}
+ async function poll(){try{const r=await fetch(endpoint,{headers:{'X-Requested-With':'XMLHttpRequest'},cache:'no-store'});if(!r.ok)return;const d=await r.json();map=new Map((d.conversaciones||[]).map(c=>[String(c.id),c]));(d.conversaciones||[]).forEach(c=>{if(c.no_leidos>(last[c.id]||0))opened.add(String(c.id));last[c.id]=c.no_leidos});save();render()}catch(e){}}
+ document.getElementById('adminChatMin')?.addEventListener('click',min);setInterval(poll,4000);poll();
 })();
 </script>
 {% endif %}
