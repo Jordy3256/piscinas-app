@@ -1595,11 +1595,19 @@ def _soporte_conversacion_payload(conversacion, *, admin=False):
     else:
         titulo = "Soporte JVAQUA"
         base = f"/dashboard/asistente/digital/soporte/{conversacion.pk}/"
+    ultimo_entrante = (
+        conversacion.mensajes.filter(remitente="cliente" if admin else "admin")
+        .order_by("-id")
+        .values_list("id", flat=True)
+        .first()
+        or 0
+    )
     return {
         "id": conversacion.pk,
         "titulo": titulo,
         "subtitulo": (conversacion.asunto or conversacion.get_categoria_display())[:80],
         "no_leidos": no_leidos,
+        "ultimo_entrante_id": ultimo_entrante,
         "estado": conversacion.estado,
         "estado_label": conversacion.get_estado_display(),
         "url": base + "?support_float=1",
