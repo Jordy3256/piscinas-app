@@ -1,0 +1,41 @@
+{% extends "dashboard/base_admin.html" %}
+{% block title %}Inteligencia de Inventario | JVAQUA ERP{% endblock %}
+{% block top_title %}Inteligencia de Inventario{% endblock %}
+{% block content %}
+<style>
+.ii{--n:#17324d;--b:#0865d9;--m:#68788b;--l:#e6edf5;--r:#c93645;--y:#c78308;--g:#16805e}.hero,.cardx{background:#fff;border:1px solid var(--l);border-radius:21px;box-shadow:0 9px 25px rgba(17,45,76,.05)}.hero{padding:1.2rem;background:linear-gradient(135deg,#fff,#f1f8ff)}.k{font-size:.68rem;font-weight:900;letter-spacing:.09em;text-transform:uppercase;color:var(--b)}.title{font-size:1.65rem;font-weight:950;color:var(--n);margin:.2rem 0}.sub{font-size:.75rem;color:var(--m)}.grid{display:grid;grid-template-columns:repeat(5,1fr);gap:.6rem}.cardx{padding:.9rem}.val{font-size:1.33rem;font-weight:950;color:var(--n)}.two{display:grid;grid-template-columns:1.22fr .78fr;gap:.7rem}.rowx{display:grid;grid-template-columns:1.25fr .62fr .62fr .62fr .65fr;gap:.45rem;align-items:center;padding:.67rem 0;border-bottom:1px solid var(--l);font-size:.71rem}.rowx:last-child{border-bottom:0}.badge{font-size:.61rem;font-weight:900;border-radius:999px;padding:.27rem .42rem;background:#f2f6fa}.agotado,.critico{color:var(--r)}.proximo,.atencion{color:var(--y)}.correcto,.saludable{color:var(--g)}.signal{padding:.64rem;border-radius:12px;margin-bottom:.48rem;font-size:.71rem}.signal.critico{background:#fee7e9}.signal.atencion{background:#fff3d8}.signal.saludable{background:#e6f7ef}.linkrow{display:block;padding:.62rem;border:1px solid var(--l);border-radius:12px;margin-bottom:.45rem;text-decoration:none;color:inherit}.linkrow strong{font-size:.73rem;color:var(--n)}.linkrow span{font-size:.67rem;color:var(--m)}.cities{display:grid;grid-template-columns:repeat(3,1fr);gap:.55rem}.city{background:#f7f9fc;border-radius:13px;padding:.65rem}.city strong{font-size:.82rem;color:var(--n)}@media(max-width:1000px){.grid{grid-template-columns:repeat(3,1fr)}.cities{grid-template-columns:repeat(2,1fr)}}@media(max-width:800px){.two{grid-template-columns:1fr}.rowx{grid-template-columns:1fr 1fr}.rowx .wide{grid-column:1/-1}}@media(max-width:560px){.grid{grid-template-columns:1fr 1fr}.cities{grid-template-columns:1fr}.title{font-size:1.4rem}}
+</style>
+<div class="ii">
+<section class="hero mb-3"><div class="d-flex flex-wrap justify-content-between gap-2 align-items-end"><div><div class="k">Inventario · Inteligencia Empresarial</div><h1 class="title">Inteligencia de Inventario y Consumo</h1><div class="sub">Consumo real, autonomía estimada, costos por contrato y alertas para anticipar reposiciones.</div></div><form method="get"><select name="ciudad" class="form-select form-select-sm" onchange="this.form.submit()"><option value="">Toda JVAQUA</option>{% for c in ciudades %}<option value="{{ c.id }}" {% if ciudad_obj.id == c.id %}selected{% endif %}>{{ c.nombre }}</option>{% endfor %}</select></form></div></section>
+
+<div class="grid mb-3">
+<div class="cardx"><div class="sub">Costo químico del mes</div><div class="val">${{ analisis.costo_mes|floatformat:2 }}</div></div>
+<div class="cardx"><div class="sub">Valor stock central</div><div class="val">${{ analisis.valor_stock|floatformat:2 }}</div></div>
+<div class="cardx"><div class="sub">Productos agotados</div><div class="val">{{ analisis.agotados }}</div></div>
+<div class="cardx"><div class="sub">Stock crítico</div><div class="val">{{ analisis.criticos }}</div><div class="sub">{{ analisis.proximos }} próximos a mínimo</div></div>
+<div class="cardx"><div class="sub">Consumos anormales</div><div class="val">{{ analisis.anomalos }}</div><div class="sub">Contratos sobre su promedio</div></div>
+</div>
+
+<div class="two mb-3">
+<section class="cardx"><div class="k mb-2">Consumo y autonomía por producto</div>
+{% for x in analisis.ranking_productos %}
+<div class="rowx"><div class="wide"><a href="{{ x.url }}"><strong>{{ x.insumo.nombre }}</strong></a><br><span class="sub">{{ x.cantidad_mes }} {{ x.insumo.unidad_corta }} consumidos este mes</span></div><div><span class="sub">Costo</span><br><strong>${{ x.costo_mes|floatformat:2 }}</strong></div><div><span class="sub">Stock</span><br><strong>{{ x.stock }} {{ x.insumo.unidad_corta }}</strong></div><div><span class="sub">Autonomía</span><br><strong>{% if x.autonomia_dias != None %}{{ x.autonomia_dias }} días{% else %}Sin consumo base{% endif %}</strong></div><div><span class="badge {{ x.estado }}">{{ x.estado }}</span></div></div>
+{% empty %}<div class="sub">No existen datos de productos para analizar.</div>{% endfor %}
+</section>
+<aside class="cardx"><div class="k mb-2">Señales de inventario</div>{% for s in analisis.senales %}<div class="signal {{ s.nivel }}"><strong>{{ s.titulo }}</strong><br>{{ s.texto }}</div>{% endfor %}<div class="sub mt-3">La autonomía se estima usando el consumo registrado de los últimos 30 días. Debe complementarse con conteos físicos.</div></aside>
+</div>
+
+<div class="two mb-3">
+<section class="cardx"><div class="k mb-2">Costo y desviación por contrato</div>
+{% for x in analisis.contratos %}
+<a class="linkrow" href="{{ x.url }}"><strong>{{ x.contrato.cliente.nombre }}</strong><br><span>${{ x.costo|floatformat:2 }} este mes · promedio previo ${{ x.promedio_previo|floatformat:2 }}{% if x.variacion_pct != None %} · variación {{ x.variacion_pct }}%{% endif %}{% if x.anomalo %} · CONSUMO ANORMAL{% endif %}</span></a>
+{% empty %}<div class="sub">Todavía no hay consumos por contrato en el período.</div>{% endfor %}
+</section>
+<aside class="cardx"><div class="k mb-2">Inventario en sitio</div>
+{% for x in analisis.sitio_critico %}<a class="linkrow" href="{{ x.url }}"><strong>{{ x.contrato.cliente.nombre }} · {{ x.insumo.nombre }}</strong><br><span>{{ x.stock_estimado }} {{ x.insumo.unidad_corta }} estimados · estado {{ x.estado }}{% if x.dias_hasta_minimo != None %} · {{ x.dias_hasta_minimo }} día(s) al mínimo{% endif %}</span></a>{% empty %}<div class="sub">No hay posiciones críticas registradas en contratos.</div>{% endfor %}
+</aside>
+</div>
+
+<section class="cardx"><div class="k mb-2">Costo de consumo por ciudad</div><div class="cities">{% for x in analisis.ranking_ciudades %}<div class="city"><strong>{{ x.nombre }}</strong><br><span class="sub">${{ x.costo|floatformat:2 }} · {{ x.contratos }} contrato(s)</span></div>{% empty %}<div class="sub">Sin consumo territorial registrado.</div>{% endfor %}</div></section>
+</div>
+{% endblock %}

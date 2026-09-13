@@ -96,6 +96,7 @@ from .aquo_ejecutivo import responder_aquo_ejecutivo
 from .centro_decisiones import construir_centro_decisiones
 from .inteligencia_cartera import analizar_cartera_inteligente
 from .inteligencia_operativa import analizar_operacion
+from .inteligencia_inventario import analizar_inventario_inteligente
 
 # -------------------
 # Helpers de roles
@@ -3806,6 +3807,25 @@ def marcar_todas_leidas_view(request):
 
 
 
+
+
+
+@login_required
+def inteligencia_inventario_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    ciudad_id = (request.GET.get("ciudad") or "").strip()
+    ciudad_obj = Ciudad.objects.filter(pk=ciudad_id, activa=True).first() if ciudad_id.isdigit() else None
+    analisis = analizar_inventario_inteligente(
+        hoy=timezone.localdate(),
+        ciudad=ciudad_obj,
+    )
+    return render(request, "dashboard/inteligencia_inventario.html", {
+        "analisis": analisis,
+        "ciudad_obj": ciudad_obj,
+        "ciudades": Ciudad.objects.filter(activa=True).order_by("orden", "nombre"),
+        "es_admin": True,
+    })
 
 
 @login_required
