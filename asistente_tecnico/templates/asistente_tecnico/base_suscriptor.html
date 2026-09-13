@@ -44,7 +44,18 @@
 .mobile-orbit-items.count-6 .mobile-orbit-item{width:48px}.mobile-orbit-items.count-6 .mobile-orbit-item:nth-child(1){--x:-118px}.mobile-orbit-items.count-6 .mobile-orbit-item:nth-child(2){--x:-91px}.mobile-orbit-items.count-6 .mobile-orbit-item:nth-child(5){--x:91px}.mobile-orbit-items.count-6 .mobile-orbit-item:nth-child(6){--x:118px}}
 
 /* AQUO flotante · modo embebido */
-.aquo-float-mode .jd-top,.aquo-float-mode .jd-bottom,.aquo-float-mode .mobile-orbit-nav{display:none!important}
+.aquo-float-mode .jd-top,
+.aquo-float-mode .jd-bottom,
+.aquo-float-mode .mobile-orbit-nav,
+.aquo-float-mode .bottom-nav,
+.aquo-float-mode .floating-nav,
+.aquo-float-mode .floating-menu,
+.aquo-float-mode .menu-fab,
+.aquo-float-mode .nav-fab,
+.aquo-float-mode .jd-menu-fab,
+.aquo-float-mode [class*="orbit-toggle"],
+.aquo-float-mode [class*="floating-menu"],
+.aquo-float-mode [class*="menu-fab"]{display:none!important}
 .aquo-float-mode .jd-content{max-width:none!important;padding:8px!important;margin:0!important}
 .aquo-float-mode .spacer-bottom{display:none!important}
 .aquo-float-mode .assistant-head{display:none!important}
@@ -101,6 +112,7 @@
       <div class="aquo-float-actions">
         <a id="aquoFloatFull" href="{% url 'asistente_tecnico:digital_resolver' %}" title="Abrir completo"><i class="bi bi-arrows-fullscreen"></i></a>
         <button id="aquoFloatMinimize" type="button" title="Minimizar"><i class="bi bi-dash-lg"></i></button>
+        <button id="aquoFloatClose" type="button" title="Cerrar AQUO"><i class="bi bi-x-lg"></i></button>
       </div>
     </header>
     <div id="aquoFloatFrameMount" style="height:calc(100% - 55px);position:relative">
@@ -110,12 +122,13 @@
 </div>
 <script>
 (function(){
-  const root=document.getElementById('aquoFloatRoot'),bubble=document.getElementById('aquoFloatBubble'),panel=document.getElementById('aquoFloatPanel'),mount=document.getElementById('aquoFloatFrameMount'),minimize=document.getElementById('aquoFloatMinimize'),full=document.getElementById('aquoFloatFull');
+  const root=document.getElementById('aquoFloatRoot'),bubble=document.getElementById('aquoFloatBubble'),panel=document.getElementById('aquoFloatPanel'),mount=document.getElementById('aquoFloatFrameMount'),minimize=document.getElementById('aquoFloatMinimize'),closeBtn=document.getElementById('aquoFloatClose'),full=document.getElementById('aquoFloatFull');
   if(!root||!bubble)return;
   const qs=new URLSearchParams(location.search);
   const inFloat=qs.get('aquo_float')==='1';
   const onResolver=location.pathname.includes('/digital/resolver/');
   if(inFloat||onResolver){root.style.display='none';return}
+  if(sessionStorage.getItem('jvaqua_aquo_hidden')==='1'){root.style.display='none';return}
 
   let frame=null,dragging=false,moved=false,startX=0,startY=0,startLeft=0,startTop=0;
   const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
@@ -146,6 +159,11 @@
   }
   function closePanel(){root.classList.remove('is-open');localStorage.setItem('jvaqua_aquo_open','0')}
   minimize?.addEventListener('click',closePanel);
+  closeBtn?.addEventListener('click',()=>{
+    closePanel();
+    root.style.display='none';
+    sessionStorage.setItem('jvaqua_aquo_hidden','1');
+  });
 
   bubble.addEventListener('pointerdown',e=>{
     dragging=true;moved=false;startX=e.clientX;startY=e.clientY;
