@@ -1601,7 +1601,7 @@
 {% if request.GET.support_float != '1' %}
 {{ soporte_admin_inicial|json_script:"support-admin-initial-data" }}
 <style>
-.admin-chat-dock{position:fixed;right:15px;bottom:88px;z-index:1095;display:flex;flex-direction:column-reverse;gap:8px;align-items:flex-end;pointer-events:none;touch-action:none;user-select:none;-webkit-user-select:none}.admin-chat-mini{position:relative;width:54px;height:54px;touch-action:none;user-select:none;-webkit-user-select:none;border:4px solid #fff;border-radius:50%;background:linear-gradient(145deg,#17324d,#087bb8);color:#fff;box-shadow:0 12px 30px rgba(16,50,80,.29);pointer-events:auto;cursor:pointer;display:grid;place-items:center;font-weight:900}.admin-chat-mini .initials{font-size:.78rem}.admin-chat-mini .count{position:absolute;right:-5px;top:-6px;min-width:22px;height:22px;padding:0 5px;border-radius:999px;background:#dc3545;border:2px solid #fff;color:#fff;font-size:.64rem;font-weight:900;display:none;place-items:center}.admin-chat-mini.unread .count{display:grid}.admin-chat-mini.unread{animation:adminPulse 1.7s infinite}.admin-chat-mini.active{outline:3px solid rgba(8,123,184,.18)}.admin-chat-panel{position:fixed;right:81px;bottom:88px;z-index:1094;width:min(330px,calc(100vw - 105px));height:min(460px,calc(100vh - 165px));border:1px solid #dde8ef;border-radius:20px;background:#fff;box-shadow:0 22px 60px rgba(15,45,79,.25);overflow:hidden;opacity:0;visibility:hidden;transform:translateY(10px) scale(.98);transition:.18s}.admin-chat-panel.open{opacity:1;visibility:visible;transform:none}.admin-chat-head{height:52px;padding:7px 8px 7px 12px;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,#17324d,#087bb8);color:#fff}.admin-chat-head strong{font-size:.78rem}.admin-chat-head small{display:block;font-size:.6rem;opacity:.82;max-width:190px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.admin-chat-actions{display:flex;gap:4px}.admin-chat-actions button,.admin-chat-actions a{width:31px;height:31px;border:0;border-radius:9px;display:grid;place-items:center;background:rgba(255,255,255,.14);color:#fff!important;text-decoration:none}.admin-chat-frame{display:block;width:100%;height:calc(100% - 52px);border:0;background:#f5f9fc}@keyframes adminPulse{50%{box-shadow:0 13px 34px rgba(8,123,184,.48),0 0 0 8px rgba(8,123,184,.09)}}@media(max-width:600px){.admin-chat-dock{right:11px;bottom:88px}.admin-chat-panel{left:8px;right:8px;bottom:82px;width:auto;height:calc(100vh - 102px)}}
+.admin-chat-dock{position:fixed;right:15px;bottom:88px;z-index:1095;display:flex;flex-direction:column-reverse;gap:8px;align-items:flex-end;pointer-events:none;touch-action:none;user-select:none;-webkit-user-select:none}.admin-chat-mini{position:relative;width:54px;height:54px;touch-action:none;user-select:none;-webkit-user-select:none;border:4px solid #fff;border-radius:50%;background:linear-gradient(145deg,#17324d,#087bb8);color:#fff;box-shadow:0 12px 30px rgba(16,50,80,.29);pointer-events:auto;cursor:grab;display:grid;place-items:center;font-weight:900}.admin-chat-mini:active{cursor:grabbing}.admin-chat-mini .initials{font-size:.78rem}.admin-chat-mini .count{position:absolute;right:-5px;top:-6px;min-width:22px;height:22px;padding:0 5px;border-radius:999px;background:#dc3545;border:2px solid #fff;color:#fff;font-size:.64rem;font-weight:900;display:none;place-items:center}.admin-chat-mini.unread .count{display:grid}.admin-chat-mini.unread{animation:adminPulse 1.7s infinite}.admin-chat-mini.active{outline:3px solid rgba(8,123,184,.18)}.admin-chat-panel{position:fixed;right:81px;bottom:88px;z-index:1094;width:min(330px,calc(100vw - 105px));height:min(460px,calc(100vh - 165px));border:1px solid #dde8ef;border-radius:20px;background:#fff;box-shadow:0 22px 60px rgba(15,45,79,.25);overflow:hidden;opacity:0;visibility:hidden;transform:translateY(10px) scale(.98);transition:.18s}.admin-chat-panel.open{opacity:1;visibility:visible;transform:none}.admin-chat-head{height:52px;padding:7px 8px 7px 12px;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,#17324d,#087bb8);color:#fff}.admin-chat-head strong{font-size:.78rem}.admin-chat-head small{display:block;font-size:.6rem;opacity:.82;max-width:190px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.admin-chat-actions{display:flex;gap:4px}.admin-chat-actions button,.admin-chat-actions a{width:31px;height:31px;border:0;border-radius:9px;display:grid;place-items:center;background:rgba(255,255,255,.14);color:#fff!important;text-decoration:none}.admin-chat-frame{display:block;width:100%;height:calc(100% - 52px);border:0;background:#f5f9fc}@keyframes adminPulse{50%{box-shadow:0 13px 34px rgba(8,123,184,.48),0 0 0 8px rgba(8,123,184,.09)}}@media(max-width:600px){.admin-chat-dock{right:11px;bottom:88px}.admin-chat-panel{left:8px;right:8px;bottom:82px;width:auto;height:calc(100vh - 102px)}}
 </style>
 <div id="adminChatDock" class="admin-chat-dock"></div>
 <section id="adminChatPanel" class="admin-chat-panel"><header class="admin-chat-head"><div><strong id="adminChatTitle">Soporte JVAQUA</strong><small id="adminChatSubtitle">Conversación</small></div><div class="admin-chat-actions"><a id="adminChatFull" href="{% url 'asistente_tecnico:soporte_admin_lista' %}" title="Abrir completo"><i class="bi bi-arrows-fullscreen"></i></a><button id="adminChatMin" type="button" title="Minimizar"><i class="bi bi-dash-lg"></i></button><button id="adminChatClose" type="button" title="Cerrar burbuja"><i class="bi bi-x-lg"></i></button></div></header><div id="adminChatMount" style="height:calc(100% - 52px)"></div></section>
@@ -1616,158 +1616,323 @@
   if(!dock||!panel)return;
 
   const endpoint="{% url 'asistente_tecnico:soporte_admin_burbuja_api' %}";
-  let map=new Map();
-  let active=null,frame=null,pollTimer=null;
+  const initial=JSON.parse(
+    document.getElementById('support-admin-initial-data')?.textContent || '[]'
+  );
+
+  let conversations=new Map(
+    (Array.isArray(initial)?initial:[]).map(c=>[String(c.id),c])
+  );
+  let active=null;
+  let frame=null;
+  let pollTimer=null;
 
   let opened=new Set();
   let dismissedAt={};
   try{
-    opened=new Set(JSON.parse(sessionStorage.getItem('jvaqua_admin_support_open')||'[]').map(String));
-    dismissedAt=JSON.parse(sessionStorage.getItem('jvaqua_admin_support_dismissed_at')||'{}')||{};
+    opened=new Set(
+      JSON.parse(sessionStorage.getItem('jvaqua_admin_support_open')||'[]').map(String)
+    );
+    dismissedAt=JSON.parse(
+      sessionStorage.getItem('jvaqua_admin_support_dismissed_at')||'{}'
+    ) || {};
   }catch(e){}
+
+  (Array.isArray(initial)?initial:[]).forEach(c=>{
+    if((c.no_leidos||0)>0){
+      opened.add(String(c.id));
+      const incoming=c.ultimo_entrante_id||0;
+      if(incoming>Number(dismissedAt[String(c.id)]||0)){
+        delete dismissedAt[String(c.id)];
+      }
+    }
+  });
+
+  const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
 
   function saveState(){
     try{
-      sessionStorage.setItem('jvaqua_admin_support_open',JSON.stringify([...opened].slice(-5)));
-      sessionStorage.setItem('jvaqua_admin_support_dismissed_at',JSON.stringify(dismissedAt));
+      sessionStorage.setItem(
+        'jvaqua_admin_support_open',
+        JSON.stringify([...opened].slice(-5))
+      );
+      sessionStorage.setItem(
+        'jvaqua_admin_support_dismissed_at',
+        JSON.stringify(dismissedAt)
+      );
     }catch(e){}
   }
-  function destroyFrame(){if(frame){frame.remove();frame=null}mount.innerHTML=''}
-  function minimize(){panel.classList.remove('open');destroyFrame();active=null;render()}
+
+  function destroyFrame(){
+    if(frame){frame.remove();frame=null}
+    mount.innerHTML='';
+  }
+
+  function initials(x){
+    return (x||'JV')
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0,2)
+      .map(y=>y[0])
+      .join('')
+      .toUpperCase();
+  }
+
+  function placePanel(){
+    if(innerWidth<=600){
+      panel.style.left='8px';
+      panel.style.right='8px';
+      return;
+    }
+    const r=dock.getBoundingClientRect();
+    if(r.left<innerWidth/2){
+      panel.style.left='18px';
+      panel.style.right='auto';
+    }else{
+      panel.style.right='81px';
+      panel.style.left='auto';
+    }
+  }
+
+  function minimize(){
+    panel.classList.remove('open');
+    destroyFrame();
+    active=null;
+    render();
+  }
+
   function closeActive(){
-    if(!active){minimize();return}
-    const c=map.get(String(active));
-    if(c)dismissedAt[String(active)]=c.ultimo_entrante_id||0;
+    if(!active){
+      minimize();
+      return;
+    }
+    const c=conversations.get(String(active));
+    if(c){
+      dismissedAt[String(active)]=c.ultimo_entrante_id||0;
+    }
     opened.delete(String(active));
-    saveState();minimize();
+    saveState();
+    minimize();
   }
-  function initials(x){return(x||'JV').split(/\s+/).filter(Boolean).slice(0,2).map(y=>y[0]).join('').toUpperCase()}
-  function markReadLocal(id){
-    const c=map.get(String(id));if(!c)return;
-    c.no_leidos=0;map.set(String(id),c);render();
-  }
+
   function openChat(id){
-    const c=map.get(String(id));if(!c)return;
+    const c=conversations.get(String(id));
+    if(!c)return;
+
     const sid=String(id);
-    opened.add(sid);delete dismissedAt[sid];saveState();
+    opened.add(sid);
+    delete dismissedAt[sid];
+    saveState();
+
     active=sid;
     title.textContent=c.titulo||'Cliente';
     subtitle.textContent=c.subtitulo||c.estado_label||'';
     full.href=c.url_completa;
-    markReadLocal(sid);
+
+    c.no_leidos=0;
+    conversations.set(sid,c);
+
     destroyFrame();
     frame=document.createElement('iframe');
     frame.className='admin-chat-frame';
     frame.src=c.url;
     frame.title='Soporte JVAQUA';
+    frame.setAttribute('loading','eager');
     mount.appendChild(frame);
-    panel.classList.add('open');render();
-    setTimeout(pollNow,600);
+
+    placePanel();
+    panel.classList.add('open');
+    render();
+    setTimeout(poll,900);
   }
+
   function shouldShow(c){
     const sid=String(c.id);
-    const incoming=c.ultimo_entrante_id||0;
+    const incoming=Number(c.ultimo_entrante_id||0);
     const dismissed=Number(dismissedAt[sid]||0);
+
     if((c.no_leidos||0)>0 && incoming>dismissed)return true;
     return opened.has(sid);
   }
+
+  function attachBubbleInteraction(button,id){
+    let dragging=false;
+    let moved=false;
+    let startX=0,startY=0,startLeft=0,startTop=0;
+
+    button.addEventListener('pointerdown',e=>{
+      dragging=true;
+      moved=false;
+      startX=e.clientX;
+      startY=e.clientY;
+      const r=dock.getBoundingClientRect();
+      startLeft=r.left;
+      startTop=r.top;
+      try{button.setPointerCapture(e.pointerId)}catch(err){}
+    });
+
+    button.addEventListener('pointermove',e=>{
+      if(!dragging)return;
+      const dx=e.clientX-startX;
+      const dy=e.clientY-startY;
+      if(Math.abs(dx)+Math.abs(dy)>5)moved=true;
+      if(!moved)return;
+
+      const left=clamp(
+        startLeft+dx,
+        8,
+        Math.max(8,innerWidth-dock.offsetWidth-8)
+      );
+      const top=clamp(
+        startTop+dy,
+        8,
+        Math.max(8,innerHeight-dock.offsetHeight-8)
+      );
+
+      dock.style.left=left+'px';
+      dock.style.top=top+'px';
+      dock.style.right='auto';
+      dock.style.bottom='auto';
+    });
+
+    button.addEventListener('pointerup',e=>{
+      if(!dragging)return;
+      dragging=false;
+      try{button.releasePointerCapture(e.pointerId)}catch(err){}
+
+      if(moved){
+        const r=dock.getBoundingClientRect();
+        try{
+          localStorage.setItem(
+            'jvaqua_support_admin_pos',
+            JSON.stringify({left:r.left,top:r.top})
+          );
+        }catch(err){}
+        placePanel();
+      }else{
+        if(String(active)===String(id) && panel.classList.contains('open')){
+          minimize();
+        }else{
+          openChat(id);
+        }
+      }
+    });
+
+    button.addEventListener('pointercancel',()=>{dragging=false});
+  }
+
   function render(){
     dock.innerHTML='';
-    [...map.values()].filter(shouldShow).slice(0,5).reverse().forEach(c=>{
+
+    const visible=[...conversations.values()]
+      .filter(shouldShow)
+      .slice(0,5)
+      .reverse();
+
+    visible.forEach(c=>{
       const b=document.createElement('button');
       b.type='button';
-      b.className='admin-chat-mini'+((c.no_leidos||0)>0?' unread':'')+(String(c.id)===active?' active':'');
+      b.className='admin-chat-mini'
+        +((c.no_leidos||0)>0?' unread':'')
+        +(String(c.id)===active?' active':'');
       b.title=(c.titulo||'Cliente')+' · '+(c.subtitulo||'');
-      b.innerHTML='<span class="initials">'+initials(c.titulo)+'</span><span class="count">'+(c.no_leidos||0)+'</span>';
+      b.innerHTML=
+        '<span class="initials">'+initials(c.titulo)+'</span>'
+        +'<span class="count">'+(c.no_leidos||0)+'</span>';
+
       const count=b.querySelector('.count');
-      if(count)count.style.display=(c.no_leidos||0)>0?'grid':'none';
-      b.addEventListener('click',e=>{
-        if(b.dataset.dragged==='1'){b.dataset.dragged='0';e.preventDefault();return}
-        String(active)===String(c.id)&&panel.classList.contains('open')?minimize():openChat(c.id);
-      });
-      enableDrag(b);
+      if(count){
+        count.style.display=(c.no_leidos||0)>0?'grid':'none';
+      }
+
+      attachBubbleInteraction(b,c.id);
       dock.appendChild(b);
     });
   }
 
-  function enableDrag(handle){
-    let dragging=false,moved=false,startX=0,startY=0,startLeft=0,startTop=0;
-    const move=e=>{
-      if(!dragging)return;
-      const dx=e.clientX-startX,dy=e.clientY-startY;
-      if(Math.abs(dx)+Math.abs(dy)>4)moved=true;
-      if(!moved)return;
-      const maxLeft=Math.max(8,window.innerWidth-dock.offsetWidth-8);
-      const maxTop=Math.max(8,window.innerHeight-dock.offsetHeight-8);
-      dock.style.left=Math.max(8,Math.min(maxLeft,startLeft+dx))+'px';
-      dock.style.top=Math.max(8,Math.min(maxTop,startTop+dy))+'px';
-      dock.style.right='auto';dock.style.bottom='auto';
-      e.preventDefault();
-    };
-    const up=()=>{
-      if(!dragging)return;
-      dragging=false;
-      document.removeEventListener('pointermove',move);
-      document.removeEventListener('pointerup',up);
-      if(moved){
-        handle.dataset.dragged='1';
-        const r=dock.getBoundingClientRect();
-        try{localStorage.setItem('jvaqua_support_admin_pos',JSON.stringify({left:r.left,top:r.top}))}catch(e){}
-        setTimeout(()=>{handle.dataset.dragged='0'},120);
-      }
-    };
-    handle.addEventListener('pointerdown',e=>{
-      dragging=true;moved=false;startX=e.clientX;startY=e.clientY;
-      const r=dock.getBoundingClientRect();startLeft=r.left;startTop=r.top;
-      document.addEventListener('pointermove',move,{passive:false});
-      document.addEventListener('pointerup',up,{once:true});
-      e.preventDefault();
-    });
-  }
-
-  function restorePos(){
+  function restorePosition(){
     try{
-      const p=JSON.parse(localStorage.getItem('jvaqua_support_admin_pos')||'null');
-      if(p&&Number.isFinite(p.left)&&Number.isFinite(p.top)){
-        dock.style.left=Math.max(8,Math.min(window.innerWidth-dock.offsetWidth-8,p.left))+'px';
-        dock.style.top=Math.max(8,Math.min(window.innerHeight-dock.offsetHeight-8,p.top))+'px';
-        dock.style.right='auto';dock.style.bottom='auto';
+      const saved=JSON.parse(
+        localStorage.getItem('jvaqua_support_admin_pos')||'null'
+      );
+      if(saved&&Number.isFinite(saved.left)&&Number.isFinite(saved.top)){
+        dock.style.left=saved.left+'px';
+        dock.style.top=saved.top+'px';
+        dock.style.right='auto';
+        dock.style.bottom='auto';
       }
     }catch(e){}
   }
 
-  async function pollNow(){
+  async function poll(){
     clearTimeout(pollTimer);
+
     try{
       const r=await fetch(endpoint,{
         method:'GET',
         credentials:'same-origin',
         cache:'no-store',
-        headers:{'X-Requested-With':'XMLHttpRequest','Accept':'application/json'}
+        headers:{
+          'X-Requested-With':'XMLHttpRequest',
+          'Accept':'application/json'
+        }
       });
+
       if(r.ok){
         const d=await r.json();
-        const incoming=d.conversaciones||[];
-        map=new Map(incoming.map(c=>[String(c.id),c]));
+        const incoming=Array.isArray(d.conversaciones)?d.conversaciones:[];
+        const nextMap=new Map();
+
         incoming.forEach(c=>{
           const sid=String(c.id);
-          const incomingId=c.ultimo_entrante_id||0;
+          const incomingId=Number(c.ultimo_entrante_id||0);
           const dismissed=Number(dismissedAt[sid]||0);
-          if((c.no_leidos||0)>0 && incomingId>dismissed)opened.add(sid);
+
+          if(active===sid && panel.classList.contains('open')){
+            c.no_leidos=0;
+          }
+
+          if((c.no_leidos||0)>0 && incomingId>dismissed){
+            opened.add(sid);
+            delete dismissedAt[sid];
+          }
+
+          nextMap.set(sid,c);
         });
-        saveState();render();
+
+        conversations=nextMap;
+        saveState();
+        render();
       }
-    }catch(e){}
-    pollTimer=setTimeout(pollNow,2000);
+    }catch(e){
+      // Conservamos el estado renderizado si una consulta puntual falla.
+    }
+
+    pollTimer=setTimeout(poll,2000);
   }
 
   document.getElementById('adminChatMin')?.addEventListener('click',minimize);
   document.getElementById('adminChatClose')?.addEventListener('click',closeActive);
-  document.addEventListener('visibilitychange',()=>{if(!document.hidden)pollNow()});
-  window.addEventListener('focus',pollNow);
-  restorePos();
+
+  document.addEventListener('visibilitychange',()=>{
+    if(!document.hidden)poll();
+  });
+  window.addEventListener('focus',poll);
+  window.addEventListener('resize',()=>{
+    if(dock.children.length){
+      const r=dock.getBoundingClientRect();
+      dock.style.left=clamp(r.left,8,Math.max(8,innerWidth-dock.offsetWidth-8))+'px';
+      dock.style.top=clamp(r.top,8,Math.max(8,innerHeight-dock.offsetHeight-8))+'px';
+      dock.style.right='auto';
+      dock.style.bottom='auto';
+    }
+    placePanel();
+  });
+
+  restorePosition();
+  saveState();
   render();
-  pollNow();
+  poll();
 })();
 </script>
 {% endif %}

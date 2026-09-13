@@ -1585,56 +1585,50 @@ def _respuesta_limite_soporte(request, perfil, *, ajax=False):
     return None
 
 
-@login_required
 def _soporte_conversacion_payload(conversacion, *, admin=False):
-    no_leidos = int(getattr(conversacion, "no_leidos", 0) or 0)
+    """
+    Serializa una conversación para las burbujas flotantes.
+
+    IMPORTANTE:
+    Este es un helper interno, NO una vista HTTP, por lo tanto no debe llevar
+    @login_required. Las vistas API que lo llaman sí están protegidas.
+    """
     if admin:
         usuario = conversacion.suscriptor.user
         titulo = usuario.get_full_name() or usuario.username
+        no_leidos = conversacion.mensajes.filter(
+            remitente="cliente",
+            leido_admin=False,
+        ).count()
+        ultimo_entrante_id = (
+            conversacion.mensajes.filter(remitente="cliente")
+            .order_by("-id")
+            .values_list("id", flat=True)
+            .first()
+            or 0
+        )
         base = f"/dashboard/asistente/administracion/soporte/{conversacion.pk}/"
     else:
         titulo = "Soporte JVAQUA"
+        no_leidos = conversacion.mensajes.filter(
+            remitente="admin",
+            leido_cliente=False,
+        ).count()
+        ultimo_entrante_id = (
+            conversacion.mensajes.filter(remitente="admin")
+            .order_by("-id")
+            .values_list("id", flat=True)
+            .first()
+            or 0
+        )
         base = f"/dashboard/asistente/digital/soporte/{conversacion.pk}/"
-    ultimo_entrante = (
-        conversacion.mensajes.filter(remitente="cliente" if admin else "admin")
-        .order_by("-id")
-        .values_list("id", flat=True)
-        .first()
-        or 0
-    )
+
     return {
         "id": conversacion.pk,
         "titulo": titulo,
         "subtitulo": (conversacion.asunto or conversacion.get_categoria_display())[:80],
         "no_leidos": no_leidos,
-        "ultimo_entrante_id": ultimo_entrante,
-        "estado": conversacion.estado,
-        "estado_label": conversacion.get_estado_display(),
-        "url": base + "?support_float=1",
-        "url_completa": base,
-    }
-
-
-@login_required
-def _soporte_payload_simple(conversacion, *, admin=False):
-    if admin:
-        user = conversacion.suscriptor.user
-        titulo = user.get_full_name() or user.username
-        no_leidos = conversacion.mensajes.filter(
-            remitente="cliente", leido_admin=False
-        ).count()
-        base = f"/dashboard/asistente/administracion/soporte/{conversacion.pk}/"
-    else:
-        titulo = "Soporte JVAQUA"
-        no_leidos = conversacion.mensajes.filter(
-            remitente="admin", leido_cliente=False
-        ).count()
-        base = f"/dashboard/asistente/digital/soporte/{conversacion.pk}/"
-    return {
-        "id": conversacion.pk,
-        "titulo": titulo,
-        "subtitulo": (conversacion.asunto or conversacion.get_categoria_display())[:80],
-        "no_leidos": no_leidos,
+        "ultimo_entrante_id": ultimo_entrante_id,
         "estado": conversacion.estado,
         "estado_label": conversacion.get_estado_display(),
         "url": base + "?support_float=1",
@@ -1651,7 +1645,7 @@ def digital_soporte_burbuja_api(request):
         perfil.conversaciones_soporte.exclude(estado="cerrada")
         .order_by("-ultimo_mensaje_en", "-id")[:5]
     )
-    payload = [_soporte_payload_simple(c, admin=False) for c in conversaciones]
+    payload = [_soporte_conversacion_payload(c, admin=False) for c in conversaciones]
     return JsonResponse({
         "ok": True,
         "conversaciones": payload,
@@ -1669,7 +1663,7 @@ def soporte_admin_burbuja_api(request):
         .select_related("suscriptor__user")
         .order_by("-ultimo_mensaje_en", "-id")[:8]
     )
-    payload = [_soporte_payload_simple(c, admin=True) for c in conversaciones]
+    payload = [_soporte_conversacion_payload(c, admin=True) for c in conversaciones]
     return JsonResponse({
         "ok": True,
         "conversaciones": payload,

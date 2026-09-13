@@ -20,15 +20,30 @@ def _es_admin(user):
 
 def _payload_cliente(perfil):
     resultado = []
-    for conv in perfil.conversaciones_soporte.exclude(estado="cerrada").order_by("-ultimo_mensaje_en", "-id")[:8]:
-        no_leidos = conv.mensajes.filter(remitente="admin", leido_cliente=False).count()
+    for conv in (
+        perfil.conversaciones_soporte.exclude(estado="cerrada")
+        .order_by("-ultimo_mensaje_en", "-id")[:8]
+    ):
+        no_leidos = conv.mensajes.filter(
+            remitente="admin",
+            leido_cliente=False,
+        ).count()
         if no_leidos <= 0:
             continue
+
+        ultimo_entrante_id = (
+            conv.mensajes.filter(remitente="admin")
+            .order_by("-id")
+            .values_list("id", flat=True)
+            .first()
+            or 0
+        )
         resultado.append({
             "id": conv.pk,
             "titulo": "Soporte JVAQUA",
             "subtitulo": (conv.asunto or conv.get_categoria_display())[:80],
             "no_leidos": no_leidos,
+            "ultimo_entrante_id": ultimo_entrante_id,
             "estado": conv.estado,
             "estado_label": conv.get_estado_display(),
             "url": f"/dashboard/asistente/digital/soporte/{conv.pk}/?support_float=1",
@@ -44,22 +59,33 @@ def _payload_admin():
         .select_related("suscriptor__user")
         .order_by("-ultimo_mensaje_en", "-id")[:12]
     ):
-        no_leidos = conv.mensajes.filter(remitente="cliente", leido_admin=False).count()
+        no_leidos = conv.mensajes.filter(
+            remitente="cliente",
+            leido_admin=False,
+        ).count()
         if no_leidos <= 0:
             continue
+
+        ultimo_entrante_id = (
+            conv.mensajes.filter(remitente="cliente")
+            .order_by("-id")
+            .values_list("id", flat=True)
+            .first()
+            or 0
+        )
         user = conv.suscriptor.user
         resultado.append({
             "id": conv.pk,
             "titulo": user.get_full_name() or user.username,
             "subtitulo": (conv.asunto or conv.get_categoria_display())[:80],
             "no_leidos": no_leidos,
+            "ultimo_entrante_id": ultimo_entrante_id,
             "estado": conv.estado,
             "estado_label": conv.get_estado_display(),
             "url": f"/dashboard/asistente/administracion/soporte/{conv.pk}/?support_float=1",
             "url_completa": f"/dashboard/asistente/administracion/soporte/{conv.pk}/",
         })
     return resultado
-
 
 def notificaciones_digitales(request):
     contexto = {
