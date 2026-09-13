@@ -7,6 +7,9 @@ from finanzas.models import Factura, ObligacionTrabajador
 from .inteligencia_rentabilidad import analizar_rentabilidad
 from .inteligencia_crecimiento import analizar_crecimiento_retencion
 from .salud_erp import diagnosticar_salud_erp
+from .inteligencia_cartera import analizar_cartera_inteligente
+from .inteligencia_operativa import analizar_operacion
+from .inteligencia_inventario import analizar_inventario_inteligente
 
 
 D0 = Decimal("0.00")
@@ -21,6 +24,9 @@ def construir_snapshot_ejecutivo(*, hoy=None, ciudad=None):
     rent = analizar_rentabilidad(hoy=hoy, ciudad=ciudad)
     crecimiento = analizar_crecimiento_retencion(hoy=hoy, ciudad=ciudad)
     salud = diagnosticar_salud_erp(hoy=hoy)
+    cartera_inteligente = analizar_cartera_inteligente(hoy=hoy, ciudad=ciudad)
+    operacion = analizar_operacion(hoy=hoy, ciudad=ciudad)
+    inventario = analizar_inventario_inteligente(hoy=hoy, ciudad=ciudad)
 
     facturas = list(
         Factura.objects.exclude(estado=Factura.ESTADO_ANULADA)
@@ -47,6 +53,9 @@ def construir_snapshot_ejecutivo(*, hoy=None, ciudad=None):
         "rentabilidad": rent,
         "crecimiento": crecimiento,
         "salud": salud,
+        "cartera_inteligente": cartera_inteligente,
+        "operacion": operacion,
+        "inventario": inventario,
         "cartera_pendiente": cartera_pendiente,
         "cartera_vencida": cartera_vencida,
         "cobrado_mes": cobrado,
@@ -86,11 +95,49 @@ def _respuesta_crecimiento(s):
 
 
 def _respuesta_cartera(s):
+    c=s["cartera_inteligente"]
     texto=(
-        f"En el mes actual se han registrado {_fmt(s['cobrado_mes'])} en cobros. "
-        f"La cartera pendiente es {_fmt(s['cartera_pendiente'])}, de la cual {_fmt(s['cartera_vencida'])} está vencida."
+        f"La cartera pendiente total es {_fmt(c['total'])}, con {_fmt(c['vencido'])} vencidos. "
+        f"Hay {c['clientes_prioritarios']} cliente(s) de cobro prioritario y {_fmt(c['recuperable_30'])} "
+        f"corresponde a deuda vencida de hasta 30 días."
     )
-    return texto, [], "Da prioridad a la cartera vencida antes que a los cobros todavía dentro de plazo."
+    detalle=[
+        f"{x['cliente']}: {_fmt(x['vencido'])} vencidos · {x['max_dias']} días · prioridad {x['score']}/100"
+        for x in c["ranking"][:5]
+    ]
+    return texto, detalle, "Gestiona primero los clientes con mayor puntaje de cobranza y antigüedad."
+
+
+
+def _respuesta_operacion(s):
+    o=s["operacion"]
+    texto=(
+        f"El cumplimiento operativo del mes es {o['cumplimiento']}%: "
+        f"{o['realizados_mes']} de {o['programados_mes']} mantenimientos registrados fueron realizados. "
+        f"Hay {o['atrasados']} atraso(s), {o['proximos_7']} mantenimiento(s) pendientes en los próximos 7 días "
+        f"y {len(o['recurrentes'])} cliente(s) con incidencias recurrentes."
+    )
+    detalle=[
+        f"{x['trabajador'].user.get_full_name() or x['trabajador'].user.username}: "
+        f"{x['cumplimiento']}% · {x['atrasados']} atraso(s) · {x['proximos_7']} próximos"
+        for x in o["trabajadores"][:5]
+    ]
+    return texto, detalle, "Prioriza atrasos, trabajadores con menor cumplimiento e incidencias recurrentes."
+
+
+def _respuesta_inventario(s):
+    i=s["inventario"]
+    texto=(
+        f"El costo químico registrado este mes es {_fmt(i['costo_mes'])}. "
+        f"Hay {i['agotados']} producto(s) agotado(s), {i['criticos']} en stock crítico, "
+        f"{i['proximos']} próximos al mínimo y {i['anomalos']} contrato(s) con consumo anormal."
+    )
+    detalle=[
+        f"{x['insumo'].nombre}: stock {x['stock']} {x['insumo'].unidad_corta} · "
+        + (f"autonomía {x['autonomia_dias']} días" if x["autonomia_dias"] is not None else "sin autonomía calculable")
+        for x in i["ranking_productos"][:5]
+    ]
+    return texto, detalle, "Repón primero productos agotados/críticos y revisa contratos con consumo anormal."
 
 
 def _respuesta_nomina(s):
@@ -127,15 +174,21 @@ def _respuesta_ciudades(s):
 
 def _respuesta_resumen(s):
     r=s["rentabilidad"]; c=s["crecimiento"]["actual"]; h=s["salud"]
+    o=s["operacion"]; i=s["inventario"]; ci=s["cartera_inteligente"]
     texto=(
         f"JVAQUA tiene {r['contratos']} contratos vigentes en el análisis, margen operativo base de "
         f"{r['margen_pct']}% ({_fmt(r['margen'])}) y crecimiento neto mensual de {c['crecimiento_neto']:+d}. "
         f"La retención estimada es {c['retencion']}%, la cartera vencida es {_fmt(s['cartera_vencida'])} "
-        f"y existen {h['criticas']} incidencias críticas en el ERP."
+        f"y existen {h['criticas']} incidencias críticas en el ERP. "
+        f"Operación tiene {o['cumplimiento']}% de cumplimiento y {o['atrasados']} atraso(s). "
+        f"Inventario reporta {i['agotados']} agotado(s), {i['criticos']} crítico(s) y {i['anomalos']} consumo(s) anormal(es)."
     )
     prioridades=[]
     if r["en_perdida"] or r["criticos"]: prioridades.append(f"Rentabilidad: {r['en_perdida']} en pérdida y {r['criticos']} críticos.")
-    if s["cartera_vencida"] > 0: prioridades.append(f"Cartera: {_fmt(s['cartera_vencida'])} vencida.")
+    if ci["vencido"] > 0: prioridades.append(f"Cartera: {_fmt(ci['vencido'])} vencida · {ci['clientes_prioritarios']} cliente(s) prioritario(s).")
+    if o["atrasados"]: prioridades.append(f"Operación: {o['atrasados']} mantenimiento(s) atrasado(s), cumplimiento {o['cumplimiento']}%.")
+    if i["agotados"] or i["criticos"]: prioridades.append(f"Inventario: {i['agotados']} agotado(s) y {i['criticos']} producto(s) crítico(s).")
+    if i["anomalos"]: prioridades.append(f"Consumo: {i['anomalos']} contrato(s) con desviación anormal.")
     if c["crecimiento_neto"] < 0: prioridades.append(f"Crecimiento: neto {c['crecimiento_neto']:+d} este mes.")
     if h["criticas"]: prioridades.append(f"Sistema: {h['criticas']} incidencias críticas.")
     if not prioridades: prioridades.append("No detecto una señal ejecutiva crítica en los indicadores principales.")
@@ -160,6 +213,16 @@ INTENCIONES = {
     "cartera": (
         "cartera", "cobro", "cobrar", "vencid", "deben", "cuentas por cobrar",
         "moros", "morosidad", "pagos de clientes",
+    ),
+    "operacion": (
+        "operacion", "operativo", "mantenimiento", "mantenimientos", "atraso",
+        "atrasados", "cumplimiento", "trabajador", "trabajadores", "carga de trabajo",
+        "incidencias recurrentes", "servicio",
+    ),
+    "inventario": (
+        "inventario", "stock", "quimico", "quimicos", "consumo", "consumos",
+        "cloro", "alguicida", "floculante", "metasilicato", "producto", "productos",
+        "autonomia", "agotado", "reposicion",
     ),
     "nomina": (
         "nomina", "sueldo", "salario", "pago trabajadores", "pagar trabajadores",
@@ -205,8 +268,17 @@ def _prioridades_cruzadas(snapshot):
         prioridades.append((100, f"Rentabilidad: {r['en_perdida']} contrato(s) están generando pérdida."))
     if r["criticos"]:
         prioridades.append((90, f"Margen: {r['criticos']} contrato(s) tienen margen crítico menor al 15%."))
-    if snapshot["cartera_vencida"] > 0:
-        prioridades.append((85, f"Cartera: {_fmt(snapshot['cartera_vencida'])} está vencida y requiere gestión de cobro."))
+    ci=snapshot["cartera_inteligente"]; o=snapshot["operacion"]; i=snapshot["inventario"]
+    if ci["vencido"] > 0:
+        prioridades.append((85, f"Cartera: {_fmt(ci['vencido'])} vencida · {ci['clientes_prioritarios']} cliente(s) prioritario(s)."))
+    if o["atrasados"] >= 3:
+        prioridades.append((88, f"Operación: {o['atrasados']} mantenimientos atrasados; cumplimiento {o['cumplimiento']}%."))
+    elif o["atrasados"]:
+        prioridades.append((72, f"Operación: {o['atrasados']} mantenimiento(s) atrasado(s)."))
+    if i["agotados"] or i["criticos"]:
+        prioridades.append((86, f"Inventario: {i['agotados']} agotado(s) y {i['criticos']} producto(s) en stock crítico."))
+    if i["anomalos"]:
+        prioridades.append((68, f"Consumo: {i['anomalos']} contrato(s) presentan consumo anormal."))
     if h["criticas"]:
         prioridades.append((80, f"ERP: existen {h['criticas']} incidencia(s) crítica(s) que pueden afectar la operación."))
     if c["crecimiento_neto"] < 0:
@@ -227,6 +299,8 @@ def _bloque_por_tipo(tipo, snapshot):
         "rentabilidad": _respuesta_rentabilidad,
         "crecimiento": _respuesta_crecimiento,
         "cartera": _respuesta_cartera,
+        "operacion": _respuesta_operacion,
+        "inventario": _respuesta_inventario,
         "nomina": _respuesta_nomina,
         "salud": _respuesta_salud,
         "ciudades": _respuesta_ciudades,

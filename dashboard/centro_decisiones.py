@@ -42,6 +42,9 @@ def construir_centro_decisiones(*, hoy=None, ciudad=None):
     r = s["rentabilidad"]
     c = s["crecimiento"]["actual"]
     h = s["salud"]
+    ci = s["cartera_inteligente"]
+    o = s["operacion"]
+    i = s["inventario"]
 
     decisiones = []
 
@@ -66,20 +69,83 @@ def construir_centro_decisiones(*, hoy=None, ciudad=None):
             dato=f"{len(contratos_perdida)} contrato(s)",
         ))
 
-    # 2. Cartera vencida: dinero ya facturado y no cobrado.
-    if s["cartera_vencida"] > 0:
+    # 2. Cartera inteligente: dinero vencido + prioridad de clientes.
+    if ci["vencido"] > 0:
         decisiones.append(_decision(
             clave="cartera_vencida",
             nivel="critica",
             prioridad=95,
             titulo="Cobranza vencida pendiente",
-            motivo="Existen cuentas por cobrar que ya superaron su fecha de vencimiento.",
-            impacto=s["cartera_vencida"],
+            motivo=(
+                f"Hay {ci['clientes_prioritarios']} cliente(s) de cobro prioritario "
+                f"y ${ci['vencido']:,.2f} de cartera vencida."
+            ),
+            impacto=ci["vencido"],
             impacto_tipo="capital pendiente de cobro",
-            accion="Gestionar primero los saldos vencidos y confirmar compromisos de pago.",
-            url="/dashboard/finanzas/cartera/",
-            modulo="Cartera",
-            dato=f"${s['cartera_vencida']:,.2f}",
+            accion="Gestionar primero los clientes con mayor puntaje, antigüedad y reincidencia.",
+            url="/dashboard/inteligencia/cartera/",
+            modulo="Cartera Inteligente",
+            dato=f"${ci['vencido']:,.2f}",
+        ))
+
+    # Operación en campo.
+    if o["atrasados"] >= 3 or o["cumplimiento"] < 90:
+        decisiones.append(_decision(
+            clave="riesgo_operativo",
+            nivel="critica",
+            prioridad=94,
+            titulo="Riesgo de incumplimiento operativo",
+            motivo=f"{o['atrasados']} mantenimiento(s) atrasado(s) y {o['cumplimiento']}% de cumplimiento mensual.",
+            impacto=D0,
+            impacto_tipo="impacto económico no cuantificado",
+            accion="Redistribuir carga y resolver primero los mantenimientos con mayor atraso.",
+            url="/dashboard/inteligencia/operativa/",
+            modulo="Inteligencia Operativa",
+            dato=f"{o['atrasados']} atraso(s)",
+        ))
+    elif o["atrasados"]:
+        decisiones.append(_decision(
+            clave="atrasos_operativos",
+            nivel="atencion",
+            prioridad=79,
+            titulo="Mantenimientos atrasados",
+            motivo=f"Existen {o['atrasados']} mantenimiento(s) pendientes con fecha vencida.",
+            impacto=D0,
+            impacto_tipo="impacto económico no cuantificado",
+            accion="Reprogramar o cerrar los servicios pendientes antes de que se acumulen.",
+            url="/dashboard/inteligencia/operativa/",
+            modulo="Inteligencia Operativa",
+            dato=f"{o['atrasados']} atraso(s)",
+        ))
+
+    # Inventario y consumo.
+    if i["agotados"] or i["criticos"]:
+        decisiones.append(_decision(
+            clave="stock_critico",
+            nivel="critica",
+            prioridad=93,
+            titulo="Stock crítico para la operación",
+            motivo=f"{i['agotados']} producto(s) agotado(s) y {i['criticos']} por debajo del mínimo.",
+            impacto=D0,
+            impacto_tipo="riesgo operativo no cuantificado",
+            accion="Reponer primero productos agotados y críticos según consumo y autonomía estimada.",
+            url="/dashboard/inteligencia/inventario/",
+            modulo="Inteligencia de Inventario",
+            dato=f"{i['agotados'] + i['criticos']} producto(s)",
+        ))
+    if i["anomalos"]:
+        decisiones.append(_decision(
+            clave="consumo_anormal",
+            nivel="atencion",
+            prioridad=74,
+            titulo="Consumo químico fuera del patrón",
+            motivo=f"{i['anomalos']} contrato(s) consumen significativamente más que su promedio reciente.",
+            impacto=D0,
+            impacto_tipo="sobrecosto potencial no cuantificado",
+            accion="Revisar estado del agua, dosificación, frecuencia y registro de consumo de esos contratos.",
+            url="/dashboard/inteligencia/inventario/",
+            modulo="Inteligencia de Inventario",
+            dato=f"{i['anomalos']} contrato(s)",
         ))
 
     # 3. Incidencias críticas del ERP. No se inventa impacto económico.
