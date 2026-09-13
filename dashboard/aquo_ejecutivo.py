@@ -32,7 +32,7 @@ def construir_snapshot_ejecutivo(*, hoy=None, ciudad=None):
         (_money(f.saldo) for f in facturas if f.saldo > 0 and f.fecha_vencimiento and f.fecha_vencimiento < hoy),
         D0,
     )
-    cobrado = sum((_money(f.total_cobrado) for f in facturas), D0)
+    cobrado = sum((_money(f.monto_pagado) for f in facturas), D0)
 
     obligaciones = list(
         ObligacionTrabajador.objects.exclude(estado=ObligacionTrabajador.ESTADO_ANULADO)
