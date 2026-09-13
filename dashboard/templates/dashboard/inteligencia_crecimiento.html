@@ -1,0 +1,40 @@
+{% extends "dashboard/base_admin.html" %}
+{% block title %}Crecimiento y Retención | JVAQUA ERP{% endblock %}
+{% block top_title %}Inteligencia de Crecimiento{% endblock %}
+{% block content %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+.gr{--n:#17324d;--b:#0865d9;--m:#68788b;--l:#e7edf5;--g:#14845f;--r:#d94b55;--y:#d99508}.gr-hero,.gr-card{background:#fff;border:1px solid var(--l);border-radius:20px;box-shadow:0 9px 24px rgba(18,46,77,.05)}.gr-hero{padding:1.2rem 1.3rem;background:linear-gradient(135deg,#fff,#f3f8ff)}.gr-k{font-size:.72rem;font-weight:850;letter-spacing:.08em;text-transform:uppercase;color:var(--b)}.gr-title{font-size:1.65rem;font-weight:900;color:var(--n);margin:.2rem 0}.gr-sub{font-size:.84rem;color:var(--m)}.gr-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:.75rem}.gr-card{padding:1rem}.gr-label{font-size:.72rem;font-weight:800;color:var(--m)}.gr-value{font-size:1.55rem;font-weight:900;color:var(--n);margin:.2rem 0}.gr-foot{font-size:.7rem;color:var(--m)}.gr-two{display:grid;grid-template-columns:1fr 1fr;gap:.8rem}.chart{height:270px}.chart canvas{width:100%!important;height:100%!important}.gr-head{display:flex;justify-content:space-between;gap:.5rem;align-items:center;margin-bottom:.75rem}.gr-head strong{color:var(--n)}.alertx{padding:.75rem;border-radius:14px;margin-bottom:.55rem;font-size:.78rem}.alertx.critica{background:#fee2e2;color:#991b1b}.alertx.atencion{background:#fef3c7;color:#92400e}.alertx.saludable{background:#dcfce7;color:#166534}.rowx{display:flex;justify-content:space-between;gap:.7rem;padding:.65rem 0;border-bottom:1px solid var(--l);font-size:.78rem}.rowx:last-child{border-bottom:0}.pos{color:var(--g)}.neg{color:var(--r)}@media(max-width:950px){.gr-grid{grid-template-columns:repeat(2,1fr)}.gr-two{grid-template-columns:1fr}}@media(max-width:560px){.gr-grid{grid-template-columns:1fr 1fr}.gr-value{font-size:1.25rem}}
+</style>
+<div class="gr">
+<section class="gr-hero mb-3">
+ <div class="d-flex flex-wrap justify-content-between gap-2 align-items-end">
+  <div><div class="gr-k">Inteligencia Empresarial</div><h1 class="gr-title">Crecimiento y Retención</h1><div class="gr-sub">Altas, bajas, recuperaciones y facturación mensual ganada o perdida.</div></div>
+  <form method="get"><select name="ciudad" class="form-select form-select-sm" onchange="this.form.submit()"><option value="">Todas las ciudades</option>{% for c in ciudades %}<option value="{{ c.id }}" {% if ciudad_obj.id == c.id %}selected{% endif %}>{{ c.nombre }}</option>{% endfor %}</select></form>
+ </div>
+</section>
+<div class="gr-grid mb-3">
+ <div class="gr-card"><div class="gr-label">Altas este mes</div><div class="gr-value pos">+{{ analisis.actual.altas }}</div><div class="gr-foot">${{ analisis.actual.ingreso_ganado|floatformat:2 }} / mes ganado</div></div>
+ <div class="gr-card"><div class="gr-label">Recuperados</div><div class="gr-value pos">+{{ analisis.actual.recuperados }}</div><div class="gr-foot">${{ analisis.actual.ingreso_recuperado|floatformat:2 }} / mes recuperado</div></div>
+ <div class="gr-card"><div class="gr-label">Bajas este mes</div><div class="gr-value neg">-{{ analisis.actual.bajas }}</div><div class="gr-foot">${{ analisis.actual.ingreso_perdido|floatformat:2 }} / mes perdido</div></div>
+ <div class="gr-card"><div class="gr-label">Retención estimada</div><div class="gr-value">{{ analisis.actual.retencion }}%</div><div class="gr-foot">Base: {{ analisis.actual.activos_inicio }} contratos al iniciar el mes</div></div>
+</div>
+<div class="gr-two mb-3">
+ <section class="gr-card"><div class="gr-head"><strong>Evolución comercial · 12 meses</strong></div><div class="chart"><canvas id="growthChart"></canvas></div></section>
+ <section class="gr-card"><div class="gr-head"><strong>Retención · 12 meses</strong></div><div class="chart"><canvas id="retentionChart"></canvas></div></section>
+</div>
+<div class="gr-two mb-3">
+ <section class="gr-card"><div class="gr-head"><strong>Señales ejecutivas</strong></div>{% for a in analisis.alertas %}<div class="alertx {{ a.nivel }}"><strong>{{ a.titulo }}</strong><br>{{ a.texto }}</div>{% endfor %}</section>
+ <section class="gr-card"><div class="gr-head"><strong>Motivos de baja · este mes</strong></div>{% for m in analisis.motivos %}<div class="rowx"><span>{{ m.nombre }}</span><strong>{{ m.total }}</strong></div>{% empty %}<div class="gr-sub">No hay bajas registradas en el período.</div>{% endfor %}</section>
+</div>
+<section class="gr-card">
+ <div class="gr-head"><strong>Crecimiento por ciudad · este mes</strong><span class="gr-sub">Altas + recuperaciones − bajas</span></div>
+ {% for x in analisis.ranking_ciudades %}<div class="rowx"><span><strong>{{ x.ciudad.nombre }}</strong><br><span class="gr-sub">{{ x.activos }} activos · +{{ x.altas }} altas · +{{ x.recuperados }} recuperados · -{{ x.bajas }} bajas</span></span><strong class="{% if x.neto >= 0 %}pos{% else %}neg{% endif %}">{% if x.neto > 0 %}+{% endif %}{{ x.neto }}</strong></div>{% empty %}<div class="gr-sub">Todavía no hay información territorial para mostrar.</div>{% endfor %}
+</section>
+</div>
+<script>
+const g={{ analisis.grafico_contratos|safe }}, r={{ analisis.grafico_retencion|safe }};
+new Chart(document.getElementById('growthChart'),{type:'line',data:{labels:g.labels,datasets:[{label:'Altas',data:g.altas},{label:'Recuperados',data:g.recuperados},{label:'Bajas',data:g.bajas},{label:'Activos',data:g.activos}]},options:{responsive:true,maintainAspectRatio:false}});
+new Chart(document.getElementById('retentionChart'),{type:'line',data:{labels:r.labels,datasets:[{label:'Retención %',data:r.retencion}]},options:{responsive:true,maintainAspectRatio:false,scales:{y:{suggestedMin:80,suggestedMax:100}}}});
+</script>
+{% endblock %}
