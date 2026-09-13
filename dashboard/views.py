@@ -90,6 +90,7 @@ except Exception:
 
 
 from .salud_erp import diagnosticar_salud_erp
+from .inteligencia_rentabilidad import analizar_rentabilidad
 
 # -------------------
 # Helpers de roles
@@ -3795,6 +3796,22 @@ def marcar_todas_leidas_view(request):
 
 
 
+
+
+
+@login_required
+def inteligencia_rentabilidad_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    hoy = timezone.localdate()
+    ciudad_id = (request.GET.get("ciudad") or "").strip()
+    ciudad_obj = Ciudad.objects.filter(pk=ciudad_id, activa=True).first() if ciudad_id.isdigit() else None
+    analisis = analizar_rentabilidad(hoy=hoy, ciudad=ciudad_obj)
+    return render(request, "dashboard/inteligencia_rentabilidad.html", {
+        "analisis": analisis, "hoy": hoy, "ciudad_obj": ciudad_obj,
+        "ciudades": Ciudad.objects.filter(activa=True).order_by("orden", "nombre"),
+        "es_admin": True,
+    })
 
 @login_required
 def salud_erp_view(request):
