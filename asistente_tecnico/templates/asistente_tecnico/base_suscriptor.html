@@ -77,6 +77,7 @@
 
 {% endif %}
 {% if request.GET.support_float != '1' %}
+{{ soporte_cliente_inicial|json_script:"support-client-initial-data" }}
 <style>
 .support-dock{position:fixed;right:15px;bottom:92px;z-index:1085;display:flex;flex-direction:column-reverse;gap:8px;align-items:flex-end;pointer-events:none}.support-mini{position:relative;width:57px;height:57px;border:4px solid #fff;border-radius:50%;background:linear-gradient(145deg,#0b6fe8,#0787bf);color:#fff;box-shadow:0 12px 30px rgba(4,77,165,.30);pointer-events:auto;cursor:pointer;font-size:1.3rem;display:grid;place-items:center}.support-mini.active{outline:3px solid rgba(8,123,184,.18)}.support-mini .count{position:absolute;right:-5px;top:-6px;min-width:22px;height:22px;padding:0 5px;border-radius:999px;background:#dc3545;border:2px solid #fff;color:#fff;font-size:.65rem;font-weight:900;display:none;place-items:center}.support-mini.unread .count{display:grid}.support-mini.unread{animation:supportPulse 1.7s infinite}.support-panel{position:fixed;right:84px;bottom:92px;z-index:1084;width:min(385px,calc(100vw - 108px));height:min(565px,calc(100vh - 125px));border:1px solid #dce9ef;border-radius:22px;background:#fff;box-shadow:0 22px 65px rgba(15,45,79,.25);overflow:hidden;opacity:0;visibility:hidden;transform:translateY(10px) scale(.98);transition:.18s}.support-panel.open{opacity:1;visibility:visible;transform:none}.support-head{height:54px;padding:7px 8px 7px 13px;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,#075ea5,#0787bf);color:#fff}.support-head strong{font-size:.8rem}.support-head small{display:block;font-size:.62rem;opacity:.82;max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.support-actions{display:flex;gap:5px}.support-actions button,.support-actions a{width:32px;height:32px;border:0;border-radius:10px;display:grid;place-items:center;background:rgba(255,255,255,.14);color:#fff!important;text-decoration:none}.support-frame{display:block;width:100%;height:calc(100% - 54px);border:0;background:#f5f9fc}@keyframes supportPulse{50%{box-shadow:0 13px 34px rgba(4,77,165,.46),0 0 0 8px rgba(8,123,184,.09)}}@media(max-width:600px){.support-dock{right:11px;bottom:88px}.support-mini{width:53px;height:53px}.support-panel{left:8px;right:8px;bottom:82px;width:auto;height:calc(100vh - 102px)}}
 </style>
@@ -85,7 +86,10 @@
 <script>
 (function(){
  const dock=document.getElementById('supportDock'),panel=document.getElementById('supportPanel'),mount=document.getElementById('supportMount'),title=document.getElementById('supportTitle'),subtitle=document.getElementById('supportSubtitle'),full=document.getElementById('supportFull');if(!dock||!panel)return;
- const endpoint="{% url 'asistente_tecnico:digital_soporte_burbuja_api' %}";let map=new Map(),active=null,frame=null,last={};
+ const endpoint="{% url 'asistente_tecnico:digital_soporte_burbuja_api' %}";
+ const initial=JSON.parse(document.getElementById('support-client-initial-data')?.textContent||'[]');
+ let map=new Map((Array.isArray(initial)?initial:[]).map(c=>[String(c.id),c])),active=null,frame=null,last={};
+ (Array.isArray(initial)?initial:[]).forEach(c=>{last[c.id]=c.no_leidos||0});
  function destroy(){if(frame){frame.remove();frame=null}mount.innerHTML=''}
  function min(){panel.classList.remove('open');destroy();active=null;render()}
  function openChat(id){const c=map.get(String(id));if(!c)return;active=String(id);title.textContent=c.titulo;subtitle.textContent=c.subtitulo||c.estado_label;full.href=c.url_completa;destroy();frame=document.createElement('iframe');frame.className='support-frame';frame.src=c.url;frame.title='Soporte JVAQUA';mount.appendChild(frame);panel.classList.add('open');render()}
@@ -106,7 +110,7 @@
    });
    render();
  }catch(e){}}
- document.getElementById('supportMin')?.addEventListener('click',min);setInterval(poll,4000);poll();
+ document.getElementById('supportMin')?.addEventListener('click',min);render();setInterval(poll,4000);poll();
 })();
 </script>
 {% endif %}

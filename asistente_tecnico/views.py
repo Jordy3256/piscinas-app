@@ -1607,22 +1607,44 @@ def _soporte_conversacion_payload(conversacion, *, admin=False):
 
 
 @login_required
+def _soporte_payload_simple(conversacion, *, admin=False):
+    if admin:
+        user = conversacion.suscriptor.user
+        titulo = user.get_full_name() or user.username
+        no_leidos = conversacion.mensajes.filter(
+            remitente="cliente", leido_admin=False
+        ).count()
+        base = f"/dashboard/asistente/administracion/soporte/{conversacion.pk}/"
+    else:
+        titulo = "Soporte JVAQUA"
+        no_leidos = conversacion.mensajes.filter(
+            remitente="admin", leido_cliente=False
+        ).count()
+        base = f"/dashboard/asistente/digital/soporte/{conversacion.pk}/"
+    return {
+        "id": conversacion.pk,
+        "titulo": titulo,
+        "subtitulo": (conversacion.asunto or conversacion.get_categoria_display())[:80],
+        "no_leidos": no_leidos,
+        "estado": conversacion.estado,
+        "estado_label": conversacion.get_estado_display(),
+        "url": base + "?support_float=1",
+        "url_completa": base,
+    }
+
+
+@login_required
 def digital_soporte_burbuja_api(request):
     perfil = _suscriptor(request.user)
     if not perfil:
         return JsonResponse({"ok": False, "error": "No autorizado"}, status=403)
     conversaciones = list(
         perfil.conversaciones_soporte.exclude(estado="cerrada")
-        .annotate(no_leidos=Count(
-            "mensajes",
-            filter=Q(mensajes__remitente="admin", mensajes__leido_cliente=False),
-        ))
         .order_by("-ultimo_mensaje_en", "-id")[:5]
     )
-    payload = [_soporte_conversacion_payload(c, admin=False) for c in conversaciones]
+    payload = [_soporte_payload_simple(c, admin=False) for c in conversaciones]
     return JsonResponse({
         "ok": True,
-        "visible": bool(payload),
         "conversaciones": payload,
         "no_leidos": sum(x["no_leidos"] for x in payload),
         "limite": _estado_limite_soporte(perfil),
@@ -1635,17 +1657,12 @@ def soporte_admin_burbuja_api(request):
         return JsonResponse({"ok": False, "error": "No autorizado"}, status=403)
     conversaciones = list(
         ConversacionSoporteDigital.objects.exclude(estado="cerrada")
-        .annotate(no_leidos=Count(
-            "mensajes",
-            filter=Q(mensajes__remitente="cliente", mensajes__leido_admin=False),
-        ))
         .select_related("suscriptor__user")
         .order_by("-ultimo_mensaje_en", "-id")[:8]
     )
-    payload = [_soporte_conversacion_payload(c, admin=True) for c in conversaciones]
+    payload = [_soporte_payload_simple(c, admin=True) for c in conversaciones]
     return JsonResponse({
         "ok": True,
-        "visible": any(x["no_leidos"] > 0 for x in payload),
         "conversaciones": payload,
         "no_leidos": sum(x["no_leidos"] for x in payload),
     })
