@@ -15,7 +15,7 @@
   <link rel="manifest" href="/dashboard/manifest.json?v=20260916-01">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="{% static 'dashboard/jvaqua-login.css' %}?v=20260916-03">
+  <link rel="stylesheet" href="{% static 'dashboard/jvaqua-login.css' %}?v=20260916-04">
 </head>
 <body>
 <div class="login-page">
@@ -62,8 +62,17 @@
         </article>
       </div>
 
+      <div class="aquo-guide-card aquo-guide-desktop">
+        <img src="{% static 'asistente_tecnico/characters/aquo-avatar-hq.webp' %}" alt="AQUO, asistente inteligente para piscinas">
+        <div class="aquo-guide-bubble">
+          <strong>Hola, soy AQUO.</strong>
+          <p>Cuéntame qué pasa con tu piscina y te guío paso a paso: qué revisar, cuánto aplicar y qué hacer después.</p>
+          <div class="aquo-guide-tags"><span>Agua verde</span><span>pH / Cloro</span><span>Dosificación</span><span>Mantenimiento</span></div>
+        </div>
+      </div>
+
       <a class="brand-cta" href="/dashboard/asistente/digital/registro/">
-        Empezar con AQUO
+        Probar AQUO
         <span aria-hidden="true">→</span>
       </a>
     </div>
@@ -91,6 +100,15 @@
       <p>Diagnostica, calcula, aprende y mantén tu piscina con AQUO.</p>
       <div class="mobile-feature-chips" aria-hidden="true">
         <span>✦ Diagnóstico</span><span>⌁ Dosificación</span><span>✓ Plan inteligente</span>
+      </div>
+    </div>
+
+    <div class="aquo-guide-card aquo-guide-mobile">
+      <img src="{% static 'asistente_tecnico/characters/aquo-avatar-hq.webp' %}" alt="AQUO">
+      <div class="aquo-guide-bubble">
+        <strong>¿Tienes un problema con tu piscina?</strong>
+        <p>Yo te digo qué revisar, qué producto usar y cuánto aplicar.</p>
+        <div class="aquo-guide-tags"><span>Diagnosticar</span><span>Calcular</span><span>Resolver</span></div>
       </div>
     </div>
 
@@ -161,8 +179,8 @@
           </svg>
         </div>
         <div>
-          <strong>Instala AQUO 360 en tu teléfono</strong>
-          <small>Accede con un toque y úsalo como una app.</small>
+          <strong>Lleva AQUO 360 contigo</strong>
+          <small>Instálalo gratis en tu teléfono y entra con un solo toque.</small>
         </div>
       </div>
 
@@ -223,17 +241,9 @@
     });
   }
 
-  const isStandalone=()=>{
-    return window.matchMedia('(display-mode: standalone)').matches ||
-           window.navigator.standalone === true;
-  };
-
   const isiOS=/iphone|ipad|ipod/i.test(navigator.userAgent);
+  const isAndroid=/android/i.test(navigator.userAgent);
   let deferredPrompt=null;
-
-  function hideInstallCard(){
-    if(installCard)installCard.hidden=true;
-  }
 
   function showHelp(html){
     if(!installHelp)return;
@@ -241,51 +251,63 @@
     installHelp.hidden=false;
   }
 
-  if(isStandalone()){
-    hideInstallCard();
-  }else{
-    window.addEventListener('beforeinstallprompt',(event)=>{
-      event.preventDefault();
-      deferredPrompt=event;
-      if(installCard)installCard.hidden=false;
-      if(installButton){
-        installButton.classList.add('is-ready');
-        installButton.querySelector('span').textContent='Instalar app';
-      }
-    });
+  // El bloque de instalación permanece visible en el login móvil.
+  // Algunos navegadores embebidos (WhatsApp/Facebook/Custom Tabs) pueden
+  // reportar el modo de visualización de forma distinta y ocultarlo por error.
+  if(installCard) installCard.hidden=false;
 
+  window.addEventListener('beforeinstallprompt',(event)=>{
+    event.preventDefault();
+    deferredPrompt=event;
+    if(installCard)installCard.hidden=false;
     if(installButton){
-      installButton.addEventListener('click',async()=>{
-        installHelp.hidden=true;
-
-        if(deferredPrompt){
-          deferredPrompt.prompt();
-          const choice=await deferredPrompt.userChoice;
-          deferredPrompt=null;
-          if(choice && choice.outcome==='accepted'){
-            hideInstallCard();
-          }
-          return;
-        }
-
-        if(isiOS){
-          showHelp(
-            '<strong>En iPhone o iPad:</strong> abre esta página en Safari, toca <b>Compartir</b> y luego <b>Agregar a pantalla de inicio</b>.'
-          );
-          return;
-        }
-
-        showHelp(
-          '<strong>Para instalar AQUO 360:</strong> abre el menú de tu navegador y selecciona <b>Instalar aplicación</b> o <b>Agregar a pantalla principal</b>.'
-        );
-      });
+      installButton.classList.add('is-ready');
+      installButton.querySelector('span').textContent='Instalar AQUO 360';
     }
+  });
 
-    window.addEventListener('appinstalled',()=>{
-      deferredPrompt=null;
-      hideInstallCard();
+  if(installButton){
+    installButton.addEventListener('click',async()=>{
+      if(installHelp)installHelp.hidden=true;
+
+      if(deferredPrompt){
+        deferredPrompt.prompt();
+        const choice=await deferredPrompt.userChoice;
+        deferredPrompt=null;
+        if(choice && choice.outcome==='accepted'){
+          installButton.querySelector('span').textContent='AQUO 360 instalado';
+          installButton.disabled=true;
+        }
+        return;
+      }
+
+      if(isiOS){
+        showHelp(
+          '<strong>En iPhone o iPad:</strong> abre AQUO 360 en <b>Safari</b>, toca <b>Compartir</b> y selecciona <b>Agregar a pantalla de inicio</b>.'
+        );
+        return;
+      }
+
+      if(isAndroid){
+        showHelp(
+          '<strong>En Android:</strong> si abriste AQUO desde WhatsApp u otra app, toca <b>⋮</b> y elige <b>Abrir en Chrome</b>. Luego en Chrome toca <b>⋮ → Instalar aplicación</b> o <b>Agregar a pantalla principal</b>.'
+        );
+        return;
+      }
+
+      showHelp(
+        '<strong>Para instalar AQUO 360:</strong> abre el menú de tu navegador y selecciona <b>Instalar aplicación</b> o <b>Agregar a pantalla principal</b>.'
+      );
     });
   }
+
+  window.addEventListener('appinstalled',()=>{
+    deferredPrompt=null;
+    if(installButton){
+      installButton.querySelector('span').textContent='AQUO 360 instalado';
+      installButton.disabled=true;
+    }
+  });
 })();
 </script>
 </body>

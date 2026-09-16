@@ -218,6 +218,33 @@ a{text-decoration:none}
 }
 .login-meta i{width:4px;height:4px;border-radius:50%;background:#b8c3cf}
 
+
+/* AQUO como guía visible de la experiencia */
+.aquo-guide-card{
+  display:flex;align-items:center;gap:13px;
+  max-width:610px;margin-top:18px;padding:13px 14px;
+  border:1px solid rgba(255,255,255,.16);border-radius:18px;
+  background:rgba(255,255,255,.09);backdrop-filter:blur(10px);
+  box-shadow:0 12px 30px rgba(0,25,60,.10)
+}
+.aquo-guide-card img{
+  width:64px;height:64px;object-fit:cover;object-position:center 16%;
+  border-radius:17px;border:2px solid rgba(255,255,255,.72);
+  box-shadow:0 8px 22px rgba(0,28,67,.22);flex:0 0 auto
+}
+.aquo-guide-bubble{min-width:0}
+.aquo-guide-bubble strong{display:block;color:#fff;font-size:.83rem;font-weight:900}
+.aquo-guide-bubble p{
+  margin:4px 0 8px;color:rgba(255,255,255,.72);
+  font-size:.72rem;line-height:1.4
+}
+.aquo-guide-tags{display:flex;flex-wrap:wrap;gap:5px}
+.aquo-guide-tags span{
+  padding:4px 7px;border-radius:999px;background:rgba(255,255,255,.11);
+  color:rgba(255,255,255,.84);font-size:.58rem;font-weight:800
+}
+.aquo-guide-mobile{display:none}
+
 /* Instalación PWA */
 .install-banner{
   width:min(100%,470px);padding:16px;border:1px solid rgba(7,87,184,.11);
@@ -296,14 +323,33 @@ a{text-decoration:none}
     margin:0 auto;padding:24px 20px 22px;border-radius:25px;
     box-shadow:0 20px 55px rgba(4,46,94,.18)
   }
+  .aquo-guide-desktop{display:none}
+  .aquo-guide-mobile{
+    display:flex;width:min(100%,470px);margin:-2px auto 12px;
+    padding:12px 13px;border-color:rgba(7,87,184,.10);
+    background:linear-gradient(145deg,#ffffff,#eef8ff);
+    box-shadow:0 14px 34px rgba(4,46,94,.11)
+  }
+  .aquo-guide-mobile img{
+    width:58px;height:58px;border-color:#fff;
+    box-shadow:0 8px 20px rgba(7,87,184,.16)
+  }
+  .aquo-guide-mobile .aquo-guide-bubble strong{color:#173653;font-size:.78rem}
+  .aquo-guide-mobile .aquo-guide-bubble p{color:#71839a;font-size:.67rem;margin-bottom:7px}
+  .aquo-guide-mobile .aquo-guide-tags span{
+    background:#e5f3fb;color:#0a6395;font-size:.55rem
+  }
+
   .install-banner{
-    position:fixed;left:12px;right:12px;
-    bottom:max(10px,env(safe-area-inset-bottom));
-    width:auto;max-width:470px;margin:0 auto;border-radius:21px;
-    z-index:60;box-shadow:0 20px 55px rgba(4,46,94,.28)
+    display:block!important;visibility:visible!important;opacity:1!important;
+    position:fixed!important;left:10px!important;right:10px!important;
+    bottom:calc(10px + env(safe-area-inset-bottom))!important;
+    width:auto!important;max-width:470px!important;margin:0 auto!important;
+    border-radius:21px;z-index:2147483000!important;
+    box-shadow:0 22px 60px rgba(4,46,94,.32)
   }
   .install-copy{margin-bottom:10px}
-  .install-button{height:48px}
+  .install-button{height:50px}
   .security-row{gap:3px}
   .security-item{font-size:.6rem}
 }
@@ -322,4 +368,8 @@ a{text-decoration:none}
 @media(prefers-reduced-motion:reduce){
   .water-lines i{animation:none}
   .login-submit,.brand-cta,.install-button{transition:none}
+}
+
+@media(max-width:900px){
+  #pwa-install-card[hidden]{display:block!important}
 }
