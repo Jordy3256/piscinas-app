@@ -1,6 +1,6 @@
 /* dashboard/static/dashboard/sw-dashboard.js */
 
-const VERSION = "v2026-03-11-20";
+const VERSION = "v2026-09-16-aquo360-01";
 const CACHE = {
   static: `static-${VERSION}`,
   pages: `pages-${VERSION}`,
@@ -188,18 +188,18 @@ self.addEventListener("push", (event) => {
     data = event.data ? event.data.json() : {};
   } catch (e) {
     data = {
-      title: "Piscinas App",
+      title: "AQUO 360",
       body: event.data ? event.data.text() : "Nueva notificación",
     };
   }
 
-  const title = data.title || "Piscinas App";
+  const title = data.title || "AQUO 360";
   const body = data.body || data.message || "Tienes una nueva notificación.";
   const url = data.url || "/dashboard/home/";
   const tag =
     data.tag && String(data.tag).trim()
       ? String(data.tag).trim()
-      : `piscinas-${Date.now()}`;
+      : `aquo360-${Date.now()}`;
 
   const options = {
     body,

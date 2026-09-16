@@ -1,9 +1,9 @@
 {
-  "name": "JVAQUA ERP",
-  "short_name": "JVAQUA",
-  "description": "Sistema Integral de Gestión JVAQUA para operación de piscinas.",
+  "name": "AQUO 360",
+  "short_name": "AQUO 360",
+  "description": "Plataforma inteligente para la gestión, operación y cuidado de piscinas.",
   "id": "/dashboard/",
-  "start_url": "/dashboard/home/",
+  "start_url": "/dashboard/inicio/",
   "scope": "/dashboard/",
   "display": "standalone",
   "background_color": "#0757b8",

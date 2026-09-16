@@ -1108,9 +1108,9 @@ def sw_js_view(request):
 # -------------------
 def manifest_json_view(request):
     data = {
-        "name": "Piscinas App",
-        "short_name": "Piscinas",
-        "description": "Gestión de mantenimientos, operativo y finanzas.",
+        "name": "AQUO 360",
+        "short_name": "AQUO 360",
+        "description": "Plataforma inteligente para la gestión, operación y cuidado de piscinas.",
         "id": "/dashboard/",
         "start_url": "/dashboard/inicio/",
         "scope": "/dashboard/",
