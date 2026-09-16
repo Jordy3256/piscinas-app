@@ -15,7 +15,7 @@
   <link rel="manifest" href="/dashboard/manifest.json?v=20260916-01">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="{% static 'dashboard/jvaqua-login.css' %}?v=20260916-04">
+  <link rel="stylesheet" href="{% static 'dashboard/jvaqua-login.css' %}?v=20260916-05">
 </head>
 <body>
 <div class="login-page">
@@ -243,6 +243,11 @@
 
   const isiOS=/iphone|ipad|ipod/i.test(navigator.userAgent);
   const isAndroid=/android/i.test(navigator.userAgent);
+  const isInstalledPWA=()=>{
+    return window.matchMedia('(display-mode: standalone)').matches ||
+           window.matchMedia('(display-mode: fullscreen)').matches ||
+           window.navigator.standalone === true;
+  };
   let deferredPrompt=null;
 
   function showHelp(html){
@@ -251,10 +256,9 @@
     installHelp.hidden=false;
   }
 
-  // El bloque de instalación permanece visible en el login móvil.
-  // Algunos navegadores embebidos (WhatsApp/Facebook/Custom Tabs) pueden
-  // reportar el modo de visualización de forma distinta y ocultarlo por error.
-  if(installCard) installCard.hidden=false;
+  // En navegador normal mostramos siempre la opción.
+  // Si el usuario YA abrió AQUO 360 como PWA instalada, la ocultamos.
+  if(installCard) installCard.hidden=isInstalledPWA();
 
   window.addEventListener('beforeinstallprompt',(event)=>{
     event.preventDefault();
@@ -303,10 +307,7 @@
 
   window.addEventListener('appinstalled',()=>{
     deferredPrompt=null;
-    if(installButton){
-      installButton.querySelector('span').textContent='AQUO 360 instalado';
-      installButton.disabled=true;
-    }
+    if(installCard)installCard.hidden=true;
   });
 })();
 </script>

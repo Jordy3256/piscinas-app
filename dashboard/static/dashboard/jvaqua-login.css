@@ -373,3 +373,238 @@ a{text-decoration:none}
 @media(max-width:900px){
   #pwa-install-card[hidden]{display:block!important}
 }
+
+
+/* =========================================================
+   v3.10.63c · Login compacto AQUO 360
+   Objetivo: ver toda la información principal sin desplazarse.
+   ========================================================= */
+
+/* DESKTOP */
+@media(min-width:901px){
+  html,body{height:100%;overflow:hidden}
+  .login-page{
+    height:100dvh;min-height:0;
+    grid-template-columns:minmax(0,1.08fr) minmax(390px,.92fr)
+  }
+  .login-brand{
+    height:100dvh;min-height:0;
+    padding:clamp(18px,2.8vw,38px) clamp(24px,4vw,58px)
+  }
+  .aquo-mark{width:48px;height:48px;border-radius:15px}
+  .aquo-mark svg{width:28px;height:28px}
+  .aquo-wordmark{font-size:.95rem}
+  .brand-edition{font-size:.6rem}
+  .brand-main{
+    max-width:640px;padding:10px 0;margin:auto 0
+  }
+  .brand-kicker{margin-bottom:10px;padding:5px 9px;font-size:.64rem}
+  .brand-main h1{
+    font-size:clamp(2.15rem,4.15vw,4rem);
+    line-height:.96
+  }
+  .brand-main>p{
+    margin-top:12px;font-size:clamp(.86rem,1.1vw,.98rem);line-height:1.45
+  }
+  .brand-features{
+    gap:7px;margin-top:14px;max-width:590px
+  }
+  .brand-feature{padding:8px 10px;border-radius:13px;gap:8px}
+  .brand-feature .feature-icon{width:27px;height:27px;border-radius:8px}
+  .brand-feature strong{font-size:.72rem}
+  .brand-feature small{font-size:.59rem;margin-top:1px}
+  .aquo-guide-card{margin-top:10px;padding:9px 10px;gap:9px;border-radius:14px}
+  .aquo-guide-card img{width:50px;height:50px;border-radius:13px}
+  .aquo-guide-bubble strong{font-size:.74rem}
+  .aquo-guide-bubble p{margin:2px 0 5px;font-size:.62rem;line-height:1.3}
+  .aquo-guide-tags span{font-size:.51rem;padding:3px 6px}
+  .brand-cta{margin-top:10px;padding:9px 13px;border-radius:12px;font-size:.73rem}
+  .brand-footer{font-size:.64rem}
+
+  .login-panel{
+    height:100dvh;min-height:0;overflow:hidden;
+    gap:10px;padding:18px 24px
+  }
+  .login-card{
+    width:min(100%,455px);
+    padding:23px 28px 20px;border-radius:24px
+  }
+  .login-eyebrow{margin-bottom:4px;font-size:.65rem}
+  .login-card h2{font-size:1.62rem}
+  .login-subtitle{margin:6px 0 16px;font-size:.78rem;line-height:1.4}
+  .login-card .form-label{margin-bottom:5px;font-size:.69rem}
+  .login-card .mb-3{margin-bottom:.75rem!important}
+  .login-card .mb-4{margin-bottom:.9rem!important}
+  .login-input .form-control{height:45px;border-radius:13px;font-size:.87rem}
+  .password-toggle{width:34px;height:34px}
+  .login-submit{height:46px;border-radius:13px;font-size:.88rem}
+  .login-register{margin-top:11px;padding:10px 11px;border-radius:13px}
+  .login-register span{font-size:.68rem}
+  .login-register small{font-size:.58rem}
+  .login-register a{font-size:.66rem}
+  .security-row{margin-top:13px;padding-top:11px}
+  .security-item{font-size:.56rem}
+  .security-item span{font-size:.82rem;margin-bottom:2px}
+  .login-meta{margin-top:11px;font-size:.61rem}
+
+  .install-banner{
+    width:min(100%,455px);padding:11px 12px;border-radius:17px
+  }
+  .install-copy{margin-bottom:8px;gap:9px}
+  .install-icon{width:36px;height:36px;border-radius:11px}
+  .install-copy strong{font-size:.76rem}
+  .install-copy small{font-size:.59rem}
+  .install-button{height:42px;border-radius:12px;font-size:.78rem}
+  .install-button svg{width:18px;height:18px}
+  .install-help{font-size:.61rem;padding:8px 9px}
+}
+
+/* MÓVIL */
+@media(max-width:900px){
+  html,body{
+    height:100%;min-height:100%;overflow:hidden!important
+  }
+  .login-page{
+    height:100dvh!important;min-height:0!important;overflow:hidden!important;
+    background:linear-gradient(160deg,#032b62 0,#0764b8 29%,#edf7ff 29.2%,#f4f9fe 100%)
+  }
+  .login-panel{
+    height:100dvh!important;min-height:0!important;overflow:hidden!important;
+    display:flex!important;flex-direction:column!important;
+    justify-content:flex-start!important;gap:6px!important;
+    padding:
+      max(8px,env(safe-area-inset-top))
+      10px
+      calc(116px + env(safe-area-inset-bottom))!important
+  }
+
+  .mobile-aquo-hero{
+    flex:0 0 auto;width:min(100%,470px);
+    padding:2px 4px 4px!important
+  }
+  .mobile-aquo-brand{margin-bottom:7px;gap:8px}
+  .aquo-mark-mobile{width:37px;height:37px;border-radius:12px}
+  .aquo-mark-mobile svg{width:23px;height:23px}
+  .mobile-aquo-brand strong{font-size:.78rem}
+  .mobile-aquo-brand small{font-size:.54rem}
+  .mobile-aquo-hero h1{
+    font-size:clamp(1.35rem,5.8vw,1.72rem)!important;
+    line-height:1!important
+  }
+  .mobile-aquo-hero>p{
+    margin:5px 0 0!important;font-size:.68rem!important;line-height:1.3!important
+  }
+  .mobile-feature-chips{margin-top:6px!important;gap:4px!important}
+  .mobile-feature-chips span{
+    padding:4px 6px!important;font-size:.51rem!important
+  }
+
+  .aquo-guide-mobile{
+    flex:0 0 auto;margin:0 auto 3px!important;
+    padding:7px 9px!important;gap:8px!important;border-radius:14px!important
+  }
+  .aquo-guide-mobile img{
+    width:44px!important;height:44px!important;border-radius:12px!important
+  }
+  .aquo-guide-mobile .aquo-guide-bubble strong{font-size:.67rem!important}
+  .aquo-guide-mobile .aquo-guide-bubble p{
+    margin:1px 0 4px!important;font-size:.57rem!important;line-height:1.25!important
+  }
+  .aquo-guide-mobile .aquo-guide-tags{gap:3px!important}
+  .aquo-guide-mobile .aquo-guide-tags span{
+    padding:2px 5px!important;font-size:.47rem!important
+  }
+
+  .login-card{
+    flex:0 0 auto;width:min(100%,470px);
+    margin:0 auto!important;padding:14px 15px 12px!important;
+    border-radius:20px!important
+  }
+  .login-card::before{height:3px}
+  .login-eyebrow{margin:0 0 2px!important;font-size:.56rem!important}
+  .login-card h2{font-size:1.22rem!important}
+  .login-subtitle{
+    margin:4px 0 10px!important;font-size:.65rem!important;line-height:1.28!important
+  }
+  .login-card .form-label{
+    margin-bottom:3px!important;font-size:.61rem!important
+  }
+  .login-card .mb-3{margin-bottom:.48rem!important}
+  .login-card .mb-4{margin-bottom:.55rem!important}
+  .login-input .form-control{
+    height:39px!important;border-radius:11px!important;
+    padding-left:40px!important;font-size:.77rem!important
+  }
+  .login-input .field-icon{left:13px!important;font-size:.86rem!important}
+  .login-input-password .form-control{padding-right:43px!important}
+  .password-toggle{
+    right:6px!important;width:30px!important;height:30px!important;font-size:.86rem!important
+  }
+  .login-submit{
+    height:40px!important;border-radius:11px!important;font-size:.76rem!important
+  }
+
+  .login-register{
+    margin-top:7px!important;padding:7px 9px!important;
+    border-radius:12px!important;gap:6px!important;
+    flex-direction:row!important;align-items:center!important
+  }
+  .login-register span{font-size:.59rem!important}
+  .login-register small{
+    display:none!important
+  }
+  .login-register a{
+    width:auto!important;padding:0!important;border:0!important;
+    font-size:.6rem!important;white-space:nowrap!important
+  }
+
+  /* Mantener beneficios, pero en una sola línea compacta */
+  .security-row{
+    margin-top:7px!important;padding-top:7px!important;gap:2px!important
+  }
+  .security-item{font-size:.49rem!important}
+  .security-item span{
+    display:inline!important;margin:0 3px 0 0!important;font-size:.7rem!important
+  }
+  .login-meta{
+    margin-top:5px!important;font-size:.52rem!important
+  }
+
+  /* Banner siempre visible abajo, sin tapar el formulario */
+  .install-banner{
+    display:block!important;visibility:visible!important;opacity:1!important;
+    position:fixed!important;left:8px!important;right:8px!important;
+    bottom:calc(7px + env(safe-area-inset-bottom))!important;
+    width:auto!important;max-width:470px!important;margin:0 auto!important;
+    padding:9px 10px!important;border-radius:16px!important;
+    z-index:2147483000!important
+  }
+  .install-copy{margin-bottom:6px!important;gap:8px!important}
+  .install-icon{
+    width:32px!important;height:32px!important;border-radius:10px!important
+  }
+  .install-icon svg{width:17px!important;height:17px!important}
+  .install-copy strong{font-size:.68rem!important}
+  .install-copy small{font-size:.53rem!important}
+  .install-button{
+    height:38px!important;border-radius:11px!important;
+    font-size:.69rem!important;gap:7px!important
+  }
+  .install-button svg{width:17px!important;height:17px!important}
+  .install-help{
+    margin-top:6px!important;padding:6px 7px!important;
+    font-size:.54rem!important;line-height:1.3!important
+  }
+
+  /* Si ya está instalada y se abre como PWA, este bloque se oculta por JS. */
+  #pwa-install-card[hidden]{display:none!important}
+}
+
+/* Teléfonos de poca altura */
+@media(max-width:900px) and (max-height:700px){
+  .mobile-feature-chips{display:none!important}
+  .aquo-guide-mobile{display:none!important}
+  .login-panel{
+    padding-bottom:calc(108px + env(safe-area-inset-bottom))!important
+  }
+}
