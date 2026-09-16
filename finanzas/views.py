@@ -32,11 +32,12 @@ from .facturacion_externa import sincronizar_avisos_facturacion
 
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, Image
 from reportlab.platypus import HRFlowable
+from backend.pdf_branding import draw_jvaqua_pdf_page
 
 
 def _es_admin(user):
@@ -1096,7 +1097,7 @@ def nomina_pago_consolidado_pdf(request, lote_pk):
     pagos = lote.distribuciones.filter(activo=True).select_related("obligacion__contrato__cliente")
     response = HttpResponse(content_type="application/pdf")
     response["Content-Disposition"] = f'attachment; filename="pago-consolidado-{lote.pk}.pdf"'
-    doc = SimpleDocTemplate(response, pagesize=A4, rightMargin=18*mm, leftMargin=18*mm, topMargin=18*mm, bottomMargin=18*mm)
+    doc = SimpleDocTemplate(response, pagesize=A4, rightMargin=18*mm, leftMargin=18*mm, topMargin=24*mm, bottomMargin=18*mm)
     styles = getSampleStyleSheet()
     story = [Paragraph("JVAQUA - COMPROBANTE DE PAGO CONSOLIDADO", styles["Title"]), Spacer(1, 8),
              Paragraph(f"Trabajador: <b>{lote.trabajador}</b>", styles["Normal"]),
@@ -1113,7 +1114,7 @@ def nomina_pago_consolidado_pdf(request, lote_pk):
     table=Table(data, colWidths=[72*mm,58*mm,30*mm])
     table.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#0B5ED7")),("TEXTCOLOR",(0,0),(-1,0),colors.white),("GRID",(0,0),(-1,-1),.4,colors.HexColor("#CBD5E1")),("PADDING",(0,0),(-1,-1),7),("ALIGN",(2,1),(2,-1),"RIGHT")]))
     story += [table, Spacer(1, 18), Paragraph(f"Forma de pago: {lote.get_metodo_pago_display()}", styles["Normal"]), Paragraph(f"Referencia: {lote.referencia or '—'}", styles["Normal"])]
-    doc.build(story)
+    doc.build(story, onFirstPage=draw_jvaqua_pdf_page, onLaterPages=draw_jvaqua_pdf_page)
     return response
 
 
@@ -1160,7 +1161,7 @@ def nomina_trabajador_pdf(request, trabajador_pk):
         pagesize=A4,
         rightMargin=18 * mm,
         leftMargin=18 * mm,
-        topMargin=18 * mm,
+        topMargin=24 * mm,
         bottomMargin=20 * mm,
         title=f"Nómina {nombre} {mes:02d}/{anio}",
         author="JVAQUA",
@@ -1270,7 +1271,7 @@ def nomina_trabajador_pdf(request, trabajador_pk):
         Table([["______________________________", "______________________________"], ["Responsable JVAQUA", "Trabajador"]], colWidths=[85 * mm, 85 * mm], style=TableStyle([("ALIGN", (0, 0), (-1, -1), "CENTER"), ("FONTSIZE", (0, 0), (-1, -1), 9), ("TOPPADDING", (0, 1), (-1, 1), 5)])),
     ])
 
-    doc.build(story, onFirstPage=_pie_pagina, onLaterPages=_pie_pagina)
+    doc.build(story, onFirstPage=draw_jvaqua_pdf_page, onLaterPages=draw_jvaqua_pdf_page)
     return response
 
 
@@ -1301,7 +1302,7 @@ def nomina_pago_anular(request,pk,pago_pk):
 def _pdf_response(nombre_archivo, titulo, subtitulo, filas, encabezados, resumen=None):
     response = HttpResponse(content_type="application/pdf")
     response["Content-Disposition"] = f'attachment; filename="{nombre_archivo}"'
-    doc = SimpleDocTemplate(response, pagesize=A4, rightMargin=14*mm, leftMargin=14*mm, topMargin=14*mm, bottomMargin=14*mm)
+    doc = SimpleDocTemplate(response, pagesize=A4, rightMargin=14*mm, leftMargin=14*mm, topMargin=24*mm, bottomMargin=14*mm)
     estilos = getSampleStyleSheet()
     elementos = [Paragraph(titulo, ParagraphStyle("TituloJVA", parent=estilos["Title"], alignment=TA_CENTER, fontSize=17)), Paragraph(subtitulo, ParagraphStyle("SubJVA", parent=estilos["Normal"], alignment=TA_CENTER, textColor=colors.HexColor("#5b6472"))), Spacer(1, 7*mm)]
     if resumen:
@@ -1310,8 +1311,63 @@ def _pdf_response(nombre_archivo, titulo, subtitulo, filas, encabezados, resumen
     data = [[Paragraph(str(x), estilos["BodyText"]) for x in encabezados]] + [[Paragraph(str(x), estilos["BodyText"]) for x in fila] for fila in filas]
     tabla = Table(data, repeatRows=1)
     tabla.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#123b66")),("TEXTCOLOR",(0,0),(-1,0),colors.white),("GRID",(0,0),(-1,-1),0.25,colors.HexColor("#cbd5e1")),("VALIGN",(0,0),(-1,-1),"TOP"),("PADDING",(0,0),(-1,-1),5)]))
-    elementos.append(tabla); doc.build(elementos); return response
+    elementos.append(tabla); doc.build(elementos, onFirstPage=draw_jvaqua_pdf_page, onLaterPages=draw_jvaqua_pdf_page); return response
 
+
+
+
+def _fila_cobro_factura(factura):
+    """Desglose robusto de una cuenta existente: neto + IVA = total."""
+    total = Decimal(factura.total_cobro or 0).quantize(Decimal("0.01"))
+    iva = Decimal(factura.impuesto or 0).quantize(Decimal("0.01"))
+    neto = max(total - iva, Decimal("0.00")).quantize(Decimal("0.01"))
+    contractual = Decimal(
+        factura.valor_contractual or factura.subtotal or factura.total or 0
+    ).quantize(Decimal("0.01"))
+    descuento = Decimal(factura.descuento_promocion or 0).quantize(Decimal("0.01"))
+    return {
+        "fecha": factura.fecha_vencimiento,
+        "cliente": factura.cliente.nombre,
+        "detalle": (
+            f"Cuota {factura.cuota_numero}/{factura.total_cuotas}"
+            if factura.total_cuotas > 1 else "Mensualidad"
+        ),
+        "contractual": contractual,
+        "descuento": descuento,
+        "neto": neto,
+        "iva": iva,
+        "valor": total,
+        "promocion": factura.promocion_nombre or (
+            factura.promocion.nombre if factura.promocion_id else ""
+        ),
+    }
+
+
+def _fila_cobro_proyectado(contrato, cuota, promo):
+    """Proyección de cobro respetando promociones e IVA del contrato."""
+    precio_mensual = Decimal(contrato.precio_mensual or 0)
+    proporcion = (
+        Decimal(cuota["valor"]) / precio_mensual
+        if precio_mensual > 0 else Decimal("0.00")
+    )
+    neto = (Decimal(promo["total"]) * proporcion).quantize(Decimal("0.01"))
+    desglose = contrato.desglose_valor(neto)
+    contractual = Decimal(cuota["valor"]).quantize(Decimal("0.01"))
+    descuento = max(contractual - neto, Decimal("0.00")).quantize(Decimal("0.01"))
+    return {
+        "fecha": cuota["fecha_vencimiento"],
+        "cliente": contrato.cliente.nombre,
+        "detalle": (
+            f"Cuota {cuota['cuota_numero']}/{cuota['total_cuotas']}"
+            if cuota["total_cuotas"] > 1 else "Mensualidad"
+        ),
+        "contractual": contractual,
+        "descuento": descuento,
+        "neto": desglose["base"],
+        "iva": desglose["impuesto"],
+        "valor": desglose["total"],
+        "promocion": promo["promocion"].nombre if promo["promocion"] else "",
+    }
 
 
 @login_required
@@ -1352,17 +1408,7 @@ def resumen_mensual_cobros_pagos_pdf(request):
         (f.contrato_id, f.periodo_anio, f.periodo_mes, f.cuota_numero)
         for f in facturas
     }
-    cobros = []
-    for f in facturas:
-        cobros.append({
-            "fecha": f.fecha_vencimiento,
-            "cliente": f.cliente.nombre,
-            "detalle": f"Cuota {f.cuota_numero}/{f.total_cuotas}" if f.total_cuotas > 1 else "Mensualidad",
-            "contractual": f.valor_contractual or f.subtotal or f.total,
-            "descuento": f.descuento_promocion or Decimal("0.00"),
-            "valor": f.total_cobro,
-            "promocion": f.promocion_nombre or (f.promocion.nombre if f.promocion_id else ""),
-        })
+    cobros = [_fila_cobro_factura(f) for f in facturas]
 
     # Si todavía no se generó una cuenta, la proyectamos desde el contrato sin
     # escribir nada en la base. Se revisan meses de servicio cercanos porque un
@@ -1381,25 +1427,13 @@ def resumen_mensual_cobros_pagos_pdf(request):
                 clave = (contrato.pk, pa, pm, cuota["cuota_numero"])
                 if clave in claves_factura:
                     continue
-                proporcion = (
-                    cuota["valor"] / Decimal(contrato.precio_mensual)
-                    if contrato.precio_mensual else Decimal("0.00")
-                )
-                valor_neto = (promo["total"] * proporcion).quantize(Decimal("0.01"))
-                descuento = max(cuota["valor"] - valor_neto, Decimal("0.00"))
-                cobros.append({
-                    "fecha": fecha,
-                    "cliente": contrato.cliente.nombre,
-                    "detalle": f"Cuota {cuota['cuota_numero']}/{cuota['total_cuotas']}" if cuota["total_cuotas"] > 1 else "Mensualidad",
-                    "contractual": cuota["valor"],
-                    "descuento": descuento,
-                    "valor": valor_neto,
-                    "promocion": promo["promocion"].nombre if promo["promocion"] else "",
-                })
+                cobros.append(_fila_cobro_proyectado(contrato, cuota, promo))
 
     cobros.sort(key=lambda x: (x["fecha"], x["cliente"]))
     total_contractual = sum((x["contractual"] for x in cobros), Decimal("0.00"))
     total_descuentos = sum((x["descuento"] for x in cobros), Decimal("0.00"))
+    total_neto = sum((x["neto"] for x in cobros), Decimal("0.00"))
+    total_iva = sum((x["iva"] for x in cobros), Decimal("0.00"))
     total_cobrar = sum((x["valor"] for x in cobros), Decimal("0.00"))
 
     # --- PAGOS A TRABAJADORES: obligaciones existentes + programación faltante.
@@ -1416,12 +1450,16 @@ def resumen_mensual_cobros_pagos_pdf(request):
     pagos = [{
         "fecha": o.fecha_pago_programada,
         "trabajador": str(o.trabajador),
-        "cliente": o.contrato.cliente.nombre,
+        "cliente": o.concepto_origen,
         "valor": o.valor_acordado,
     } for o in obligaciones]
 
     for contrato in contratos:
         if not contrato.tecnico_designado_id or not contrato.valor_tecnico_mensual or contrato.valor_tecnico_mensual <= 0:
+            continue
+        # Un trabajador con mensualidad fija no debe volver a proyectarse por
+        # cada contrato; su obligación mensual única ya se gestiona aparte.
+        if contrato.tecnico_designado.tipo_remuneracion == "mensual_fija":
             continue
         for pa, pm in _meses_servicio_candidatos_para_pago(anio, mes, meses_atras=12):
             fecha = _fecha_pago_programada_contrato(contrato, pa, pm)
@@ -1447,8 +1485,10 @@ def resumen_mensual_cobros_pagos_pdf(request):
     response = HttpResponse(content_type="application/pdf")
     response["Content-Disposition"] = f'attachment; filename="resumen_cobros_pagos_{anio}_{mes:02d}.pdf"'
     doc = SimpleDocTemplate(
-        response, pagesize=A4, rightMargin=10*mm, leftMargin=10*mm,
-        topMargin=10*mm, bottomMargin=10*mm
+        response, pagesize=landscape(A4), rightMargin=10*mm, leftMargin=10*mm,
+        topMargin=24*mm, bottomMargin=16*mm,
+        title=f"Resumen mensual de cobros y pagos · {nombre_mes} {anio}",
+        author="JVAQUA",
     )
     estilos = getSampleStyleSheet()
     titulo = ParagraphStyle("RMTitle", parent=estilos["Title"], fontSize=16, leading=19, alignment=TA_CENTER)
@@ -1462,31 +1502,39 @@ def resumen_mensual_cobros_pagos_pdf(request):
     ]
 
     resumen = [
-        ["TOTAL A COBRAR", f"${total_cobrar:.2f}", "TOTAL A PAGAR", f"${total_pagar:.2f}", "DIFERENCIA", f"${diferencia:.2f}"],
+        [
+            "BASE NETA", f"${total_neto:.2f}",
+            "IVA", f"${total_iva:.2f}",
+            "TOTAL A COBRAR", f"${total_cobrar:.2f}",
+            "TOTAL A PAGAR", f"${total_pagar:.2f}",
+            "DIFERENCIA", f"${diferencia:.2f}",
+        ],
     ]
-    t = Table(resumen, colWidths=[31*mm, 27*mm, 31*mm, 27*mm, 29*mm, 27*mm])
+    t = Table(resumen, colWidths=[24*mm, 22*mm, 13*mm, 20*mm, 27*mm, 23*mm, 27*mm, 23*mm, 22*mm, 23*mm])
     t.setStyle(TableStyle([
         ("BACKGROUND", (0,0), (-1,-1), colors.HexColor("#eef4fb")),
         ("TEXTCOLOR", (0,0), (-1,-1), colors.HexColor("#123b66")),
         ("FONTNAME", (0,0), (-1,-1), "Helvetica-Bold"),
         ("FONTSIZE", (0,0), (-1,-1), 7.5),
-        ("ALIGN", (1,0), (1,0), "RIGHT"), ("ALIGN", (3,0), (3,0), "RIGHT"), ("ALIGN", (5,0), (5,0), "RIGHT"),
+        ("ALIGN", (1,0), (1,0), "RIGHT"), ("ALIGN", (3,0), (3,0), "RIGHT"),
+        ("ALIGN", (5,0), (5,0), "RIGHT"), ("ALIGN", (7,0), (7,0), "RIGHT"), ("ALIGN", (9,0), (9,0), "RIGHT"),
         ("GRID", (0,0), (-1,-1), .35, colors.HexColor("#cbd5e1")),
         ("PADDING", (0,0), (-1,-1), 6),
     ]))
     elementos += [t, Spacer(1, 5*mm)]
 
     elementos.append(Paragraph(f"COBROS DE CONTRATOS · {len(cobros)} registros", seccion))
-    datos_c = [["✓", "Fecha", "Cliente", "Detalle / promoción", "Base", "Desc.", "Cobrar"]]
+    datos_c = [["✓", "Fecha", "Cliente", "Detalle / promoción", "Contractual", "Desc.", "Neto", "IVA", "Total"]]
     for x in cobros:
         detalle = x["detalle"] + (f" · {x['promocion']}" if x["promocion"] else "")
         datos_c.append([
             "☐", x["fecha"].strftime("%d/%m/%Y"), Paragraph(x["cliente"], pequeno),
-            Paragraph(detalle, pequeno), f"${x['contractual']:.2f}", f"${x['descuento']:.2f}", f"${x['valor']:.2f}"
+            Paragraph(detalle, pequeno), f"${x['contractual']:.2f}", f"${x['descuento']:.2f}",
+            f"${x['neto']:.2f}", f"${x['iva']:.2f}", f"${x['valor']:.2f}"
         ])
     if len(datos_c) == 1:
-        datos_c.append(["", "", "Sin cobros programados", "", "", "", ""])
-    tc = Table(datos_c, repeatRows=1, colWidths=[8*mm, 21*mm, 43*mm, 47*mm, 22*mm, 20*mm, 22*mm])
+        datos_c.append(["", "", "Sin cobros programados", "", "", "", "", "", ""])
+    tc = Table(datos_c, repeatRows=1, colWidths=[7*mm, 20*mm, 43*mm, 57*mm, 24*mm, 21*mm, 22*mm, 20*mm, 23*mm])
     tc.setStyle(TableStyle([
         ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#123b66")),("TEXTCOLOR",(0,0),(-1,0),colors.white),
         ("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),7),
@@ -1495,7 +1543,7 @@ def resumen_mensual_cobros_pagos_pdf(request):
     ]))
     elementos += [tc, Spacer(1, 2*mm)]
     elementos.append(Paragraph(
-        f"Valor contractual: ${total_contractual:.2f} · Descuentos/promociones: ${total_descuentos:.2f} · Total real a cobrar: ${total_cobrar:.2f}",
+        f"Valor contractual base: ${total_contractual:.2f} · Descuentos/promociones: ${total_descuentos:.2f} · Base neta: ${total_neto:.2f} · IVA: ${total_iva:.2f} · Total a cobrar: ${total_cobrar:.2f}",
         pequeno
     ))
     elementos += [Spacer(1, 5*mm), Paragraph(f"PAGOS A TRABAJADORES · {len(pagos)} registros", seccion)]
@@ -1508,7 +1556,7 @@ def resumen_mensual_cobros_pagos_pdf(request):
         ])
     if len(datos_p) == 1:
         datos_p.append(["", "", "Sin pagos programados", "", ""])
-    tp = Table(datos_p, repeatRows=1, colWidths=[10*mm, 25*mm, 50*mm, 75*mm, 24*mm])
+    tp = Table(datos_p, repeatRows=1, colWidths=[10*mm, 28*mm, 62*mm, 120*mm, 28*mm])
     tp.setStyle(TableStyle([
         ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#123b66")),("TEXTCOLOR",(0,0),(-1,0),colors.white),
         ("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),7.2),
@@ -1520,7 +1568,7 @@ def resumen_mensual_cobros_pagos_pdf(request):
         "La casilla de verificación está destinada al control físico/manual.",
         pequeno
     )]
-    doc.build(elementos)
+    doc.build(elementos, onFirstPage=draw_jvaqua_pdf_page, onLaterPages=draw_jvaqua_pdf_page)
     return response
 
 @login_required
@@ -1528,9 +1576,9 @@ def cliente_estado_cuenta_pdf(request, cliente_pk):
     if not _es_admin(request.user): return _denegado(request)
     cliente = get_object_or_404(Cliente, pk=cliente_pk)
     facturas = list(Factura.objects.filter(cliente=cliente).prefetch_related("pagos").order_by("-periodo_anio", "-periodo_mes"))
-    filas = [(f.numero, f.periodo_label, f.fecha_vencimiento.strftime("%d/%m/%Y"), f"${f.total:.2f}", f"${f.monto_pagado:.2f}", f"${f.saldo:.2f}", f.estado_visual.title()) for f in facturas]
+    filas = [(f.numero, f.periodo_label, f.fecha_vencimiento.strftime("%d/%m/%Y"), f"${f.total_cobro:.2f}", f"${f.monto_pagado:.2f}", f"${f.saldo:.2f}", f.estado_visual.title()) for f in facturas]
     activas=[f for f in facturas if f.estado != Factura.ESTADO_ANULADA]
-    resumen=[("Cliente", cliente.nombre),("Teléfono", cliente.telefono or "—"),("Total facturado", f"${sum((f.total for f in activas), Decimal('0')):.2f}"),("Total cobrado", f"${sum((f.monto_pagado for f in activas), Decimal('0')):.2f}"),("Saldo pendiente", f"${sum((f.saldo for f in activas), Decimal('0')):.2f}")]
+    resumen=[("Cliente", cliente.nombre),("Teléfono", cliente.telefono or "—"),("Total facturado", f"${sum((f.total_cobro for f in activas), Decimal('0')):.2f}"),("Total cobrado", f"${sum((f.monto_pagado for f in activas), Decimal('0')):.2f}"),("Saldo pendiente", f"${sum((f.saldo for f in activas), Decimal('0')):.2f}")]
     return _pdf_response(f"estado-cuenta-{slugify(cliente.nombre)}.pdf", "JVAQUA · Estado de cuenta", "Historial financiero del cliente", filas, ["Factura","Periodo","Vence","Total","Cobrado","Saldo","Estado"], resumen)
 
 
@@ -1633,11 +1681,13 @@ def comprobante_servicio_pdf(request,pk):
         pagesize=A4,
         rightMargin=13*mm,
         leftMargin=13*mm,
-        topMargin=11*mm,
+        topMargin=24*mm,
         bottomMargin=13*mm,
         title=f"Comprobante de Servicio {c.numero_formateado}",
         author="JVAQUA",
     )
+
+    doc.jvaqua_skip_header = True
 
     styles = getSampleStyleSheet()
     azul = colors.HexColor("#123B66")
@@ -1884,6 +1934,6 @@ def comprobante_servicio_pdf(request,pk):
         ),
     ]
 
-    doc.build(story)
+    doc.build(story, onFirstPage=draw_jvaqua_pdf_page, onLaterPages=draw_jvaqua_pdf_page)
     return response
 

@@ -253,6 +253,13 @@ def materializar_consumos_contratos(*, hoy=None, usuario=None, contratos_activos
 
     hoy = hoy or timezone.localdate()
     qs = InventarioContrato.objects.select_related("insumo", "contrato")
+    # Solo materializamos consumo automático de inventarios que realmente
+    # siguen configurados como "en sitio". Esto evita descontar existencias
+    # históricas si el contrato cambió a químicos del cliente o del trabajador.
+    qs = qs.filter(
+        contrato__quimicos_proveedor="jvaqua",
+        contrato__quimicos_almacenamiento="contrato",
+    )
     if contratos_activos:
         qs = qs.filter(contrato__activo=True)
 

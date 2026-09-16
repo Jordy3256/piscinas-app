@@ -97,6 +97,7 @@ from .centro_decisiones import construir_centro_decisiones
 from .inteligencia_cartera import analizar_cartera_inteligente
 from .inteligencia_operativa import analizar_operacion
 from .inteligencia_inventario import analizar_inventario_inteligente
+from backend.pdf_branding import draw_jvaqua_pdf_page
 
 # -------------------
 # Helpers de roles
@@ -1108,9 +1109,9 @@ def sw_js_view(request):
 # -------------------
 def manifest_json_view(request):
     data = {
-        "name": "AQUO 360",
-        "short_name": "AQUO 360",
-        "description": "Plataforma inteligente para la gestión, operación y cuidado de piscinas.",
+        "name": "Piscinas App",
+        "short_name": "Piscinas",
+        "description": "Gestión de mantenimientos, operativo y finanzas.",
         "id": "/dashboard/",
         "start_url": "/dashboard/inicio/",
         "scope": "/dashboard/",
@@ -2389,14 +2390,14 @@ def trabajador_expediente_pdf_view(request, pk):
     ctx = _trabajador_expediente_contexto(trabajador, desde, hasta)
     from reportlab.lib import colors
     from reportlab.lib.enums import TA_CENTER
-    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.pagesizes import A4, landscape
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import mm
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
     from io import BytesIO
     buffer=BytesIO()
     nombre=_nombre_usuario(trabajador.user)
-    doc=SimpleDocTemplate(buffer,pagesize=A4,rightMargin=14*mm,leftMargin=14*mm,topMargin=14*mm,bottomMargin=14*mm)
+    doc=SimpleDocTemplate(buffer,pagesize=A4,rightMargin=14*mm,leftMargin=14*mm,topMargin=24*mm,bottomMargin=14*mm)
     styles=getSampleStyleSheet(); styles.add(ParagraphStyle(name='CenterSmall', parent=styles['Normal'], alignment=TA_CENTER, textColor=colors.HexColor('#60748c')))
     story=[Paragraph('JVAQUA ERP', styles['Title']), Paragraph('Expediente del trabajador', styles['Heading2']), Paragraph(nombre, styles['Heading1'])]
     periodo = f"Período: {desde.strftime('%d/%m/%Y') if desde else 'Inicio'} - {hasta.strftime('%d/%m/%Y') if hasta else 'Actualidad'}"
@@ -2425,7 +2426,7 @@ def trabajador_expediente_pdf_view(request, pk):
     if seccion in ('completo','conocimiento'):
         section('Asistente Técnico',['Fecha','Diagnóstico','Resultado'],[[timezone.localtime(c.creado_en).strftime('%d/%m/%Y'),c.diagnostico,c.get_resultado_display()] for c in ctx['casos_asistente']], [28*mm,105*mm,30*mm])
     story += [Spacer(1,8),Paragraph(f"Generado por JVAQUA ERP · {timezone.localtime().strftime('%d/%m/%Y %H:%M')}",styles['CenterSmall'])]
-    doc.build(story)
+    doc.build(story, onFirstPage=draw_jvaqua_pdf_page, onLaterPages=draw_jvaqua_pdf_page)
     response=HttpResponse(buffer.getvalue(),content_type='application/pdf')
     response['Content-Disposition']=f'attachment; filename="expediente_trabajador_{trabajador.pk}.pdf"'
     return response
@@ -6483,7 +6484,11 @@ def _inventario_valorizado():
     contratos = sum(
         (
             Decimal(inv.stock_estimado or 0) * Decimal(inv.insumo.costo or 0)
-            for inv in InventarioContrato.objects.filter(contrato__activo=True).select_related("insumo")
+            for inv in InventarioContrato.objects.filter(
+                contrato__activo=True,
+                contrato__quimicos_proveedor="jvaqua",
+                contrato__quimicos_almacenamiento="contrato",
+            ).select_related("insumo")
         ),
         Decimal("0.00"),
     )
@@ -6499,6 +6504,52 @@ def _cantidad_texto(insumo, cantidad):
     cantidad = Decimal(cantidad or 0)
     unidad = "kg" if insumo.unidad_base == "kg" else "L"
     return f"{cantidad:.3f} {unidad}"
+
+
+
+def _resumen_inventario_contratos_en_sitio():
+    """
+    Devuelve todos los contratos activos configurados para inventario en sitio,
+    incluso cuando aún no tengan filas InventarioContrato creadas.
+    """
+    contratos_en_sitio = list(
+        Contrato.objects.filter(
+            activo=True,
+            quimicos_proveedor="jvaqua",
+            quimicos_almacenamiento="contrato",
+        )
+        .select_related("cliente", "responsable_reposicion__user", "tecnico_designado__user")
+        .order_by("cliente__nombre", "id")
+    )
+    ids_contratos = [c.pk for c in contratos_en_sitio]
+
+    inventarios = list(
+        InventarioContrato.objects.filter(contrato_id__in=ids_contratos)
+        .select_related("contrato__cliente", "contrato__responsable_reposicion__user", "insumo")
+        .order_by("contrato__cliente__nombre", "insumo__nombre")
+    )
+
+    por_contrato = {
+        contrato.pk: {
+            "contrato": contrato,
+            "stocks": [],
+            "criticos": 0,
+            "valor": Decimal("0.00"),
+            "configurado": False,
+        }
+        for contrato in contratos_en_sitio
+    }
+    for fila in inventarios:
+        item = por_contrato.get(fila.contrato_id)
+        if item is None:
+            continue
+        item["stocks"].append(fila)
+        item["configurado"] = True
+        if fila.estado_stock in {"critico", "agotado"}:
+            item["criticos"] += 1
+        item["valor"] += Decimal(fila.stock_estimado or 0) * Decimal(fila.insumo.costo or 0)
+
+    return list(por_contrato.values())
 
 
 @login_required
@@ -6532,19 +6583,8 @@ def inventario_view(request):
     costo_consumo_mes = consumo_mes.aggregate(total=Sum("total_costo")).get("total") or Decimal("0")
     cantidad_consumo_mes = consumo_mes.aggregate(total=Sum("cantidad")).get("total") or Decimal("0")
     solicitudes_pendientes = SolicitudReposicion.objects.filter(estado="pendiente").select_related("trabajador__user", "insumo").order_by("-creada_en")
-    inventarios_contratos = list(
-        InventarioContrato.objects.filter(contrato__activo=True)
-        .select_related("contrato__cliente", "contrato__responsable_reposicion__user", "insumo")
-        .order_by("contrato__cliente__nombre", "insumo__nombre")
-    )
-    contratos_inventario = {}
-    for fila in inventarios_contratos:
-        cid = fila.contrato_id
-        item = contratos_inventario.setdefault(cid, {"contrato": fila.contrato, "stocks": [], "criticos": 0, "valor": Decimal("0.00")})
-        item["stocks"].append(fila)
-        if fila.estado_stock in {"critico", "agotado"}: item["criticos"] += 1
-        item["valor"] += Decimal(fila.stock_estimado or 0) * Decimal(fila.insumo.costo or 0)
-    resumen_contratos_inventario = list(contratos_inventario.values())
+    # Incluye también contratos en sitio que todavía no tienen productos configurados.
+    resumen_contratos_inventario = _resumen_inventario_contratos_en_sitio()
 
     movimientos_recientes = list(
         MovimientoInventario.objects.select_related("insumo", "trabajador__user", "mantenimiento__cliente")
@@ -6563,6 +6603,8 @@ def inventario_view(request):
         productos_asignados += len(stocks)
         resumen_trabajadores.append({"trabajador": trabajador, "stocks": stocks, "valor": valorizado})
 
+    valorizado_inventario = _inventario_valorizado()
+
     return render(request, "dashboard/inventario.html", {
         "insumos": insumos,
         "trabajadores": trabajadores,
@@ -6572,10 +6614,10 @@ def inventario_view(request):
         "bajo_stock": bajo_stock,
         "sin_stock": sin_stock,
         "stock_total_kg": stock_total_kg,
-        "valor_inventario": _inventario_valorizado()["total"],
-        "valor_inventario_bodega": _inventario_valorizado()["bodega"],
-        "valor_inventario_trabajadores": _inventario_valorizado()["trabajadores"],
-        "valor_inventario_contratos": _inventario_valorizado()["contratos"],
+        "valor_inventario": valorizado_inventario["total"],
+        "valor_inventario_bodega": valorizado_inventario["bodega"],
+        "valor_inventario_trabajadores": valorizado_inventario["trabajadores"],
+        "valor_inventario_contratos": valorizado_inventario["contratos"],
         "valor_asignado": valor_asignado,
         "productos_asignados": productos_asignados,
         "resumen_contratos_inventario": resumen_contratos_inventario,
@@ -7250,19 +7292,63 @@ def inventario_trabajador_detalle_view(request, trabajador_id):
 
 def _pdf_inventario_response(titulo, filas, nombre_archivo, resumen=None):
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=1.1*cm, leftMargin=1.1*cm, topMargin=1.1*cm, bottomMargin=1.1*cm)
-    styles = getSampleStyleSheet(); story = [Paragraph(titulo, styles["Title"]), Spacer(1, 8)]
-    story.append(Paragraph(f"Generado: {timezone.localdate().strftime('%d/%m/%Y')}", styles["Normal"]))
+    columnas = len(filas[0]) if filas else 0
+    pagina = landscape(A4) if columnas >= 6 else A4
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=pagina,
+        rightMargin=1.1*cm,
+        leftMargin=1.1*cm,
+        topMargin=2.4*cm,
+        bottomMargin=1.5*cm,
+        title=titulo,
+        author="JVAQUA",
+    )
+    styles = getSampleStyleSheet()
+    celda = ParagraphStyle(
+        "InvCelda",
+        parent=styles["BodyText"],
+        fontSize=7.4 if columnas >= 6 else 8.2,
+        leading=9,
+    )
+    titulo_style = ParagraphStyle(
+        "InvTitulo",
+        parent=styles["Title"],
+        fontSize=16,
+        leading=19,
+        textColor=colors.HexColor("#123B66"),
+        spaceAfter=3,
+    )
+    story = [
+        Paragraph(titulo, titulo_style),
+        Paragraph(f"Generado: {timezone.localdate().strftime('%d/%m/%Y')}", styles["Normal"]),
+    ]
     if resumen:
-        story.append(Spacer(1, 6)); story.append(Paragraph(resumen, styles["Normal"]))
-    story.append(Spacer(1, 10))
-    tabla = Table(filas, repeatRows=1)
+        story += [Spacer(1, 4), Paragraph(resumen, styles["Normal"])]
+    story.append(Spacer(1, 8))
+
+    filas_pdf = []
+    for indice, fila in enumerate(filas):
+        estilo = styles["BodyText"] if indice == 0 else celda
+        filas_pdf.append([Paragraph(str(valor), estilo) for valor in fila])
+
+    tabla = Table(filas_pdf, repeatRows=1, hAlign="LEFT")
     tabla.setStyle(TableStyle([
-        ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#D9EAF7")), ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
-        ("GRID", (0,0), (-1,-1), .45, colors.lightgrey), ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
-        ("FONTSIZE", (0,0), (-1,-1), 8.5), ("PADDING", (0,0), (-1,-1), 4),
+        ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#123B66")),
+        ("TEXTCOLOR", (0,0), (-1,0), colors.white),
+        ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+        ("GRID", (0,0), (-1,-1), .35, colors.HexColor("#CBD5E1")),
+        ("VALIGN", (0,0), (-1,-1), "TOP"),
+        ("FONTSIZE", (0,0), (-1,-1), 7.5 if columnas >= 6 else 8.2),
+        ("LEFTPADDING", (0,0), (-1,-1), 4),
+        ("RIGHTPADDING", (0,0), (-1,-1), 4),
+        ("TOPPADDING", (0,0), (-1,-1), 4),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+        ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white, colors.HexColor("#F8FAFC")]),
     ]))
-    story.append(tabla); doc.build(story); buffer.seek(0)
+    story.append(tabla)
+    doc.build(story, onFirstPage=draw_jvaqua_pdf_page, onLaterPages=draw_jvaqua_pdf_page)
+    buffer.seek(0)
     response = HttpResponse(buffer.getvalue(), content_type="application/pdf")
     response["Content-Disposition"] = f'attachment; filename="{nombre_archivo}"'
     return response
@@ -7274,7 +7360,13 @@ def inventario_general_pdf_view(request):
     filas = [["Producto", "Categoría", "Stock", "Mínimo", "Costo/base", "Valor"]]
     for i in Insumo.objects.filter(activo=True).order_by("nombre"):
         filas.append([i.nombre, i.get_categoria_display(), _cantidad_texto(i, i.stock), _cantidad_texto(i, i.stock_minimo), f"${i.costo:,.4f}", f"${(Decimal(i.stock)*Decimal(i.costo or 0)):,.2f}"])
-    return _pdf_inventario_response("Inventario General JVAQUA", filas, "inventario_general.pdf", f"Valor estimado del inventario: ${_inventario_valorizado():,.2f}")
+    valorizado = _inventario_valorizado()
+    return _pdf_inventario_response(
+        "Inventario General JVAQUA",
+        filas,
+        "inventario_general.pdf",
+        f"Valor total: ${valorizado['total']:,.2f} · Bodega: ${valorizado['bodega']:,.2f} · Trabajadores: ${valorizado['trabajadores']:,.2f} · Contratos: ${valorizado['contratos']:,.2f}",
+    )
 
 
 @login_required
@@ -7339,7 +7431,7 @@ import io
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import cm
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
@@ -7633,7 +7725,7 @@ def exportar_ganancias_pdf(request):
         pagesize=A4,
         rightMargin=1.2 * cm,
         leftMargin=1.2 * cm,
-        topMargin=1.2 * cm,
+        topMargin=2.4 * cm,
         bottomMargin=1.2 * cm,
     )
 
@@ -7699,7 +7791,7 @@ def exportar_ganancias_pdf(request):
 
     story.append(tabla_detalle)
 
-    doc.build(story)
+    doc.build(story, onFirstPage=draw_jvaqua_pdf_page, onLaterPages=draw_jvaqua_pdf_page)
     pdf = buffer.getvalue()
     buffer.close()
 
@@ -8060,7 +8152,7 @@ def _generar_pdf_clientes_contratos(clientes, titulo, nombre_archivo, subtitulo=
     buffer = BytesIO()
     doc = SimpleDocTemplate(
         buffer, pagesize=A4, rightMargin=14*mm, leftMargin=14*mm,
-        topMargin=18*mm, bottomMargin=16*mm,
+        topMargin=24*mm, bottomMargin=16*mm,
         title=titulo, author="JVAQUA",
     )
     styles = getSampleStyleSheet()
@@ -8191,7 +8283,7 @@ def _generar_pdf_clientes_contratos(clientes, titulo, nombre_archivo, subtitulo=
 
     if not clientes:
         story.append(Paragraph("No existen clientes para los filtros seleccionados.", body))
-    doc.build(story, onFirstPage=footer, onLaterPages=footer)
+    doc.build(story, onFirstPage=draw_jvaqua_pdf_page, onLaterPages=draw_jvaqua_pdf_page)
     response = HttpResponse(buffer.getvalue(), content_type="application/pdf")
     response["Content-Disposition"] = f'attachment; filename="{nombre_archivo}"'
     return response
@@ -9154,21 +9246,26 @@ def contrato_promocion_nueva_view(request, pk):
                     cuota = next((x for x in cuotas if x["cuota_numero"] == factura.cuota_numero), None)
                     if not cuota: continue
                     proporcion = cuota["valor"] / Decimal(contrato.precio_mensual or 1)
-                    nuevo_total = (calc["total"] * proporcion).quantize(Decimal("0.01"))
+                    nuevo_neto = (calc["total"] * proporcion).quantize(Decimal("0.01"))
+                    desglose = contrato.desglose_valor(nuevo_neto)
                     pagado_actual = factura.monto_pagado
-                    # Si ya se cobró más que el nuevo total, se requiere devolución/nota de crédito.
-                    # Si lo cobrado es igual o menor, la promoción puede aplicarse normalmente.
-                    if pagado_actual > nuevo_total:
+                    # La comparación debe hacerse contra el total real, IVA incluido.
+                    if pagado_actual > desglose["total"]:
                         continue
                     factura.valor_contractual = cuota["valor"]
-                    factura.descuento_promocion = max(cuota["valor"] - nuevo_total, Decimal("0.00"))
-                    factura.promocion = promo; factura.promocion_nombre = promo.nombre
-                    factura.subtotal = nuevo_total; factura.total = nuevo_total
-                    factura.estado = Factura.ESTADO_PROMOCION if nuevo_total == 0 else Factura.ESTADO_PENDIENTE
+                    factura.descuento_promocion = max(cuota["valor"] - nuevo_neto, Decimal("0.00"))
+                    factura.promocion = promo
+                    factura.promocion_nombre = promo.nombre
+                    factura.subtotal = desglose["base"]
+                    factura.impuesto = desglose["impuesto"]
+                    factura.total = desglose["total"]
+                    factura.estado = Factura.ESTADO_PROMOCION if desglose["total"] == 0 else Factura.ESTADO_PENDIENTE
                     factura.save()
                     item = factura.items.first()
                     if item:
-                        item.precio_unitario = nuevo_total; item.save()
+                        item.precio_unitario = desglose["base"]
+                        item.subtotal = desglose["base"]
+                        item.save(update_fields=["precio_unitario", "subtotal"])
                     factura.sincronizar_estado()
                     actualizadas += 1
             messages.success(request, f"Promoción aplicada correctamente. {actualizadas} cuenta(s) ya generada(s) fueron actualizadas.")

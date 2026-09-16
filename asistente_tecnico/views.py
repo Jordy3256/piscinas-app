@@ -12,6 +12,7 @@ from django.db.models import Count, Q
 from django.http import HttpResponseForbidden, JsonResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from backend.pdf_branding import draw_jvaqua_pdf_page
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.clickjacking import xframe_options_sameorigin
 
@@ -1228,7 +1229,7 @@ def _pdf_response(nombre, objetos):
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import mm
     from reportlab.platypus import SimpleDocTemplate, PageBreak, Paragraph
-    buf=BytesIO(); doc=SimpleDocTemplate(buf,pagesize=A4,rightMargin=16*mm,leftMargin=16*mm,topMargin=16*mm,bottomMargin=16*mm)
+    buf=BytesIO(); doc=SimpleDocTemplate(buf,pagesize=A4,rightMargin=16*mm,leftMargin=16*mm,topMargin=24*mm,bottomMargin=16*mm)
     styles=_pdf_styles(); story=[]
     objs=list(objetos)
     if len(objs)>1:
@@ -1236,7 +1237,7 @@ def _pdf_response(nombre, objetos):
     for i,obj in enumerate(objs):
         if i: story.append(PageBreak())
         story.extend(_contenido_story(obj,styles))
-    doc.build(story); data=buf.getvalue(); buf.close()
+    doc.build(story, onFirstPage=draw_jvaqua_pdf_page, onLaterPages=draw_jvaqua_pdf_page); data=buf.getvalue(); buf.close()
     resp=HttpResponse(data,content_type="application/pdf"); resp["Content-Disposition"]=f'attachment; filename="{nombre}"'; return resp
 
 
