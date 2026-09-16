@@ -259,7 +259,8 @@ a{text-decoration:none}
   }
   .login-brand{display:none}
   .login-panel{
-    min-height:100dvh;justify-content:flex-start;padding:0 16px 24px;
+    min-height:100dvh;justify-content:flex-start;
+    padding:0 16px calc(150px + env(safe-area-inset-bottom));
     padding-top:max(18px,env(safe-area-inset-top));background:transparent;
     box-shadow:none;backdrop-filter:none;overflow:visible
   }
@@ -295,7 +296,14 @@ a{text-decoration:none}
     margin:0 auto;padding:24px 20px 22px;border-radius:25px;
     box-shadow:0 20px 55px rgba(4,46,94,.18)
   }
-  .install-banner{margin:0 auto;border-radius:21px}
+  .install-banner{
+    position:fixed;left:12px;right:12px;
+    bottom:max(10px,env(safe-area-inset-bottom));
+    width:auto;max-width:470px;margin:0 auto;border-radius:21px;
+    z-index:60;box-shadow:0 20px 55px rgba(4,46,94,.28)
+  }
+  .install-copy{margin-bottom:10px}
+  .install-button{height:48px}
   .security-row{gap:3px}
   .security-item{font-size:.6rem}
 }
