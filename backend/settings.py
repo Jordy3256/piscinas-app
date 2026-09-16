@@ -92,6 +92,8 @@ ALLOWED_HOSTS = [
     "piscinas-app.onrender.com",
     "piscinas-app-1.onrender.com",
     ".onrender.com",
+    "aquo360.com",
+    "www.aquo360.com",
 ]
 if RENDER_HOST:
     ALLOWED_HOSTS.append(RENDER_HOST)
@@ -122,6 +124,8 @@ CSRF_COOKIE_SAMESITE = "Lax"
 CSRF_TRUSTED_ORIGINS = [
     "https://piscinas-app.onrender.com",
     "https://piscinas-app-1.onrender.com",
+    "https://aquo360.com",
+    "https://www.aquo360.com",
 ]
 if RENDER_HOST:
     CSRF_TRUSTED_ORIGINS.append(f"https://{RENDER_HOST}")
