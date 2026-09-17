@@ -7854,6 +7854,15 @@ def _validar_datos_contrato(request):
     notificar_facturacion = requiere_factura
     aplica_iva = request.POST.get("aplica_iva") == "on"
     momento_facturacion = (request.POST.get("momento_facturacion") or "").strip()
+
+    # Coherencia obligatoria: "Por visita" gobierna Cartera y, si aplica,
+    # Facturación Externa. No aceptamos una fecha mensual contradictoria.
+    if forma_pago == "por_visita":
+        programacion_cobro = "por_visita"
+        programacion_personalizada = ""
+        if requiere_factura:
+            momento_facturacion = "por_visita"
+
     quimicos_proveedor = (request.POST.get("quimicos_proveedor") or "jvaqua").strip()
     quimicos_almacenamiento = (request.POST.get("quimicos_almacenamiento") or "trabajador").strip()
     responsable_reposicion_id = (request.POST.get("responsable_reposicion") or "").strip()
@@ -7953,7 +7962,7 @@ def _validar_datos_contrato(request):
     if programacion_cobro == "semestral_adelantado" and not vigencia_meses:
         vigencia_meses = 12
 
-    if programacion_cobro in {"inicio_periodo", "cierre_periodo", "despues_cierre"}:
+    if programacion_cobro in {"inicio_periodo", "cierre_periodo", "despues_cierre", "por_visita"}:
         campos_enteros["cobro_mes_desfase"] = 0
 
     hora_visita_fija_obj = parse_time(hora_visita_fija) if hora_visita_fija else None

@@ -439,7 +439,11 @@ def sincronizar_contrato_activo(contrato, *, desde_fecha=None, horizonte_meses=1
             "periodo_inicio": cuota["periodo_inicio"],
             "periodo_fin": cuota["periodo_fin"],
             "total_cuotas": cuota["total_cuotas"],
-            "fecha_facturacion_programada": contrato.fecha_programada_facturacion(factura.periodo_anio, factura.periodo_mes),
+            "fecha_facturacion_programada": (
+                cuota["fecha_cobro_desde"]
+                if contrato.momento_facturacion == "por_visita"
+                else contrato.fecha_programada_facturacion(factura.periodo_anio, factura.periodo_mes)
+            ),
             "requiere_factura": contrato.requiere_factura,
             "subtotal": desglose["base"],
             "impuesto": desglose["impuesto"],

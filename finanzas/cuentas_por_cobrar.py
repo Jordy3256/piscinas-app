@@ -173,10 +173,15 @@ def generar_factura_contrato(contrato, anio, mes, usuario=None):
         return [], 0
 
     creadas = []
-    fecha_facturacion = contrato.fecha_programada_facturacion(anio, mes)
+    fecha_facturacion_general = contrato.fecha_programada_facturacion(anio, mes)
     promo_datos = valores_promocion(contrato, anio, mes)
     cuotas = contrato.calendario_cobros(anio, mes)
     for cuota in cuotas:
+        fecha_facturacion = (
+            cuota["fecha_cobro_desde"]
+            if contrato.momento_facturacion == "por_visita"
+            else fecha_facturacion_general
+        )
         proporcion = (cuota["valor"] / Decimal(contrato.precio_mensual or 1)) if contrato.precio_mensual else Decimal("0")
         valor_base_cuota = (promo_datos["total"] * proporcion).quantize(Decimal("0.01"))
         desglose = contrato.desglose_valor(valor_base_cuota)
@@ -209,9 +214,15 @@ def generar_factura_contrato(contrato, anio, mes, usuario=None):
             },
         )
         if creada:
-            descripcion = f"Servicio de mantenimiento {cuota['periodo_inicio']:%d/%m/%Y} al {cuota['periodo_fin']:%d/%m/%Y}"
-            if cuota["total_cuotas"] > 1:
-                descripcion += f" · cuota {cuota['cuota_numero']}/{cuota['total_cuotas']}"
+            if cuota.get("es_por_visita"):
+                descripcion = (
+                    f"Visita de mantenimiento {cuota['fecha_cobro_desde']:%d/%m/%Y}"
+                    f" · visita {cuota['cuota_numero']}/{cuota['total_cuotas']}"
+                )
+            else:
+                descripcion = f"Servicio de mantenimiento {cuota['periodo_inicio']:%d/%m/%Y} al {cuota['periodo_fin']:%d/%m/%Y}"
+                if cuota["total_cuotas"] > 1:
+                    descripcion += f" · cuota {cuota['cuota_numero']}/{cuota['total_cuotas']}"
             FacturaItem.objects.create(
                 factura=factura,
                 descripcion=descripcion,

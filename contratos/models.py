@@ -52,6 +52,7 @@ class Contrato(models.Model):
         ("rango_dias", "Rango de días"),
         ("dos_pagos", "Dos pagos mensuales"),
         ("despues_cierre", "Días después del cierre"),
+        ("por_visita", "Por visita"),
         ("semestral_adelantado", "Pago semestral adelantado · 6 meses"),
         ("personalizado", "Personalizado"),
     ]
@@ -73,6 +74,7 @@ class Contrato(models.Model):
         ("cierre_periodo", "Al finalizar el periodo"),
         ("dia_fijo", "Día fijo del mes"),
         ("antes_cobro", "Días antes del cobro"),
+        ("por_visita", "Por visita"),
         ("personalizado", "Personalizado"),
     ]
 
@@ -424,6 +426,55 @@ class Contrato(models.Model):
                 "periodo_fin": fin_semestre,
             }]
 
+        if programacion == "por_visita":
+            # Pago por visita: cada mantenimiento del ciclo origina una cuota.
+            # La suma de todas las cuotas mantiene exactamente el precio mensual
+            # contractual; la última absorbe cualquier centavo de redondeo.
+            from mantenimientos.models import Mantenimiento
+
+            visitas = list(
+                Mantenimiento.objects.filter(
+                    contrato=self,
+                    fecha__gte=max(inicio, self.fecha_inicio),
+                    fecha__lt=fin,
+                )
+                .order_by("fecha", "id")
+                .values("id", "fecha")
+            )
+            if not visitas:
+                return []
+
+            total_visitas = len(visitas)
+            precio = Decimal(self.precio_mensual or 0).quantize(Decimal("0.01"))
+            valor_regular = (precio / Decimal(total_visitas)).quantize(Decimal("0.01"))
+            acumulado = Decimal("0.00")
+            cuotas = []
+
+            for indice, visita in enumerate(visitas, start=1):
+                if indice == total_visitas:
+                    valor_base = (precio - acumulado).quantize(Decimal("0.01"))
+                else:
+                    valor_base = valor_regular
+                    acumulado += valor_base
+
+                desglose = self.desglose_valor(valor_base)
+                fecha_visita = visita["fecha"]
+                cuotas.append({
+                    "cuota_numero": indice,
+                    "total_cuotas": total_visitas,
+                    "fecha_cobro_desde": fecha_visita,
+                    "fecha_vencimiento": fecha_visita,
+                    "valor": desglose["base"],
+                    "impuesto": desglose["impuesto"],
+                    "total": desglose["total"],
+                    "periodo_inicio": inicio,
+                    "periodo_fin": fin,
+                    "mantenimiento_id": visita["id"],
+                    "fecha_visita": fecha_visita,
+                    "es_por_visita": True,
+                })
+            return cuotas
+
         if programacion == "inicio_periodo":
             fechas = [(inicio, inicio)]
         elif programacion == "cierre_periodo":
@@ -507,6 +558,12 @@ class Contrato(models.Model):
         momento = self.momento_facturacion or "antes_cobro"
         dias_antes = int(self.facturacion_dias_antes or 0)
 
+        # En facturación por visita cada cuota usa su propia fecha en Cartera
+        # y en Facturación Externa. Este método devuelve la primera solo como
+        # referencia compatible para vistas/resúmenes antiguos.
+        if momento == "por_visita":
+            return primer_cobro if calendario else None
+
         if momento == "antes_inicio":
             return inicio - timedelta(days=dias_antes)
         if momento == "inicio_periodo":
@@ -563,6 +620,22 @@ class Contrato(models.Model):
                 self.ciudad = ciudad_obj.nombre
         self.frecuencia_personalizada = (self.frecuencia_personalizada or "").strip()
         self.forma_pago_personalizada = (self.forma_pago_personalizada or "").strip()
+
+        # Una condición "Por visita" no puede quedar combinada con una fecha
+        # mensual. Cartera y facturación siguen automáticamente las visitas.
+        if self.forma_pago == "por_visita":
+            self.programacion_cobro = "por_visita"
+            self.cobro_mes_desfase = 0
+            self.cobro_dia_1 = None
+            self.cobro_dia_2 = None
+            self.cobro_rango_desde = None
+            self.cobro_rango_hasta = None
+            self.cobro_dias_despues_cierre = 0
+            if self.requiere_factura:
+                self.momento_facturacion = "por_visita"
+                self.facturacion_dia = None
+                self.facturacion_dias_antes = 0
+
         self.programacion_cobro_personalizada = (self.programacion_cobro_personalizada or "").strip()
         self.observaciones_facturacion = (self.observaciones_facturacion or "").strip()
         if self.quimicos_proveedor == "cliente":

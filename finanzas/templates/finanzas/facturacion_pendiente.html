@@ -50,8 +50,13 @@
           <div class="fx-meta">{{ aviso.contrato.forma_pago_completa }}</div>
         </div>
         <div>
-          <div class="small text-muted">Periodo del servicio</div>
-          <div>{{ aviso.periodo_inicio|date:"d/m/Y" }} → {{ aviso.periodo_fin|date:"d/m/Y" }}</div>
+          {% if aviso.es_por_visita %}
+            <div class="small text-muted">Visita a facturar</div>
+            <div><strong>Visita #{{ aviso.cuota_numero }}</strong> · {{ aviso.fecha_programada|date:"d/m/Y" }}</div>
+          {% else %}
+            <div class="small text-muted">Periodo del servicio</div>
+            <div>{{ aviso.periodo_inicio|date:"d/m/Y" }} → {{ aviso.periodo_fin|date:"d/m/Y" }}</div>
+          {% endif %}
         </div>
         <div>
           <div class="small text-muted">Fecha de facturación</div>

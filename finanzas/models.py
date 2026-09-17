@@ -464,6 +464,10 @@ class AvisoFacturacion(models.Model):
     )
     periodo_anio = models.PositiveIntegerField()
     periodo_mes = models.PositiveSmallIntegerField()
+    cuota_numero = models.PositiveSmallIntegerField(
+        default=1,
+        help_text="Número de cuota/visita dentro del período. En pago por visita permite varios avisos mensuales.",
+    )
     periodo_inicio = models.DateField()
     periodo_fin = models.DateField()
     fecha_programada = models.DateField(db_index=True)
@@ -488,8 +492,8 @@ class AvisoFacturacion(models.Model):
         ordering = ["fecha_programada", "contrato__cliente__nombre", "id"]
         constraints = [
             models.UniqueConstraint(
-                fields=["contrato", "periodo_anio", "periodo_mes"],
-                name="unique_aviso_facturacion_contrato_periodo",
+                fields=["contrato", "periodo_anio", "periodo_mes", "cuota_numero"],
+                name="unique_aviso_facturacion_cuota_periodo",
             )
         ]
         verbose_name = "Aviso de facturación"
@@ -500,7 +504,17 @@ class AvisoFacturacion(models.Model):
         return self.contrato.cliente
 
     @property
+    def es_por_visita(self):
+        return (
+            self.contrato.forma_pago == "por_visita"
+            or self.contrato.programacion_cobro == "por_visita"
+            or self.contrato.momento_facturacion == "por_visita"
+        )
+
+    @property
     def periodo_label(self):
+        if self.es_por_visita:
+            return f"Visita #{self.cuota_numero} · {self.fecha_programada:%d/%m/%Y}"
         return f"{self.periodo_inicio:%d/%m/%Y} → {self.periodo_fin:%d/%m/%Y}"
 
     @property
@@ -520,6 +534,8 @@ class AvisoFacturacion(models.Model):
         self.save(update_fields=["estado", "realizada_en", "realizada_por", "actualizada_en"])
 
     def __str__(self):
+        if self.es_por_visita:
+            return f"{self.contrato.cliente} · visita #{self.cuota_numero} · {self.fecha_programada:%d/%m/%Y}"
         return f"{self.contrato.cliente} · {self.periodo_mes:02d}/{self.periodo_anio}"
 
 

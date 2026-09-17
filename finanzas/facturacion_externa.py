@@ -18,9 +18,10 @@ def sincronizar_avisos_facturacion(*, hoy=None, meses_atras=4, meses_adelante=3)
     """
     Materializa recordatorios de facturación independientes de Cartera.
 
-    Una configuración histórica/incompleta en un contrato no debe impedir abrir
-    el módulo completo. Los errores se devuelven para diagnóstico y el resto de
-    contratos continúa sincronizándose.
+    En contratos "Por visita" crea un aviso por cada mantenimiento programado,
+    usando la misma fecha de la visita. En el resto conserva un aviso por período.
+    Las reprogramaciones actualizan los avisos pendientes y las visitas que dejan
+    de existir anulan únicamente avisos todavía pendientes.
     """
     hoy = hoy or timezone.localdate()
 
@@ -47,41 +48,89 @@ def sincronizar_avisos_facturacion(*, hoy=None, meses_atras=4, meses_adelante=3)
 
                 if contrato.fecha_inicio and periodo_fin <= contrato.fecha_inicio:
                     continue
-
-                fecha_programada = contrato.fecha_programada_facturacion(anio, mes)
-                if not fecha_programada:
+                if contrato.fecha_fin_contrato and periodo_inicio > contrato.fecha_fin_contrato:
                     continue
 
-                if fecha_programada < hoy - timedelta(days=31):
-                    continue
+                por_visita = (
+                    contrato.forma_pago == "por_visita"
+                    or contrato.programacion_cobro == "por_visita"
+                    or contrato.momento_facturacion == "por_visita"
+                )
 
-                aviso, creado = AvisoFacturacion.objects.get_or_create(
+                eventos = []
+                if por_visita:
+                    for cuota in contrato.calendario_cobros(anio, mes):
+                        eventos.append({
+                            "cuota_numero": int(cuota["cuota_numero"]),
+                            "fecha_programada": cuota["fecha_cobro_desde"],
+                            "periodo_inicio": cuota["periodo_inicio"],
+                            "periodo_fin": cuota["periodo_fin"],
+                        })
+                else:
+                    fecha_programada = contrato.fecha_programada_facturacion(anio, mes)
+                    if fecha_programada:
+                        eventos.append({
+                            "cuota_numero": 1,
+                            "fecha_programada": fecha_programada,
+                            "periodo_inicio": periodo_inicio,
+                            "periodo_fin": periodo_fin,
+                        })
+
+                esperadas = {evento["cuota_numero"] for evento in eventos}
+
+                # Si una visita futura desapareció/reprogramó fuera de este ciclo,
+                # el aviso pendiente que ya no corresponde se anula.
+                pendientes_periodo = AvisoFacturacion.objects.filter(
                     contrato=contrato,
                     periodo_anio=anio,
                     periodo_mes=mes,
-                    defaults={
-                        "periodo_inicio": periodo_inicio,
-                        "periodo_fin": periodo_fin,
-                        "fecha_programada": fecha_programada,
-                    },
+                    estado=AvisoFacturacion.ESTADO_PENDIENTE,
                 )
-                if creado:
-                    creados += 1
-                    continue
+                if esperadas:
+                    anulados += pendientes_periodo.exclude(
+                        cuota_numero__in=esperadas
+                    ).update(estado=AvisoFacturacion.ESTADO_ANULADA)
+                else:
+                    anulados += pendientes_periodo.update(
+                        estado=AvisoFacturacion.ESTADO_ANULADA
+                    )
 
-                if aviso.estado == AvisoFacturacion.ESTADO_PENDIENTE:
-                    cambios = []
-                    for campo, valor in {
-                        "periodo_inicio": periodo_inicio,
-                        "periodo_fin": periodo_fin,
-                        "fecha_programada": fecha_programada,
-                    }.items():
-                        if getattr(aviso, campo) != valor:
-                            setattr(aviso, campo, valor)
-                            cambios.append(campo)
-                    if cambios:
-                        aviso.save(update_fields=cambios + ["actualizada_en"])
-                        actualizados += 1
+                for evento in eventos:
+                    fecha_programada = evento["fecha_programada"]
+
+                    # Conservamos la política histórica: no recrear recordatorios
+                    # demasiado antiguos si ya no existían.
+                    if fecha_programada < hoy - timedelta(days=31):
+                        continue
+
+                    aviso, creado = AvisoFacturacion.objects.get_or_create(
+                        contrato=contrato,
+                        periodo_anio=anio,
+                        periodo_mes=mes,
+                        cuota_numero=evento["cuota_numero"],
+                        defaults={
+                            "periodo_inicio": evento["periodo_inicio"],
+                            "periodo_fin": evento["periodo_fin"],
+                            "fecha_programada": fecha_programada,
+                        },
+                    )
+                    if creado:
+                        creados += 1
+                        continue
+
+                    if aviso.estado == AvisoFacturacion.ESTADO_PENDIENTE:
+                        cambios = []
+                        for campo, valor in {
+                            "periodo_inicio": evento["periodo_inicio"],
+                            "periodo_fin": evento["periodo_fin"],
+                            "fecha_programada": fecha_programada,
+                        }.items():
+                            if getattr(aviso, campo) != valor:
+                                setattr(aviso, campo, valor)
+                                cambios.append(campo)
+                        if cambios:
+                            aviso.save(update_fields=cambios + ["actualizada_en"])
+                            actualizados += 1
 
         except Exception as exc:
             errores.append({

@@ -587,6 +587,48 @@
       }
     }
 
+    function bloquearSelect(select, bloqueado){
+      if(!select) return;
+      select.style.pointerEvents = bloqueado ? "none" : "";
+      select.style.backgroundColor = bloqueado ? "#f1f5f9" : "";
+      select.style.color = bloqueado ? "#64748b" : "";
+      select.tabIndex = bloqueado ? -1 : 0;
+      select.setAttribute("aria-disabled", bloqueado ? "true" : "false");
+    }
+
+    function sincronizarPagoPorVisita(){
+      if(!formaPagoSelect || !programacionCobro) return;
+      const porVisita = formaPagoSelect.value === "por_visita";
+
+      if(porVisita){
+        programacionCobro.value = "por_visita";
+        programacionCobro.dataset.autoPorVisita = "1";
+        bloquearSelect(programacionCobro, true);
+
+        if(requiereFactura && requiereFactura.checked && momentoFacturacion){
+          momentoFacturacion.value = "por_visita";
+          momentoFacturacion.dataset.autoPorVisita = "1";
+          bloquearSelect(momentoFacturacion, true);
+        }else if(momentoFacturacion){
+          bloquearSelect(momentoFacturacion, false);
+        }
+      }else{
+        if(programacionCobro.dataset.autoPorVisita === "1" && programacionCobro.value === "por_visita"){
+          programacionCobro.value = "inicio_periodo";
+        }
+        delete programacionCobro.dataset.autoPorVisita;
+        bloquearSelect(programacionCobro, false);
+
+        if(momentoFacturacion){
+          if(momentoFacturacion.dataset.autoPorVisita === "1" && momentoFacturacion.value === "por_visita"){
+            momentoFacturacion.value = "antes_cobro";
+          }
+          delete momentoFacturacion.dataset.autoPorVisita;
+          bloquearSelect(momentoFacturacion, false);
+        }
+      }
+    }
+
     function actualizarCamposComerciales(){
       const regla = programacionCobro ? programacionCobro.value : "";
       document.querySelectorAll(".cobro-field").forEach(el => {
@@ -606,6 +648,8 @@
         const inicio = fechaInicioContrato && fechaInicioContrato.value ? fechaInicioContrato.value.split("-").reverse().join("/") : "la fecha de inicio";
         if (regla === "semestral_adelantado") {
           preview.textContent = `Contrato anual desde ${inicio}: Cartera generará únicamente 2 cuentas, cada una por 6 mensualidades adelantadas.`;
+        } else if (regla === "por_visita") {
+          preview.textContent = "Pago por visita: cada mantenimiento programado genera una cuenta individual en la fecha de la visita. El valor mensual se distribuye entre las visitas del período y conserva IVA, promociones y descuentos.";
         } else {
           preview.textContent = `Periodo mensual anclado en ${inicio}. Cartera generará la cuenta únicamente en el mes donde caiga la fecha real definida por: ${texto}.`;
         }
@@ -639,14 +683,19 @@
     });
     if (formaPagoSelect) formaPagoSelect.addEventListener("change", function(){
       sincronizarPagoSemestral("forma");
+      sincronizarPagoPorVisita();
       actualizarCamposComerciales();
       actualizarResumenIva();
     });
-    if (requiereFactura) requiereFactura.addEventListener("change", actualizarCamposComerciales);
+    if (requiereFactura) requiereFactura.addEventListener("change", function(){
+      sincronizarPagoPorVisita();
+      actualizarCamposComerciales();
+    });
     if (momentoFacturacion) momentoFacturacion.addEventListener("change", actualizarCamposComerciales);
     if (fechaInicioContrato) fechaInicioContrato.addEventListener("change", actualizarCamposComerciales);
     if (precioMensual) precioMensual.addEventListener("input", actualizarResumenIva);
     if (aplicaIva) aplicaIva.addEventListener("change", actualizarResumenIva);
+    sincronizarPagoPorVisita();
     actualizarCamposComerciales();
     actualizarResumenIva();
 
