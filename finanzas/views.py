@@ -147,12 +147,9 @@ def panel_financiero(request):
 
     ciudad = (request.GET.get("ciudad") or "").strip()
 
-    # Auditoría defensiva: Finanzas no depende del cron para tener el ciclo de
-    # servicio vigente materializado y con sus fechas comerciales correctas.
-    sincronizar_cartera_vigente(hoy=hoy)
-
-    # Al abrir Finanzas se actualizan la campana y las alertas push del administrador.
-    generar_alertas_financieras(enviar_push=True)
+    # La carga del panel es de solo lectura. La sincronización financiera y las
+    # alertas se ejecutan al cambiar contratos/pagos o por tareas programadas;
+    # hacerlas aquí provocaba cientos de consultas/escrituras por cada visita.
     resumen = obtener_resumen_financiero(anio, mes, ciudad=ciudad)
     inicio, fin = resumen["inicio"], resumen["fin"]
 
@@ -432,7 +429,6 @@ def facturas_lista(request):
         return _denegado(request)
 
     hoy = timezone.localdate()
-    sincronizar_cartera_vigente(hoy=hoy)
     q = (request.GET.get("q") or "").strip()
     estado = (request.GET.get("estado") or "").strip()
     # Al entrar a Cartera por primera vez mostramos únicamente el mes actual.
@@ -633,11 +629,10 @@ def cartera_centro(request):
 
     hoy = timezone.localdate()
 
-    # Antes de mostrar cifras financieras, corregimos/materializamos el ciclo
-    # vigente. Así Cartera no depende de un cron y no puede omitir un 25/08→25/09
-    # simplemente porque hoy todavía sea 17/09.
-    sync_cartera = sincronizar_cartera_vigente(hoy=hoy)
-    reconciliar_cartera_nomina()
+    # Cartera es una vista de lectura. Las cuentas se materializan/sincronizan
+    # desde el contrato y los pagos; una apertura de página nunca debe recorrer
+    # y reescribir toda la contabilidad.
+    sync_cartera = None
 
     q = (request.GET.get("q") or "").strip()
     estado = (request.GET.get("estado") or "gestion").strip()
@@ -814,7 +809,6 @@ def cartera_centro(request):
 @login_required
 def nomina_lista(request):
     if not _es_admin(request.user): return _denegado(request)
-    reconciliar_cartera_nomina()
     hoy=timezone.localdate()
     try:
         anio = int(request.GET.get("anio") or hoy.year)

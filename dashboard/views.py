@@ -421,7 +421,12 @@ def _build_calendario_mantenimientos(anio, mes, trabajador=None):
             sin_asignar = 0
             for m in items:
                 try:
-                    if not m.trabajadores.exists():
+                    cache = getattr(m, "_prefetched_objects_cache", {})
+                    asignados = cache.get("trabajadores")
+                    if asignados is not None:
+                        if len(asignados) == 0:
+                            sin_asignar += 1
+                    elif not m.trabajadores.exists():
                         sin_asignar += 1
                 except Exception:
                     pass
@@ -1976,8 +1981,6 @@ def push_test_view(request):
 def _centro_acciones_contexto():
     """Construye prioridades diarias sin duplicar la lógica financiera."""
     hoy = timezone.localdate()
-    sincronizar_cartera_vigente(hoy=hoy)
-    reconciliar_cartera_nomina()
     proximos_tres_dias = hoy + timedelta(days=3)
     limite_programacion = hoy + timedelta(days=7)
 
@@ -2729,10 +2732,9 @@ def home_view(request):
 def dashboard_view(request):
     base_ctx = {"VAPID_PUBLIC_KEY": getattr(settings, "VAPID_PUBLIC_KEY", "")}
 
-    # Renovación silenciosa de la programación: mantiene siempre visitas futuras
-    # para contratos activos. Al desactivar un contrato, la lógica existente
-    # cancela sus mantenimientos automáticos pendientes.
-    mantener_programacion_automatica(horizonte_dias=14)
+    # La programación automática se mantiene al modificar contratos y mediante
+    # los procesos programados. No se regenera en cada GET del dashboard: hacerlo
+    # aquí convertía una simple carga de página en escrituras y consultas masivas.
 
     if es_admin(request.user):
         hoy = date.today()
@@ -3579,23 +3581,24 @@ def dashboard_view(request):
         ruta_mantenimientos = []
         for m in mantenimientos_hoy:
             c = m.contrato
+            cliente = m.cliente
             ruta_mantenimientos.append({
                 "id": m.id,
-                "cliente": str(m.cliente),
-                "direccion": c.direccion or m.cliente.direccion or "",
-                "maps": c.enlace_google_maps or m.cliente.enlace_google_maps or "",
+                "cliente": str(cliente),
+                "direccion": ((c.direccion if c else "") or cliente.direccion or ""),
+                "maps": ((c.enlace_google_maps if c else "") or cliente.enlace_google_maps or ""),
                 "cliente_id": m.cliente_id,
-                "contrato_id": c.id,
-                "lat": float(c.latitud) if c.latitud is not None else (float(m.cliente.latitud) if m.cliente.latitud is not None else None),
-                "lng": float(c.longitud) if c.longitud is not None else (float(m.cliente.longitud) if m.cliente.longitud is not None else None),
+                "contrato_id": c.id if c else None,
+                "lat": float(c.latitud) if c and c.latitud is not None else (float(cliente.latitud) if cliente.latitud is not None else None),
+                "lng": float(c.longitud) if c and c.longitud is not None else (float(cliente.longitud) if cliente.longitud is not None else None),
                 "estado": m.estado,
-                "tipo_horario": c.tipo_horario_visita or "libre",
-                "hora_fija": c.hora_visita_fija.strftime("%H:%M") if c.hora_visita_fija else "",
-                "ventana_desde": c.ventana_visita_desde.strftime("%H:%M") if c.ventana_visita_desde else "",
-                "ventana_hasta": c.ventana_visita_hasta.strftime("%H:%M") if c.ventana_visita_hasta else "",
-                "duracion": c.duracion_estimada_minutos or 30,
-                "prioridad": c.prioridad_visita or "normal",
-                "telefono": m.cliente.telefono or "",
+                "tipo_horario": (c.tipo_horario_visita if c else "") or "libre",
+                "hora_fija": c.hora_visita_fija.strftime("%H:%M") if c and c.hora_visita_fija else "",
+                "ventana_desde": c.ventana_visita_desde.strftime("%H:%M") if c and c.ventana_visita_desde else "",
+                "ventana_hasta": c.ventana_visita_hasta.strftime("%H:%M") if c and c.ventana_visita_hasta else "",
+                "duracion": (c.duracion_estimada_minutos if c else None) or 30,
+                "prioridad": (c.prioridad_visita if c else "") or "normal",
+                "telefono": cliente.telefono or "",
             })
         ruta_total_minutos = sum(x["duracion"] for x in ruta_mantenimientos if x["estado"] != "realizado")
 
@@ -4369,6 +4372,29 @@ def admin_operativo_view(request):
     semana_anterior = inicio_agenda - timedelta(days=7)
     semana_siguiente = inicio_agenda + timedelta(days=7)
 
+    # KPIs operativos coherentes en tres horizontes. Respetan los filtros de
+    # ciudad/trabajador y no dependen de las listas truncadas de la interfaz.
+    def _kpis_periodo(qs):
+        datos = qs.aggregate(
+            total=Count("id", distinct=True),
+            realizados=Count("id", filter=Q(estado="realizado"), distinct=True),
+            pendientes=Count("id", filter=Q(estado="pendiente"), distinct=True),
+        )
+        total = int(datos.get("total") or 0)
+        realizados = int(datos.get("realizados") or 0)
+        pendientes = int(datos.get("pendientes") or 0)
+        return {
+            "total": total,
+            "realizados": realizados,
+            "pendientes": pendientes,
+            "cumplimiento": round((realizados / total) * 100, 1) if total else 0,
+        }
+
+    primer_dia_mes, ultimo_dia_mes = _inicio_fin_mes(anio_cal, mes_cal)
+    kpi_dia = _kpis_periodo(base_qs.filter(fecha=fecha_resumen))
+    kpi_semana = _kpis_periodo(base_qs.filter(fecha__range=(inicio_agenda, fin_agenda)))
+    kpi_mes = _kpis_periodo(base_qs.filter(fecha__range=(primer_dia_mes, ultimo_dia_mes)))
+
     return render(
         request,
         "dashboard/admin_operativo.html",
@@ -4412,6 +4438,15 @@ def admin_operativo_view(request):
             "agenda_fecha_base": fecha_base_agenda,
             "agenda_semana_anterior": semana_anterior,
             "agenda_semana_siguiente": semana_siguiente,
+            "fecha_resumen": fecha_resumen,
+            "total_resumen_dia": total_resumen_dia,
+            "realizados_resumen_dia": realizados_resumen_dia,
+            "pendientes_resumen_dia": pendientes_resumen_dia,
+            "sin_asignar_resumen_dia": sin_asignar_resumen_dia,
+            "cumplimiento_resumen_dia": cumplimiento_resumen_dia,
+            "kpi_dia": kpi_dia,
+            "kpi_semana": kpi_semana,
+            "kpi_mes": kpi_mes,
             "es_admin": True,
         },
     )
@@ -7584,6 +7619,26 @@ QUIMICOS_PROVEEDORES_VALIDOS = {valor for valor, _ in Contrato.QUIMICOS_PROVEEDO
 QUIMICOS_ALMACENAMIENTOS_VALIDOS = {valor for valor, _ in Contrato.QUIMICOS_ALMACENAMIENTO_CHOICES}
 
 
+def _errores_coherencia_cobro(forma_pago, programacion_cobro):
+    """Evita combinaciones comerciales que producen fechas de cartera contradictorias."""
+    compatibles = {
+        "adelantado": {"inicio_periodo"},
+        "servicio_cumplido": {"cierre_periodo", "despues_cierre"},
+        "50_50": {"dos_pagos"},
+        "quincenal": {"dos_pagos"},
+        "por_visita": {"por_visita"},
+        "fin_mensualidad": {"cierre_periodo", "despues_cierre"},
+        "semestral_adelantado": {"semestral_adelantado"},
+    }
+    permitidas = compatibles.get(forma_pago)
+    if permitidas and programacion_cobro not in permitidas:
+        etiqueta_forma = dict(Contrato.FORMA_PAGO_CHOICES).get(forma_pago, forma_pago)
+        etiquetas_prog = dict(Contrato.PROGRAMACION_COBRO_CHOICES)
+        opciones = ", ".join(etiquetas_prog.get(x, x) for x in sorted(permitidas))
+        return [f"La forma de pago ‘{etiqueta_forma}’ no coincide con la programación de cobro. Usa: {opciones}."]
+    return []
+
+
 def _entero_post(request, nombre, minimo=0, maximo=None, obligatorio=False):
     valor = (request.POST.get(nombre) or "").strip()
     if not valor:
@@ -7648,6 +7703,7 @@ def _validar_datos_contrato(request):
     if forma_pago == "personalizado" and not forma_pago_personalizada: errores.append("Debes escribir la forma de pago personalizada.")
     if programacion_cobro not in PROGRAMACIONES_COBRO_VALIDAS: errores.append("Debes seleccionar una programación de cobro válida.")
     if programacion_cobro == "personalizado" and not programacion_personalizada: errores.append("Describe la programación de cobro personalizada.")
+    errores.extend(_errores_coherencia_cobro(forma_pago, programacion_cobro))
 
     campos_enteros = {}
     configuracion = [
@@ -9256,6 +9312,7 @@ def contrato_reactivar_view(request, pk):
             errores.append("Selecciona una programación de cobro válida.")
         if programacion_cobro == "personalizado" and not programacion_cobro_personalizada:
             errores.append("Describe la programación de cobro personalizada.")
+        errores.extend(_errores_coherencia_cobro(forma_pago, programacion_cobro))
         errores.extend(validar_programacion(frecuencia, dias_visita, tecnico, automatica=contrato.generacion_automatica))
 
         enteros = {}

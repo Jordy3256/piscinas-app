@@ -338,8 +338,18 @@ class Factura(models.Model):
 
     @property
     def monto_pagado(self):
-        """Total cobrado, conservando compatibilidad con facturas antiguas."""
-        total_pagos = self.pagos.filter(activo=True).aggregate(valor=models.Sum("monto"))["valor"] or Decimal("0.00")
+        """Total cobrado sin provocar N+1 cuando ``pagos`` está prefetched."""
+        cache = getattr(self, "_prefetched_objects_cache", {})
+        pagos_prefetched = cache.get("pagos")
+        if pagos_prefetched is not None:
+            total_pagos = sum(
+                (p.monto for p in pagos_prefetched if p.activo),
+                Decimal("0.00"),
+            )
+        else:
+            total_pagos = self.pagos.filter(activo=True).aggregate(
+                valor=models.Sum("monto")
+            )["valor"] or Decimal("0.00")
         if total_pagos == 0 and self.ingreso_generado_id and self.estado == self.ESTADO_PAGADA:
             return self.total or Decimal("0.00")
         return total_pagos

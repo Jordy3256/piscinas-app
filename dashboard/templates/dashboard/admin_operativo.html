@@ -745,6 +745,17 @@
   </div>
 </div>
 
+<div class="card shadow-sm mb-3 op-card-compact">
+  <div class="card-body">
+    <div class="op-section-title mb-3">Resumen general</div>
+    <div class="row g-2">
+      <div class="col-12 col-lg-4"><div class="op-soft-box h-100"><div class="small-label">Día seleccionado</div><div class="big-number">{{ kpi_dia.realizados }}/{{ kpi_dia.total }}</div><div class="small text-muted">{{ kpi_dia.pendientes }} pendientes · {{ kpi_dia.cumplimiento|floatformat:0 }}% realizado</div></div></div>
+      <div class="col-12 col-lg-4"><div class="op-soft-box h-100"><div class="small-label">Semana {{ agenda_semanal.inicio|date:"d/m" }}–{{ agenda_semanal.fin|date:"d/m" }}</div><div class="big-number">{{ kpi_semana.realizados }}/{{ kpi_semana.total }}</div><div class="small text-muted">{{ kpi_semana.pendientes }} pendientes · {{ kpi_semana.cumplimiento|floatformat:0 }}% realizado</div></div></div>
+      <div class="col-12 col-lg-4"><div class="op-soft-box h-100"><div class="small-label">Mes visible</div><div class="big-number">{{ kpi_mes.realizados }}/{{ kpi_mes.total }}</div><div class="small text-muted">{{ kpi_mes.pendientes }} pendientes · {{ kpi_mes.cumplimiento|floatformat:0 }}% realizado</div></div></div>
+    </div>
+  </div>
+</div>
+
 {% if total_sin_asignar > 0 %}
   <div class="alert alert-danger py-2 mb-3">
     <div class="fw-semibold mb-2">
