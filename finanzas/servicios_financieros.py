@@ -219,13 +219,21 @@ def obtener_resumen_financiero(anio: int, mes: int, ciudad: str = "") -> dict:
     utilidad_real = ingresos_cobrados - egresos_pagados
     resultado_proyectado = ingresos_esperados - egresos_previstos
 
+    # Los indicadores de cumplimiento deben usar exactamente el mismo universo
+    # que los saldos "por cobrar" y "por pagar". Antes se comparaban los
+    # movimientos de caja del mes contra la proyección del mes, mientras los
+    # saldos se calculaban desde facturas/obligaciones. Eso podía mostrar, por
+    # ejemplo, un saldo por pagar pequeño pero un cumplimiento artificialmente
+    # bajo.
+    cobrado_sobre_previsto = min(cobrado_facturas + cobrado_manual, ingresos_esperados)
+    pagado_sobre_previsto = min(pagado_nomina + pagado_no_nomina, egresos_previstos)
     cumplimiento_cobranza = (
-        min(Decimal("100.00"), (ingresos_cobrados / ingresos_esperados) * 100)
+        min(Decimal("100.00"), (cobrado_sobre_previsto / ingresos_esperados) * 100)
         if ingresos_esperados > 0
         else CERO
     )
     cumplimiento_pagos = (
-        min(Decimal("100.00"), (egresos_pagados / egresos_previstos) * 100)
+        min(Decimal("100.00"), (pagado_sobre_previsto / egresos_previstos) * 100)
         if egresos_previstos > 0
         else CERO
     )
@@ -236,12 +244,42 @@ def obtener_resumen_financiero(anio: int, mes: int, ciudad: str = "") -> dict:
     )
 
     hoy = timezone.localdate()
-    cobros_vencidos = [f for f in facturas_lista if f.saldo > 0 and f.fecha_vencimiento < hoy]
+
+    # Las alertas de cobranza son acumuladas, no mensuales. Una deuda vencida
+    # sigue siendo prioritaria aunque se haya originado en agosto y el panel esté
+    # mostrando septiembre. Esto mantiene Inicio, Finanzas y Cartera hablando de
+    # la misma cartera pendiente.
+    facturas_alerta_qs = (
+        Factura.objects
+        .exclude(estado=Factura.ESTADO_ANULADA)
+        .filter(
+            Q(fecha_vencimiento__lt=hoy)
+            | Q(fecha_cobro_desde__lte=hoy, fecha_vencimiento__gte=hoy)
+            | Q(fecha_vencimiento=hoy)
+        )
+        .select_related("cliente", "contrato")
+        .prefetch_related("pagos")
+        .order_by("fecha_vencimiento", "id")
+    )
+    if ciudad:
+        facturas_alerta_qs = facturas_alerta_qs.filter(
+            Q(contrato__ciudad_ref__nombre__iexact=ciudad)
+            | Q(contrato__ciudad__iexact=ciudad)
+            | Q(cliente__ciudad_ref__nombre__iexact=ciudad)
+            | Q(cliente__ciudad__iexact=ciudad)
+        ).distinct()
+    facturas_alerta = list(facturas_alerta_qs)
+    cobros_vencidos = [
+        f for f in facturas_alerta
+        if f.saldo > 0 and f.fecha_vencimiento and f.fecha_vencimiento < hoy
+    ]
     cobros_hoy = [
-        f
-        for f in facturas_lista
+        f for f in facturas_alerta
         if f.saldo > 0
-        and (f.fecha_cobro_desde or f.fecha_vencimiento) <= hoy <= f.fecha_vencimiento
+        and (
+            (f.fecha_cobro_desde and f.fecha_cobro_desde <= hoy <= f.fecha_vencimiento)
+            or f.fecha_vencimiento == hoy
+        )
     ]
     try:
         from .facturacion_externa import avisos_que_deben_alertar

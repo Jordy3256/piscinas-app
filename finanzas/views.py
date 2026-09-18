@@ -185,13 +185,13 @@ def panel_financiero(request):
     ultimos = sorted(ultimos, key=lambda x: (x["fecha"], x["obj"].pk), reverse=True)[:10]
 
     prioridades = []
-    for factura in resumen["cobros_vencidos"][:4]:
+    for factura in resumen["cobros_vencidos"][:6]:
         prioridades.append({
             "nivel": "critica", "icono": "🔴", "titulo": "Cobro vencido",
             "detalle": f"{factura.cliente} · ${factura.saldo:.2f}",
             "url": reverse("finanzas_factura_detalle", args=[factura.pk]),
         })
-    for factura in resumen["cobros_hoy"][:4]:
+    for factura in resumen["cobros_hoy"][:6]:
         prioridades.append({
             "nivel": "importante", "icono": "🟠", "titulo": "Cobrar hoy",
             "detalle": f"{factura.cliente} · ${factura.saldo:.2f}",
