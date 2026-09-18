@@ -1808,6 +1808,134 @@ def _serie_evolutiva_contratos_metas(metas, hoy=None):
         "objetivo_final": anclas[-1][1] if anclas else actual_hoy,
     }
 
+
+def _analitica_proyeccion_metas(metas, serie, hoy=None):
+    """Proyección ejecutiva basada en crecimiento contractual real y economía actual.
+
+    No escribe datos ni modifica contratos/cartera. Las cifras futuras son estimaciones:
+    contratos = tendencia neta histórica reciente; ingresos = ticket mensual vigente;
+    utilidad = margen observado de movimientos pagados recientes.
+    """
+    hoy = hoy or timezone.localdate()
+    activos_qs = Contrato.objects.filter(activo=True, fecha_inicio__lte=hoy)
+    contratos_actuales = activos_qs.count()
+    mrr = activos_qs.aggregate(total=Sum("precio_mensual"))["total"] or Decimal("0.00")
+    ticket = (Decimal(mrr) / Decimal(contratos_actuales)) if contratos_actuales else Decimal("0.00")
+
+    # Tendencia neta: diferencias mensuales de contratos activos de los últimos 6 cortes
+    # disponibles. Promedio ponderado, dando mayor importancia a los meses recientes.
+    activos_hist = [x for x in (serie.get("activos") or []) if x is not None]
+    cambios = [activos_hist[i] - activos_hist[i-1] for i in range(1, len(activos_hist))]
+    cambios = cambios[-6:]
+    if cambios:
+        pesos = list(range(1, len(cambios) + 1))
+        crecimiento_mensual = sum(c*p for c, p in zip(cambios, pesos)) / sum(pesos)
+        promedio_simple = sum(cambios) / len(cambios)
+    else:
+        crecimiento_mensual = 0.0
+        promedio_simple = 0.0
+
+    # Altas/bajas de los últimos 90 días explican la velocidad actual.
+    desde_90 = hoy - timedelta(days=90)
+    altas_90 = Contrato.objects.filter(fecha_inicio__range=(desde_90, hoy)).count()
+    bajas_90 = Contrato.objects.filter(fecha_baja__range=(desde_90, hoy)).count()
+    recuperados_90 = ReactivacionContrato.objects.filter(fecha_reactivacion__range=(desde_90, hoy)).count()
+    crecimiento_neto_90 = altas_90 + recuperados_90 - bajas_90
+    ritmo_90 = crecimiento_neto_90 / 3.0
+
+    # Combina historia mensual (60%) con pulso de 90 días (40%). Evita que un único
+    # mes extraordinario domine la proyección. Nunca fuerza crecimiento positivo.
+    ritmo_base = (crecimiento_mensual * 0.60) + (ritmo_90 * 0.40)
+    if abs(ritmo_base) < 0.05:
+        ritmo_base = 0.0
+    ritmo_conservador = ritmo_base * 0.65 if ritmo_base >= 0 else ritmo_base * 1.15
+    ritmo_acelerado = ritmo_base * 1.35 if ritmo_base >= 0 else ritmo_base * 0.65
+
+    # Economía observada: usamos montos efectivamente marcados como pagados, no IVA
+    # contractual futuro. Ventana de 6 meses para estabilizar meses atípicos.
+    inicio_6m = hoy - timedelta(days=183)
+    ingresos_pagados = Ingreso.objects.filter(
+        fecha__range=(inicio_6m, hoy),
+    ).exclude(estado=Ingreso.ESTADO_ANULADO).aggregate(total=Sum("monto_pagado"))["total"] or Decimal("0.00")
+    egresos_pagados = Egreso.objects.filter(
+        fecha__range=(inicio_6m, hoy), aprobado=True,
+    ).exclude(estado=Egreso.ESTADO_ANULADO).aggregate(total=Sum("monto_pagado"))["total"] or Decimal("0.00")
+    margen_hist = None
+    if ingresos_pagados > 0:
+        margen_hist = float((Decimal(ingresos_pagados) - Decimal(egresos_pagados)) / Decimal(ingresos_pagados))
+        margen_hist = max(-1.0, min(margen_hist, 0.95))
+
+    def add_months(d, n):
+        idx = d.year * 12 + (d.month - 1) + n
+        y, m0 = divmod(idx, 12)
+        return date(y, m0 + 1, 1)
+
+    meses = 24
+    labels, actual_line, conservador, tendencia, acelerado = [], [], [], [], []
+    ingresos_tendencia, utilidad_tendencia = [], []
+    for n in range(0, meses + 1):
+        f = add_months(date(hoy.year, hoy.month, 1), n)
+        labels.append(f"{['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][f.month-1]} {f.year}")
+        actual_line.append(contratos_actuales if n == 0 else None)
+        c = max(0, round(contratos_actuales + ritmo_conservador * n, 1))
+        t = max(0, round(contratos_actuales + ritmo_base * n, 1))
+        a = max(0, round(contratos_actuales + ritmo_acelerado * n, 1))
+        conservador.append(c); tendencia.append(t); acelerado.append(a)
+        ingreso = Decimal(str(t)) * Decimal(ticket)
+        ingresos_tendencia.append(round(float(ingreso), 2))
+        utilidad_tendencia.append(round(float(ingreso) * margen_hist, 2) if margen_hist is not None else None)
+
+    meta_referencia = None
+    metas_futuras = sorted(
+        [m for m in metas if m.metrica == "contratos_activos" and m.fecha_fin >= hoy],
+        key=lambda m: (m.fecha_fin, m.pk),
+    )
+    if metas_futuras:
+        meta_referencia = metas_futuras[0]
+        meses_meta = max(((meta_referencia.fecha_fin.year-hoy.year)*12 + meta_referencia.fecha_fin.month-hoy.month), 1)
+        ritmo_necesario = max((meta_referencia.objetivo - contratos_actuales) / meses_meta, 0)
+        proyectado_meta = max(0, contratos_actuales + ritmo_base * meses_meta)
+        brecha_meta = proyectado_meta - meta_referencia.objetivo
+    else:
+        ritmo_necesario = 0.0; proyectado_meta = contratos_actuales; brecha_meta = 0.0
+
+    contratos_12 = tendencia[min(12, len(tendencia)-1)]
+    ingreso_12 = ingresos_tendencia[min(12, len(ingresos_tendencia)-1)]
+    utilidad_12 = utilidad_tendencia[min(12, len(utilidad_tendencia)-1)]
+
+    return {
+        "mrr_actual": float(mrr),
+        "ticket_promedio": float(ticket),
+        "crecimiento_mensual": round(ritmo_base, 2),
+        "crecimiento_simple": round(promedio_simple, 2),
+        "altas_90": altas_90,
+        "bajas_90": bajas_90,
+        "recuperados_90": recuperados_90,
+        "neto_90": crecimiento_neto_90,
+        "margen_hist": round(margen_hist * 100, 1) if margen_hist is not None else None,
+        "ingresos_pagados_6m": float(ingresos_pagados),
+        "egresos_pagados_6m": float(egresos_pagados),
+        "contratos_12": contratos_12,
+        "ingreso_12": ingreso_12,
+        "utilidad_12": utilidad_12,
+        "meta_referencia": meta_referencia,
+        "ritmo_necesario": round(ritmo_necesario, 2),
+        "proyectado_meta": round(proyectado_meta, 1),
+        "brecha_meta": round(brecha_meta, 1),
+        "grafico_escenarios": json.dumps({
+            "labels": labels,
+            "conservador": conservador,
+            "tendencia": tendencia,
+            "acelerado": acelerado,
+        }),
+        "grafico_financiero": json.dumps({
+            "labels": labels,
+            "ingresos": ingresos_tendencia,
+            "utilidad": utilidad_tendencia,
+        }),
+        "hay_base_financiera": margen_hist is not None,
+    }
+
 @login_required
 def metas_empresa_view(request):
     if not es_admin(request.user):
@@ -1820,7 +1948,9 @@ def metas_empresa_view(request):
         if MetaEmpresa is not None else []
     )
     serie = _serie_evolutiva_contratos_metas(metas_modelo, hoy=hoy)
+    proyeccion = _analitica_proyeccion_metas(metas_modelo, serie, hoy=hoy)
 
+    contexto.update(proyeccion)
     contexto.update({
         "hoy": hoy,
         "grafico_evolucion_contratos": json.dumps({
@@ -7642,23 +7772,15 @@ QUIMICOS_ALMACENAMIENTOS_VALIDOS = {valor for valor, _ in Contrato.QUIMICOS_ALMA
 
 def _errores_coherencia_cobro(forma_pago, programacion_cobro):
     """Evita combinaciones comerciales que producen fechas de cartera contradictorias."""
-    # Las condiciones actuales describen el acuerdo económico y la fecha real
-    # se configura por separado. Solo 50/50 y Por visita tienen calendario
-    # intrínseco. Las reglas antiguas siguen aceptándose para no romper datos.
-    reglas_fecha = {valor for valor, _ in Contrato.PROGRAMACION_COBRO_CHOICES_ACTIVAS}
     compatibles = {
-        "adelantado": reglas_fecha - {"por_visita"},
-        "servicio_cumplido": reglas_fecha - {"por_visita"},
-        "anual": reglas_fecha - {"por_visita"},
+        "adelantado": {"inicio_periodo"},
+        "servicio_cumplido": {"cierre_periodo", "despues_cierre"},
         "50_50": {"dos_pagos"},
-        "por_visita": {"por_visita"},
-        # Compatibilidad histórica.
         "quincenal": {"dos_pagos"},
+        "por_visita": {"por_visita"},
         "fin_mensualidad": {"cierre_periodo", "despues_cierre"},
         "semestral_adelantado": {"semestral_adelantado"},
     }
-    if programacion_cobro == "adelanto_mensualidades" and forma_pago != "anual":
-        return ["‘Adelanto de X mensualidades’ se utiliza con la condición de pago Anual."]
     permitidas = compatibles.get(forma_pago)
     if permitidas and programacion_cobro not in permitidas:
         etiqueta_forma = dict(Contrato.FORMA_PAGO_CHOICES).get(forma_pago, forma_pago)
@@ -7709,11 +7831,6 @@ def _validar_datos_contrato(request):
         programacion_personalizada = ""
         if requiere_factura:
             momento_facturacion = "por_visita"
-    elif forma_pago == "50_50":
-        # Inicio 50% / Final 50%: las fechas son automáticamente los extremos
-        # reales del periodo; no depende de días manuales.
-        programacion_cobro = "dos_pagos"
-        programacion_personalizada = ""
 
     quimicos_proveedor = (request.POST.get("quimicos_proveedor") or "jvaqua").strip()
     quimicos_almacenamiento = (request.POST.get("quimicos_almacenamiento") or "trabajador").strip()
@@ -7742,12 +7859,11 @@ def _validar_datos_contrato(request):
     campos_enteros = {}
     configuracion = [
         ("periodo_dia_inicio", 1, 31, False), ("cobro_mes_desfase", 0, 2, False),
-        ("cobro_dia_1", 1, 31, programacion_cobro in {"dia_fijo", "personalizado"} or (programacion_cobro == "dos_pagos" and forma_pago != "50_50")),
-        ("cobro_dia_2", 1, 31, programacion_cobro == "dos_pagos" and forma_pago != "50_50"),
+        ("cobro_dia_1", 1, 31, programacion_cobro in {"dia_fijo", "dos_pagos", "personalizado"}),
+        ("cobro_dia_2", 1, 31, programacion_cobro == "dos_pagos"),
         ("cobro_rango_desde", 1, 31, programacion_cobro == "rango_dias"),
         ("cobro_rango_hasta", 1, 31, programacion_cobro == "rango_dias"),
         ("cobro_dias_despues_cierre", 0, 365, programacion_cobro == "despues_cierre"),
-        ("cobro_meses_adelantados", 1, 12, programacion_cobro == "adelanto_mensualidades"),
         ("facturacion_dia", 1, 31, requiere_factura and momento_facturacion in {"dia_fijo", "personalizado"}),
         ("facturacion_dias_antes", 0, 365, False),
         ("notificacion_factura_dias_antes", 0, 365, False),
@@ -7815,10 +7931,8 @@ def _validar_datos_contrato(request):
             errores.append("La vigencia debe estar entre 1 y 120 meses.")
     if programacion_cobro == "semestral_adelantado" and not vigencia_meses:
         vigencia_meses = 12
-    if forma_pago == "anual":
-        vigencia_meses = 12
 
-    if programacion_cobro in {"inicio_periodo", "cierre_periodo", "despues_cierre", "por_visita", "adelanto_mensualidades", "dos_pagos"}:
+    if programacion_cobro in {"inicio_periodo", "cierre_periodo", "despues_cierre", "por_visita"}:
         campos_enteros["cobro_mes_desfase"] = 0
 
     hora_visita_fija_obj = parse_time(hora_visita_fija) if hora_visita_fija else None
@@ -7849,7 +7963,6 @@ def _validar_datos_contrato(request):
         "generacion_automatica": generacion_automatica, "tecnico_designado": tecnico_designado,
         "tecnico_id": tecnico_id, "dias_visita": dias_visita, "programacion_cobro": programacion_cobro,
         "programacion_cobro_personalizada": programacion_personalizada, "porcentaje_primer_pago": porcentaje_primer_pago,
-        "cobro_meses_adelantados": campos_enteros.get("cobro_meses_adelantados") or 1,
         "requiere_factura": requiere_factura, "momento_facturacion": momento_facturacion if requiere_factura else "",
         "notificar_facturacion": notificar_facturacion,
         "aplica_iva": aplica_iva,
@@ -8510,7 +8623,7 @@ def contrato_crear_view(request):
         "cobro_mes_desfase": 0,
         "cobro_dia_1": "", "cobro_dia_2": "",
         "cobro_rango_desde": "", "cobro_rango_hasta": "",
-        "cobro_dias_despues_cierre": 0, "cobro_meses_adelantados": 1, "porcentaje_primer_pago": "50.00",
+        "cobro_dias_despues_cierre": 0, "porcentaje_primer_pago": "50.00",
         "programacion_cobro_personalizada": "",
         "requiere_factura": False, "momento_facturacion": "", "facturacion_dia": "",
         "facturacion_dias_antes": 0, "notificar_facturacion": False,
@@ -8553,7 +8666,7 @@ def contrato_crear_view(request):
             ),
             **{campo: validacion.get(campo) or "" for campo in (
                 "periodo_dia_inicio", "programacion_cobro", "cobro_mes_desfase", "cobro_dia_1", "cobro_dia_2",
-                "cobro_rango_desde", "cobro_rango_hasta", "cobro_dias_despues_cierre", "cobro_meses_adelantados", "porcentaje_primer_pago",
+                "cobro_rango_desde", "cobro_rango_hasta", "cobro_dias_despues_cierre", "porcentaje_primer_pago",
                 "programacion_cobro_personalizada", "momento_facturacion", "facturacion_dia", "facturacion_dias_antes",
                 "notificacion_factura_dias_antes", "observaciones_facturacion")},
             "requiere_factura": validacion["requiere_factura"],
@@ -8605,7 +8718,6 @@ def contrato_crear_view(request):
                 cobro_dia_1=validacion["cobro_dia_1"], cobro_dia_2=validacion["cobro_dia_2"],
                 cobro_rango_desde=validacion["cobro_rango_desde"], cobro_rango_hasta=validacion["cobro_rango_hasta"],
                 cobro_dias_despues_cierre=validacion["cobro_dias_despues_cierre"] or 0,
-                cobro_meses_adelantados=validacion["cobro_meses_adelantados"],
                 porcentaje_primer_pago=validacion["porcentaje_primer_pago"],
                 programacion_cobro_personalizada=validacion["programacion_cobro_personalizada"],
                 requiere_factura=validacion["requiere_factura"], momento_facturacion=validacion["momento_facturacion"],
@@ -8670,8 +8782,8 @@ def contrato_crear_view(request):
             "contrato": None,
             "clientes": clientes,
             "frecuencias": Contrato.FRECUENCIA_CHOICES,
-            "formas_pago": Contrato.FORMA_PAGO_CHOICES_ACTIVAS,
-            "programaciones_cobro": Contrato.PROGRAMACION_COBRO_CHOICES_ACTIVAS,
+            "formas_pago": Contrato.FORMA_PAGO_CHOICES,
+            "programaciones_cobro": Contrato.PROGRAMACION_COBRO_CHOICES,
             "momentos_facturacion": Contrato.MOMENTO_FACTURACION_CHOICES,
             "quimicos_proveedores": Contrato.QUIMICOS_PROVEEDOR_CHOICES,
             "quimicos_almacenamientos": Contrato.QUIMICOS_ALMACENAMIENTO_CHOICES,
@@ -8728,7 +8840,6 @@ def contrato_editar_view(request, pk):
         "cobro_dia_1": contrato.cobro_dia_1 or "", "cobro_dia_2": contrato.cobro_dia_2 or "",
         "cobro_rango_desde": contrato.cobro_rango_desde or "", "cobro_rango_hasta": contrato.cobro_rango_hasta or "",
         "cobro_dias_despues_cierre": contrato.cobro_dias_despues_cierre,
-        "cobro_meses_adelantados": contrato.cobro_meses_adelantados,
         "porcentaje_primer_pago": contrato.porcentaje_primer_pago,
         "programacion_cobro_personalizada": contrato.programacion_cobro_personalizada,
         "requiere_factura": contrato.requiere_factura, "momento_facturacion": contrato.momento_facturacion,
@@ -8776,7 +8887,7 @@ def contrato_editar_view(request, pk):
             "forma_pago", "forma_pago_personalizada", "periodo_dia_inicio",
             "programacion_cobro", "cobro_mes_desfase", "cobro_dia_1",
             "cobro_dia_2", "cobro_rango_desde", "cobro_rango_hasta",
-            "cobro_dias_despues_cierre", "cobro_meses_adelantados", "porcentaje_primer_pago",
+            "cobro_dias_despues_cierre", "porcentaje_primer_pago",
             "programacion_cobro_personalizada", "precio_mensual",
             "valor_tecnico_mensual",
         )
@@ -8805,7 +8916,7 @@ def contrato_editar_view(request, pk):
             ),
             **{campo: validacion.get(campo) or "" for campo in (
                 "periodo_dia_inicio", "programacion_cobro", "cobro_mes_desfase", "cobro_dia_1", "cobro_dia_2",
-                "cobro_rango_desde", "cobro_rango_hasta", "cobro_dias_despues_cierre", "cobro_meses_adelantados", "porcentaje_primer_pago",
+                "cobro_rango_desde", "cobro_rango_hasta", "cobro_dias_despues_cierre", "porcentaje_primer_pago",
                 "programacion_cobro_personalizada", "momento_facturacion", "facturacion_dia", "facturacion_dias_antes",
                 "notificacion_factura_dias_antes", "observaciones_facturacion")},
             "requiere_factura": validacion["requiere_factura"],
@@ -8851,7 +8962,7 @@ def contrato_editar_view(request, pk):
             )
             for campo in (
                 "periodo_dia_inicio", "programacion_cobro", "cobro_mes_desfase", "cobro_dia_1", "cobro_dia_2",
-                "cobro_rango_desde", "cobro_rango_hasta", "cobro_dias_despues_cierre", "cobro_meses_adelantados", "porcentaje_primer_pago",
+                "cobro_rango_desde", "cobro_rango_hasta", "cobro_dias_despues_cierre", "porcentaje_primer_pago",
                 "programacion_cobro_personalizada", "requiere_factura", "momento_facturacion", "facturacion_dia",
                 "facturacion_dias_antes", "notificar_facturacion", "notificacion_factura_dias_antes",
                 "observaciones_facturacion"):
@@ -8914,8 +9025,8 @@ def contrato_editar_view(request, pk):
             "contrato": contrato,
             "clientes": clientes,
             "frecuencias": Contrato.FRECUENCIA_CHOICES,
-            "formas_pago": Contrato.FORMA_PAGO_CHOICES_ACTIVAS,
-            "programaciones_cobro": Contrato.PROGRAMACION_COBRO_CHOICES_ACTIVAS,
+            "formas_pago": Contrato.FORMA_PAGO_CHOICES,
+            "programaciones_cobro": Contrato.PROGRAMACION_COBRO_CHOICES,
             "momentos_facturacion": Contrato.MOMENTO_FACTURACION_CHOICES,
             "quimicos_proveedores": Contrato.QUIMICOS_PROVEEDOR_CHOICES,
             "quimicos_almacenamientos": Contrato.QUIMICOS_ALMACENAMIENTO_CHOICES,
@@ -9318,7 +9429,6 @@ def contrato_reactivar_view(request, pk):
         "cobro_rango_desde": contrato.cobro_rango_desde or "",
         "cobro_rango_hasta": contrato.cobro_rango_hasta or "",
         "cobro_dias_despues_cierre": contrato.cobro_dias_despues_cierre or 0,
-        "cobro_meses_adelantados": contrato.cobro_meses_adelantados or 1,
         "porcentaje_primer_pago": decimal_web(contrato.porcentaje_primer_pago),
         "programacion_cobro_personalizada": contrato.programacion_cobro_personalizada,
         "precio_mensual": decimal_web(contrato.precio_mensual),
@@ -9337,11 +9447,6 @@ def contrato_reactivar_view(request, pk):
         forma_pago_personalizada = (request.POST.get("forma_pago_personalizada") or "").strip()
         programacion_cobro = (request.POST.get("programacion_cobro") or "").strip()
         programacion_cobro_personalizada = (request.POST.get("programacion_cobro_personalizada") or "").strip()
-
-        if forma_pago == "por_visita":
-            programacion_cobro = "por_visita"
-        elif forma_pago == "50_50":
-            programacion_cobro = "dos_pagos"
 
         tecnico = Trabajador.objects.filter(pk=int(tecnico_id), activo=True).select_related("user").first() if tecnico_id.isdigit() else None
         if not fecha_inicio:
@@ -9364,12 +9469,11 @@ def contrato_reactivar_view(request, pk):
         enteros = {}
         config = [
             ("periodo_dia_inicio", 1, 31, True), ("cobro_mes_desfase", 0, 2, True),
-            ("cobro_dia_1", 1, 31, programacion_cobro == "dia_fijo" or (programacion_cobro == "dos_pagos" and forma_pago != "50_50")),
-            ("cobro_dia_2", 1, 31, programacion_cobro == "dos_pagos" and forma_pago != "50_50"),
+            ("cobro_dia_1", 1, 31, programacion_cobro in {"dia_fijo", "dos_pagos"}),
+            ("cobro_dia_2", 1, 31, programacion_cobro == "dos_pagos"),
             ("cobro_rango_desde", 1, 31, programacion_cobro == "rango_dias"),
             ("cobro_rango_hasta", 1, 31, programacion_cobro == "rango_dias"),
             ("cobro_dias_despues_cierre", 0, 365, programacion_cobro == "despues_cierre"),
-        ("cobro_meses_adelantados", 1, 12, programacion_cobro == "adelanto_mensualidades"),
         ]
         for nombre, minimo, maximo, obligatorio in config:
             try:
@@ -9413,7 +9517,6 @@ def contrato_reactivar_view(request, pk):
             "cobro_dia_1": request.POST.get("cobro_dia_1", ""), "cobro_dia_2": request.POST.get("cobro_dia_2", ""),
             "cobro_rango_desde": request.POST.get("cobro_rango_desde", ""), "cobro_rango_hasta": request.POST.get("cobro_rango_hasta", ""),
             "cobro_dias_despues_cierre": request.POST.get("cobro_dias_despues_cierre", "0"),
-            "cobro_meses_adelantados": request.POST.get("cobro_meses_adelantados", "1"),
             "porcentaje_primer_pago": request.POST.get("porcentaje_primer_pago", "50.00"),
             "programacion_cobro_personalizada": programacion_cobro_personalizada,
             "precio_mensual": request.POST.get("precio_mensual", ""),
@@ -9443,7 +9546,6 @@ def contrato_reactivar_view(request, pk):
                 contrato.cobro_rango_desde = enteros["cobro_rango_desde"]
                 contrato.cobro_rango_hasta = enteros["cobro_rango_hasta"]
                 contrato.cobro_dias_despues_cierre = enteros["cobro_dias_despues_cierre"] or 0
-                contrato.cobro_meses_adelantados = enteros.get("cobro_meses_adelantados") or 1
                 contrato.porcentaje_primer_pago = porcentaje_primer_pago
                 contrato.programacion_cobro_personalizada = programacion_cobro_personalizada
                 contrato.precio_mensual = precio_mensual
@@ -9465,7 +9567,6 @@ def contrato_reactivar_view(request, pk):
                     cobro_dia_1=enteros["cobro_dia_1"], cobro_dia_2=enteros["cobro_dia_2"],
                     cobro_rango_desde=enteros["cobro_rango_desde"], cobro_rango_hasta=enteros["cobro_rango_hasta"],
                     cobro_dias_despues_cierre=enteros["cobro_dias_despues_cierre"] or 0,
-                    cobro_meses_adelantados=enteros.get("cobro_meses_adelantados") or 1,
                     porcentaje_primer_pago=porcentaje_primer_pago,
                     programacion_cobro_personalizada=programacion_cobro_personalizada,
                     precio_mensual=precio_mensual, valor_tecnico_mensual=valor_tecnico_mensual,
@@ -9489,7 +9590,7 @@ def contrato_reactivar_view(request, pk):
 
     return render(request, "dashboard/contrato_reactivar.html", {
         "contrato": contrato, "trabajadores": trabajadores, "frecuencias": Contrato.FRECUENCIA_CHOICES,
-        "formas_pago": Contrato.FORMA_PAGO_CHOICES_ACTIVAS, "programaciones_cobro": Contrato.PROGRAMACION_COBRO_CHOICES_ACTIVAS,
+        "formas_pago": Contrato.FORMA_PAGO_CHOICES, "programaciones_cobro": Contrato.PROGRAMACION_COBRO_CHOICES,
         "dias_semana": DIAS_SEMANA.items(), "datos": datos, "next": siguiente, "es_admin": True,
     })
 
