@@ -3619,6 +3619,12 @@ def dashboard_view(request):
             "calendario_trabajador": calendario_trabajador,
             "fecha_seleccionada": fecha_seleccionada,
             "fecha_seleccionada_str": fecha_seleccionada_str,
+            "fecha_resumen": fecha_resumen,
+            "total_resumen_dia": total_resumen_dia,
+            "realizados_resumen_dia": realizados_resumen_dia,
+            "pendientes_resumen_dia": pendientes_resumen_dia,
+            "sin_asignar_resumen_dia": sin_asignar_resumen_dia,
+            "cumplimiento_resumen_dia": cumplimiento_resumen_dia,
             "agenda_semanal": agenda_semanal,
             "agenda_semana_anterior": semana_anterior,
             "agenda_semana_siguiente": semana_siguiente,
@@ -4295,6 +4301,20 @@ def admin_operativo_view(request):
         atrasados = _filtrar_mantenimientos_por_busqueda(atrasados, q)
         proximos = _filtrar_mantenimientos_por_busqueda(proximos, q)
 
+    # Resumen principal: siempre describe exclusivamente el día que el
+    # administrador está consultando (hoy o la fecha elegida en calendario).
+    fecha_resumen = fecha_seleccionada or hoy
+    qs_resumen_dia = base_qs.filter(fecha=fecha_resumen)
+    total_resumen_dia = qs_resumen_dia.count()
+    realizados_resumen_dia = qs_resumen_dia.filter(estado="realizado").count()
+    pendientes_resumen_dia = qs_resumen_dia.filter(estado="pendiente").count()
+    sin_asignar_resumen_dia = qs_resumen_dia.filter(
+        estado="pendiente", trabajadores__isnull=True
+    ).distinct().count()
+    cumplimiento_resumen_dia = round(
+        (realizados_resumen_dia / total_resumen_dia) * 100, 1
+    ) if total_resumen_dia else 0
+
     total_dia_reales = len(dia_list)
     total_atrasados_reales = len(atrasados)
     for m in atrasados:
@@ -4497,6 +4517,9 @@ def mantenimiento_detalle_view(request, pk):
             return f"/dashboard/mantenimientos/{mantenimiento.pk}/"
 
         if accion == "marcar_pendiente":
+            if not es_usuario_admin:
+                messages.error(request, "Solo un administrador puede reabrir un mantenimiento realizado.")
+                return redirect(safe_return_url())
             mantenimiento.estado = "pendiente"
             mantenimiento.borrador_guardado = True
             mantenimiento.save(update_fields=["estado", "borrador_guardado"])

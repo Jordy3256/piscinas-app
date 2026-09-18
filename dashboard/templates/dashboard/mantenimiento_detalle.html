@@ -83,7 +83,7 @@
 
 {% if esta_realizado %}
 <div class="alert alert-secondary shadow-sm border-0 rounded-4">
-  <strong>🔒 Mantenimiento cerrado.</strong> La información está bloqueada. Si necesitas corregirla, primero vuelve el mantenimiento a pendiente.
+  <strong>🔒 Mantenimiento cerrado.</strong> La información está protegida contra cambios.{% if es_admin %} Puedes reabrirlo desde el control administrativo inferior para corregirlo.{% else %} Solo un administrador puede volver a modificarlo o marcarlo como pendiente.{% endif %}
 </div>
 {% endif %}
 
@@ -225,8 +225,8 @@
   {% endif %}
 </form>
 
-{% if esta_realizado %}
-<div class="card premium-card mb-3"><div class="card-body"><div class="premium-title"><i class="bi bi-arrow-counterclockwise"></i><span>Estado del mantenimiento</span></div><form method="post">{% csrf_token %}<input type="hidden" name="accion" value="marcar_pendiente"><button class="btn btn-warning btn-lg w-100">↩️ Volver a pendiente para corregir</button></form></div></div>
+{% if esta_realizado and es_admin %}
+<div class="card premium-card mb-3"><div class="card-body"><div class="premium-title"><i class="bi bi-shield-lock"></i><span>Control administrativo</span></div><div class="text-muted small mb-3">Este mantenimiento ya fue cerrado. Solo administración puede reabrirlo para realizar correcciones.</div><form method="post">{% csrf_token %}<input type="hidden" name="accion" value="marcar_pendiente"><button class="btn btn-warning btn-lg w-100">↩️ Reabrir y volver a pendiente</button></form></div></div>
 {% endif %}
 
 {% if es_admin %}

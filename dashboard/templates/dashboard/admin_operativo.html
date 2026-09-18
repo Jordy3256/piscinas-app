@@ -727,40 +727,20 @@
 <div class="card shadow-sm mb-3 border-warning op-card-compact"><div class="card-body"><div class="op-section-title mb-2">⚠ Requieren atención</div><div class="d-flex flex-wrap gap-2">{% if total_atrasados_reales %}<span class="op-chip">🔴 {{ total_atrasados_reales }} atrasado{{ total_atrasados_reales|pluralize }}</span>{% endif %}{% if total_sin_asignar %}<span class="op-chip">🟠 {{ total_sin_asignar }} sin trabajador asignado</span>{% endif %}</div></div></div>
 {% endif %}
 
-<div class="row g-2 mb-3">
-  <div class="col-6 col-md-3">
-    <div class="card shadow-sm border-primary op-kpi">
-      <div class="card-body py-3">
-        <div class="text-muted small">{{ etiqueta_periodo }}</div>
-        <div class="fs-4 fw-bold text-primary">{{ total_dia_reales }}</div>
+<div class="card shadow-sm mb-3 op-card-compact">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+      <div>
+        <div class="op-section-title">Resumen del día</div>
+        <div class="op-subtitle">{{ fecha_resumen|date:"l, d \d\e F \d\e Y"|capfirst }} · solo datos de esta fecha</div>
       </div>
+      <span class="op-chip">{{ cumplimiento_resumen_dia|floatformat:0 }}% completado</span>
     </div>
-  </div>
-
-  <div class="col-6 col-md-3">
-    <div class="card shadow-sm border-danger op-kpi">
-      <div class="card-body py-3">
-        <div class="text-muted small">Atrasados</div>
-        <div class="fs-4 fw-bold text-danger">{{ total_atrasados_reales }}</div>
-      </div>
-    </div>
-  </div>
-
-  <div class="col-6 col-md-3">
-    <div class="card shadow-sm border-secondary op-kpi">
-      <div class="card-body py-3">
-        <div class="text-muted small">Próximos</div>
-        <div class="fs-4 fw-bold">{{ total_proximos_reales|default:proximos|length }}</div>
-      </div>
-    </div>
-  </div>
-
-  <div class="col-6 col-md-3">
-    <div class="card shadow-sm border-warning op-kpi">
-      <div class="card-body py-3">
-        <div class="text-muted small">Sin asignar</div>
-        <div class="fs-4 fw-bold text-warning">{{ total_sin_asignar }}</div>
-      </div>
+    <div class="row g-2">
+      <div class="col-6 col-lg-3"><div class="op-soft-box h-100"><div class="small-label">Programados</div><div class="big-number text-primary">{{ total_resumen_dia }}</div></div></div>
+      <div class="col-6 col-lg-3"><div class="op-soft-box h-100"><div class="small-label">Realizados</div><div class="big-number text-success">{{ realizados_resumen_dia }}</div></div></div>
+      <div class="col-6 col-lg-3"><div class="op-soft-box h-100"><div class="small-label">Pendientes</div><div class="big-number text-warning">{{ pendientes_resumen_dia }}</div></div></div>
+      <div class="col-6 col-lg-3"><div class="op-soft-box h-100"><div class="small-label">Sin asignar</div><div class="big-number {% if sin_asignar_resumen_dia %}text-danger{% endif %}">{{ sin_asignar_resumen_dia }}</div></div></div>
     </div>
   </div>
 </div>
@@ -1012,18 +992,18 @@
 
     <div class="vstack gap-2">
       <div class="op-soft-box">
-        <div class="small-label">Total del mes</div>
-        <div class="big-number text-primary">{{ calendario_operativo.total_mes }}</div>
+        <div class="small-label">Programados · día seleccionado</div>
+        <div class="big-number text-primary">{{ total_resumen_dia }}</div>
       </div>
 
       <div class="op-soft-box">
-        <div class="small-label">Realizados</div>
-        <div class="big-number text-success">{{ calendario_operativo.total_realizados }}</div>
+        <div class="small-label">Realizados · día seleccionado</div>
+        <div class="big-number text-success">{{ realizados_resumen_dia }}</div>
       </div>
 
       <div class="op-soft-box">
-        <div class="small-label">Pendientes</div>
-        <div class="big-number text-warning">{{ calendario_operativo.total_pendientes }}</div>
+        <div class="small-label">Pendientes · día seleccionado</div>
+        <div class="big-number text-warning">{{ pendientes_resumen_dia }}</div>
       </div>
 
       <div class="op-soft-box">
