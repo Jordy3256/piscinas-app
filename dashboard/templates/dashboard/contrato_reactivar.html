@@ -70,6 +70,7 @@
             <label class="form-label fw-semibold">Forma de pago</label>
             <select class="form-select" id="formaPago" name="forma_pago" required>
               {% for value,label in formas_pago %}<option value="{{ value }}" {% if datos.forma_pago == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+              {% if datos.forma_pago and datos.forma_pago != "adelantado" and datos.forma_pago != "servicio_cumplido" and datos.forma_pago != "50_50" and datos.forma_pago != "por_visita" and datos.forma_pago != "anual" %}<option value="{{ datos.forma_pago }}" selected hidden>Configuración anterior conservada</option>{% endif %}
             </select>
           </div>
           <div class="col-12" id="formaPagoPersonalizadaBox">
@@ -85,6 +86,8 @@
             <label class="form-label fw-semibold">Programación de cobro</label>
             <select class="form-select" id="programacionCobro" name="programacion_cobro" required>
               {% for value,label in programaciones_cobro %}<option value="{{ value }}" {% if datos.programacion_cobro == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+              <option value="dos_pagos" {% if datos.programacion_cobro == "dos_pagos" %}selected{% endif %} hidden>Automático: inicio y cierre 50/50</option>
+              {% if datos.programacion_cobro == "semestral_adelantado" or datos.programacion_cobro == "personalizado" %}<option value="{{ datos.programacion_cobro }}" selected hidden>Configuración anterior conservada</option>{% endif %}
             </select>
           </div>
           <div class="col-md-4">
@@ -110,6 +113,9 @@
           </div>
           <div class="col-md-4 cobro-extra" data-show="despues_cierre">
             <label class="form-label fw-semibold">Días después del cierre</label><input type="number" min="0" max="365" class="form-control" name="cobro_dias_despues_cierre" value="{{ datos.cobro_dias_despues_cierre }}">
+          </div>
+          <div class="col-md-4 cobro-extra" data-show="adelanto_mensualidades">
+            <label class="form-label fw-semibold">Mensualidades a adelantar</label><input type="number" min="1" max="12" class="form-control" name="cobro_meses_adelantados" value="{{ datos.cobro_meses_adelantados|default:1 }}">
           </div>
           <div class="col-md-4 cobro-extra" data-show="dos_pagos">
             <label class="form-label fw-semibold">% primer pago</label><input type="number" min="0.01" max="99.99" step="0.01" class="form-control" name="porcentaje_primer_pago" value="{{ datos.porcentaje_primer_pago }}">
@@ -137,8 +143,15 @@
   const cobro=document.getElementById('programacionCobro');
   function refresh(){
     freqBox.style.display=freq.value==='personalizado'?'block':'none';
-    formaBox.style.display=forma.value==='personalizado'?'block':'none';
-    document.querySelectorAll('.cobro-extra').forEach(el=>{el.style.display=(el.dataset.show||'').split(' ').includes(cobro.value)?'block':'none';});
+    formaBox.style.display='none';
+    if(forma.value==='por_visita') cobro.value='por_visita';
+    if(forma.value==='50_50') cobro.value='dos_pagos';
+    cobro.style.pointerEvents=(forma.value==='por_visita'||forma.value==='50_50')?'none':'';
+    document.querySelectorAll('.cobro-extra').forEach(el=>{
+      let visible=(el.dataset.show||'').split(' ').includes(cobro.value);
+      if(forma.value==='50_50' && cobro.value==='dos_pagos') visible=false;
+      el.style.display=visible?'block':'none';
+    });
   }
   [freq,forma,cobro].forEach(el=>el.addEventListener('change',refresh)); refresh();
   document.getElementById('fechaInicio').addEventListener('change',function(){

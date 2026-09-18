@@ -241,6 +241,7 @@
                 <select id="forma_pago" name="forma_pago" class="form-select" required>
                   <option value="">Selecciona una condición</option>
                   {% for valor, etiqueta in formas_pago %}<option value="{{ valor }}" {% if datos_formulario.forma_pago == valor %}selected{% endif %}>{{ etiqueta }}</option>{% endfor %}
+                  {% if datos_formulario.forma_pago and datos_formulario.forma_pago != "adelantado" and datos_formulario.forma_pago != "servicio_cumplido" and datos_formulario.forma_pago != "50_50" and datos_formulario.forma_pago != "por_visita" and datos_formulario.forma_pago != "anual" %}<option value="{{ datos_formulario.forma_pago }}" selected hidden>Configuración anterior conservada</option>{% endif %}
                 </select>
                 <div class="form-text">Describe cómo se acuerda comercialmente el pago.</div>
               </div>
@@ -249,6 +250,8 @@
                 <select class="form-select" id="programacion_cobro" name="programacion_cobro" required>
                   <option value="">Selecciona una regla</option>
                   {% for valor, etiqueta in programaciones_cobro %}<option value="{{ valor }}" {% if datos_formulario.programacion_cobro == valor %}selected{% endif %}>{{ etiqueta }}</option>{% endfor %}
+                  <option value="dos_pagos" {% if datos_formulario.programacion_cobro == "dos_pagos" %}selected{% endif %} hidden>Automático: inicio y cierre 50/50</option>
+                  {% if datos_formulario.programacion_cobro == "semestral_adelantado" or datos_formulario.programacion_cobro == "personalizado" %}<option value="{{ datos_formulario.programacion_cobro }}" selected hidden>Configuración anterior conservada</option>{% endif %}
                 </select>
                 <div class="form-text">Esta regla es la que utiliza Cartera para decidir en qué mes crear la cuenta.</div>
               </div>
@@ -302,6 +305,11 @@
                 <label class="form-label">Días después del cierre</label>
                 <input class="form-control" type="number" min="0" max="365" name="cobro_dias_despues_cierre" value="{{ datos_formulario.cobro_dias_despues_cierre }}">
               </div>
+              <div class="col-md-6 cobro-field" data-show="adelanto_mensualidades">
+                <label class="form-label">Mensualidades a adelantar</label>
+                <input class="form-control" id="cobro_meses_adelantados" type="number" min="1" max="12" step="1" name="cobro_meses_adelantados" value="{{ datos_formulario.cobro_meses_adelantados|default:1 }}">
+                <div class="form-text">Puedes usar 1, 2, 3… hasta 12 meses. En un contrato anual el sistema crea bloques hasta completar el año.</div>
+              </div>
               <div class="col-12 cobro-field" data-show="personalizado">
                 <label class="form-label">Descripción de la programación</label>
                 <input class="form-control" name="programacion_cobro_personalizada" maxlength="200" value="{{ datos_formulario.programacion_cobro_personalizada }}" placeholder="Ej.: cliente paga entre el 5 y el 10 del mes siguiente">
@@ -310,9 +318,7 @@
               <div class="col-12">
                 <div class="cf-note" id="vista-previa-comercial">Completa la regla para visualizar cómo se generarán los próximos cobros.</div>
                 <div class="cf-note mt-2 d-none" id="resumen-semestral">
-                  <strong>Contrato anual con anticipos semestrales:</strong>
-                  el cliente paga 6 mensualidades al inicio y las siguientes 6 al comenzar el segundo semestre.
-                  La nómina del técnico continúa generándose mensualmente.
+                  <strong>Adelanto flexible:</strong> el cliente paga por bloques de X mensualidades. En contratos anuales los bloques continúan hasta completar los 12 meses, sin duplicar mensualidades.
                 </div>
               </div>
             </div>
@@ -385,7 +391,7 @@
                 <div class="d-flex justify-content-between"><span>IVA 15%</span><strong id="iva-impuesto">$0.00</strong></div>
                 <div class="d-flex justify-content-between mt-1"><span>Total cliente / mes</span><strong id="iva-total">$0.00</strong></div>
                 <div class="border-top mt-2 pt-2 d-none" id="resumen-economico-semestral">
-                  <div class="d-flex justify-content-between"><span>Pago adelantado 6 meses</span><strong id="semestral-total">$0.00</strong></div>
+                  <div class="d-flex justify-content-between"><span>Próximo bloque adelantado</span><strong id="semestral-total">$0.00</strong></div>
                   <div class="d-flex justify-content-between"><span>Valor anual</span><strong id="anual-total">$0.00</strong></div>
                 </div>
               </div>
@@ -415,7 +421,7 @@
                   <div class="input-group"><input type="number" min="0" max="365" id="aviso_vencimiento_dias" name="aviso_vencimiento_dias" class="form-control" value="{{ datos_formulario.aviso_vencimiento_dias|default:30 }}"><span class="input-group-text">días</span></div>
                 </div>
               </div>
-              <div class="cf-note mt-2">Los contratos con pago semestral adelantado se consideran anuales y usarán 12 meses si no seleccionas otra vigencia.</div>
+              <div class="cf-note mt-2">La condición <strong>Anual</strong> fija una vigencia de 12 meses. La cantidad de meses que se cobran juntos se define en “Adelanto de X mensualidades”.</div>
             </div>
           </div>
 
@@ -571,21 +577,13 @@
     const aplicaIva = document.getElementById("aplica_iva");
     const resumenSemestral = document.getElementById("resumen-semestral");
     const resumenEconomicoSemestral = document.getElementById("resumen-economico-semestral");
+    const mesesAdelantados = document.getElementById("cobro_meses_adelantados");
 
     function esPagoSemestral(){
-      return (formaPagoSelect && formaPagoSelect.value === "semestral_adelantado") ||
-             (programacionCobro && programacionCobro.value === "semestral_adelantado");
+      return programacionCobro && (programacionCobro.value === "adelanto_mensualidades" || programacionCobro.value === "semestral_adelantado");
     }
 
-    function sincronizarPagoSemestral(origen){
-      if(!formaPagoSelect || !programacionCobro) return;
-      if(origen === "forma" && formaPagoSelect.value === "semestral_adelantado"){
-        programacionCobro.value = "semestral_adelantado";
-      }
-      if(origen === "programacion" && programacionCobro.value === "semestral_adelantado"){
-        formaPagoSelect.value = "semestral_adelantado";
-      }
-    }
+    function sincronizarPagoSemestral(){ return; }
 
     function bloquearSelect(select, bloqueado){
       if(!select) return;
@@ -599,6 +597,18 @@
     function sincronizarPagoPorVisita(){
       if(!formaPagoSelect || !programacionCobro) return;
       const porVisita = formaPagoSelect.value === "por_visita";
+      const mitad = formaPagoSelect.value === "50_50";
+
+      if(mitad){
+        programacionCobro.value = "dos_pagos";
+        programacionCobro.dataset.auto5050 = "1";
+        bloquearSelect(programacionCobro, true);
+        return;
+      }
+      if(programacionCobro.dataset.auto5050 === "1"){
+        delete programacionCobro.dataset.auto5050;
+        if(programacionCobro.value === "dos_pagos") programacionCobro.value = "inicio_periodo";
+      }
 
       if(porVisita){
         programacionCobro.value = "por_visita";
@@ -646,8 +656,11 @@
       if (preview && regla) {
         const texto = programacionCobro.options[programacionCobro.selectedIndex].text;
         const inicio = fechaInicioContrato && fechaInicioContrato.value ? fechaInicioContrato.value.split("-").reverse().join("/") : "la fecha de inicio";
-        if (regla === "semestral_adelantado") {
-          preview.textContent = `Contrato anual desde ${inicio}: Cartera generará únicamente 2 cuentas, cada una por 6 mensualidades adelantadas.`;
+        if (regla === "adelanto_mensualidades" || regla === "semestral_adelantado") {
+          const meses = regla === "semestral_adelantado" ? 6 : Math.max(1, Math.min(12, parseInt(mesesAdelantados && mesesAdelantados.value || "1", 10)));
+          preview.textContent = `Desde ${inicio}: Cartera generará cobros adelantados por bloques de ${meses} mensualidad(es), sin modificar cobros históricos ya creados.`;
+        } else if (regla === "dos_pagos" && formaPagoSelect && formaPagoSelect.value === "50_50") {
+          preview.textContent = `Inicio 50% / Final 50%: se generará una cuota al inicio del periodo y la segunda al cierre del mismo periodo.`;
         } else if (regla === "por_visita") {
           preview.textContent = "Pago por visita: cada mantenimiento programado genera una cuenta individual en la fecha de la visita. El valor mensual se distribuye entre las visitas del período y conserva IVA, promociones y descuentos.";
         } else {
@@ -672,7 +685,8 @@
       if(totalEl) totalEl.textContent = fmt(total);
       const semestralEl = document.getElementById("semestral-total");
       const anualEl = document.getElementById("anual-total");
-      if(semestralEl) semestralEl.textContent = fmt(total * 6);
+      const meses = programacionCobro && programacionCobro.value === "semestral_adelantado" ? 6 : Math.max(1, Math.min(12, parseInt(mesesAdelantados && mesesAdelantados.value || "1", 10)));
+      if(semestralEl) semestralEl.textContent = fmt(total * meses);
       if(anualEl) anualEl.textContent = fmt(total * 12);
     }
 
@@ -687,6 +701,7 @@
       actualizarCamposComerciales();
       actualizarResumenIva();
     });
+    if (mesesAdelantados) mesesAdelantados.addEventListener("input", function(){ actualizarCamposComerciales(); actualizarResumenIva(); });
     if (requiereFactura) requiereFactura.addEventListener("change", function(){
       sincronizarPagoPorVisita();
       actualizarCamposComerciales();

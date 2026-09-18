@@ -34,15 +34,26 @@ class Contrato(models.Model):
         ("personalizado", "Personalizado"),
     ]
 
+    # Los valores históricos se conservan en choices para que ningún contrato
+    # existente pierda su configuración. La interfaz usa las listas *_ACTIVAS.
     FORMA_PAGO_CHOICES = [
-        ("adelantado", "Adelantado"),
-        ("servicio_cumplido", "Servicio cumplido"),
-        ("50_50", "50/50"),
-        ("quincenal", "Quincenal"),
+        ("adelantado", "Mes Adelantado"),
+        ("servicio_cumplido", "Mes Cumplido"),
+        ("50_50", "Inicio 50% - 50% Final"),
         ("por_visita", "Por visita"),
-        ("fin_mensualidad", "Fin de la mensualidad"),
-        ("semestral_adelantado", "Anual · 2 pagos semestrales adelantados"),
-        ("personalizado", "Personalizado"),
+        ("anual", "Anual"),
+        # Compatibilidad histórica: no se ofrecen en contratos nuevos.
+        ("quincenal", "Quincenal (anterior)"),
+        ("fin_mensualidad", "Fin de la mensualidad (anterior)"),
+        ("semestral_adelantado", "Anual · 2 pagos semestrales adelantados (anterior)"),
+        ("personalizado", "Personalizado (anterior)"),
+    ]
+    FORMA_PAGO_CHOICES_ACTIVAS = [
+        ("adelantado", "Mes Adelantado"),
+        ("servicio_cumplido", "Mes Cumplido"),
+        ("50_50", "Inicio 50% - 50% Final"),
+        ("por_visita", "Por visita"),
+        ("anual", "Anual"),
     ]
 
     PROGRAMACION_COBRO_CHOICES = [
@@ -50,11 +61,22 @@ class Contrato(models.Model):
         ("cierre_periodo", "Mismo día de cierre del periodo"),
         ("dia_fijo", "Día fijo mensual"),
         ("rango_dias", "Rango de días"),
-        ("dos_pagos", "Dos pagos mensuales"),
-        ("despues_cierre", "Días después del cierre"),
+        ("despues_cierre", "Días máximos después del cierre"),
         ("por_visita", "Por visita"),
-        ("semestral_adelantado", "Pago semestral adelantado · 6 meses"),
-        ("personalizado", "Personalizado"),
+        ("adelanto_mensualidades", "Adelanto de X mensualidades"),
+        # Compatibilidad histórica/interna.
+        ("dos_pagos", "Dos pagos mensuales (anterior)"),
+        ("semestral_adelantado", "Pago semestral adelantado · 6 meses (anterior)"),
+        ("personalizado", "Personalizado (anterior)"),
+    ]
+    PROGRAMACION_COBRO_CHOICES_ACTIVAS = [
+        ("inicio_periodo", "Mismo día de inicio del periodo"),
+        ("cierre_periodo", "Mismo día de cierre del periodo"),
+        ("dia_fijo", "Día fijo mensual"),
+        ("rango_dias", "Rango de días"),
+        ("despues_cierre", "Días máximos después del cierre"),
+        ("por_visita", "Por visita"),
+        ("adelanto_mensualidades", "Adelanto de X mensualidades"),
     ]
 
 
@@ -125,6 +147,11 @@ class Contrato(models.Model):
     cobro_rango_desde = models.PositiveSmallIntegerField(null=True, blank=True, validators=[MinValueValidator(1), MaxValueValidator(31)])
     cobro_rango_hasta = models.PositiveSmallIntegerField(null=True, blank=True, validators=[MinValueValidator(1), MaxValueValidator(31)])
     cobro_dias_despues_cierre = models.PositiveSmallIntegerField(default=0)
+    cobro_meses_adelantados = models.PositiveSmallIntegerField(
+        default=1,
+        validators=[MinValueValidator(1), MaxValueValidator(12)],
+        help_text="Cantidad de mensualidades que se cobran juntas por adelantado.",
+    )
     porcentaje_primer_pago = models.DecimalField(
         max_digits=5,
         decimal_places=2,
@@ -375,55 +402,32 @@ class Contrato(models.Model):
         programacion = self.programacion_cobro or "inicio_periodo"
         destino_anio, destino_mes = _mover_mes(anio, mes, int(self.cobro_mes_desfase or 0))
 
-        # Contrato anual con dos anticipos semestrales.
-        #
-        # Ejemplo: inicio 11/09/2026, valor mensual $55:
-        #   11/09/2026 -> $330 por 6 meses
-        #   11/03/2027 -> $330 por los siguientes 6 meses
-        # Después del segundo semestre no se generan más cuentas bajo esta
-        # modalidad; para continuar debe renovarse/actualizarse el contrato.
-        if programacion == "semestral_adelantado":
+        # Anticipos por bloques de mensualidades. El modo histórico semestral
+        # se interpreta como bloques de 6 sin modificar el dato almacenado.
+        if programacion in {"adelanto_mensualidades", "semestral_adelantado"}:
             if not self.fecha_inicio:
                 return []
 
-            diferencia_meses = (
-                (int(anio) - self.fecha_inicio.year) * 12
-                + (int(mes) - self.fecha_inicio.month)
-            )
-            if diferencia_meses not in {0, 6}:
+            meses_bloque = 6 if programacion == "semestral_adelantado" else int(self.cobro_meses_adelantados or 1)
+            meses_bloque = min(max(meses_bloque, 1), 12)
+            vigencia = int(self.vigencia_meses or (12 if self.forma_pago in {"anual", "semestral_adelantado"} else meses_bloque))
+            diferencia_meses = ((int(anio) - self.fecha_inicio.year) * 12 + (int(mes) - self.fecha_inicio.month))
+            if diferencia_meses < 0 or diferencia_meses >= vigencia or diferencia_meses % meses_bloque != 0:
                 return []
 
-            cobro_anio, cobro_mes = _mover_mes(
-                self.fecha_inicio.year,
-                self.fecha_inicio.month,
-                diferencia_meses,
-            )
-            fecha_cobro = _fecha_segura(
-                cobro_anio,
-                cobro_mes,
-                self.fecha_inicio.day,
-            )
-            fin_anio, fin_mes = _mover_mes(cobro_anio, cobro_mes, 6)
-            fin_semestre = _fecha_segura(
-                fin_anio,
-                fin_mes,
-                self.fecha_inicio.day,
-            )
-
-            valor_semestral = (
-                Decimal(self.precio_mensual or 0) * Decimal("6")
-            ).quantize(Decimal("0.01"))
-            desglose = self.desglose_valor(valor_semestral)
+            meses_cubiertos = min(meses_bloque, vigencia - diferencia_meses)
+            cobro_anio, cobro_mes = _mover_mes(self.fecha_inicio.year, self.fecha_inicio.month, diferencia_meses)
+            fecha_cobro = _fecha_segura(cobro_anio, cobro_mes, self.fecha_inicio.day)
+            fin_anio, fin_mes = _mover_mes(cobro_anio, cobro_mes, meses_cubiertos)
+            fin_bloque = _fecha_segura(fin_anio, fin_mes, self.fecha_inicio.day)
+            valor_bloque = (Decimal(self.precio_mensual or 0) * Decimal(meses_cubiertos)).quantize(Decimal("0.01"))
+            desglose = self.desglose_valor(valor_bloque)
             return [{
-                "cuota_numero": 1,
-                "total_cuotas": 1,
-                "fecha_cobro_desde": fecha_cobro,
-                "fecha_vencimiento": fecha_cobro,
-                "valor": desglose["base"],
-                "impuesto": desglose["impuesto"],
-                "total": desglose["total"],
-                "periodo_inicio": fecha_cobro,
-                "periodo_fin": fin_semestre,
+                "cuota_numero": 1, "total_cuotas": 1,
+                "fecha_cobro_desde": fecha_cobro, "fecha_vencimiento": fecha_cobro,
+                "valor": desglose["base"], "impuesto": desglose["impuesto"], "total": desglose["total"],
+                "periodo_inicio": fecha_cobro, "periodo_fin": fin_bloque,
+                "meses_adelantados": meses_cubiertos,
             }]
 
         if programacion == "por_visita":
@@ -489,11 +493,16 @@ class Contrato(models.Model):
                 hasta = desde
             fechas = [(desde, hasta)]
         elif programacion == "dos_pagos":
-            f1 = _fecha_segura(destino_anio, destino_mes, self.cobro_dia_1 or 1)
-            f2 = _fecha_segura(destino_anio, destino_mes, self.cobro_dia_2 or 15)
-            if f2 < f1:
-                f1, f2 = f2, f1
-            fechas = [(f1, f1), (f2, f2)]
+            # La condición 50/50 actual usa inicio y cierre reales del periodo.
+            # Los contratos históricos con "dos_pagos" conservan sus días guardados.
+            if self.forma_pago == "50_50":
+                fechas = [(inicio, inicio), (fin, fin)]
+            else:
+                f1 = _fecha_segura(destino_anio, destino_mes, self.cobro_dia_1 or 1)
+                f2 = _fecha_segura(destino_anio, destino_mes, self.cobro_dia_2 or 15)
+                if f2 < f1:
+                    f1, f2 = f2, f1
+                fechas = [(f1, f1), (f2, f2)]
         elif programacion == "despues_cierre":
             fecha = fin + timedelta(days=int(self.cobro_dias_despues_cierre or 0))
             fechas = [(fecha, fecha)]
@@ -597,6 +606,8 @@ class Contrato(models.Model):
         # La modalidad semestral adelantada representa un compromiso anual.
         # Si se crea sin vigencia explícita, se establece automáticamente en 12 meses.
         if self.programacion_cobro == "semestral_adelantado" and not self.vigencia_meses:
+            self.vigencia_meses = 12
+        if self.forma_pago == "anual":
             self.vigencia_meses = 12
 
         if self.vigencia_meses and self.fecha_inicio:
@@ -736,6 +747,11 @@ class ReactivacionContrato(models.Model):
     cobro_rango_desde = models.PositiveSmallIntegerField(null=True, blank=True)
     cobro_rango_hasta = models.PositiveSmallIntegerField(null=True, blank=True)
     cobro_dias_despues_cierre = models.PositiveSmallIntegerField(default=0)
+    cobro_meses_adelantados = models.PositiveSmallIntegerField(
+        default=1,
+        validators=[MinValueValidator(1), MaxValueValidator(12)],
+        help_text="Cantidad de mensualidades que se cobran juntas por adelantado.",
+    )
     porcentaje_primer_pago = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal("50.00"))
     programacion_cobro_personalizada = models.CharField(max_length=200, blank=True, default="")
     precio_mensual = models.DecimalField(max_digits=10, decimal_places=2)
