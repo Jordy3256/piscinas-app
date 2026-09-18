@@ -8,6 +8,7 @@ from django.db.models import Q, Sum
 from django.utils import timezone
 
 from contratos.models import Contrato
+from .cuentas_por_cobrar import cuotas_programadas_para_mes_cobro, valores_promocion
 
 from .models import (
     Egreso,
@@ -109,8 +110,18 @@ def obtener_resumen_financiero(anio: int, mes: int, ciudad: str = "") -> dict:
     ingresos_cobrados = _sumar(ingresos_reales_qs, "monto_pagado")
     egresos_pagados = _sumar(egresos_reales_qs, "monto_pagado") + pagos_consolidados_ciudad
 
+    # Las claves periodo_anio/periodo_mes describen el SERVICIO. Para el resumen
+    # financiero mensual importa la FECHA REAL DE COBRO. Un ciclo 25/09→25/10
+    # puede cobrarse el 25/10 y debe aparecer en octubre, no en septiembre.
     facturas = (
-        Factura.objects.filter(periodo_anio=anio, periodo_mes=mes)
+        Factura.objects.filter(
+            Q(fecha_cobro_desde__year=anio, fecha_cobro_desde__month=mes)
+            | Q(
+                fecha_cobro_desde__isnull=True,
+                fecha_vencimiento__year=anio,
+                fecha_vencimiento__month=mes,
+            )
+        )
         .exclude(estado=Factura.ESTADO_ANULADA)
         .select_related("cliente", "contrato")
         .prefetch_related("pagos")
@@ -141,31 +152,45 @@ def obtener_resumen_financiero(anio: int, mes: int, ciudad: str = "") -> dict:
         ).distinct()
         egresos_no_nomina = egresos_no_nomina.filter(ciudad_proyecto__iexact=ciudad)
 
-    total_facturado = _sumar(facturas, "total")
+    # total_cobro conserva promociones/descuentos e IVA correctamente incluso
+    # en cuentas antiguas. No usamos Sum(total) porque puede conservar valores
+    # históricos previos a una promoción.
+    facturas_lista = list(facturas)
+    total_facturado = sum((f.total_cobro for f in facturas_lista), CERO)
     total_ingresos_manuales = _sumar(ingresos_manuales, "total")
     total_nomina = _sumar(obligaciones, "valor_acordado")
     total_egresos_no_nomina = _sumar(egresos_no_nomina, "total")
 
-    # Completa la proyección territorial desde contratos cuando todavía no se han
-    # materializado la factura o la obligación del período. No duplica documentos existentes.
-    if ciudad:
-        contratos_periodo = _contratos_del_periodo(anio, mes, ciudad)
-        ids_facturados = set(facturas.values_list("contrato_id", flat=True))
-        ids_obligados = set(obligaciones.values_list("contrato_id", flat=True))
-        promos = {}
-        for promo in PromocionContrato.objects.filter(contrato__in=contratos_periodo, activa=True):
-            if promo.aplica_a(anio, mes):
-                promos[promo.contrato_id] = promo
-        for contrato in contratos_periodo:
-            if contrato.id not in ids_facturados:
-                valor = Decimal(contrato.precio_mensual or 0)
-                if contrato.id in promos:
-                    valor = promos[contrato.id].calcular(valor)["total"]
-                total_facturado += contrato.desglose_valor(valor)["total"]
-            if contrato.id not in ids_obligados:
-                trabajador = contrato.tecnico_designado
-                if not trabajador or trabajador.tipo_remuneracion != "mensual_fija":
-                    total_nomina += Decimal(contrato.valor_tecnico_mensual or 0)
+    # Completa la proyección desde el calendario REAL DE COBRO de los contratos,
+    # tanto en Global como por ciudad. No duplica cuentas ya materializadas.
+    contratos_periodo = _contratos_del_periodo(anio, mes, ciudad)
+    claves_facturadas = {
+        (f.contrato_id, f.periodo_anio, f.periodo_mes, f.cuota_numero)
+        for f in facturas_lista
+    }
+    ids_obligados = set(obligaciones.values_list("contrato_id", flat=True))
+
+    for contrato in contratos_periodo:
+        if contrato.precio_mensual and contrato.precio_mensual > 0:
+            for periodo_anio, periodo_mes, cuota in cuotas_programadas_para_mes_cobro(
+                contrato, anio, mes
+            ):
+                clave = (contrato.id, periodo_anio, periodo_mes, cuota["cuota_numero"])
+                if clave in claves_facturadas:
+                    continue
+
+                promo_datos = valores_promocion(contrato, periodo_anio, periodo_mes)
+                precio = Decimal(contrato.precio_mensual or 0)
+                proporcion = (cuota["valor"] / precio) if precio else Decimal("0")
+                valor_base = (promo_datos["total"] * proporcion).quantize(Decimal("0.01"))
+                total_facturado += contrato.desglose_valor(valor_base)["total"]
+
+        # Conservamos la proyección de nómina faltante en la vista territorial.
+        # La vista Global ya materializa nómina desde sus obligaciones reales.
+        if ciudad and contrato.id not in ids_obligados:
+            trabajador = contrato.tecnico_designado
+            if not trabajador or trabajador.tipo_remuneracion != "mensual_fija":
+                total_nomina += Decimal(contrato.valor_tecnico_mensual or 0)
 
     ingresos_esperados = total_facturado + total_ingresos_manuales
 
@@ -180,7 +205,7 @@ def obtener_resumen_financiero(anio: int, mes: int, ciudad: str = "") -> dict:
     total_recurrentes_pendientes = CERO if ciudad else _sumar(recurrentes_pendientes, "monto")
     egresos_previstos = total_nomina + total_egresos_no_nomina + total_recurrentes_pendientes
 
-    cobrado_facturas = sum((factura.monto_pagado for factura in facturas), CERO)
+    cobrado_facturas = sum((factura.monto_pagado for factura in facturas_lista), CERO)
     cobrado_manual = _sumar(ingresos_manuales, "monto_pagado")
     por_cobrar = max(ingresos_esperados - cobrado_facturas - cobrado_manual, CERO)
 
@@ -211,10 +236,10 @@ def obtener_resumen_financiero(anio: int, mes: int, ciudad: str = "") -> dict:
     )
 
     hoy = timezone.localdate()
-    cobros_vencidos = [f for f in facturas if f.saldo > 0 and f.fecha_vencimiento < hoy]
+    cobros_vencidos = [f for f in facturas_lista if f.saldo > 0 and f.fecha_vencimiento < hoy]
     cobros_hoy = [
         f
-        for f in facturas
+        for f in facturas_lista
         if f.saldo > 0
         and (f.fecha_cobro_desde or f.fecha_vencimiento) <= hoy <= f.fecha_vencimiento
     ]

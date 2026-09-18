@@ -110,10 +110,12 @@ def _mover_mes(anio, mes, desplazamiento):
 
 def _periodos_a_materializar(contrato, desde_fecha=None, horizonte_meses=12):
     """
-    Devuelve claves (año, mes) de periodos de servicio a mantener creados.
+    Devuelve los ciclos de servicio que deben existir en Cartera/Nómina.
 
-    Un contrato recién creado puede comenzar en el pasado o futuro; en ese caso
-    `desde_fecha` permite comenzar exactamente desde su fecha de inicio.
+    La clave importante es que el ciclo mensual NO siempre empieza en el mismo
+    mes calendario que ``desde_fecha``. Ejemplo: un contrato 25→25 consultado el
+    17/09 está todavía dentro del ciclo 25/08→25/09. La lógica anterior empezaba
+    directamente en septiembre y podía saltarse por completo ese cobro vigente.
     """
     hoy = timezone.localdate()
     desde_fecha = desde_fecha or hoy
@@ -122,6 +124,13 @@ def _periodos_a_materializar(contrato, desde_fecha=None, horizonte_meses=12):
         desde_fecha = contrato.fecha_inicio
 
     inicio_anio, inicio_mes = desde_fecha.year, desde_fecha.month
+
+    # Encontrar el mes-clave del ciclo que CONTIENE a desde_fecha.
+    # Si el corte de este mes todavía no llegó, el ciclo vigente inició el mes
+    # anterior. Esto evita omitir cuentas como 25/08→25/09 al consultar 17/09.
+    candidato_inicio, _ = contrato.periodo_servicio(inicio_anio, inicio_mes)
+    if candidato_inicio > desde_fecha:
+        inicio_anio, inicio_mes = _mover_mes(inicio_anio, inicio_mes, -1)
 
     for offset in range(0, max(int(horizonte_meses), 0) + 1):
         anio, mes = _mover_mes(inicio_anio, inicio_mes, offset)
@@ -355,6 +364,54 @@ def sincronizar_modalidad_remuneracion_trabajador(trabajador):
         resultado["creadas"] += int(datos.get("obligaciones_creadas", 0))
         resultado["actualizadas"] += int(datos.get("obligaciones_actualizadas", 0))
     return resultado
+
+def sincronizar_cartera_vigente(*, hoy=None):
+    """
+    Revisión defensiva de Cartera para uso interactivo.
+
+    - Corrige fechas de cuentas pendientes contra el calendario real del contrato.
+    - Materializa el ciclo que está vigente HOY si faltaba.
+    - No necesita crear doce meses adicionales para poder gestionar el cobro actual.
+
+    Se utiliza al abrir Finanzas/Cartera para que la pantalla nunca dependa de que
+    el cron diario haya corrido correctamente.
+    """
+    from contratos.models import Contrato
+
+    hoy = hoy or timezone.localdate()
+    resultado = {
+        "contratos_procesados": 0,
+        "facturas_creadas": 0,
+        "facturas_actualizadas": 0,
+        "errores": [],
+    }
+
+    contratos = (
+        Contrato.objects.filter(activo=True)
+        .select_related("cliente", "tecnico_designado")
+        .order_by("id")
+    )
+    for contrato in contratos:
+        if contrato.fecha_fin_contrato and contrato.fecha_fin_contrato < hoy:
+            continue
+        try:
+            datos = sincronizar_contrato_activo(
+                contrato,
+                desde_fecha=hoy,
+                horizonte_meses=0,
+            )
+            resultado["contratos_procesados"] += 1
+            resultado["facturas_creadas"] += int(datos.get("facturas_creadas", 0) or 0)
+            resultado["facturas_actualizadas"] += int(datos.get("facturas_actualizadas", 0) or 0)
+        except Exception as exc:
+            resultado["errores"].append({
+                "contrato_id": contrato.pk,
+                "cliente": str(contrato.cliente),
+                "error": str(exc),
+            })
+
+    return resultado
+
 
 def materializar_finanzas_contrato(
     contrato,

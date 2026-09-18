@@ -26,7 +26,11 @@ from .cuentas_por_cobrar import MESES, generar_facturas_periodo, previsualizar_f
 
 from .servicios_financieros import obtener_resumen_financiero
 from .reconciliacion import reconciliar_cartera_nomina
-from .sincronizacion import materializar_nomina_fija_trabajador, sincronizar_modalidad_remuneracion_trabajador
+from .sincronizacion import (
+    materializar_nomina_fija_trabajador,
+    sincronizar_modalidad_remuneracion_trabajador,
+    sincronizar_cartera_vigente,
+)
 from .alertas_financieras import generar_alertas_financieras
 from .facturacion_externa import sincronizar_avisos_facturacion
 
@@ -77,6 +81,46 @@ def _sum(qs, field):
     return qs.aggregate(valor=Sum(field))["valor"] or Decimal("0.00")
 
 
+def _filtro_fecha_real_cobro(anio=None, mes=None):
+    """Filtra por el mes/año en que la cuenta realmente entra a cobro.
+
+    ``periodo_anio`` y ``periodo_mes`` describen el ciclo de servicio y no deben
+    usarse como sustituto de la fecha comercial de cobro.
+    """
+    if anio and mes:
+        return (
+            Q(fecha_cobro_desde__year=anio, fecha_cobro_desde__month=mes)
+            | Q(
+                fecha_cobro_desde__isnull=True,
+                fecha_vencimiento__year=anio,
+                fecha_vencimiento__month=mes,
+            )
+        )
+    if anio:
+        return (
+            Q(fecha_cobro_desde__year=anio)
+            | Q(fecha_cobro_desde__isnull=True, fecha_vencimiento__year=anio)
+        )
+    if mes:
+        return (
+            Q(fecha_cobro_desde__month=mes)
+            | Q(fecha_cobro_desde__isnull=True, fecha_vencimiento__month=mes)
+        )
+    return Q()
+
+
+def _cobro_habilitado_hasta(fecha):
+    return Q(fecha_cobro_desde__lte=fecha) | Q(
+        fecha_cobro_desde__isnull=True, fecha_vencimiento__lte=fecha
+    )
+
+
+def _cobro_despues_de(fecha):
+    return Q(fecha_cobro_desde__gt=fecha) | Q(
+        fecha_cobro_desde__isnull=True, fecha_vencimiento__gt=fecha
+    )
+
+
 def _mes_anterior(anio, mes):
     return (anio - 1, 12) if mes == 1 else (anio, mes - 1)
 
@@ -102,6 +146,10 @@ def panel_financiero(request):
         anio, mes = hoy.year, hoy.month
 
     ciudad = (request.GET.get("ciudad") or "").strip()
+
+    # Auditoría defensiva: Finanzas no depende del cron para tener el ciclo de
+    # servicio vigente materializado y con sus fechas comerciales correctas.
+    sincronizar_cartera_vigente(hoy=hoy)
 
     # Al abrir Finanzas se actualizan la campana y las alertas push del administrador.
     generar_alertas_financieras(enviar_push=True)
@@ -384,6 +432,7 @@ def facturas_lista(request):
         return _denegado(request)
 
     hoy = timezone.localdate()
+    sincronizar_cartera_vigente(hoy=hoy)
     q = (request.GET.get("q") or "").strip()
     estado = (request.GET.get("estado") or "").strip()
     # Al entrar a Cartera por primera vez mostramos únicamente el mes actual.
@@ -415,12 +464,12 @@ def facturas_lista(request):
     facturas_qs = (
         Factura.objects.select_related("cliente", "contrato")
         .prefetch_related("pagos")
-        .order_by("-periodo_anio", "-periodo_mes", "cliente__nombre", "-id")
+        .order_by("fecha_cobro_desde", "fecha_vencimiento", "cliente__nombre", "id")
     )
-    if anio_filtro:
-        facturas_qs = facturas_qs.filter(periodo_anio=anio_filtro)
-    if mes_filtro:
-        facturas_qs = facturas_qs.filter(periodo_mes=mes_filtro)
+    if anio_filtro or mes_filtro:
+        facturas_qs = facturas_qs.filter(
+            _filtro_fecha_real_cobro(anio_filtro, mes_filtro)
+        )
     if estado:
         if estado == Factura.ESTADO_VENCIDA:
             facturas_qs = facturas_qs.filter(
@@ -539,8 +588,8 @@ def generar_facturas_desde_contratos(request):
         facturas_qs = (
             Factura.objects.select_related("cliente", "contrato")
             .prefetch_related("pagos")
-            .filter(periodo_anio=anio, periodo_mes=mes)
-            .order_by("cliente__nombre", "-id")
+            .filter(_filtro_fecha_real_cobro(anio, mes))
+            .order_by("fecha_cobro_desde", "fecha_vencimiento", "cliente__nombre", "id")
         )
         facturas = list(facturas_qs)
         activas = [f for f in facturas if f.estado != Factura.ESTADO_ANULADA]
@@ -583,9 +632,15 @@ def cartera_centro(request):
         return _denegado(request)
 
     hoy = timezone.localdate()
+
+    # Antes de mostrar cifras financieras, corregimos/materializamos el ciclo
+    # vigente. Así Cartera no depende de un cron y no puede omitir un 25/08→25/09
+    # simplemente porque hoy todavía sea 17/09.
+    sync_cartera = sincronizar_cartera_vigente(hoy=hoy)
     reconciliar_cartera_nomina()
+
     q = (request.GET.get("q") or "").strip()
-    estado = (request.GET.get("estado") or "todas").strip()
+    estado = (request.GET.get("estado") or "gestion").strip()
     ciudad = (request.GET.get("ciudad") or "").strip()
     anio_raw = (request.GET.get("anio") or "").strip()
     mes_raw = (request.GET.get("mes") or "").strip()
@@ -594,66 +649,165 @@ def cartera_centro(request):
     try:
         anio = int(anio_raw) if anio_raw else None
         mes = int(mes_raw) if mes_raw else None
-        if anio and not 2020 <= anio <= 2100: raise ValueError
-        if mes and not 1 <= mes <= 12: raise ValueError
+        if anio and not 2020 <= anio <= 2100:
+            raise ValueError
+        if mes and not 1 <= mes <= 12:
+            raise ValueError
     except (TypeError, ValueError):
         anio = mes = None
         messages.warning(request, "El periodo indicado no es válido.")
 
     try:
         por_pagina = int(por_pagina_raw)
-        if por_pagina not in {25, 50, 100}: raise ValueError
+        if por_pagina not in {25, 50, 100}:
+            raise ValueError
     except (TypeError, ValueError):
         por_pagina = 25
 
-    qs = Factura.objects.select_related("cliente", "contrato").prefetch_related("pagos").all()
+    base = Factura.objects.select_related("cliente", "contrato").prefetch_related("pagos").all()
     if q:
-        qs = qs.filter(Q(cliente__nombre__icontains=q) | Q(cliente__telefono__icontains=q) | Q(numero__icontains=q) | Q(cliente__ciudad__icontains=q))
+        base = base.filter(
+            Q(cliente__nombre__icontains=q)
+            | Q(cliente__telefono__icontains=q)
+            | Q(numero__icontains=q)
+            | Q(cliente__ciudad__icontains=q)
+        )
     if ciudad:
-        qs = qs.filter(cliente__ciudad__iexact=ciudad)
-    if anio:
-        qs = qs.filter(periodo_anio=anio)
-    if mes:
-        qs = qs.filter(periodo_mes=mes)
-    if estado == "pendiente":
-        qs = qs.filter(estado=Factura.ESTADO_PENDIENTE, fecha_vencimiento__gte=hoy)
+        base = base.filter(cliente__ciudad__iexact=ciudad)
+    if anio or mes:
+        base = base.filter(_filtro_fecha_real_cobro(anio, mes))
+
+    abiertas = base.exclude(
+        estado__in=[Factura.ESTADO_ANULADA, Factura.ESTADO_PROMOCION, Factura.ESTADO_PAGADA]
+    )
+    limite_proximo = hoy + timedelta(days=7)
+
+    # KPIs se calculan independientemente de la pestaña visual. Las cuentas
+    # programadas a futuro NO son deuda exigible ni envejecen la cartera.
+    exigibles_qs = abiertas.filter(_cobro_habilitado_hasta(hoy))
+    futuras_qs = abiertas.filter(_cobro_despues_de(hoy))
+    proximas_qs = futuras_qs.filter(
+        Q(fecha_cobro_desde__lte=limite_proximo)
+        | Q(fecha_cobro_desde__isnull=True, fecha_vencimiento__lte=limite_proximo)
+    )
+    programadas_qs = futuras_qs.exclude(pk__in=proximas_qs.values("pk"))
+
+    facturas_exigibles = list(exigibles_qs)
+    facturas_proximas = list(proximas_qs)
+    facturas_programadas = list(programadas_qs)
+
+    total_por_cobrar = sum((f.saldo for f in facturas_exigibles), Decimal("0.00"))
+    vencido = sum(
+        (f.saldo for f in facturas_exigibles if f.estado_visual == Factura.ESTADO_VENCIDA),
+        Decimal("0.00"),
+    )
+    proximas_valor = sum((f.saldo for f in facturas_proximas), Decimal("0.00"))
+    programadas_futuras_valor = sum((f.saldo for f in facturas_programadas), Decimal("0.00"))
+    cobrado_mes = (
+        PagoFactura.objects.filter(
+            activo=True,
+            fecha__year=hoy.year,
+            fecha__month=hoy.month,
+        ).aggregate(t=Sum("monto"))["t"]
+        or Decimal("0.00")
+    )
+
+    antiguedad = {
+        "por_vencer": Decimal("0.00"),
+        "dias_1_7": Decimal("0.00"),
+        "dias_8_15": Decimal("0.00"),
+        "dias_16_30": Decimal("0.00"),
+        "mas_30": Decimal("0.00"),
+    }
+    for factura in facturas_exigibles:
+        if factura.saldo <= 0:
+            continue
+        dias = (hoy - factura.fecha_vencimiento).days
+        if dias <= 0:
+            antiguedad["por_vencer"] += factura.saldo
+        elif dias <= 7:
+            antiguedad["dias_1_7"] += factura.saldo
+        elif dias <= 15:
+            antiguedad["dias_8_15"] += factura.saldo
+        elif dias <= 30:
+            antiguedad["dias_16_30"] += factura.saldo
+        else:
+            antiguedad["mas_30"] += factura.saldo
+
+    qs = base
+    if estado == "gestion":
+        qs = qs.exclude(
+            estado__in=[Factura.ESTADO_ANULADA, Factura.ESTADO_PROMOCION, Factura.ESTADO_PAGADA]
+        ).filter(_cobro_habilitado_hasta(hoy))
+    elif estado == "proximas":
+        qs = proximas_qs
+    elif estado == "programadas":
+        qs = programadas_qs
+    elif estado == "pendiente":
+        qs = qs.filter(
+            estado=Factura.ESTADO_PENDIENTE,
+            fecha_vencimiento__gte=hoy,
+        ).filter(_cobro_habilitado_hasta(hoy))
     elif estado == "parcial":
-        qs = qs.filter(estado=Factura.ESTADO_PARCIAL, fecha_vencimiento__gte=hoy)
+        qs = qs.filter(
+            estado=Factura.ESTADO_PARCIAL,
+            fecha_vencimiento__gte=hoy,
+        ).filter(_cobro_habilitado_hasta(hoy))
     elif estado == "vencida":
-        qs = qs.filter(estado__in=[Factura.ESTADO_PENDIENTE, Factura.ESTADO_PARCIAL, Factura.ESTADO_VENCIDA], fecha_vencimiento__lt=hoy)
+        qs = qs.filter(
+            estado__in=[Factura.ESTADO_PENDIENTE, Factura.ESTADO_PARCIAL, Factura.ESTADO_VENCIDA],
+            fecha_vencimiento__lt=hoy,
+        )
     elif estado == "pagada":
         qs = qs.filter(estado=Factura.ESTADO_PAGADA)
     elif estado == "anulada":
         qs = qs.filter(estado=Factura.ESTADO_ANULADA)
-    qs = qs.order_by("-periodo_anio", "-periodo_mes", "fecha_vencimiento", "cliente__nombre", "-id")
+    elif estado == "todas":
+        pass
+    else:
+        estado = "gestion"
+        qs = qs.exclude(
+            estado__in=[Factura.ESTADO_ANULADA, Factura.ESTADO_PROMOCION, Factura.ESTADO_PAGADA]
+        ).filter(_cobro_habilitado_hasta(hoy))
 
+    # Lo más próximo/urgente aparece primero; las cuentas lejanas nunca dominan
+    # la pantalla de gestión diaria.
+    qs = qs.order_by("fecha_cobro_desde", "fecha_vencimiento", "cliente__nombre", "id")
     facturas_totales = list(qs)
-    activas = [f for f in facturas_totales if f.estado != Factura.ESTADO_ANULADA]
-    total_por_cobrar = sum((f.saldo for f in activas), Decimal("0.00"))
-    vencido = sum((f.saldo for f in activas if f.estado_visual == Factura.ESTADO_VENCIDA), Decimal("0.00"))
-    cobrado_mes = PagoFactura.objects.filter(activo=True, fecha__year=hoy.year, fecha__month=hoy.month).aggregate(t=Sum("monto"))["t"] or Decimal("0.00")
-    proximas = sum(1 for f in activas if f.saldo > 0 and hoy <= f.fecha_vencimiento <= hoy + timedelta(days=7))
-
-    antiguedad = {"por_vencer": Decimal("0.00"), "dias_1_7": Decimal("0.00"), "dias_8_15": Decimal("0.00"), "dias_16_30": Decimal("0.00"), "mas_30": Decimal("0.00")}
-    for factura in activas:
-        if factura.saldo <= 0: continue
-        dias = (hoy - factura.fecha_vencimiento).days
-        if dias <= 0: antiguedad["por_vencer"] += factura.saldo
-        elif dias <= 7: antiguedad["dias_1_7"] += factura.saldo
-        elif dias <= 15: antiguedad["dias_8_15"] += factura.saldo
-        elif dias <= 30: antiguedad["dias_16_30"] += factura.saldo
-        else: antiguedad["mas_30"] += factura.saldo
 
     paginator = Paginator(facturas_totales, por_pagina)
     page_obj = paginator.get_page(request.GET.get("page"))
-    params = request.GET.copy(); params.pop("page", None)
-    ciudades = Cliente.objects.exclude(ciudad="").values_list("ciudad", flat=True).distinct().order_by("ciudad")
+    params = request.GET.copy()
+    params.pop("page", None)
+    ciudades = (
+        Cliente.objects.exclude(ciudad="")
+        .values_list("ciudad", flat=True)
+        .distinct()
+        .order_by("ciudad")
+    )
 
     return render(request, "finanzas/cartera.html", {
-        "page_obj": page_obj, "total_registros": paginator.count, "total_por_cobrar": total_por_cobrar,
-        "vencido": vencido, "cobrado_mes": cobrado_mes, "proximas": proximas, "antiguedad": antiguedad,
-        "q": q, "estado": estado, "ciudad": ciudad, "anio_filtro": anio or "", "mes_filtro": mes or "",
-        "por_pagina": por_pagina, "ciudades": ciudades, "meses": MESES, "querystring": params.urlencode(), "es_admin": True,
+        "page_obj": page_obj,
+        "total_registros": paginator.count,
+        "total_por_cobrar": total_por_cobrar,
+        "vencido": vencido,
+        "cobrado_mes": cobrado_mes,
+        "proximas": len(facturas_proximas),
+        "proximas_valor": proximas_valor,
+        "programadas_futuras": len(facturas_programadas),
+        "programadas_futuras_valor": programadas_futuras_valor,
+        "antiguedad": antiguedad,
+        "q": q,
+        "estado": estado,
+        "ciudad": ciudad,
+        "anio_filtro": anio or "",
+        "mes_filtro": mes or "",
+        "por_pagina": por_pagina,
+        "ciudades": ciudades,
+        "meses": MESES,
+        "querystring": params.urlencode(),
+        "sync_cartera": sync_cartera,
+        "es_admin": True,
     })
 
 
@@ -1299,10 +1453,11 @@ def nomina_pago_anular(request,pk,pago_pk):
     return redirect("finanzas_nomina_detalle",pk=pk)
 
 
-def _pdf_response(nombre_archivo, titulo, subtitulo, filas, encabezados, resumen=None):
+def _pdf_response(nombre_archivo, titulo, subtitulo, filas, encabezados, resumen=None, landscape_mode=False):
     response = HttpResponse(content_type="application/pdf")
     response["Content-Disposition"] = f'attachment; filename="{nombre_archivo}"'
-    doc = SimpleDocTemplate(response, pagesize=A4, rightMargin=14*mm, leftMargin=14*mm, topMargin=24*mm, bottomMargin=14*mm)
+    page_size = landscape(A4) if landscape_mode else A4
+    doc = SimpleDocTemplate(response, pagesize=page_size, rightMargin=14*mm, leftMargin=14*mm, topMargin=24*mm, bottomMargin=14*mm)
     estilos = getSampleStyleSheet()
     elementos = [Paragraph(titulo, ParagraphStyle("TituloJVA", parent=estilos["Title"], alignment=TA_CENTER, fontSize=17)), Paragraph(subtitulo, ParagraphStyle("SubJVA", parent=estilos["Normal"], alignment=TA_CENTER, textColor=colors.HexColor("#5b6472"))), Spacer(1, 7*mm)]
     if resumen:
@@ -1326,7 +1481,7 @@ def _fila_cobro_factura(factura):
     ).quantize(Decimal("0.01"))
     descuento = Decimal(factura.descuento_promocion or 0).quantize(Decimal("0.01"))
     return {
-        "fecha": factura.fecha_vencimiento,
+        "fecha": factura.fecha_real_cobro,
         "cliente": factura.cliente.nombre,
         "detalle": (
             f"Cuota {factura.cuota_numero}/{factura.total_cuotas}"
@@ -1355,7 +1510,7 @@ def _fila_cobro_proyectado(contrato, cuota, promo):
     contractual = Decimal(cuota["valor"]).quantize(Decimal("0.01"))
     descuento = max(contractual - neto, Decimal("0.00")).quantize(Decimal("0.01"))
     return {
-        "fecha": cuota["fecha_vencimiento"],
+        "fecha": cuota.get("fecha_cobro_desde") or cuota["fecha_vencimiento"],
         "cliente": contrato.cliente.nombre,
         "detalle": (
             f"Cuota {cuota['cuota_numero']}/{cuota['total_cuotas']}"
@@ -1398,12 +1553,12 @@ def resumen_mensual_cobros_pagos_pdf(request):
     facturas_qs = (
         Factura.objects
         .select_related("cliente", "contrato", "promocion")
-        .filter(fecha_vencimiento__range=(inicio_mes, fin_mes))
+        .filter(_filtro_fecha_real_cobro(anio, mes))
         .exclude(estado=Factura.ESTADO_ANULADA)
     )
     if ciudad:
         facturas_qs = facturas_qs.filter(cliente__ciudad__iexact=ciudad)
-    facturas = list(facturas_qs.order_by("fecha_vencimiento", "cliente__nombre", "id"))
+    facturas = list(facturas_qs.order_by("fecha_cobro_desde", "fecha_vencimiento", "cliente__nombre", "id"))
     claves_factura = {
         (f.contrato_id, f.periodo_anio, f.periodo_mes, f.cuota_numero)
         for f in facturas
@@ -1421,7 +1576,7 @@ def resumen_mensual_cobros_pagos_pdf(request):
         for pa, pm in _meses_servicio_candidatos_para_pago(anio, mes, meses_atras=12):
             promo = valores_promocion(contrato, pa, pm)
             for cuota in contrato.calendario_cobros(pa, pm):
-                fecha = cuota.get("fecha_vencimiento")
+                fecha = cuota.get("fecha_cobro_desde") or cuota.get("fecha_vencimiento")
                 if not fecha or fecha.year != anio or fecha.month != mes:
                     continue
                 clave = (contrato.pk, pa, pm, cuota["cuota_numero"])
@@ -1573,13 +1728,54 @@ def resumen_mensual_cobros_pagos_pdf(request):
 
 @login_required
 def cliente_estado_cuenta_pdf(request, cliente_pk):
-    if not _es_admin(request.user): return _denegado(request)
+    if not _es_admin(request.user):
+        return _denegado(request)
     cliente = get_object_or_404(Cliente, pk=cliente_pk)
-    facturas = list(Factura.objects.filter(cliente=cliente).prefetch_related("pagos").order_by("-periodo_anio", "-periodo_mes"))
-    filas = [(f.numero, f.periodo_label, f.fecha_vencimiento.strftime("%d/%m/%Y"), f"${f.total_cobro:.2f}", f"${f.monto_pagado:.2f}", f"${f.saldo:.2f}", f.estado_visual.title()) for f in facturas]
-    activas=[f for f in facturas if f.estado != Factura.ESTADO_ANULADA]
-    resumen=[("Cliente", cliente.nombre),("Teléfono", cliente.telefono or "—"),("Total facturado", f"${sum((f.total_cobro for f in activas), Decimal('0')):.2f}"),("Total cobrado", f"${sum((f.monto_pagado for f in activas), Decimal('0')):.2f}"),("Saldo pendiente", f"${sum((f.saldo for f in activas), Decimal('0')):.2f}")]
-    return _pdf_response(f"estado-cuenta-{slugify(cliente.nombre)}.pdf", "JVAQUA · Estado de cuenta", "Historial financiero del cliente", filas, ["Factura","Periodo","Vence","Total","Cobrado","Saldo","Estado"], resumen)
+    hoy = timezone.localdate()
+    facturas = list(
+        Factura.objects.filter(cliente=cliente)
+        .prefetch_related("pagos")
+        .order_by("-fecha_cobro_desde", "-fecha_vencimiento", "-id")
+    )
+    filas = [
+        (
+            f.numero,
+            f.periodo_servicio_label,
+            f.fecha_real_cobro.strftime("%d/%m/%Y") if f.fecha_real_cobro else "—",
+            f.fecha_vencimiento.strftime("%d/%m/%Y"),
+            f"${f.total_cobro:.2f}",
+            f"${f.monto_pagado:.2f}",
+            f"${f.saldo:.2f}",
+            f.estado_gestion_label,
+        )
+        for f in facturas
+    ]
+    activas = [f for f in facturas if f.estado != Factura.ESTADO_ANULADA]
+    exigibles = [
+        f for f in activas
+        if f.saldo > 0 and f.fecha_real_cobro and f.fecha_real_cobro <= hoy
+    ]
+    futuras = [
+        f for f in activas
+        if f.saldo > 0 and f.fecha_real_cobro and f.fecha_real_cobro > hoy
+    ]
+    resumen = [
+        ("Cliente", cliente.nombre),
+        ("Teléfono", cliente.telefono or "—"),
+        ("Total histórico/documentado", f"${sum((f.total_cobro for f in activas), Decimal('0')):.2f}"),
+        ("Total cobrado", f"${sum((f.monto_pagado for f in activas), Decimal('0')):.2f}"),
+        ("Saldo exigible hoy", f"${sum((f.saldo for f in exigibles), Decimal('0')):.2f}"),
+        ("Programado a futuro", f"${sum((f.saldo for f in futuras), Decimal('0')):.2f}"),
+    ]
+    return _pdf_response(
+        f"estado-cuenta-{slugify(cliente.nombre)}.pdf",
+        "JVAQUA · Estado de cuenta",
+        "Historial financiero del cliente",
+        filas,
+        ["Factura", "Periodo servicio", "Cobro desde", "Vence", "Total", "Cobrado", "Saldo", "Estado"],
+        resumen,
+        landscape_mode=True,
+    )
 
 
 @login_required
@@ -1609,8 +1805,11 @@ def calendario_financiero(request):
     except Exception: anio,mes=hoy.year,hoy.month
     inicio,fin=_rango_mes(anio,mes)
     eventos=[]
-    for f in Factura.objects.filter(fecha_vencimiento__range=(inicio,fin)).exclude(estado=Factura.ESTADO_ANULADA).select_related("cliente"):
-        eventos.append({"fecha":f.fecha_vencimiento,"tipo":"Cobro programado","detalle":f.cliente.nombre,"valor":f.saldo,"estado":f.estado_visual})
+    for f in Factura.objects.filter(_filtro_fecha_real_cobro(anio, mes)).exclude(estado=Factura.ESTADO_ANULADA).select_related("cliente"):
+        detalle = f.cliente.nombre
+        if f.fecha_real_cobro and f.fecha_vencimiento != f.fecha_real_cobro:
+            detalle += f" · vence {f.fecha_vencimiento:%d/%m/%Y}"
+        eventos.append({"fecha":f.fecha_real_cobro,"tipo":"Cobro programado","detalle":detalle,"valor":f.saldo,"estado":f.estado_gestion})
     for o in ObligacionTrabajador.objects.filter(fecha_pago_programada__range=(inicio,fin)).exclude(estado=ObligacionTrabajador.ESTADO_ANULADO).select_related("trabajador","contrato__cliente"):
         eventos.append({"fecha":o.fecha_pago_programada,"tipo":"Pago a trabajador","detalle":f"{o.trabajador} · {o.concepto_origen}","valor":o.saldo,"estado":o.estado})
     for i in Ingreso.objects.filter(fecha__range=(inicio,fin)).exclude(estado=Ingreso.ESTADO_ANULADO): eventos.append({"fecha":i.fecha,"tipo":"Ingreso realizado","detalle":i.concepto,"valor":i.monto_pagado,"estado":"pagado"})

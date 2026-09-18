@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from django.utils import timezone
 
-from finanzas.models import Factura, ObligacionTrabajador
+from finanzas.models import ObligacionTrabajador, PagoFactura
 from .inteligencia_rentabilidad import analizar_rentabilidad
 from .inteligencia_crecimiento import analizar_crecimiento_retencion
 from .salud_erp import diagnosticar_salud_erp
@@ -28,17 +28,22 @@ def construir_snapshot_ejecutivo(*, hoy=None, ciudad=None):
     operacion = analizar_operacion(hoy=hoy, ciudad=ciudad)
     inventario = analizar_inventario_inteligente(hoy=hoy, ciudad=ciudad)
 
-    facturas = list(
-        Factura.objects.exclude(estado=Factura.ESTADO_ANULADA)
-        .filter(fecha_emision__year=hoy.year, fecha_emision__month=hoy.month)
-        .prefetch_related("pagos")
-    )
-    cartera_pendiente = sum((_money(f.saldo) for f in facturas if f.saldo > 0), D0)
-    cartera_vencida = sum(
-        (_money(f.saldo) for f in facturas if f.saldo > 0 and f.fecha_vencimiento and f.fecha_vencimiento < hoy),
+    # Cartera inteligente ya separa deuda exigible de cuentas programadas a
+    # futuro. Nunca usamos fecha_emision: materializar 12 meses el mismo día no
+    # puede convertir 12 meses futuros en cartera del mes actual.
+    cartera_pendiente = _money(cartera_inteligente["total"])
+    cartera_vencida = _money(cartera_inteligente["vencido"])
+    cobrado = sum(
+        (
+            _money(p.monto)
+            for p in PagoFactura.objects.filter(
+                activo=True,
+                fecha__year=hoy.year,
+                fecha__month=hoy.month,
+            )
+        ),
         D0,
     )
-    cobrado = sum((_money(f.monto_pagado) for f in facturas), D0)
 
     obligaciones = list(
         ObligacionTrabajador.objects.exclude(estado=ObligacionTrabajador.ESTADO_ANULADO)

@@ -1,4 +1,5 @@
 from finanzas.reconciliacion import reconciliar_cartera_nomina
+from finanzas.sincronizacion import sincronizar_cartera_vigente
 # dashboard/views.py
 import json
 import logging
@@ -1975,6 +1976,7 @@ def push_test_view(request):
 def _centro_acciones_contexto():
     """Construye prioridades diarias sin duplicar la lógica financiera."""
     hoy = timezone.localdate()
+    sincronizar_cartera_vigente(hoy=hoy)
     reconciliar_cartera_nomina()
     proximos_tres_dias = hoy + timedelta(days=3)
     limite_programacion = hoy + timedelta(days=7)
@@ -2776,8 +2778,18 @@ def dashboard_view(request):
         )
 
         actualizar_facturas_vencidas()
-        total_facturas_pendientes = Factura.objects.filter(estado=Factura.ESTADO_PENDIENTE).count()
-        total_facturas_vencidas = Factura.objects.filter(estado=Factura.ESTADO_VENCIDA).count()
+        # El dashboard no debe contar como deuda las cuentas que solo están
+        # materializadas para meses futuros.
+        total_facturas_pendientes = Factura.objects.filter(
+            estado__in=[Factura.ESTADO_PENDIENTE, Factura.ESTADO_PARCIAL],
+        ).filter(
+            models.Q(fecha_cobro_desde__lte=hoy)
+            | models.Q(fecha_cobro_desde__isnull=True, fecha_vencimiento__lte=hoy)
+        ).count()
+        total_facturas_vencidas = Factura.objects.filter(
+            estado__in=[Factura.ESTADO_PENDIENTE, Factura.ESTADO_PARCIAL, Factura.ESTADO_VENCIDA],
+            fecha_vencimiento__lt=hoy,
+        ).count()
         total_facturas_pagadas = Factura.objects.filter(estado=Factura.ESTADO_PAGADA).count()
 
         mantenimientos_hoy_qs = (
@@ -4778,8 +4790,14 @@ def mantenimiento_detalle_view(request, pk):
         return redirect(safe_return_url())
 
     lista_usos = mantenimiento.usos_insumos.select_related("insumo", "trabajador__user").all()
-    lista_egresos = mantenimiento.egresos.all() if hasattr(mantenimiento, "egresos") else []
-    total_egresos = sum((Decimal(u.subtotal()) for u in lista_usos), Decimal("0.00"))
+    # Privacidad financiera: el trabajador solo ve producto, cantidad y unidad.
+    # Costos/valorizaciones pertenecen exclusivamente a Administración.
+    if es_usuario_admin:
+        lista_egresos = mantenimiento.egresos.all() if hasattr(mantenimiento, "egresos") else []
+        total_egresos = sum((Decimal(u.subtotal()) for u in lista_usos), Decimal("0.00"))
+    else:
+        lista_egresos = []
+        total_egresos = Decimal("0.00")
 
     fotos_qs = mantenimiento.fotos.all()
     fotos_por_nombre = {
@@ -5412,82 +5430,34 @@ def _dias_vencimiento_factura():
 
 
 def _crear_factura_para_contrato(contrato, anio, mes):
-    cliente = _obtener_cliente_de_contrato(contrato)
-    if not cliente:
-        return None, False, "Contrato sin cliente"
+    """Bloqueado: la creación directa antigua ignoraba el calendario contractual.
 
-    monto = _obtener_monto_contrato(contrato)
-    if monto <= 0:
-        return None, False, "Contrato sin monto válido"
-
-    fecha_emision = date(anio, mes, 1)
-    fecha_vencimiento = fecha_emision + timedelta(days=_dias_vencimiento_factura())
-
-    factura, creada = Factura.objects.get_or_create(
-        contrato=contrato,
-        periodo_anio=anio,
-        periodo_mes=mes,
-        defaults={
-            "cliente": cliente,
-            "fecha_emision": fecha_emision,
-            "fecha_vencimiento": fecha_vencimiento,
-            "subtotal": monto,
-            "impuesto": Decimal("0.00"),
-            "total": monto,
-            "estado": Factura.ESTADO_PENDIENTE,
-            "observaciones": "",
-        }
+    Se conserva el nombre solo para detectar llamadas heredadas. Toda creación de
+    Cartera debe pasar por ``finanzas.cuentas_por_cobrar``.
+    """
+    raise RuntimeError(
+        "Generador financiero obsoleto bloqueado. Usa finanzas.cuentas_por_cobrar."
     )
-
-    if creada:
-        FacturaItem.objects.create(
-            factura=factura,
-            descripcion=_descripcion_factura_contrato(contrato, anio, mes),
-            cantidad=Decimal("1.00"),
-            precio_unitario=monto,
-            subtotal=monto,
-        )
-        factura.actualizar_totales()
-
-    return factura, creada, None
 
 
 def generar_facturas_automaticas(anio=None, mes=None):
+    """Compatibilidad con la antigua capa financiera del dashboard.
+
+    La única fuente autorizada para crear Cartera es ahora
+    ``finanzas.cuentas_por_cobrar``. La implementación histórica creaba cuentas
+    el día 1 y vencimiento +5 días, ignorando por completo el corte real del
+    contrato; mantener esa lógica disponible es un riesgo financiero.
+    """
     hoy = timezone.localdate()
     anio = anio or hoy.year
     mes = mes or hoy.month
+    from finanzas.cuentas_por_cobrar import generar_facturas_periodo
 
-    creadas = 0
-    existentes = 0
-    errores = []
-
-    from contratos.models import Contrato, ReactivacionContrato, CotizacionMantenimiento, EquipamientoContrato
-
-    contratos = Contrato.objects.select_related("cliente").all().order_by("id")
-
-    for contrato in contratos:
-        if not _contrato_activo_para_facturacion(contrato):
-            continue
-
-        try:
-            _, creada, error = _crear_factura_para_contrato(contrato, anio, mes)
-
-            if error:
-                errores.append(f"Contrato #{contrato.pk}: {error}")
-                continue
-
-            if creada:
-                creadas += 1
-            else:
-                existentes += 1
-
-        except Exception as ex:
-            errores.append(f"Contrato #{contrato.pk}: {ex}")
-
+    resultado = generar_facturas_periodo(anio, mes)
     return {
-        "creadas": creadas,
-        "existentes": existentes,
-        "errores": errores,
+        "creadas": int(resultado.get("creadas", 0) or 0),
+        "existentes": int(resultado.get("existentes", 0) or 0),
+        "errores": resultado.get("errores", []),
         "anio": anio,
         "mes": mes,
     }
@@ -5515,55 +5485,11 @@ def actualizar_facturas_vencidas():
 @login_required
 @require_GET
 def factura_list_view(request):
+    """Compatibilidad: usa la lista financiera canónica."""
     if not es_admin(request.user):
         return render(request, "dashboard/no_autorizado.html", status=403)
-
-    actualizar_facturas_vencidas()
-
-    estado = (request.GET.get("estado", "") or "").strip().lower()
-    periodo = (request.GET.get("periodo", "") or "").strip()
-
-    facturas = Factura.objects.all().order_by("-periodo_anio", "-periodo_mes", "-id")
-
-    if estado in [
-        Factura.ESTADO_PENDIENTE,
-        Factura.ESTADO_PAGADA,
-        Factura.ESTADO_VENCIDA,
-        Factura.ESTADO_ANULADA,
-    ]:
-        facturas = facturas.filter(estado=estado)
-
-    if periodo:
-        try:
-            anio_txt, mes_txt = periodo.split("-")
-            facturas = facturas.filter(
-                periodo_anio=int(anio_txt),
-                periodo_mes=int(mes_txt),
-            )
-        except Exception:
-            pass
-
-    total_facturado = facturas.aggregate(total=Sum("total"))["total"] or Decimal("0.00")
-    total_pagado = facturas.filter(estado=Factura.ESTADO_PAGADA).aggregate(total=Sum("total"))["total"] or Decimal("0.00")
-    total_pendiente = facturas.filter(
-        estado__in=[Factura.ESTADO_PENDIENTE, Factura.ESTADO_VENCIDA]
-    ).aggregate(total=Sum("total"))["total"] or Decimal("0.00")
-
-    return render(
-        request,
-        "dashboard/factura_list.html",
-        {
-            "facturas": facturas,
-            "estado_actual": estado,
-            "periodo_actual": periodo,
-            "total_facturado": total_facturado,
-            "total_pagado": total_pagado,
-            "total_pendiente": total_pendiente,
-            "mantenimientos_futuros": mantenimientos_futuros,
-            "proximo_mantenimiento": proximo_mantenimiento,
-            "es_admin": True,
-        },
-    )
+    from finanzas.views import facturas_lista
+    return facturas_lista(request)
 
 
 @login_required
@@ -5701,197 +5627,11 @@ def factura_anular_view(request, pk):
 
 @login_required
 def flujo_mensual_view(request):
+    """Compatibilidad: delega al panel financiero canónico."""
     if not es_admin(request.user):
         return render(request, "dashboard/no_autorizado.html", status=403)
-
-    hoy = timezone.localdate()
-
-    try:
-        anio = int(request.GET.get("anio", hoy.year))
-        mes = int(request.GET.get("mes", hoy.month))
-    except ValueError:
-        anio, mes = hoy.year, hoy.month
-
-    primer_dia = date(anio, mes, 1)
-    ultimo_dia = date(anio, mes, monthrange(anio, mes)[1])
-
-    ingresos_qs = Ingreso.objects.filter(fecha__range=(primer_dia, ultimo_dia)).order_by("-fecha", "-id")
-    egresos_qs = Egreso.objects.filter(fecha__range=(primer_dia, ultimo_dia)).order_by("-fecha", "-id")
-
-    ingresos_manuales_qs = ingresos_qs.filter(cliente__isnull=True, contrato__isnull=True)
-    egresos_manuales_qs = egresos_qs.filter(mantenimiento__isnull=True, insumo__isnull=True)
-
-    total_ingresos = ingresos_qs.aggregate(total=Sum("total"))["total"] or Decimal("0")
-    total_egresos = egresos_qs.aggregate(total=Sum("total"))["total"] or Decimal("0")
-
-    total_ingresos_manuales = ingresos_manuales_qs.aggregate(total=Sum("total"))["total"] or Decimal("0")
-    total_egresos_manuales = egresos_manuales_qs.aggregate(total=Sum("total"))["total"] or Decimal("0")
-
-    total_ingresos_automaticos = total_ingresos - total_ingresos_manuales
-    total_egresos_automaticos = total_egresos - total_egresos_manuales
-
-    balance = total_ingresos - total_egresos
-
-    # Resumen del día (movido desde dashboard)
-    ingresos_hoy_qs = Ingreso.objects.filter(fecha=hoy).order_by("-id")
-    egresos_hoy_qs = Egreso.objects.filter(fecha=hoy).order_by("-id")
-
-    total_ingresos_hoy = ingresos_hoy_qs.aggregate(total=Sum("total"))["total"] or Decimal("0")
-    total_egresos_hoy = egresos_hoy_qs.aggregate(total=Sum("total"))["total"] or Decimal("0")
-    balance_hoy = total_ingresos_hoy - total_egresos_hoy
-
-    total_ingresos_hoy_manuales = ingresos_hoy_qs.filter(cliente__isnull=True, contrato__isnull=True).aggregate(total=Sum("total"))["total"] or Decimal("0")
-    total_egresos_hoy_manuales = egresos_hoy_qs.filter(mantenimiento__isnull=True, insumo__isnull=True).aggregate(total=Sum("total"))["total"] or Decimal("0")
-
-    total_ingresos_hoy_automaticos = total_ingresos_hoy - total_ingresos_hoy_manuales
-    total_egresos_hoy_automaticos = total_egresos_hoy - total_egresos_hoy_manuales
-
-    actualizar_facturas_vencidas()
-    facturas_mes = Factura.objects.filter(
-        periodo_anio=anio,
-        periodo_mes=mes,
-    ).select_related("cliente", "contrato", "ingreso_generado").order_by("-id")
-
-    total_facturas_mes = facturas_mes.aggregate(total=Sum("total"))["total"] or Decimal("0")
-    total_facturas_pagadas_mes = facturas_mes.filter(
-        estado=Factura.ESTADO_PAGADA
-    ).aggregate(total=Sum("total"))["total"] or Decimal("0")
-    total_facturas_pendientes_mes = facturas_mes.filter(
-        estado__in=[Factura.ESTADO_PENDIENTE, Factura.ESTADO_VENCIDA]
-    ).aggregate(total=Sum("total"))["total"] or Decimal("0")
-    total_facturas_vencidas = facturas_mes.filter(estado=Factura.ESTADO_VENCIDA).count()
-    total_facturas_pagadas_count = facturas_mes.filter(estado=Factura.ESTADO_PAGADA).count()
-    total_facturas_pendientes_count = facturas_mes.filter(
-        estado__in=[Factura.ESTADO_PENDIENTE, Factura.ESTADO_VENCIDA]
-    ).count()
-
-    # Recurrentes próximos (movidos desde dashboard)
-    recurrentes_proximos_3_dias = list(
-        MovimientoRecurrente.objects.filter(
-            activo=True,
-            proxima_fecha__gte=hoy,
-            proxima_fecha__lte=hoy + timedelta(days=3)
-        ).order_by("proxima_fecha", "id")[:10]
-    )
-
-    # Mes anterior
-    mes_anterior = mes - 1 or 12
-    anio_anterior = anio - 1 if mes == 1 else anio
-
-    primer_dia_ant = date(anio_anterior, mes_anterior, 1)
-    ultimo_dia_ant = date(anio_anterior, mes_anterior, monthrange(anio_anterior, mes_anterior)[1])
-
-    ingresos_ant = Ingreso.objects.filter(fecha__range=(primer_dia_ant, ultimo_dia_ant))
-    egresos_ant = Egreso.objects.filter(fecha__range=(primer_dia_ant, ultimo_dia_ant))
-
-    total_ingresos_ant = ingresos_ant.aggregate(total=Sum("total"))["total"] or Decimal("0")
-    total_egresos_ant = egresos_ant.aggregate(total=Sum("total"))["total"] or Decimal("0")
-    balance_ant = total_ingresos_ant - total_egresos_ant
-
-    def variacion(actual, anterior):
-        if anterior == 0:
-            return 100 if actual > 0 else 0
-        return ((actual - anterior) / anterior) * 100
-
-    variacion_ingresos_mes = variacion(total_ingresos, total_ingresos_ant)
-    variacion_egresos_mes = variacion(total_egresos, total_egresos_ant)
-    variacion_balance_mes = variacion(balance, balance_ant)
-
-    # Resumen diario
-    resumen_diario = []
-    balance_acumulado = Decimal("0")
-
-    dias = monthrange(anio, mes)[1]
-    for dia in range(1, dias + 1):
-        fecha = date(anio, mes, dia)
-
-        ingresos_dia = ingresos_qs.filter(fecha=fecha).aggregate(total=Sum("total"))["total"] or Decimal("0")
-        egresos_dia = egresos_qs.filter(fecha=fecha).aggregate(total=Sum("total"))["total"] or Decimal("0")
-
-        balance_dia = ingresos_dia - egresos_dia
-        balance_acumulado += balance_dia
-
-        resumen_diario.append({
-            "dia": dia,
-            "ingresos": ingresos_dia,
-            "egresos": egresos_dia,
-            "balance_acumulado": balance_acumulado,
-        })
-
-    top_ingresos = ingresos_qs.order_by("-total")[:5]
-    top_egresos = egresos_qs.order_by("-total")[:5]
-
-    fecha_inicio_reporte = primer_dia.strftime("%Y-%m-%d")
-    fecha_fin_reporte = ultimo_dia.strftime("%Y-%m-%d")
-
-    return render(request, "dashboard/flujo_mensual.html", {
-        "anio": anio,
-        "mes": mes,
-        "hoy": hoy,
-        "primer_dia": primer_dia,
-        "ultimo_dia": ultimo_dia,
-
-        "ingresos_qs": ingresos_qs,
-        "egresos_qs": egresos_qs,
-        "ingresos_hoy_qs": ingresos_hoy_qs[:8],
-        "egresos_hoy_qs": egresos_hoy_qs[:8],
-
-        "ingresos_manuales_qs": ingresos_manuales_qs,
-        "egresos_manuales_qs": egresos_manuales_qs,
-
-        "total_ingresos": total_ingresos,
-        "total_egresos": total_egresos,
-        "total_ingresos_hoy": total_ingresos_hoy,
-        "total_egresos_hoy": total_egresos_hoy,
-
-        "total_ingresos_manuales": total_ingresos_manuales,
-        "total_egresos_manuales": total_egresos_manuales,
-        "total_ingresos_hoy_manuales": total_ingresos_hoy_manuales,
-        "total_egresos_hoy_manuales": total_egresos_hoy_manuales,
-
-        "total_ingresos_automaticos": total_ingresos_automaticos,
-        "total_egresos_automaticos": total_egresos_automaticos,
-        "total_ingresos_hoy_automaticos": total_ingresos_hoy_automaticos,
-        "total_egresos_hoy_automaticos": total_egresos_hoy_automaticos,
-
-        "balance": balance,
-        "balance_hoy": balance_hoy,
-
-        "facturas_mes": facturas_mes,
-        "total_facturas_mes": total_facturas_mes,
-        "total_facturas_pagadas_mes": total_facturas_pagadas_mes,
-        "total_facturas_pendientes_mes": total_facturas_pendientes_mes,
-        "total_facturas_vencidas": total_facturas_vencidas,
-        "total_facturas_pagadas_count": total_facturas_pagadas_count,
-        "total_facturas_pendientes_count": total_facturas_pendientes_count,
-
-        "recurrentes_proximos_3_dias": recurrentes_proximos_3_dias,
-
-        "resumen_mes_actual": {
-            "ingresos": total_ingresos,
-            "egresos": total_egresos,
-            "balance": balance,
-        },
-        "resumen_mes_anterior": {
-            "ingresos": total_ingresos_ant,
-            "egresos": total_egresos_ant,
-            "balance": balance_ant,
-        },
-
-        "variacion_ingresos_mes": variacion_ingresos_mes,
-        "variacion_egresos_mes": variacion_egresos_mes,
-        "variacion_balance_mes": variacion_balance_mes,
-
-        "resumen_diario": resumen_diario,
-
-        "top_ingresos": top_ingresos,
-        "top_egresos": top_egresos,
-
-        "fecha_inicio_reporte": fecha_inicio_reporte,
-        "fecha_fin_reporte": fecha_fin_reporte,
-        "es_admin": True,
-    })
-
+    from finanzas.views import panel_financiero
+    return panel_financiero(request)
 
 @login_required
 def egreso_manual_crear_view(request):
@@ -9114,37 +8854,21 @@ def contrato_detalle_view(request, pk):
         .order_by("-periodo_anio", "-periodo_mes", "-id")[:10]
     )
 
-    total_facturado = (
-        Factura.objects
-        .filter(contrato=contrato)
-        .aggregate(total=Sum("total"))
-        .get("total")
-        or Decimal("0.00")
+    hoy_finanzas = timezone.localdate()
+    facturas_contrato = list(
+        Factura.objects.filter(contrato=contrato)
+        .exclude(estado=Factura.ESTADO_ANULADA)
+        .prefetch_related("pagos")
     )
-
-    total_pagado = (
-        Factura.objects
-        .filter(
-            contrato=contrato,
-            estado=Factura.ESTADO_PAGADA,
-        )
-        .aggregate(total=Sum("total"))
-        .get("total")
-        or Decimal("0.00")
-    )
-
-    total_pendiente = (
-        Factura.objects
-        .filter(
-            contrato=contrato,
-            estado__in=[
-                Factura.ESTADO_PENDIENTE,
-                Factura.ESTADO_VENCIDA,
-            ],
-        )
-        .aggregate(total=Sum("total"))
-        .get("total")
-        or Decimal("0.00")
+    facturas_exigibles = [
+        f for f in facturas_contrato
+        if f.fecha_real_cobro and f.fecha_real_cobro <= hoy_finanzas
+    ]
+    total_facturado = sum((f.total_cobro for f in facturas_exigibles), Decimal("0.00"))
+    total_pagado = sum((f.monto_pagado for f in facturas_contrato), Decimal("0.00"))
+    total_pendiente = sum(
+        (f.saldo for f in facturas_exigibles if f.saldo > 0),
+        Decimal("0.00"),
     )
 
     mantenimientos_futuros = mantenimientos.filter(

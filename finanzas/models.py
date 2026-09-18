@@ -372,6 +372,50 @@ class Factura(models.Model):
         return min(100, int((self.monto_pagado / total_cobro) * 100))
 
     @property
+    def fecha_real_cobro(self):
+        """Fecha desde la que la cuenta pertenece realmente a Cartera.
+
+        ``periodo_anio/periodo_mes`` identifican el ciclo de servicio, no
+        necesariamente el mes calendario de cobro. Esta propiedad evita usar
+        esas claves contables como si fueran una fecha de vencimiento.
+        """
+        return self.fecha_cobro_desde or self.fecha_vencimiento
+
+    @property
+    def periodo_servicio_label(self):
+        if self.periodo_inicio and self.periodo_fin:
+            etiqueta = f"{self.periodo_inicio:%d/%m/%Y} → {self.periodo_fin:%d/%m/%Y}"
+            if self.total_cuotas and self.total_cuotas > 1:
+                etiqueta += f" · cuota {self.cuota_numero}/{self.total_cuotas}"
+            return etiqueta
+        return self.periodo_label
+
+    @property
+    def es_programada_futura(self):
+        if self.estado in {self.ESTADO_PAGADA, self.ESTADO_ANULADA, self.ESTADO_PROMOCION}:
+            return False
+        return bool(
+            self.saldo > 0
+            and self.fecha_real_cobro
+            and self.fecha_real_cobro > timezone.localdate()
+        )
+
+    @property
+    def estado_gestion(self):
+        """Estado para gestión de cartera, separando deuda de programación futura."""
+        if self.es_programada_futura:
+            return "programada"
+        return self.estado_visual
+
+    @property
+    def estado_gestion_label(self):
+        if self.estado_gestion == "programada":
+            return "Programada"
+        if self.estado_visual == self.ESTADO_VENCIDA:
+            return "Vencida"
+        return self.get_estado_display()
+
+    @property
     def estado_visual(self):
         if self.estado not in {self.ESTADO_PAGADA, self.ESTADO_ANULADA} and self.fecha_vencimiento < timezone.localdate():
             return self.ESTADO_VENCIDA

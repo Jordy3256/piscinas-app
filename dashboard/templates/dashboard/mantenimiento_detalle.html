@@ -163,11 +163,11 @@
         {% for u in lista_usos %}
         <div class="usage-card d-flex justify-content-between align-items-center gap-2 flex-wrap">
           <div><div class="fw-bold">{{ u.insumo.nombre }}</div><div class="small text-muted">{{ u.cantidad_mostrada|floatformat:3 }} {{ u.unidad_mostrada }} · {{ u.trabajador|default:'Histórico' }}</div></div>
-          <div class="text-end"><div class="fw-bold">${{ u.subtotal|floatformat:2 }}</div>{% if not esta_realizado %}<a class="btn btn-sm btn-outline-primary mt-1" href="/dashboard/usos/{{ u.id }}/editar/">Editar</a> <a class="btn btn-sm btn-outline-danger mt-1" href="/dashboard/usos/{{ u.id }}/eliminar/">Eliminar</a>{% endif %}</div>
+          <div class="text-end">{% if es_admin %}<div class="fw-bold">${{ u.subtotal|floatformat:2 }}</div>{% endif %}{% if not esta_realizado %}<a class="btn btn-sm btn-outline-primary mt-1" href="/dashboard/usos/{{ u.id }}/editar/">Editar</a> <a class="btn btn-sm btn-outline-danger mt-1" href="/dashboard/usos/{{ u.id }}/eliminar/">Eliminar</a>{% endif %}</div>
         </div>
         {% endfor %}
       </div>
-      <div class="d-flex justify-content-between border-top pt-3 mb-3"><strong>Costo químico actual</strong><strong>${{ total_egresos|floatformat:2 }}</strong></div>
+      {% if es_admin %}<div class="d-flex justify-content-between border-top pt-3 mb-3"><strong>Costo químico actual</strong><strong>${{ total_egresos|floatformat:2 }}</strong></div>{% endif %}
       {% endif %}
 
       {% if not esta_realizado %}
