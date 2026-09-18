@@ -3548,6 +3548,27 @@ def dashboard_view(request):
         semana_anterior = inicio_agenda - timedelta(days=7)
         semana_siguiente = inicio_agenda + timedelta(days=7)
 
+        # Resumen del día visible para el trabajador. Estas variables deben
+        # calcularse también en esta rama: el contexto las utiliza más abajo y
+        # su ausencia provocaba un NameError/HTTP 500 al abrir Mis mantenimientos.
+        fecha_resumen = fecha_seleccionada or hoy
+        resumen_dia_qs = Mantenimiento.objects.filter(
+            fecha=fecha_resumen,
+            trabajadores=trabajador,
+        ).distinct()
+        total_resumen_dia = resumen_dia_qs.count()
+        realizados_resumen_dia = resumen_dia_qs.filter(estado="realizado").count()
+        pendientes_resumen_dia = resumen_dia_qs.filter(estado="pendiente").count()
+        # En la vista de un trabajador todos los mantenimientos están, por
+        # definición, asignados a ese trabajador. Se conserva la variable para
+        # mantener un contexto homogéneo con las plantillas existentes.
+        sin_asignar_resumen_dia = 0
+        cumplimiento_resumen_dia = (
+            round((realizados_resumen_dia / total_resumen_dia) * 100, 2)
+            if total_resumen_dia
+            else 0
+        )
+
         ordenes_hoy = list(
             OrdenTrabajo.objects.filter(
                 fecha=fecha_seleccionada or hoy,
