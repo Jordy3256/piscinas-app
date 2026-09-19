@@ -7928,8 +7928,9 @@ def _validar_datos_contrato(request):
     if requiere_factura and momento_facturacion not in MOMENTOS_FACTURACION_VALIDOS:
         errores.append("Selecciona cuándo debe emitirse la factura.")
     if requiere_factura:
-        if facturacion_tipo_identificacion not in {"ruc", "cedula"}:
-            errores.append("Selecciona RUC o Cédula en los datos de facturación.")
+        # En los datos administrativos de facturación únicamente la identificación
+        # es obligatoria. El resto de campos puede completarse cuando el cliente
+        # facilite la información, sin impedir guardar el contrato.
         if not facturacion_identificacion:
             errores.append("Ingresa la identificación para facturación.")
         elif not facturacion_identificacion.isdigit():
@@ -7938,14 +7939,6 @@ def _validar_datos_contrato(request):
             errores.append("El RUC debe tener 13 dígitos.")
         elif facturacion_tipo_identificacion == "cedula" and len(facturacion_identificacion) != 10:
             errores.append("La cédula debe tener 10 dígitos.")
-        if not facturacion_razon_social:
-            errores.append("Ingresa la razón social o nombre para facturación.")
-        if not facturacion_direccion:
-            errores.append("Ingresa la dirección de facturación.")
-        if not facturacion_telefono:
-            errores.append("Ingresa el teléfono de facturación.")
-        if not facturacion_correo:
-            errores.append("Ingresa el correo electrónico de facturación.")
     else:
         facturacion_tipo_identificacion = facturacion_identificacion = ""
         facturacion_razon_social = facturacion_direccion = ""

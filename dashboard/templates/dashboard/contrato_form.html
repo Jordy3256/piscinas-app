@@ -117,7 +117,7 @@
           <div class="cf-card-body"><div class="row g-3">
             <div class="col-md-4"><label class="form-label">Ciudad</label><select name="ciudad_ref" class="form-select"><option value="">Seleccionar</option>{% for c in ciudades %}<option value="{{ c.id }}" {% if datos_formulario.ciudad_ref_id|stringformat:'s' == c.id|stringformat:'s' %}selected{% endif %}>{{ c.nombre }}</option>{% endfor %}</select></div>
             <div class="col-md-8"><label class="form-label">Sector / urbanización</label><input name="sector_urbanizacion" class="form-control" value="{{ datos_formulario.sector_urbanizacion|default:'' }}"></div>
-            <div class="col-12"><label class="form-label">Dirección</label><textarea name="direccion" class="form-control" rows="2">{{ datos_formulario.direccion|default:'' }}</textarea></div>
+            <div class="col-12"><label class="form-label">Dirección <span class="text-muted">(opcional)</span></label><textarea name="direccion" class="form-control" rows="2">{{ datos_formulario.direccion|default:'' }}</textarea></div>
             <div class="col-12"><label class="form-label">Google Maps</label><input name="enlace_google_maps" class="form-control" value="{{ datos_formulario.enlace_google_maps|default:'' }}" placeholder="https://maps.google.com/..."></div>
             <div class="col-md-6"><label class="form-label">Latitud <span class="text-muted fw-normal">(opcional)</span></label><input type="number" step="0.000001" name="latitud" class="form-control" value="{{ datos_formulario.latitud|default:'' }}"></div>
             <div class="col-md-6"><label class="form-label">Longitud <span class="text-muted fw-normal">(opcional)</span></label><input type="number" step="0.000001" name="longitud" class="form-control" value="{{ datos_formulario.longitud|default:'' }}"></div>
@@ -371,18 +371,18 @@
                   <div class="small text-muted mb-3">Información administrativa para elaborar la factura externamente. No modifica cartera, cobros ni valores del contrato.</div>
                   <div class="row g-3">
                     <div class="col-md-3">
-                      <label class="form-label">Tipo de identificación</label>
+                      <label class="form-label">Tipo de identificación <span class="text-muted">(opcional)</span></label>
                       <select class="form-select" name="facturacion_tipo_identificacion">
                         <option value="">Selecciona</option>
                         <option value="ruc" {% if datos_formulario.facturacion_tipo_identificacion == "ruc" %}selected{% endif %}>RUC</option>
                         <option value="cedula" {% if datos_formulario.facturacion_tipo_identificacion == "cedula" %}selected{% endif %}>Cédula</option>
                       </select>
                     </div>
-                    <div class="col-md-3"><label class="form-label">Identificación</label><input class="form-control" name="facturacion_identificacion" inputmode="numeric" maxlength="20" value="{{ datos_formulario.facturacion_identificacion }}"></div>
-                    <div class="col-md-6"><label class="form-label">Razón social o nombre</label><input class="form-control" name="facturacion_razon_social" maxlength="200" value="{{ datos_formulario.facturacion_razon_social }}"></div>
+                    <div class="col-md-3"><label class="form-label">Identificación <span class="text-danger">*</span></label><input class="form-control" name="facturacion_identificacion" required inputmode="numeric" maxlength="20" value="{{ datos_formulario.facturacion_identificacion }}"></div>
+                    <div class="col-md-6"><label class="form-label">Razón social o nombre <span class="text-muted">(opcional)</span></label><input class="form-control" name="facturacion_razon_social" maxlength="200" value="{{ datos_formulario.facturacion_razon_social }}"></div>
                     <div class="col-md-6"><label class="form-label">Dirección</label><input class="form-control" name="facturacion_direccion" maxlength="300" value="{{ datos_formulario.facturacion_direccion }}"></div>
-                    <div class="col-md-3"><label class="form-label">Teléfono</label><input class="form-control" name="facturacion_telefono" maxlength="30" value="{{ datos_formulario.facturacion_telefono }}"></div>
-                    <div class="col-md-3"><label class="form-label">Correo electrónico</label><input class="form-control" type="email" name="facturacion_correo" value="{{ datos_formulario.facturacion_correo }}"></div>
+                    <div class="col-md-3"><label class="form-label">Teléfono <span class="text-muted">(opcional)</span></label><input class="form-control" name="facturacion_telefono" maxlength="30" value="{{ datos_formulario.facturacion_telefono }}"></div>
+                    <div class="col-md-3"><label class="form-label">Correo electrónico <span class="text-muted">(opcional)</span></label><input class="form-control" type="email" name="facturacion_correo" value="{{ datos_formulario.facturacion_correo }}"></div>
                   </div>
                 </div>
               </div>
