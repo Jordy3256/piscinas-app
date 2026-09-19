@@ -15,7 +15,7 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("--apply", action="store_true", help="Aplica anulacion conservadora solo a candidatas sin pagos activos.")
-        parser.add_argument("--invoice-ids", nargs="+", type=int, help="Limita --apply a IDs aprobados explicitamente.")
+        parser.add_argument("--invoice-ids", nargs="+", type=int, help="Limita estrictamente la auditoria y, con --apply, la anulacion a IDs aprobados explicitamente.")
 
     def handle(self, *args, **options):
         aplicar = options["apply"]
@@ -52,7 +52,9 @@ class Command(BaseCommand):
             base = min(completas, key=lambda f: (f.creada_en, f.id))
             sospechosas = [
                 f for f in facturas
-                if int(f.total_cuotas or 1) > 1 and (f.creada_en, f.id) > (base.creada_en, base.id)
+                if int(f.total_cuotas or 1) > 1
+                and (f.creada_en, f.id) > (base.creada_en, base.id)
+                and (not ids or f.id in ids)
             ]
             if not sospechosas:
                 continue

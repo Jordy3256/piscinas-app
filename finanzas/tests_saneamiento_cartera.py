@@ -49,3 +49,66 @@ class SaneamientoCarteraCommandTests(TestCase):
         call_command("auditar_saneamiento_cartera", stdout=out)
         self.assertIn(str(sospechosa.id), out.getvalue())
         self.assertIn("revision manual", out.getvalue().lower())
+
+    def test_invoice_ids_limita_estrictamente_el_dry_run(self):
+        self.factura(1, 1, Decimal("40.00"))
+        incluida = self.factura(2, 2, Decimal("20.00"))
+
+        otro_cliente = Cliente.objects.create(nombre="Otro cliente")
+        otro_contrato = Contrato.objects.create(
+            cliente=otro_cliente, precio_mensual=Decimal("60.00"),
+            fecha_inicio=date(2026, 8, 5), activo=True
+        )
+        Factura.objects.create(
+            cliente=otro_cliente, contrato=otro_contrato, periodo_anio=2026, periodo_mes=8,
+            periodo_inicio=date(2026, 8, 5), periodo_fin=date(2026, 9, 5),
+            cuota_numero=1, total_cuotas=1, fecha_vencimiento=date(2026, 9, 5),
+            subtotal=Decimal("60.00"), total=Decimal("60.00"), valor_contractual=Decimal("60.00")
+        )
+        excluida = Factura.objects.create(
+            cliente=otro_cliente, contrato=otro_contrato, periodo_anio=2026, periodo_mes=8,
+            periodo_inicio=date(2026, 8, 5), periodo_fin=date(2026, 9, 5),
+            cuota_numero=2, total_cuotas=2, fecha_vencimiento=date(2026, 9, 5),
+            subtotal=Decimal("30.00"), total=Decimal("30.00"), valor_contractual=Decimal("60.00")
+        )
+
+        out = StringIO()
+        call_command(
+            "auditar_saneamiento_cartera", "--invoice-ids", str(incluida.id), stdout=out
+        )
+        texto = out.getvalue()
+        self.assertIn(f"SOSPECHOSA #{incluida.id}", texto)
+        self.assertNotIn(f"SOSPECHOSA #{excluida.id}", texto)
+        self.assertIn(f"Candidatas sin pagos: 1 -> [{incluida.id}]", texto)
+        self.assertIn("Grupos conflictivos detectados: 1", texto)
+
+    def test_apply_con_ids_no_toca_otra_candidata(self):
+        self.factura(1, 1, Decimal("40.00"))
+        incluida = self.factura(2, 2, Decimal("20.00"))
+
+        otro_cliente = Cliente.objects.create(nombre="Otro cliente apply")
+        otro_contrato = Contrato.objects.create(
+            cliente=otro_cliente, precio_mensual=Decimal("60.00"),
+            fecha_inicio=date(2026, 8, 5), activo=True
+        )
+        Factura.objects.create(
+            cliente=otro_cliente, contrato=otro_contrato, periodo_anio=2026, periodo_mes=8,
+            periodo_inicio=date(2026, 8, 5), periodo_fin=date(2026, 9, 5),
+            cuota_numero=1, total_cuotas=1, fecha_vencimiento=date(2026, 9, 5),
+            subtotal=Decimal("60.00"), total=Decimal("60.00"), valor_contractual=Decimal("60.00")
+        )
+        excluida = Factura.objects.create(
+            cliente=otro_cliente, contrato=otro_contrato, periodo_anio=2026, periodo_mes=8,
+            periodo_inicio=date(2026, 8, 5), periodo_fin=date(2026, 9, 5),
+            cuota_numero=2, total_cuotas=2, fecha_vencimiento=date(2026, 9, 5),
+            subtotal=Decimal("30.00"), total=Decimal("30.00"), valor_contractual=Decimal("60.00")
+        )
+
+        call_command(
+            "auditar_saneamiento_cartera", "--apply", "--invoice-ids",
+            str(incluida.id), stdout=StringIO()
+        )
+        incluida.refresh_from_db()
+        excluida.refresh_from_db()
+        self.assertEqual(incluida.estado, Factura.ESTADO_ANULADA)
+        self.assertNotEqual(excluida.estado, Factura.ESTADO_ANULADA)
