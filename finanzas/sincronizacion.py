@@ -7,7 +7,11 @@ from django.db import transaction
 from django.utils import timezone
 
 from .models import Factura, ObligacionTrabajador
-from .cuentas_por_cobrar import generar_factura_contrato, valores_promocion
+from .cuentas_por_cobrar import (
+    _periodo_materializado_con_esquema_distinto,
+    generar_factura_contrato,
+    valores_promocion,
+)
 
 
 @transaction.atomic
@@ -470,6 +474,16 @@ def sincronizar_contrato_activo(contrato, *, desde_fecha=None, horizonte_meses=1
             continue
 
         cuotas = contrato.calendario_cobros(factura.periodo_anio, factura.periodo_mes)
+
+        # Un periodo ya emitido conserva el esquema con el que nació. Si el
+        # contrato cambió después (p. ej. 1/1 -> 50/50), no reinterpretamos ni
+        # anulamos la factura histórica ni generamos cuotas retroactivas.
+        total_cuotas_actual = cuotas[0]["total_cuotas"] if cuotas else 1
+        if _periodo_materializado_con_esquema_distinto(
+            contrato, factura.periodo_anio, factura.periodo_mes, total_cuotas_actual
+        ):
+            continue
+
         cuota = next((item for item in cuotas if item["cuota_numero"] == factura.cuota_numero), None)
         if not cuota:
             factura.estado = Factura.ESTADO_ANULADA

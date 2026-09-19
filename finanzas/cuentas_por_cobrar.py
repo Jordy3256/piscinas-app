@@ -29,6 +29,24 @@ def valores_promocion(contrato, anio, mes):
     datos = promo.calcular(base); datos["promocion"] = promo; return datos
 
 
+def _periodo_materializado_con_esquema_distinto(contrato, anio, mes, total_cuotas):
+    """
+    Protege periodos ya emitidos frente a cambios posteriores del contrato.
+
+    Si un periodo ya fue materializado, por ejemplo como una mensualidad 1/1,
+    no debe completarse retroactivamente como 1/2 + 2/2 cuando la modalidad
+    actual del contrato cambie a 50/50. El periodo existente conserva su
+    esquema histórico; el nuevo esquema aplica a periodos todavía no emitidos.
+    """
+    return Factura.objects.filter(
+        contrato=contrato,
+        periodo_anio=anio,
+        periodo_mes=mes,
+    ).exclude(estado=Factura.ESTADO_ANULADA).exclude(
+        total_cuotas=int(total_cuotas or 1)
+    ).exists()
+
+
 def fecha_vencimiento_contrato(contrato, anio, mes, cuota_numero=1):
     calendario = contrato.calendario_cobros(anio, mes)
     if not calendario:
@@ -125,6 +143,12 @@ def previsualizar_facturas_periodo(anio, mes):
             valor_cuota = desglose["total"]
             valor_total_periodo += valor_cuota
 
+            if _periodo_materializado_con_esquema_distinto(
+                contrato, periodo_anio, periodo_mes, cuota["total_cuotas"]
+            ):
+                existentes += 1
+                continue
+
             ya_existe = Factura.objects.filter(
                 contrato=contrato,
                 periodo_anio=periodo_anio,
@@ -176,6 +200,11 @@ def generar_factura_contrato(contrato, anio, mes, usuario=None):
     fecha_facturacion_general = contrato.fecha_programada_facturacion(anio, mes)
     promo_datos = valores_promocion(contrato, anio, mes)
     cuotas = contrato.calendario_cobros(anio, mes)
+    if cuotas and _periodo_materializado_con_esquema_distinto(
+        contrato, anio, mes, cuotas[0]["total_cuotas"]
+    ):
+        return [], 0
+
     for cuota in cuotas:
         fecha_facturacion = (
             cuota["fecha_cobro_desde"]
@@ -249,6 +278,12 @@ def generar_facturas_periodo(anio, mes, usuario=None):
             for periodo_anio, periodo_mes, cuota in cuotas_programadas_para_mes_cobro(
                 contrato, anio, mes
             ):
+                if _periodo_materializado_con_esquema_distinto(
+                    contrato, periodo_anio, periodo_mes, cuota["total_cuotas"]
+                ):
+                    existentes += 1
+                    continue
+
                 factura_existente = Factura.objects.filter(
                     contrato=contrato,
                     periodo_anio=periodo_anio,
