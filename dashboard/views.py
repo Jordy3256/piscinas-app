@@ -1906,6 +1906,25 @@ def _analitica_proyeccion_metas(metas, serie, hoy=None):
     contratos_12 = tendencia[min(12, len(tendencia)-1)]
     ingreso_12 = ingresos_tendencia[min(12, len(ingresos_tendencia)-1)]
     utilidad_12 = utilidad_tendencia[min(12, len(utilidad_tendencia)-1)]
+
+    # Valor económico de cada meta: responde cuánto facturaría y cuánto podría
+    # quedar como utilidad al ALCANZAR cada objetivo, independientemente de si la
+    # tendencia actual llega a él. Usa el ticket vigente y el margen observado;
+    # es solo analítica y no crea/modifica movimientos financieros.
+    metas_financieras = []
+    for meta in sorted(metas_contratos, key=lambda m: (m.fecha_fin, m.pk)):
+        ingreso_meta = Decimal(meta.objetivo) * Decimal(ticket)
+        utilidad_meta = (Decimal(str(margen_hist)) * ingreso_meta) if margen_hist is not None else None
+        metas_financieras.append({
+            "anio": meta.fecha_fin.year,
+            "contratos": meta.objetivo,
+            "ingreso_mensual": round(float(ingreso_meta), 2),
+            "utilidad_mensual": round(float(utilidad_meta), 2) if utilidad_meta is not None else None,
+            "ingreso_anual": round(float(ingreso_meta * Decimal("12")), 2),
+            "utilidad_anual": round(float(utilidad_meta * Decimal("12")), 2) if utilidad_meta is not None else None,
+        })
+    meta_financiera_final = metas_financieras[-1] if metas_financieras else None
+
     contratos_horizonte = tendencia[-1] if tendencia else contratos_actuales
     ingreso_horizonte = ingresos_tendencia[-1] if ingresos_tendencia else float(mrr)
     utilidad_horizonte = utilidad_tendencia[-1] if utilidad_tendencia else None
@@ -1944,6 +1963,13 @@ def _analitica_proyeccion_metas(metas, serie, hoy=None):
             "labels": labels,
             "ingresos": ingresos_tendencia,
             "utilidad": utilidad_tendencia,
+        }),
+        "metas_financieras": metas_financieras,
+        "meta_financiera_final": meta_financiera_final,
+        "grafico_metas_financieras": json.dumps({
+            "labels": [f"{x['contratos']} · {x['anio']}" for x in metas_financieras],
+            "ingresos": [x["ingreso_mensual"] for x in metas_financieras],
+            "utilidad": [x["utilidad_mensual"] for x in metas_financieras],
         }),
         "hay_base_financiera": margen_hist is not None,
     }
