@@ -7861,6 +7861,12 @@ def _validar_datos_contrato(request):
     notificar_facturacion = requiere_factura
     aplica_iva = request.POST.get("aplica_iva") == "on"
     momento_facturacion = (request.POST.get("momento_facturacion") or "").strip()
+    facturacion_tipo_identificacion = (request.POST.get("facturacion_tipo_identificacion") or "").strip()
+    facturacion_identificacion = (request.POST.get("facturacion_identificacion") or "").strip()
+    facturacion_razon_social = (request.POST.get("facturacion_razon_social") or "").strip()
+    facturacion_direccion = (request.POST.get("facturacion_direccion") or "").strip()
+    facturacion_telefono = (request.POST.get("facturacion_telefono") or "").strip()
+    facturacion_correo = (request.POST.get("facturacion_correo") or "").strip()
 
     # Coherencia obligatoria: "Por visita" gobierna Cartera y, si aplica,
     # Facturación Externa. No aceptamos una fecha mensual contradictoria.
@@ -7921,6 +7927,29 @@ def _validar_datos_contrato(request):
 
     if requiere_factura and momento_facturacion not in MOMENTOS_FACTURACION_VALIDOS:
         errores.append("Selecciona cuándo debe emitirse la factura.")
+    if requiere_factura:
+        if facturacion_tipo_identificacion not in {"ruc", "cedula"}:
+            errores.append("Selecciona RUC o Cédula en los datos de facturación.")
+        if not facturacion_identificacion:
+            errores.append("Ingresa la identificación para facturación.")
+        elif not facturacion_identificacion.isdigit():
+            errores.append("La identificación de facturación debe contener solo números.")
+        elif facturacion_tipo_identificacion == "ruc" and len(facturacion_identificacion) != 13:
+            errores.append("El RUC debe tener 13 dígitos.")
+        elif facturacion_tipo_identificacion == "cedula" and len(facturacion_identificacion) != 10:
+            errores.append("La cédula debe tener 10 dígitos.")
+        if not facturacion_razon_social:
+            errores.append("Ingresa la razón social o nombre para facturación.")
+        if not facturacion_direccion:
+            errores.append("Ingresa la dirección de facturación.")
+        if not facturacion_telefono:
+            errores.append("Ingresa el teléfono de facturación.")
+        if not facturacion_correo:
+            errores.append("Ingresa el correo electrónico de facturación.")
+    else:
+        facturacion_tipo_identificacion = facturacion_identificacion = ""
+        facturacion_razon_social = facturacion_direccion = ""
+        facturacion_telefono = facturacion_correo = ""
 
     if quimicos_proveedor not in QUIMICOS_PROVEEDORES_VALIDOS:
         errores.append("Selecciona quién proporciona los químicos.")
@@ -8005,6 +8034,12 @@ def _validar_datos_contrato(request):
         "notificar_facturacion": notificar_facturacion,
         "aplica_iva": aplica_iva,
         "observaciones_facturacion": (request.POST.get("observaciones_facturacion") or "").strip(),
+        "facturacion_tipo_identificacion": facturacion_tipo_identificacion,
+        "facturacion_identificacion": facturacion_identificacion,
+        "facturacion_razon_social": facturacion_razon_social,
+        "facturacion_direccion": facturacion_direccion,
+        "facturacion_telefono": facturacion_telefono,
+        "facturacion_correo": facturacion_correo,
         "quimicos_proveedor": quimicos_proveedor,
         "quimicos_almacenamiento": quimicos_almacenamiento,
         "responsable_reposicion": responsable_reposicion,
@@ -8303,6 +8338,97 @@ def _generar_pdf_clientes_contratos(clientes, titulo, nombre_archivo, subtitulo=
     doc.build(story, onFirstPage=draw_jvaqua_pdf_page, onLaterPages=draw_jvaqua_pdf_page)
     response = HttpResponse(buffer.getvalue(), content_type="application/pdf")
     response["Content-Disposition"] = f'attachment; filename="{nombre_archivo}"'
+    return response
+
+
+
+@login_required
+def contratos_datos_facturacion_pdf_view(request):
+    """PDF operativo para emitir facturas externamente; no altera cartera."""
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    from reportlab.lib.enums import TA_CENTER
+    from reportlab.lib.pagesizes import landscape, A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+
+    hoy = timezone.localdate()
+    contratos = list(
+        Contrato.objects.filter(requiere_factura=True, activo=True)
+        .exclude(facturacion_identificacion="")
+        .select_related("cliente", "ciudad_ref")
+        .order_by("facturacion_razon_social", "cliente__nombre", "id")
+    )
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer, pagesize=landscape(A4), rightMargin=10*mm, leftMargin=10*mm,
+        topMargin=23*mm, bottomMargin=15*mm,
+        title="Datos de facturación de contratos", author="JVAQUA",
+    )
+    styles = getSampleStyleSheet()
+    navy = colors.HexColor("#0F172A")
+    aqua = colors.HexColor("#0F766E")
+    muted = colors.HexColor("#64748B")
+    line = colors.HexColor("#CBD5E1")
+    head = colors.HexColor("#E6FFFB")
+    title_style = ParagraphStyle("df_title", parent=styles["Title"], fontName="Helvetica-Bold", fontSize=18, leading=22, textColor=navy, alignment=TA_CENTER)
+    sub_style = ParagraphStyle("df_sub", parent=styles["Normal"], fontSize=8, leading=10, textColor=muted, alignment=TA_CENTER)
+    cell = ParagraphStyle("df_cell", parent=styles["Normal"], fontSize=6.8, leading=8.2, textColor=navy)
+    cell_bold = ParagraphStyle("df_bold", parent=cell, fontName="Helvetica-Bold")
+
+    def P(valor, style=cell):
+        return Paragraph(_pdf_texto(valor or "—"), style)
+
+    data = [[P(x, cell_bold) for x in [
+        "Cliente / ubicación", "Fecha facturación", "Tipo", "Identificación",
+        "Razón social / nombre", "Dirección", "Teléfono", "Correo electrónico"
+    ]]]
+    for contrato in contratos:
+        fecha_facturacion = contrato.fecha_programada_facturacion(hoy.year, hoy.month)
+        ubicacion = " · ".join(filter(None, [
+            contrato.ciudad or getattr(contrato.cliente, "ciudad", ""),
+            contrato.sector_urbanizacion or getattr(contrato.cliente, "sector_urbanizacion", ""),
+        ])) or "No registrada"
+        data.append([
+            P(f"{contrato.cliente.nombre} · {ubicacion}"),
+            P(fecha_facturacion.strftime("%d/%m/%Y") if fecha_facturacion else "No programada"),
+            P(contrato.get_facturacion_tipo_identificacion_display()),
+            P(contrato.facturacion_identificacion),
+            P(contrato.facturacion_razon_social),
+            P(contrato.facturacion_direccion),
+            P(contrato.facturacion_telefono),
+            P(contrato.facturacion_correo),
+        ])
+
+    story = [
+        Paragraph("JVAQUA · Datos de facturación", title_style),
+        Paragraph(
+            f"Contratos activos que requieren factura · {hoy.strftime('%m/%Y')} · {len(contratos)} registro(s) · Documento informativo para facturación externa",
+            sub_style,
+        ),
+        Spacer(1, 5*mm),
+    ]
+    if contratos:
+        tabla = Table(data, colWidths=[42*mm, 25*mm, 16*mm, 27*mm, 45*mm, 48*mm, 27*mm, 48*mm], repeatRows=1, hAlign="CENTER")
+        tabla.setStyle(TableStyle([
+            ("BACKGROUND", (0,0), (-1,0), head),
+            ("TEXTCOLOR", (0,0), (-1,0), navy),
+            ("GRID", (0,0), (-1,-1), 0.35, line),
+            ("VALIGN", (0,0), (-1,-1), "TOP"),
+            ("LEFTPADDING", (0,0), (-1,-1), 4), ("RIGHTPADDING", (0,0), (-1,-1), 4),
+            ("TOPPADDING", (0,0), (-1,-1), 4), ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+            ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white, colors.HexColor("#F8FAFC")]),
+        ]))
+        story.append(tabla)
+    else:
+        story.append(Paragraph("No existen contratos activos configurados para facturación externa.", styles["BodyText"]))
+
+    doc.build(story, onFirstPage=draw_jvaqua_pdf_page, onLaterPages=draw_jvaqua_pdf_page)
+    response = HttpResponse(buffer.getvalue(), content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename="datos_facturacion_contratos_{hoy.strftime("%Y_%m")}.pdf"'
     return response
 
 
@@ -8681,6 +8807,7 @@ def contrato_crear_view(request):
         "facturacion_dias_antes": 0, "notificar_facturacion": False,
         "aplica_iva": False,
         "notificacion_factura_dias_antes": 1, "observaciones_facturacion": "",
+        "facturacion_tipo_identificacion": "", "facturacion_identificacion": "", "facturacion_razon_social": "", "facturacion_direccion": "", "facturacion_telefono": "", "facturacion_correo": "",
         "precio_mensual": "",
         "valor_tecnico_mensual": "",
         "fecha_inicio": timezone.localdate().isoformat(),
@@ -8721,6 +8848,9 @@ def contrato_crear_view(request):
                 "cobro_rango_desde", "cobro_rango_hasta", "cobro_dias_despues_cierre", "porcentaje_primer_pago",
                 "programacion_cobro_personalizada", "momento_facturacion", "facturacion_dia", "facturacion_dias_antes",
                 "notificacion_factura_dias_antes", "observaciones_facturacion")},
+            **{campo: validacion.get(campo) or "" for campo in (
+                "facturacion_tipo_identificacion", "facturacion_identificacion", "facturacion_razon_social",
+                "facturacion_direccion", "facturacion_telefono", "facturacion_correo")},
             "requiere_factura": validacion["requiere_factura"],
             "notificar_facturacion": validacion["notificar_facturacion"],
             "aplica_iva": validacion["aplica_iva"],
@@ -8780,6 +8910,12 @@ def contrato_crear_view(request):
                     if validacion["notificacion_factura_dias_antes"] is not None else 1
                 ),
                 observaciones_facturacion=validacion["observaciones_facturacion"],
+                facturacion_tipo_identificacion=validacion["facturacion_tipo_identificacion"],
+                facturacion_identificacion=validacion["facturacion_identificacion"],
+                facturacion_razon_social=validacion["facturacion_razon_social"],
+                facturacion_direccion=validacion["facturacion_direccion"],
+                facturacion_telefono=validacion["facturacion_telefono"],
+                facturacion_correo=validacion["facturacion_correo"],
                 precio_mensual=validacion["precio_mensual"],
                 aplica_iva=validacion["aplica_iva"],
                 valor_tecnico_mensual=validacion["valor_tecnico_mensual"],
@@ -8899,6 +9035,12 @@ def contrato_editar_view(request, pk):
         "notificar_facturacion": contrato.notificar_facturacion,
         "notificacion_factura_dias_antes": contrato.notificacion_factura_dias_antes,
         "observaciones_facturacion": contrato.observaciones_facturacion,
+        "facturacion_tipo_identificacion": contrato.facturacion_tipo_identificacion,
+        "facturacion_identificacion": contrato.facturacion_identificacion,
+        "facturacion_razon_social": contrato.facturacion_razon_social,
+        "facturacion_direccion": contrato.facturacion_direccion,
+        "facturacion_telefono": contrato.facturacion_telefono,
+        "facturacion_correo": contrato.facturacion_correo,
         "aplica_iva": contrato.aplica_iva,
         "precio_mensual": contrato.precio_mensual,
         "valor_tecnico_mensual": contrato.valor_tecnico_mensual,
@@ -9017,7 +9159,8 @@ def contrato_editar_view(request, pk):
                 "cobro_rango_desde", "cobro_rango_hasta", "cobro_dias_despues_cierre", "porcentaje_primer_pago",
                 "programacion_cobro_personalizada", "requiere_factura", "momento_facturacion", "facturacion_dia",
                 "facturacion_dias_antes", "notificar_facturacion", "notificacion_factura_dias_antes",
-                "observaciones_facturacion"):
+                "observaciones_facturacion", "facturacion_tipo_identificacion", "facturacion_identificacion",
+                "facturacion_razon_social", "facturacion_direccion", "facturacion_telefono", "facturacion_correo"):
                 setattr(contrato, campo, validacion[campo])
             contrato.precio_mensual = validacion["precio_mensual"]
             contrato.aplica_iva = validacion["aplica_iva"]

@@ -365,6 +365,27 @@
                 <label class="form-label">Observaciones de facturación</label>
                 <textarea class="form-control" name="observaciones_facturacion" rows="2" placeholder="Datos o instrucciones que necesites recordar al momento de facturar.">{{ datos_formulario.observaciones_facturacion }}</textarea>
               </div>
+              <div class="col-12 facturacion-field" data-show-factura="antes_inicio inicio_periodo cierre_periodo dia_fijo antes_cobro por_visita personalizado">
+                <div class="border rounded-4 p-3 mt-2 bg-light">
+                  <div class="fw-bold mb-1">🧾 Datos de facturación</div>
+                  <div class="small text-muted mb-3">Información administrativa para elaborar la factura externamente. No modifica cartera, cobros ni valores del contrato.</div>
+                  <div class="row g-3">
+                    <div class="col-md-3">
+                      <label class="form-label">Tipo de identificación</label>
+                      <select class="form-select" name="facturacion_tipo_identificacion">
+                        <option value="">Selecciona</option>
+                        <option value="ruc" {% if datos_formulario.facturacion_tipo_identificacion == "ruc" %}selected{% endif %}>RUC</option>
+                        <option value="cedula" {% if datos_formulario.facturacion_tipo_identificacion == "cedula" %}selected{% endif %}>Cédula</option>
+                      </select>
+                    </div>
+                    <div class="col-md-3"><label class="form-label">Identificación</label><input class="form-control" name="facturacion_identificacion" inputmode="numeric" maxlength="20" value="{{ datos_formulario.facturacion_identificacion }}"></div>
+                    <div class="col-md-6"><label class="form-label">Razón social o nombre</label><input class="form-control" name="facturacion_razon_social" maxlength="200" value="{{ datos_formulario.facturacion_razon_social }}"></div>
+                    <div class="col-md-6"><label class="form-label">Dirección</label><input class="form-control" name="facturacion_direccion" maxlength="300" value="{{ datos_formulario.facturacion_direccion }}"></div>
+                    <div class="col-md-3"><label class="form-label">Teléfono</label><input class="form-control" name="facturacion_telefono" maxlength="30" value="{{ datos_formulario.facturacion_telefono }}"></div>
+                    <div class="col-md-3"><label class="form-label">Correo electrónico</label><input class="form-control" type="email" name="facturacion_correo" value="{{ datos_formulario.facturacion_correo }}"></div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>

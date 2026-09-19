@@ -224,6 +224,9 @@
         <div class="col-12 col-md-3"><div class="detail-label">Condición de pago</div><div class="detail-value">{{ contrato.forma_pago_completa }}</div></div>
         <div class="col-12 col-md-3"><div class="detail-label">Regla de cobro</div><div class="detail-value">{{ contrato.get_programacion_cobro_display }}</div></div>
         <div class="col-12 col-md-3"><div class="detail-label">Facturación</div><div class="detail-value">{% if contrato.requiere_factura %}Sí · {{ contrato.get_momento_facturacion_display }}{% else %}No requiere factura{% endif %}</div></div>
+        {% if contrato.requiere_factura %}
+          <div class="col-12"><div class="detail-label">Datos de facturación</div><div class="detail-value">{{ contrato.get_facturacion_tipo_identificacion_display }} {{ contrato.facturacion_identificacion }} · {{ contrato.facturacion_razon_social }} · {{ contrato.facturacion_direccion }} · {{ contrato.facturacion_telefono }} · {{ contrato.facturacion_correo }}</div></div>
+        {% endif %}
         {% for cuota in calendario_cobros %}
           <div class="col-12 col-md-4"><div class="detail-label">Cobro {{ cuota.cuota_numero }}/{{ cuota.total_cuotas }}</div><div class="detail-value">{% if cuota.fecha_cobro_desde != cuota.fecha_vencimiento %}Del {{ cuota.fecha_cobro_desde|date:"d/m/Y" }} al {{ cuota.fecha_vencimiento|date:"d/m/Y" }}{% else %}{{ cuota.fecha_vencimiento|date:"d/m/Y" }}{% endif %} · ${{ cuota.total|floatformat:2 }}{% if contrato.aplica_iva %} <span class="small text-muted">(incl. IVA)</span>{% endif %}</div></div>
         {% endfor %}

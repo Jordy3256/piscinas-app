@@ -174,6 +174,21 @@ class Contrato(models.Model):
     notificacion_factura_dias_antes = models.PositiveSmallIntegerField(default=1)
     observaciones_facturacion = models.TextField(blank=True, default="")
 
+    # Datos tributarios informativos para facturación externa. No intervienen
+    # en cartera, cobros ni cálculos financieros.
+    TIPO_IDENTIFICACION_FACTURACION_CHOICES = [
+        ("ruc", "RUC"),
+        ("cedula", "Cédula"),
+    ]
+    facturacion_tipo_identificacion = models.CharField(
+        max_length=10, choices=TIPO_IDENTIFICACION_FACTURACION_CHOICES, blank=True, default=""
+    )
+    facturacion_identificacion = models.CharField(max_length=20, blank=True, default="")
+    facturacion_razon_social = models.CharField(max_length=200, blank=True, default="")
+    facturacion_direccion = models.CharField(max_length=300, blank=True, default="")
+    facturacion_telefono = models.CharField(max_length=30, blank=True, default="")
+    facturacion_correo = models.EmailField(blank=True, default="")
+
     precio_mensual = models.DecimalField(
         max_digits=10,
         decimal_places=2,
