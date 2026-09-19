@@ -23,6 +23,7 @@ from clientes.models import Cliente, Ciudad
 from contratos.models import Contrato
 
 from .cuentas_por_cobrar import MESES, generar_facturas_periodo, previsualizar_facturas_periodo, valores_promocion
+from .integridad_financiera import esquema_historico_canonico
 
 from .servicios_financieros import obtener_resumen_financiero
 from .reconciliacion import reconciliar_cartera_nomina
@@ -1552,7 +1553,30 @@ def resumen_mensual_cobros_pagos_pdf(request):
     )
     if ciudad:
         facturas_qs = facturas_qs.filter(cliente__ciudad__iexact=ciudad)
-    facturas = list(facturas_qs.order_by("fecha_cobro_desde", "fecha_vencimiento", "cliente__nombre", "id"))
+    facturas_mes = list(facturas_qs.order_by("fecha_cobro_desde", "fecha_vencimiento", "cliente__nombre", "id"))
+
+    # Un reporte nunca mezcla esquemas incompatibles del mismo periodo. Si un
+    # periodo nació como 1/1 y después apareció artificialmente una 2/2, se
+    # conserva para planificación el esquema histórico que nació primero.
+    periodos_mes = {(f.contrato_id, f.periodo_anio, f.periodo_mes) for f in facturas_mes}
+    facturas_periodos = list(
+        Factura.objects.select_related("cliente", "contrato", "promocion")
+        .filter(
+            Q(contrato_id__in={x[0] for x in periodos_mes}),
+            Q(periodo_anio__in={x[1] for x in periodos_mes}),
+            Q(periodo_mes__in={x[2] for x in periodos_mes}),
+        )
+        .exclude(estado=Factura.ESTADO_ANULADA)
+    ) if periodos_mes else []
+    por_periodo = {}
+    for f in facturas_periodos:
+        por_periodo.setdefault((f.contrato_id, f.periodo_anio, f.periodo_mes), []).append(f)
+    ids_canonicos = {
+        f.id
+        for grupo in por_periodo.values()
+        for f in esquema_historico_canonico(grupo)
+    }
+    facturas = [f for f in facturas_mes if f.id in ids_canonicos]
     claves_factura = {
         (f.contrato_id, f.periodo_anio, f.periodo_mes, f.cuota_numero)
         for f in facturas
@@ -1569,7 +1593,18 @@ def resumen_mensual_cobros_pagos_pdf(request):
     for contrato in contratos:
         for pa, pm in _meses_servicio_candidatos_para_pago(anio, mes, meses_atras=12):
             promo = valores_promocion(contrato, pa, pm)
-            for cuota in contrato.calendario_cobros(pa, pm):
+            calendario = contrato.calendario_cobros(pa, pm)
+            existentes_periodo = list(
+                Factura.objects.filter(
+                    contrato=contrato, periodo_anio=pa, periodo_mes=pm
+                ).exclude(estado=Factura.ESTADO_ANULADA).order_by("creada_en", "id")
+            )
+            if existentes_periodo and calendario:
+                esquema_historico = int(existentes_periodo[0].total_cuotas or 1)
+                esquema_actual = int(calendario[0].get("total_cuotas") or 1)
+                if esquema_historico != esquema_actual:
+                    continue
+            for cuota in calendario:
                 fecha = cuota.get("fecha_cobro_desde") or cuota.get("fecha_vencimiento")
                 if not fecha or fecha.year != anio or fecha.month != mes:
                     continue
@@ -1632,11 +1667,11 @@ def resumen_mensual_cobros_pagos_pdf(request):
     diferencia = total_cobrar - total_pagar
 
     response = HttpResponse(content_type="application/pdf")
-    response["Content-Disposition"] = f'attachment; filename="resumen_cobros_pagos_{anio}_{mes:02d}.pdf"'
+    response["Content-Disposition"] = f'attachment; filename="planificacion_cobros_pagos_{anio}_{mes:02d}.pdf"'
     doc = SimpleDocTemplate(
         response, pagesize=landscape(A4), rightMargin=10*mm, leftMargin=10*mm,
         topMargin=24*mm, bottomMargin=16*mm,
-        title=f"Resumen mensual de cobros y pagos · {nombre_mes} {anio}",
+        title=f"Planificación mensual de cobros y pagos · {nombre_mes} {anio}",
         author="JVAQUA",
     )
     estilos = getSampleStyleSheet()
@@ -1645,7 +1680,7 @@ def resumen_mensual_cobros_pagos_pdf(request):
     seccion = ParagraphStyle("RMSec", parent=estilos["Heading2"], fontSize=11, leading=14, textColor=colors.HexColor("#123b66"), spaceAfter=5)
     pequeno = ParagraphStyle("RMSmall", parent=estilos["BodyText"], fontSize=7.2, leading=9)
     elementos = [
-        Paragraph("JVAQUA · Resumen mensual de cobros y pagos", titulo),
+        Paragraph("JVAQUA · Planificación mensual de cobros y pagos", titulo),
         Paragraph(f"{nombre_mes} {anio} · {ciudad if ciudad else 'Todas las ciudades'} · Control físico de planificación", subtitulo),
         Spacer(1, 4*mm),
     ]
@@ -1719,6 +1754,93 @@ def resumen_mensual_cobros_pagos_pdf(request):
     )]
     doc.build(elementos, onFirstPage=draw_jvaqua_pdf_page, onLaterPages=draw_jvaqua_pdf_page)
     return response
+
+@login_required
+def movimientos_financieros_pdf(request):
+    """Libro mensual de caja: únicamente movimientos reales registrados."""
+    if not _es_admin(request.user):
+        return _denegado(request)
+    hoy = timezone.localdate()
+    try:
+        anio = int(request.GET.get("anio") or hoy.year); mes = int(request.GET.get("mes") or hoy.month)
+    except (TypeError, ValueError):
+        anio, mes = hoy.year, hoy.month
+    inicio, fin = _rango_mes(anio, mes)
+    ingresos = list(Ingreso.objects.filter(fecha__range=(inicio, fin)).exclude(estado=Ingreso.ESTADO_ANULADO).select_related("cliente", "contrato").order_by("fecha", "id"))
+    egresos = list(Egreso.objects.filter(fecha__range=(inicio, fin)).exclude(estado=Egreso.ESTADO_ANULADO).order_by("fecha", "id"))
+    filas = []
+    for i in ingresos:
+        filas.append((i.fecha, "INGRESO", i.concepto, str(i.cliente) if i.cliente_id else "—", i.get_estado_display(), Decimal(i.monto_pagado or 0)))
+    for e in egresos:
+        filas.append((e.fecha, "EGRESO", e.concepto or e.get_categoria_display(), e.proveedor or "—", e.get_estado_display(), Decimal(e.monto_pagado or 0)))
+    filas.sort(key=lambda x: (x[0], x[1], x[2]))
+    total_i = sum((x.monto_pagado for x in ingresos), Decimal("0.00"))
+    total_e = sum((x.monto_pagado for x in egresos), Decimal("0.00"))
+    return _pdf_response(
+        f"movimientos_financieros_{anio}_{mes:02d}.pdf", "JVAQUA · Movimientos financieros",
+        f"{dict(MESES).get(mes, mes)} {anio} · Caja real registrada",
+        [(f.strftime("%d/%m/%Y"), t, c, tercero, estado, f"${m:.2f}") for f,t,c,tercero,estado,m in filas],
+        ["Fecha", "Tipo", "Concepto", "Cliente / proveedor", "Estado", "Valor real"],
+        [("Ingresos cobrados", f"${total_i:.2f}"), ("Egresos pagados", f"${total_e:.2f}"), ("Resultado de caja", f"${(total_i-total_e):.2f}")],
+        landscape_mode=True,
+    )
+
+
+@login_required
+def cartera_mensual_pdf(request):
+    if not _es_admin(request.user):
+        return _denegado(request)
+    hoy = timezone.localdate()
+    try:
+        anio = int(request.GET.get("anio") or hoy.year); mes = int(request.GET.get("mes") or hoy.month)
+    except (TypeError, ValueError):
+        anio, mes = hoy.year, hoy.month
+    facturas = list(Factura.objects.filter(_filtro_fecha_real_cobro(anio, mes)).select_related("cliente", "contrato").prefetch_related("pagos").order_by("fecha_cobro_desde", "fecha_vencimiento", "cliente__nombre", "id"))
+    filas = []
+    for f in facturas:
+        filas.append((f.numero, f.cliente.nombre, f.periodo_servicio_label, f.fecha_real_cobro.strftime("%d/%m/%Y") if f.fecha_real_cobro else "—", f.fecha_vencimiento.strftime("%d/%m/%Y"), f"${f.total_cobro:.2f}", f"${f.monto_pagado:.2f}", f"${f.saldo:.2f}", f.estado_gestion_label))
+    activas = [f for f in facturas if f.estado != Factura.ESTADO_ANULADA]
+    return _pdf_response(
+        f"cartera_{anio}_{mes:02d}.pdf", "JVAQUA · Cartera mensual", f"{dict(MESES).get(mes, mes)} {anio} · Registro de cuentas por cobrar",
+        filas, ["Factura", "Cliente", "Periodo", "Cobro", "Vence", "Total", "Cobrado", "Saldo", "Estado"],
+        [("Total documentado", f"${sum((f.total_cobro for f in activas), Decimal('0.00')):.2f}"), ("Total cobrado", f"${sum((f.monto_pagado for f in activas), Decimal('0.00')):.2f}"), ("Saldo", f"${sum((f.saldo for f in activas), Decimal('0.00')):.2f}")], landscape_mode=True,
+    )
+
+
+@login_required
+def nomina_mensual_pdf(request):
+    if not _es_admin(request.user):
+        return _denegado(request)
+    hoy = timezone.localdate()
+    try:
+        anio = int(request.GET.get("anio") or hoy.year); mes = int(request.GET.get("mes") or hoy.month)
+    except (TypeError, ValueError):
+        anio, mes = hoy.year, hoy.month
+    obligaciones = list(ObligacionTrabajador.objects.filter(periodo_anio=anio, periodo_mes=mes).select_related("trabajador__user", "contrato__cliente").prefetch_related("pagos").order_by("trabajador__user__first_name", "id"))
+    filas = [(str(o.trabajador), o.concepto_origen, o.periodo_servicio_label, o.fecha_pago_programada.strftime("%d/%m/%Y"), f"${o.valor_acordado:.2f}", f"${o.monto_pagado:.2f}", f"${o.saldo:.2f}", o.get_estado_display()) for o in obligaciones]
+    activas = [o for o in obligaciones if o.estado != ObligacionTrabajador.ESTADO_ANULADO]
+    return _pdf_response(
+        f"nomina_{anio}_{mes:02d}.pdf", "JVAQUA · Nómina mensual", f"{dict(MESES).get(mes, mes)} {anio} · Registro consolidado",
+        filas, ["Trabajador", "Origen", "Periodo", "Fecha pago", "Generado", "Pagado", "Saldo", "Estado"],
+        [("Nómina generada", f"${sum((o.valor_acordado for o in activas), Decimal('0.00')):.2f}"), ("Pagado", f"${sum((o.monto_pagado for o in activas), Decimal('0.00')):.2f}"), ("Pendiente", f"${sum((o.saldo for o in activas), Decimal('0.00')):.2f}")], landscape_mode=True,
+    )
+
+
+@login_required
+def contratos_financieros_pdf(request):
+    if not _es_admin(request.user):
+        return _denegado(request)
+    contratos = list(Contrato.objects.filter(activo=True).select_related("cliente", "tecnico_designado__user").order_by("cliente__nombre", "id"))
+    filas = []
+    base = Decimal("0.00"); iva = Decimal("0.00")
+    for c in contratos:
+        base += Decimal(c.precio_mensual or 0); iva += Decimal(c.iva_mensual or 0)
+        filas.append((c.id, c.cliente.nombre, c.cliente.ciudad or "—", c.forma_pago_completa(), c.get_programacion_cobro_display() if c.programacion_cobro else "—", f"${c.precio_mensual:.2f}", f"${c.iva_mensual:.2f}", f"${c.precio_mensual_total:.2f}", c.fecha_inicio.strftime("%d/%m/%Y"), c.fecha_fin_contrato.strftime("%d/%m/%Y") if c.fecha_fin_contrato else "Indefinido"))
+    return _pdf_response(
+        "contratos_financieros_activos.pdf", "JVAQUA · Contratos activos", "Registro financiero contractual vigente",
+        filas, ["ID", "Cliente", "Ciudad", "Condición", "Cobro", "Base mensual", "IVA", "Total", "Inicio", "Fin"],
+        [("Contratos activos", len(contratos)), ("Ingreso mensual sin IVA", f"${base:.2f}"), ("IVA mensual", f"${iva:.2f}"), ("Ingreso mensual con IVA", f"${(base+iva):.2f}")], landscape_mode=True,
+    )
 
 @login_required
 def cliente_estado_cuenta_pdf(request, cliente_pk):

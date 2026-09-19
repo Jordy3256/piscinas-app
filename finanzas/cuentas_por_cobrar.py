@@ -5,6 +5,7 @@ from django.utils import timezone
 
 from contratos.models import Contrato
 from .models import Factura, FacturaItem, PromocionContrato
+from .integridad_financiera import validar_calendario_cobros
 
 
 MESES = (
@@ -200,6 +201,7 @@ def generar_factura_contrato(contrato, anio, mes, usuario=None):
     fecha_facturacion_general = contrato.fecha_programada_facturacion(anio, mes)
     promo_datos = valores_promocion(contrato, anio, mes)
     cuotas = contrato.calendario_cobros(anio, mes)
+    validar_calendario_cobros(contrato, cuotas)
     if cuotas and _periodo_materializado_con_esquema_distinto(
         contrato, anio, mes, cuotas[0]["total_cuotas"]
     ):

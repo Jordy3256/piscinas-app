@@ -74,7 +74,11 @@
     <div class="fh-group fh-doc-group">
       <div class="fh-kicker">Documentos</div>
       <div class="fh-buttons">
-        <a class="btn fh-btn" href="{% url 'finanzas_resumen_mensual_pdf' %}?anio={{ anio }}&mes={{ mes }}{% if ciudad %}&ciudad={{ ciudad|urlencode }}{% endif %}">📄 PDF mensual</a>
+        <a class="btn fh-btn" href="{% url 'finanzas_resumen_mensual_pdf' %}?anio={{ anio }}&mes={{ mes }}{% if ciudad %}&ciudad={{ ciudad|urlencode }}{% endif %}">📅 PDF planificación</a>
+        <a class="btn fh-btn" href="{% url 'finanzas_movimientos_pdf' %}?anio={{ anio }}&mes={{ mes }}">📄 Movimientos reales</a>
+        <a class="btn fh-btn" href="{% url 'finanzas_cartera_pdf' %}?anio={{ anio }}&mes={{ mes }}">📄 Cartera</a>
+        <a class="btn fh-btn" href="{% url 'finanzas_nomina_mensual_pdf' %}?anio={{ anio }}&mes={{ mes }}">📄 Nómina</a>
+        <a class="btn fh-btn" href="{% url 'finanzas_contratos_pdf' %}">📄 Contratos</a>
         <a class="btn fh-btn" href="{% url 'finanzas_comprobantes_servicio' %}">🧾 Comprobantes</a>
       </div>
     </div>
