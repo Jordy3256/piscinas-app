@@ -8503,13 +8503,19 @@ def contrato_list_view(request):
     total_activos = contratos.filter(activo=True).count()
     total_inactivos = contratos.filter(activo=False).count()
 
-    ingreso_mensual_estimado = (
-        contratos
-        .filter(activo=True)
+    contratos_activos_resumen = contratos.filter(activo=True)
+    ingreso_mensual_sin_iva = (
+        contratos_activos_resumen
         .aggregate(total=Sum("precio_mensual"))
         .get("total")
         or Decimal("0.00")
     )
+    # El total con IVA se calcula contrato por contrato: solo suma el 15 %
+    # a los contratos que tienen aplica_iva=True. No modifica ningún contrato.
+    ingreso_mensual_con_iva = sum(
+        (contrato.precio_mensual_total for contrato in contratos_activos_resumen.only("precio_mensual", "aplica_iva")),
+        Decimal("0.00"),
+    ).quantize(Decimal("0.01"))
 
     paginator = Paginator(contratos, 20)
     page_number = request.GET.get("page")
@@ -8534,7 +8540,8 @@ def contrato_list_view(request):
             "total_contratos": total_contratos,
             "total_activos": total_activos,
             "total_inactivos": total_inactivos,
-            "ingreso_mensual_estimado": ingreso_mensual_estimado,
+            "ingreso_mensual_sin_iva": ingreso_mensual_sin_iva,
+            "ingreso_mensual_con_iva": ingreso_mensual_con_iva,
             "querystring": querystring,
             "es_admin": True,
         },
