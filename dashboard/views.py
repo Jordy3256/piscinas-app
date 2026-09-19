@@ -8512,9 +8512,16 @@ def contrato_list_view(request):
     )
     # El total con IVA se calcula contrato por contrato: solo suma el 15 %
     # a los contratos que tienen aplica_iva=True. No modifica ningún contrato.
+    # Evitamos .only() sobre este queryset porque ya usa select_related("cliente");
+    # combinar ambos puede provocar FieldError al diferir la FK que select_related recorre.
+    # values_list() obtiene solo los dos datos necesarios sin alterar el queryset principal.
     ingreso_mensual_con_iva = sum(
-        (contrato.precio_mensual_total for contrato in contratos_activos_resumen.only("precio_mensual", "aplica_iva")),
-        Decimal("0.00"),
+        (
+            (Decimal(precio or 0) * Decimal("1.15")).quantize(Decimal("0.01"))
+            if aplica_iva
+            else Decimal(precio or 0).quantize(Decimal("0.01"))
+        )
+        for precio, aplica_iva in contratos_activos_resumen.values_list("precio_mensual", "aplica_iva")
     ).quantize(Decimal("0.01"))
 
     paginator = Paginator(contratos, 20)
