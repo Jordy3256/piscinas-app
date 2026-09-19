@@ -1537,7 +1537,7 @@ def _metas_empresa_contexto():
         meses_restantes = max(dias_restantes / 30.4375, 0)
 
         # Para metas futuras, el esfuerzo incremental parte del objetivo anterior,
-        # no del valor actual de hoy. Así 2027 = 150 - 60, 2028 = 350 - 150.
+        # no del valor actual de hoy. Así cada cierre anual parte de la meta anterior.
         if hoy < meta.fecha_inicio:
             base_calculo = objetivo_anterior
             faltan_plan = max(meta.objetivo - base_calculo, 0)
@@ -1870,7 +1870,11 @@ def _analitica_proyeccion_metas(metas, serie, hoy=None):
         y, m0 = divmod(idx, 12)
         return date(y, m0 + 1, 1)
 
-    meses = 24
+    # Horizonte dinámico: todas las proyecciones llegan hasta el cierre de la última
+    # meta empresarial vigente (actualmente diciembre de 2031). No se limita a 24 meses.
+    metas_contratos = [m for m in metas if m.metrica == "contratos_activos"]
+    fecha_horizonte = max([m.fecha_fin for m in metas_contratos] or [hoy])
+    meses = max((fecha_horizonte.year - hoy.year) * 12 + (fecha_horizonte.month - hoy.month), 0)
     labels, actual_line, conservador, tendencia, acelerado = [], [], [], [], []
     ingresos_tendencia, utilidad_tendencia = [], []
     for n in range(0, meses + 1):
@@ -1902,6 +1906,9 @@ def _analitica_proyeccion_metas(metas, serie, hoy=None):
     contratos_12 = tendencia[min(12, len(tendencia)-1)]
     ingreso_12 = ingresos_tendencia[min(12, len(ingresos_tendencia)-1)]
     utilidad_12 = utilidad_tendencia[min(12, len(utilidad_tendencia)-1)]
+    contratos_horizonte = tendencia[-1] if tendencia else contratos_actuales
+    ingreso_horizonte = ingresos_tendencia[-1] if ingresos_tendencia else float(mrr)
+    utilidad_horizonte = utilidad_tendencia[-1] if utilidad_tendencia else None
 
     return {
         "mrr_actual": float(mrr),
@@ -1918,6 +1925,11 @@ def _analitica_proyeccion_metas(metas, serie, hoy=None):
         "contratos_12": contratos_12,
         "ingreso_12": ingreso_12,
         "utilidad_12": utilidad_12,
+        "fecha_horizonte": fecha_horizonte,
+        "meses_horizonte": meses,
+        "contratos_horizonte": contratos_horizonte,
+        "ingreso_horizonte": ingreso_horizonte,
+        "utilidad_horizonte": utilidad_horizonte,
         "meta_referencia": meta_referencia,
         "ritmo_necesario": round(ritmo_necesario, 2),
         "proyectado_meta": round(proyectado_meta, 1),
