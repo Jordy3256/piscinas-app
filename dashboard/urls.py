@@ -75,6 +75,7 @@ from .views import (
     mantenimiento_whatsapp_cliente_view,
     mantenimiento_historial_view,
     foto_mantenimiento_eliminar_view,
+    foto_mantenimiento_archivo_view,
     usoinsumo_eliminar_view,
     usoinsumo_editar_view,
 
@@ -388,6 +389,11 @@ urlpatterns = [
         "mantenimientos/<int:pk>/whatsapp/",
         mantenimiento_whatsapp_cliente_view,
         name="mantenimiento_whatsapp_cliente",
+    ),
+    path(
+        "fotos/<int:pk>/archivo/",
+        foto_mantenimiento_archivo_view,
+        name="foto_mantenimiento_archivo",
     ),
     path(
         "fotos/<int:pk>/eliminar/",

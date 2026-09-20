@@ -4645,6 +4645,26 @@ def admin_operativo_view(request):
 # Detalle mantenimiento
 # -------------------
 @login_required
+@login_required
+def foto_mantenimiento_archivo_view(request, pk):
+    """Abre una evidencia persistente o muestra un aviso si el archivo histórico se perdió."""
+    foto = get_object_or_404(FotoMantenimiento, pk=pk)
+    archivo = foto.imagen
+    disponible = False
+    if archivo and archivo.name:
+        try:
+            disponible = archivo.storage.exists(archivo.name)
+        except Exception:
+            disponible = bool(settings.CLOUDINARY_URL)
+    if disponible:
+        try:
+            return redirect(archivo.url)
+        except Exception:
+            pass
+    svg = """<svg xmlns='http://www.w3.org/2000/svg' width='1200' height='700' viewBox='0 0 1200 700'><rect width='1200' height='700' fill='#f3f6f9'/><rect x='80' y='80' width='1040' height='540' rx='28' fill='#fff' stroke='#d8e1ea' stroke-width='4'/><text x='600' y='320' text-anchor='middle' font-family='Arial,sans-serif' font-size='42' font-weight='700' fill='#334155'>Archivo histórico no disponible</text><text x='600' y='385' text-anchor='middle' font-family='Arial,sans-serif' font-size='28' fill='#64748b'>El registro se conserva, pero el archivo físico ya no existe.</text></svg>"""
+    return HttpResponse(svg, content_type='image/svg+xml')
+
+
 def mantenimiento_detalle_view(request, pk):
     """Detalle unificado del mantenimiento.
 

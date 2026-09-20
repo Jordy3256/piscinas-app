@@ -233,6 +233,34 @@ def panel_financiero(request):
 
 
 @login_required
+def archivo_financiero_view(request, tipo, pk):
+    """Abre el comprobante original, restringido a administración."""
+    if not _es_admin(request.user):
+        return _denegado(request)
+    modelos = {
+        "ingreso": Ingreso, "egreso": Egreso, "pago-factura": PagoFactura,
+        "pago-trabajador": PagoTrabajador, "lote-trabajador": LotePagoTrabajador,
+    }
+    modelo = modelos.get(tipo)
+    if modelo is None:
+        return HttpResponse("Tipo de archivo no válido.", status=404)
+    obj = get_object_or_404(modelo, pk=pk)
+    archivo = getattr(obj, "comprobante", None)
+    if not archivo or not archivo.name:
+        return HttpResponse("Este movimiento no tiene comprobante adjunto.", status=404)
+    try:
+        existe = archivo.storage.exists(archivo.name)
+    except Exception:
+        existe = bool(settings.CLOUDINARY_URL)
+    if not existe:
+        return HttpResponse("El registro del comprobante existe, pero el archivo físico ya no está disponible.", status=404, content_type="text/plain; charset=utf-8")
+    try:
+        return redirect(archivo.url)
+    except Exception:
+        return HttpResponse("No fue posible abrir el comprobante.", status=404)
+
+
+@login_required
 def movimientos(request):
     if not _es_admin(request.user):
         return _denegado(request)

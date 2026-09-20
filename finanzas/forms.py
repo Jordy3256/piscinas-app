@@ -11,6 +11,12 @@ class DateInput(forms.DateInput):
 
 
 class BaseMovimientoForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if "comprobante" in self.fields:
+            self.fields["comprobante"].label = "Comprobante de pago / respaldo"
+            self.fields["comprobante"].widget.attrs.update({"accept": "image/*,application/pdf"})
+
     def clean(self):
         cleaned = super().clean()
         total = cleaned.get("total") or Decimal("0.00")
@@ -93,6 +99,8 @@ class PagoFacturaForm(forms.ModelForm):
     def __init__(self, *args, factura=None, **kwargs):
         self.factura = factura
         super().__init__(*args, **kwargs)
+        self.fields["comprobante"].label = "Comprobante de pago / respaldo"
+        self.fields["comprobante"].widget.attrs.update({"accept": "image/*,application/pdf"})
         if factura and not self.is_bound:
             self.fields["monto"].initial = factura.saldo
 
@@ -121,6 +129,8 @@ class PagoTrabajadorForm(forms.ModelForm):
     def __init__(self, *args, obligacion=None, **kwargs):
         self.obligacion = obligacion
         super().__init__(*args, **kwargs)
+        self.fields["comprobante"].label = "Comprobante de pago / respaldo"
+        self.fields["comprobante"].widget.attrs.update({"accept": "image/*,application/pdf"})
         if obligacion and not self.is_bound:
             self.fields["monto"].initial = obligacion.saldo
 
