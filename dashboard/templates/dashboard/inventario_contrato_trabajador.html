@@ -10,8 +10,8 @@
 <div class="row g-3 mb-4">
 {% for inv in stocks %}
   <div class="col-md-6 col-xl-4"><div class="site-card">
-    <div class="d-flex justify-content-between gap-2"><div><div class="fw-bold">{{ inv.insumo.nombre }}</div><div class="small text-muted">Mínimo {{ inv.stock_minimo|floatformat:3 }} {{ inv.insumo.unidad_corta }}</div></div>{% if inv.estado_stock == 'agotado' %}<span class="badge bg-danger">Agotado</span>{% elif inv.estado_stock == 'critico' %}<span class="badge bg-danger">Crítico</span>{% elif inv.estado_stock == 'proximo' %}<span class="badge bg-warning text-dark">Próximo</span>{% else %}<span class="badge bg-success">Correcto</span>{% endif %}</div>
-    <div class="site-kpi mt-3">{{ inv.stock_estimado|floatformat:3 }} {{ inv.insumo.unidad_corta }}</div>
+    <div class="d-flex justify-content-between gap-2"><div><div class="fw-bold">{{ inv.insumo.nombre }}</div><div class="small text-muted">Mínimo {{ inv.stock_minimo|floatformat:"-3" }} {{ inv.insumo.unidad_corta }}</div></div>{% if inv.estado_stock == 'agotado' %}<span class="badge bg-danger">Agotado</span>{% elif inv.estado_stock == 'critico' %}<span class="badge bg-danger">Crítico</span>{% elif inv.estado_stock == 'proximo' %}<span class="badge bg-warning text-dark">Próximo</span>{% else %}<span class="badge bg-success">Correcto</span>{% endif %}</div>
+    <div class="site-kpi mt-3">{{ inv.stock_estimado|floatformat:"-3" }} {{ inv.insumo.unidad_corta }}</div>
     <div class="small text-muted">Existencia estimada · {% if inv.dias_hasta_minimo is not None %}≈ {{ inv.dias_hasta_minimo }} días al mínimo{% else %}sin consumo diario configurado{% endif %}</div>
     <form method="post" action="{% url 'contrato_inventario_ajustar' contrato.id inv.id %}" class="row g-2 mt-3">{% csrf_token %}
       <div class="col-7"><input class="form-control" type="number" step="0.001" min="0" name="nueva_existencia" placeholder="Conteo físico" required></div>
@@ -33,5 +33,5 @@
 </form></div>
 {% endif %}
 
-<div class="site-card"><h5 class="fw-bold">🧾 Historial reciente</h5><div class="table-responsive"><table class="table align-middle mb-0"><thead><tr><th>Fecha</th><th>Producto</th><th>Movimiento</th><th>Cantidad</th></tr></thead><tbody>{% for m in movimientos %}<tr><td>{{ m.creado_en|date:'d/m/Y H:i' }}</td><td>{{ m.insumo.nombre }}</td><td>{{ m.get_tipo_display }}</td><td>{{ m.cantidad|floatformat:3 }} {{ m.insumo.unidad_corta }}</td></tr>{% empty %}<tr><td colspan="4" class="text-muted">Sin movimientos registrados.</td></tr>{% endfor %}</tbody></table></div></div>
+<div class="site-card"><h5 class="fw-bold">🧾 Historial reciente</h5><div class="table-responsive"><table class="table align-middle mb-0"><thead><tr><th>Fecha</th><th>Producto</th><th>Movimiento</th><th>Cantidad</th></tr></thead><tbody>{% for m in movimientos %}<tr><td>{{ m.creado_en|date:'d/m/Y H:i' }}</td><td>{{ m.insumo.nombre }}</td><td>{{ m.get_tipo_display }}</td><td>{{ m.cantidad|floatformat:"-3" }} {{ m.insumo.unidad_corta }}</td></tr>{% empty %}<tr><td colspan="4" class="text-muted">Sin movimientos registrados.</td></tr>{% endfor %}</tbody></table></div></div>
 {% endblock %}

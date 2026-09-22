@@ -2,6 +2,7 @@ from io import BytesIO
 
 from django.core.files.base import ContentFile
 from django.db import models
+from django.conf import settings
 from PIL import Image
 
 from clientes.models import Cliente
@@ -14,6 +15,7 @@ class Mantenimiento(models.Model):
     ESTADO_CHOICES = [
         ("pendiente", "Pendiente"),
         ("realizado", "Realizado"),
+        ("cancelado", "Cancelado"),
     ]
 
     cliente = models.ForeignKey(
@@ -36,6 +38,15 @@ class Mantenimiento(models.Model):
         help_text="Indica si fue generado desde la programación automática del contrato.",
     )
     observaciones = models.TextField(blank=True)
+    motivo_cancelacion = models.TextField(blank=True)
+    cancelado_en = models.DateTimeField(null=True, blank=True)
+    cancelado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="mantenimientos_cancelados",
+    )
 
     ESTADO_AGUA_RAPIDO = [
         ("", "Sin seleccionar"),

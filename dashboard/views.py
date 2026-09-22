@@ -4280,7 +4280,7 @@ def mantenimiento_historial_view(request):
     elif filtro == "sin_asignar":
         qs = qs.filter(trabajadores__isnull=True).distinct()
 
-    if estado in ["pendiente", "realizado"]:
+    if estado in ["pendiente", "realizado", "cancelado"]:
         qs = qs.filter(estado=estado)
 
     if cliente_id.isdigit():
@@ -4304,6 +4304,7 @@ def mantenimiento_historial_view(request):
     total_historial = len(items)
     total_realizados_historial = len([m for m in items if getattr(m, "estado", "") == "realizado"])
     total_pendientes_historial = len([m for m in items if getattr(m, "estado", "") == "pendiente"])
+    total_cancelados_historial = len([m for m in items if getattr(m, "estado", "") == "cancelado"])
     total_atrasados_historial = len([
         m for m in items
         if getattr(m, "estado", "") == "pendiente" and getattr(m, "fecha", hoy) < hoy
@@ -4354,6 +4355,7 @@ def mantenimiento_historial_view(request):
             "total_historial": total_historial,
             "total_realizados_historial": total_realizados_historial,
             "total_pendientes_historial": total_pendientes_historial,
+            "total_cancelados_historial": total_cancelados_historial,
             "total_atrasados_historial": total_atrasados_historial,
             "total_sin_asignar_historial": total_sin_asignar_historial,
             "querystring": querystring,
@@ -4530,7 +4532,7 @@ def admin_operativo_view(request):
     # administrador está consultando (hoy o la fecha elegida en calendario).
     fecha_resumen = fecha_seleccionada or hoy
     qs_resumen_dia = base_qs.filter(fecha=fecha_resumen)
-    total_resumen_dia = qs_resumen_dia.count()
+    total_resumen_dia = qs_resumen_dia.exclude(estado="cancelado").count()
     realizados_resumen_dia = qs_resumen_dia.filter(estado="realizado").count()
     pendientes_resumen_dia = qs_resumen_dia.filter(estado="pendiente").count()
     sin_asignar_resumen_dia = qs_resumen_dia.filter(
@@ -4597,6 +4599,7 @@ def admin_operativo_view(request):
     # KPIs operativos coherentes en tres horizontes. Respetan los filtros de
     # ciudad/trabajador y no dependen de las listas truncadas de la interfaz.
     def _kpis_periodo(qs):
+        qs = qs.exclude(estado="cancelado")
         datos = qs.aggregate(
             total=Count("id", distinct=True),
             realizados=Count("id", filter=Q(estado="realizado"), distinct=True),
@@ -4618,7 +4621,7 @@ def admin_operativo_view(request):
     kpi_mes = _kpis_periodo(base_qs.filter(fecha__range=(primer_dia_mes, ultimo_dia_mes)))
 
     # Análisis exacto del período seleccionado, sin usar listas truncadas de interfaz.
-    seleccion_qs = base_qs.filter(fecha__range=(seleccion_inicio, seleccion_fin)) if seleccion_inicio and seleccion_fin else base_qs.filter(fecha=fecha_resumen)
+    seleccion_qs = base_qs.exclude(estado="cancelado").filter(fecha__range=(seleccion_inicio, seleccion_fin)) if seleccion_inicio and seleccion_fin else base_qs.exclude(estado="cancelado").filter(fecha=fecha_resumen)
     kpi_seleccion = _kpis_periodo(seleccion_qs)
     trabajadores_periodo = []
     for t in Trabajador.objects.select_related("user").filter(activo=True).order_by("user__first_name", "user__username"):
@@ -4700,6 +4703,38 @@ def admin_operativo_view(request):
         },
     )
 
+
+
+@login_required
+@require_http_methods(["POST"])
+def mantenimiento_cancelar_view(request, pk):
+    """Cancela una visita pendiente sin contabilizarla como incumplimiento del trabajador."""
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    mantenimiento = get_object_or_404(Mantenimiento, pk=pk)
+    motivo = (request.POST.get("motivo_cancelacion", "") or "").strip()
+    siguiente = request.POST.get("next", "") or request.META.get("HTTP_REFERER", "/dashboard/operativo/")
+    if not url_has_allowed_host_and_scheme(siguiente, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
+        siguiente = "/dashboard/operativo/"
+
+    if mantenimiento.estado == "realizado":
+        messages.error(request, "Un mantenimiento realizado no puede cancelarse.")
+        return redirect(siguiente)
+    if mantenimiento.estado == "cancelado":
+        messages.info(request, "Esta visita ya estaba cancelada.")
+        return redirect(siguiente)
+    if not motivo:
+        messages.error(request, "Debes indicar el motivo de la cancelación.")
+        return redirect(siguiente)
+
+    mantenimiento.estado = "cancelado"
+    mantenimiento.motivo_cancelacion = motivo
+    mantenimiento.cancelado_en = timezone.now()
+    mantenimiento.cancelado_por = request.user
+    mantenimiento.save(update_fields=["estado", "motivo_cancelacion", "cancelado_en", "cancelado_por"])
+    messages.success(request, "Visita cancelada. No contará como atraso ni incumplimiento del trabajador.")
+    return redirect(siguiente)
 
 # -------------------
 # Detalle mantenimiento
@@ -4795,6 +4830,7 @@ def mantenimiento_detalle_view(request, pk):
         .order_by("user__username")
     )
     esta_realizado = mantenimiento.estado == "realizado"
+    esta_cancelado = mantenimiento.estado == "cancelado"
     checklist, _ = ChecklistMantenimiento.objects.get_or_create(mantenimiento=mantenimiento)
 
     cliente_operativo = mantenimiento.cliente
@@ -4806,6 +4842,10 @@ def mantenimiento_detalle_view(request, pk):
         trabajador_actual
         and _telefono_whatsapp_ecuador(cliente_operativo.telefono)
     )
+
+    if request.method == "POST" and esta_cancelado:
+        messages.error(request, "Esta visita fue cancelada por administración y no puede registrarse como realizada.")
+        return redirect("mantenimiento_detalle", pk=mantenimiento.pk)
 
     if request.method == "POST":
         accion = (request.POST.get("accion") or "").strip()
@@ -5195,6 +5235,7 @@ def mantenimiento_detalle_view(request, pk):
             "cantidad_usos": cantidad_usos,
             "puede_cerrar": puede_cerrar,
             "esta_realizado": esta_realizado,
+            "esta_cancelado": esta_cancelado,
             "foto_inicio": foto_inicio,
             "foto_fin": foto_fin,
             "foto_nivel": foto_nivel,

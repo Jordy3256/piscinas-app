@@ -156,13 +156,14 @@
   <div class="card premium-card mb-3">
     <div class="card-body">
       <div class="premium-title"><i class="bi bi-droplet-half"></i><span>Productos utilizados <span class="badge bg-light text-secondary">Opcional</span></span></div>
+      {% if esta_cancelado %}<div class="alert alert-secondary border mb-3"><div class="fw-bold">🚫 Visita cancelada por administración</div><div class="mt-1">{{ m.motivo_cancelacion }}</div>{% if m.cancelado_en %}<div class="small text-muted mt-1">Cancelada el {{ m.cancelado_en|date:"d/m/Y H:i" }}{% if m.cancelado_por %} por {{ m.cancelado_por.get_full_name|default:m.cancelado_por.username }}{% endif %}.</div>{% endif %}</div>{% endif %}
       <div class="text-muted small mb-3">Este es el único registro de productos/químicos del mantenimiento. {% if modalidad_quimicos == 'contrato' %}Los consumos se descuentan del inventario en sitio de este contrato.{% elif modalidad_quimicos == 'cliente' %}Los productos son proporcionados por el cliente: se registra lo aplicado sin descontar inventario JVAQUA.{% else %}Los consumos se descuentan del inventario del trabajador.{% endif %}</div>{% if modalidad_quimicos == 'contrato' %}<a class="btn btn-sm btn-outline-primary mb-3" href="{% url 'inventario_contrato_trabajador' m.contrato.id %}">🏊 Ver / reponer inventario en sitio</a>{% endif %}
 
       {% if lista_usos %}
       <div class="vstack gap-2 mb-3">
         {% for u in lista_usos %}
         <div class="usage-card d-flex justify-content-between align-items-center gap-2 flex-wrap">
-          <div><div class="fw-bold">{{ u.insumo.nombre }}</div><div class="small text-muted">{{ u.cantidad_mostrada|floatformat:3 }} {{ u.unidad_mostrada }} · {{ u.trabajador|default:'Histórico' }}</div></div>
+          <div><div class="fw-bold">{{ u.insumo.nombre }}</div><div class="small text-muted">{{ u.cantidad_mostrada|floatformat:"-3" }} {{ u.unidad_mostrada }} · {{ u.trabajador|default:'Histórico' }}</div></div>
           <div class="text-end">{% if es_admin %}<div class="fw-bold">${{ u.subtotal|floatformat:2 }}</div>{% endif %}{% if not esta_realizado %}<a class="btn btn-sm btn-outline-primary mt-1" href="/dashboard/usos/{{ u.id }}/editar/">Editar</a> <a class="btn btn-sm btn-outline-danger mt-1" href="/dashboard/usos/{{ u.id }}/eliminar/">Eliminar</a>{% endif %}</div>
         </div>
         {% endfor %}
@@ -239,7 +240,7 @@
   <div class="product-row producto-nuevo-row">
     <div class="d-flex justify-content-between align-items-center mb-2"><strong>Producto a utilizar</strong><button type="button" class="btn btn-sm btn-outline-danger quitarProductoBtn">Quitar</button></div>
     <div class="row g-2">
-      <div class="col-12"><select class="form-select" name="producto_insumo_id"><option value="">-- Selecciona producto --</option>{% if modalidad_quimicos == 'contrato' %}{% for inv in inventario_mantenimiento %}<option value="{{ inv.insumo.id }}">{{ inv.insumo.nombre }} · estimado {{ inv.stock_estimado|floatformat:3 }} {{ inv.insumo.unidad_corta }}</option>{% endfor %}{% elif modalidad_quimicos == 'trabajador' and trabajador_actual %}{% for inv in inventario_mantenimiento %}<option value="{{ inv.insumo.id }}">{{ inv.insumo.nombre }} · disponible {{ inv.stock|floatformat:3 }} {{ inv.insumo.unidad_corta }}</option>{% endfor %}{% else %}{% for i in insumos %}<option value="{{ i.id }}">{{ i.nombre }}</option>{% endfor %}{% endif %}</select></div>
+      <div class="col-12"><select class="form-select" name="producto_insumo_id"><option value="">-- Selecciona producto --</option>{% if modalidad_quimicos == 'contrato' %}{% for inv in inventario_mantenimiento %}<option value="{{ inv.insumo.id }}">{{ inv.insumo.nombre }} · estimado {{ inv.stock_estimado|floatformat:"-3" }} {{ inv.insumo.unidad_corta }}</option>{% endfor %}{% elif modalidad_quimicos == 'trabajador' and trabajador_actual %}{% for inv in inventario_mantenimiento %}<option value="{{ inv.insumo.id }}">{{ inv.insumo.nombre }} · disponible {{ inv.stock|floatformat:"-3" }} {{ inv.insumo.unidad_corta }}</option>{% endfor %}{% else %}{% for i in insumos %}<option value="{{ i.id }}">{{ i.nombre }}</option>{% endfor %}{% endif %}</select></div>
       <div class="col-7"><input class="form-control" type="number" step="0.001" min="0.001" name="producto_cantidad" placeholder="Cantidad"></div>
       <div class="col-5"><select class="form-select" name="producto_unidad"><option value="g">Gramos (g)</option><option value="kg">Kilogramos (kg)</option><option value="ml">Mililitros (ml)</option><option value="l">Litros (L)</option></select></div>
     </div>

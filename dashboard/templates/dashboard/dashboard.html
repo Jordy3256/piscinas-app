@@ -192,7 +192,7 @@
     <section class="exec-card">
       <div class="exec-card-head"><div class="exec-card-title">📦 Inventario crítico</div><a class="exec-link" href="{% url 'inventario' %}">Centro Logístico →</a></div>
       <div class="exec-card-body pt-2">
-        {% if productos_criticos %}<div class="simple-list">{% for p in productos_criticos %}<div class="simple-row"><div class="simple-main"><div class="simple-title">{{ p.nombre }}</div><div class="simple-meta">Mínimo {{ p.stock_minimo|floatformat:3 }} {{ p.unidad_corta }}</div></div><div class="simple-val"><span class="pill {% if p.stock <= 0 %}red{% else %}yellow{% endif %}">{{ p.stock|floatformat:3 }} {{ p.unidad_corta }}</span></div></div>{% endfor %}</div>{% else %}<div class="empty-state">✅ No hay productos por debajo del stock mínimo.</div>{% endif %}
+        {% if productos_criticos %}<div class="simple-list">{% for p in productos_criticos %}<div class="simple-row"><div class="simple-main"><div class="simple-title">{{ p.nombre }}</div><div class="simple-meta">Mínimo {{ p.stock_minimo|floatformat:"-3" }} {{ p.unidad_corta }}</div></div><div class="simple-val"><span class="pill {% if p.stock <= 0 %}red{% else %}yellow{% endif %}">{{ p.stock|floatformat:"-3" }} {{ p.unidad_corta }}</span></div></div>{% endfor %}</div>{% else %}<div class="empty-state">✅ No hay productos por debajo del stock mínimo.</div>{% endif %}
       </div>
     </section>
 

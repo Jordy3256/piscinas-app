@@ -101,6 +101,7 @@
           <option value="">Todos</option>
           <option value="pendiente" {% if estado == "pendiente" %}selected{% endif %}>Pendiente</option>
           <option value="realizado" {% if estado == "realizado" %}selected{% endif %}>Realizado</option>
+          <option value="cancelado" {% if estado == "cancelado" %}selected{% endif %}>Cancelado</option>
         </select>
       </div>
 
@@ -226,6 +227,8 @@
               <td>
                 {% if m.estado == "realizado" %}
                   <span class="badge bg-success">Realizado</span>
+                {% elif m.estado == "cancelado" %}
+                  <span class="badge bg-secondary">Cancelado</span>
                 {% else %}
                   <span class="badge bg-warning text-dark">Pendiente</span>
                 {% endif %}
@@ -242,9 +245,8 @@
                 {% endfor %}
               </td>
               <td>
-                <a href="/dashboard/mantenimientos/{{ m.id }}/" class="btn btn-outline-primary btn-sm">
-                  Abrir
-                </a>
+                <a href="/dashboard/mantenimientos/{{ m.id }}/" class="btn btn-outline-primary btn-sm">Abrir</a>
+                {% if m.estado == "cancelado" and m.motivo_cancelacion %}<div class="small text-muted mt-1" title="{{ m.motivo_cancelacion }}">Motivo: {{ m.motivo_cancelacion|truncatechars:55 }}</div>{% endif %}
               </td>
             </tr>
             {% endfor %}
@@ -269,6 +271,8 @@
             <div class="d-flex flex-wrap gap-1">
               {% if m.estado == "realizado" %}
                 <span class="badge bg-success">Realizado</span>
+              {% elif m.estado == "cancelado" %}
+                <span class="badge bg-secondary">Cancelado</span>
               {% else %}
                 <span class="badge bg-warning text-dark">Pendiente</span>
               {% endif %}
