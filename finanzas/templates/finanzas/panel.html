@@ -18,11 +18,11 @@
   @media(max-width:600px){.fin-shell{gap:12px}.fin-hero{padding:17px;border-radius:19px}.fin-actions{display:grid;grid-template-columns:1fr 1fr;width:100%}.fin-actions .btn{width:100%;font-size:.82rem}.fin-filter{width:100%;display:grid;grid-template-columns:1fr 1fr auto}.fin-filter input{width:100%;min-width:0}.fin-grid,.fin-grid.four{grid-template-columns:1fr 1fr;gap:10px}.fin-card{padding:14px;border-radius:17px}.fin-value{font-size:1.35rem}.fin-main{gap:10px}.fin-item{padding:10px;gap:9px}.fin-dot{width:36px;height:36px}.fin-item-title{font-size:.85rem}.fin-amount{font-size:.88rem}.summary-strip{grid-template-columns:1fr}.summary-strip .arrow{transform:rotate(90deg);text-align:center}}
 
   /* Cabecera financiera v3.10.17a: clases aisladas para no chocar con estilos anteriores */
-  .fh-hero{padding:26px!important;overflow:hidden}
+  .fh-hero{padding:26px!important;overflow:visible;position:relative;z-index:5}
   .fh-title-row h1{margin:0 0 7px;font-size:clamp(1.55rem,2.7vw,2.1rem);font-weight:950;line-height:1.08}
   .fh-title-row p{margin:0;color:rgba(255,255,255,.78);font-size:.96rem}
   .fh-actions-row{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;margin-top:21px;padding-top:18px;border-top:1px solid rgba(255,255,255,.18)}
-  .fh-group{min-width:0}.fh-doc-group{flex:0 0 auto}
+  .fh-group{min-width:0}.fh-doc-group{flex:0 0 auto;position:relative;z-index:1080}.fh-doc-group .dropdown{position:relative;z-index:1081}.fh-doc-group .dropdown-menu{z-index:1090;min-width:240px;max-height:min(70vh,520px);overflow-y:auto}
   .fh-kicker{margin:0 0 8px 2px;font-size:.67rem;font-weight:900;letter-spacing:.09em;text-transform:uppercase;color:rgba(255,255,255,.68)}
   .fh-buttons{display:flex;flex-wrap:wrap;gap:8px}
   .fh-btn{min-height:42px!important;padding:9px 15px!important;border-radius:12px!important;border:1px solid rgba(255,255,255,.72)!important;background:rgba(255,255,255,.04)!important;color:#fff!important;font-weight:850!important;display:inline-flex!important;align-items:center;justify-content:center;white-space:nowrap}

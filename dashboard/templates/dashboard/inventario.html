@@ -21,12 +21,18 @@
   <div class="col-md-4"><div class="card quick-card h-100"><div class="card-body"><div class="text-muted small">Consumo químico del mes</div><div class="fs-3 fw-bold">${{ costo_consumo_mes|floatformat:2 }}</div><div class="small text-muted">Incluye mantenimientos y consumo automático en sitio.</div></div></div></div>
 </div>
 
-<div class="d-flex flex-wrap gap-2 mb-4">
-  <a href="{% url 'inventario_general_pdf' %}" class="btn btn-outline-secondary">PDF Inventario</a>
-  <a href="{% url 'inventario_movimientos_pdf' %}" class="btn btn-outline-secondary">PDF Movimientos</a>
-  <a href="{% url 'inventario_productos_criticos_pdf' %}" class="btn btn-outline-danger">PDF Stock crítico</a>
-  <a href="{% url 'inventario_consumo_trabajadores_pdf' %}" class="btn btn-outline-secondary">PDF Consumo técnicos</a>
-  <a href="{% url 'inventario_consumo_contratos_pdf' %}" class="btn btn-outline-secondary">PDF Consumo contratos</a>
+<div class="dropdown mb-4" style="position:relative;z-index:1080">
+  <button class="btn btn-dark dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">📄 Reportes PDF</button>
+  <div class="dropdown-menu shadow" style="z-index:1090;min-width:250px">
+    <a href="{% url 'inventario_general_pdf' %}" class="dropdown-item">📦 Inventario valorizado</a>
+    <a href="{% url 'inventario_movimientos_pdf' %}" class="dropdown-item">🔄 Movimientos</a>
+    <a href="{% url 'inventario_productos_criticos_pdf' %}" class="dropdown-item text-danger">⚠️ Stock crítico</a>
+    <a href="{% url 'inventario_consumo_trabajadores_pdf' %}" class="dropdown-item">👷 Consumo técnicos</a>
+    <a href="{% url 'inventario_consumo_contratos_pdf' %}" class="dropdown-item">🏊 Consumo contratos</a>
+    <div class="dropdown-divider"></div>
+    <a href="{% url 'inventario_ventas_pdf' %}" class="dropdown-item">💵 Ventas</a>
+    <a href="{% url 'inventario_compras_pdf' %}" class="dropdown-item">🛍️ Compras</a>
+  </div>
 </div>
 
 <div class="row g-3 mb-4">
@@ -51,7 +57,7 @@
     <div class="col-5"><input class="form-control" name="cantidad" type="number" step="0.001" min="0.001" placeholder="Cantidad" required></div><div class="col-3"><select class="form-select" name="unidad"><option value="base">Base</option><option value="kg">kg</option><option value="g">g</option><option value="unidad">unid.</option></select></div><div class="col-4"><input class="form-control" name="precio_unitario" type="number" step="0.01" min="0" placeholder="Precio/base"></div>
     <div class="col-12 d-grid"><button class="btn btn-success fw-bold">Registrar venta + ingreso</button></div>
   </form></div></div></div>
-  <div class="col-xl-6"><div class="card quick-card h-100"><div class="card-body"><h5 class="section-title">📄 Reportes comerciales</h5><div class="d-grid gap-2"><a href="{% url 'inventario_ventas_pdf' %}" class="btn btn-outline-success">PDF de ventas</a><a href="{% url 'inventario_compras_pdf' %}" class="btn btn-outline-primary">PDF de compras</a><a href="{% url 'inventario_general_pdf' %}" class="btn btn-outline-secondary">Inventario valorizado</a></div></div></div></div>
+  <div class="col-xl-6"><div class="card quick-card h-100"><div class="card-body"><h5 class="section-title">📄 Documentación</h5><p class="text-muted mb-2">Todos los reportes de inventario, compras, ventas y consumos están agrupados en el botón <strong>Reportes PDF</strong> de la parte superior.</p><div class="small text-muted">Esto mantiene el Centro Logístico más compacto y evita botones repetidos.</div></div></div></div>
 </div>
 
 {% if solicitudes_pendientes %}<div class="card quick-card mb-4"><div class="card-body"><div class="d-flex justify-content-between align-items-center"><h5 class="section-title mb-0">📨 Solicitudes de reposición</h5><span class="badge bg-warning text-dark">{{ solicitudes_pendientes_count }} pendientes</span></div><div class="row g-2 mt-1">{% for s in solicitudes_pendientes %}<div class="col-lg-6"><div class="request-card"><div class="d-flex justify-content-between gap-2"><div><strong>{{ s.trabajador }}</strong><div>{{ s.insumo.nombre }}</div><div class="small text-muted">Stock al solicitar: {{ s.stock_al_solicitar|floatformat:3 }} {{ s.insumo.unidad_corta }}</div></div><form method="post" action="{% url 'solicitud_reposicion_atender' s.id %}">{% csrf_token %}<button class="btn btn-sm btn-outline-success">Atendida</button></form></div></div></div>{% endfor %}</div></div></div>{% endif %}
