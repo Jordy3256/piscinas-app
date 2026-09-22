@@ -4383,6 +4383,25 @@ def admin_operativo_view(request):
     fecha_seleccionada_str = (request.GET.get("fecha_seleccionada", "") or "").strip()
     fecha_seleccionada = parse_date(fecha_seleccionada_str) if fecha_seleccionada_str else None
 
+    # Selector operativo unificado: día, semana, mes o rango personalizado.
+    periodo_tipo = (request.GET.get("periodo", "") or "").strip().lower()
+    periodo_fecha_str = (request.GET.get("periodo_fecha", "") or "").strip()
+    periodo_desde_str = (request.GET.get("desde", "") or "").strip()
+    periodo_hasta_str = (request.GET.get("hasta", "") or "").strip()
+    periodo_fecha = parse_date(periodo_fecha_str) if periodo_fecha_str else None
+    periodo_desde = parse_date(periodo_desde_str) if periodo_desde_str else None
+    periodo_hasta = parse_date(periodo_hasta_str) if periodo_hasta_str else None
+    seleccion_inicio = seleccion_fin = None
+    if periodo_tipo == "dia" and periodo_fecha:
+        seleccion_inicio = seleccion_fin = periodo_fecha
+    elif periodo_tipo == "semana" and periodo_fecha:
+        seleccion_inicio = periodo_fecha - timedelta(days=periodo_fecha.weekday())
+        seleccion_fin = seleccion_inicio + timedelta(days=6)
+    elif periodo_tipo == "mes" and periodo_fecha:
+        seleccion_inicio, seleccion_fin = _inicio_fin_mes(periodo_fecha.year, periodo_fecha.month)
+    elif periodo_tipo == "rango" and periodo_desde and periodo_hasta:
+        seleccion_inicio, seleccion_fin = sorted((periodo_desde, periodo_hasta))
+
     anio_cal = int(request.GET.get("anio_cal", hoy.year))
     mes_cal = int(request.GET.get("mes_cal", hoy.month))
     anio_cal_ant, mes_cal_ant = _mes_anterior(anio_cal, mes_cal)
@@ -4488,6 +4507,20 @@ def admin_operativo_view(request):
         proximos = list(qs_proximos)
         etiqueta_periodo = "Operativo de hoy"
 
+    # Cuando existe una selección temporal explícita, la pantalla muestra SOLO ese período.
+    if seleccion_inicio and seleccion_fin:
+        dia_list = list(base_qs.filter(fecha__range=(seleccion_inicio, seleccion_fin)))
+        atrasados = []
+        proximos = []
+        if seleccion_inicio == seleccion_fin:
+            etiqueta_periodo = f"Día {seleccion_inicio.strftime('%d/%m/%Y')}"
+        elif periodo_tipo == "semana":
+            etiqueta_periodo = f"Semana {seleccion_inicio.strftime('%d/%m/%Y')} al {seleccion_fin.strftime('%d/%m/%Y')}"
+        elif periodo_tipo == "mes":
+            etiqueta_periodo = seleccion_inicio.strftime("Mes %m/%Y")
+        else:
+            etiqueta_periodo = f"Rango {seleccion_inicio.strftime('%d/%m/%Y')} al {seleccion_fin.strftime('%d/%m/%Y')}"
+
     if q:
         dia_list = _filtrar_mantenimientos_por_busqueda(dia_list, q)
         atrasados = _filtrar_mantenimientos_por_busqueda(atrasados, q)
@@ -4584,6 +4617,25 @@ def admin_operativo_view(request):
     kpi_semana = _kpis_periodo(base_qs.filter(fecha__range=(inicio_agenda, fin_agenda)))
     kpi_mes = _kpis_periodo(base_qs.filter(fecha__range=(primer_dia_mes, ultimo_dia_mes)))
 
+    # Análisis exacto del período seleccionado, sin usar listas truncadas de interfaz.
+    seleccion_qs = base_qs.filter(fecha__range=(seleccion_inicio, seleccion_fin)) if seleccion_inicio and seleccion_fin else base_qs.filter(fecha=fecha_resumen)
+    kpi_seleccion = _kpis_periodo(seleccion_qs)
+    trabajadores_periodo = []
+    for t in Trabajador.objects.select_related("user").filter(activo=True).order_by("user__first_name", "user__username"):
+        tq = seleccion_qs.filter(trabajadores=t).distinct()
+        total_t = tq.count()
+        if not total_t:
+            continue
+        realizados_t = tq.filter(estado="realizado").count()
+        trabajadores_periodo.append({
+            "id": t.id,
+            "nombre": t.user.get_full_name() or t.user.username,
+            "total": total_t,
+            "realizados": realizados_t,
+            "pendientes": tq.filter(estado="pendiente").count(),
+            "cumplimiento": round((realizados_t / total_t) * 100, 1) if total_t else 0,
+        })
+
     return render(
         request,
         "dashboard/admin_operativo.html",
@@ -4636,6 +4688,14 @@ def admin_operativo_view(request):
             "kpi_dia": kpi_dia,
             "kpi_semana": kpi_semana,
             "kpi_mes": kpi_mes,
+            "periodo_tipo": periodo_tipo,
+            "periodo_fecha_str": periodo_fecha_str,
+            "periodo_desde_str": periodo_desde_str,
+            "periodo_hasta_str": periodo_hasta_str,
+            "seleccion_inicio": seleccion_inicio,
+            "seleccion_fin": seleccion_fin,
+            "kpi_seleccion": kpi_seleccion,
+            "trabajadores_periodo": trabajadores_periodo,
             "es_admin": True,
         },
     )
@@ -8643,6 +8703,7 @@ def contrato_list_view(request):
         request.GET.get("frecuencia") or ""
     ).strip()
     ciudad_id = (request.GET.get("ciudad") or "").strip()
+    orden_valor = (request.GET.get("orden_valor") or "").strip().lower()
 
     contratos = (
         Contrato.objects
@@ -8675,6 +8736,11 @@ def contrato_list_view(request):
 
     if frecuencia in FRECUENCIAS_CONTRATO_VALIDAS:
         contratos = contratos.filter(frecuencia=frecuencia)
+
+    if orden_valor == "mayor":
+        contratos = contratos.order_by("-precio_mensual", "cliente__nombre", "id")
+    elif orden_valor == "menor":
+        contratos = contratos.order_by("precio_mensual", "cliente__nombre", "id")
 
     total_contratos = contratos.count()
     total_activos = contratos.filter(activo=True).count()
@@ -8719,6 +8785,7 @@ def contrato_list_view(request):
             "estado": estado,
             "frecuencia": frecuencia,
             "ciudad_id": ciudad_id,
+            "orden_valor": orden_valor,
             "ciudades": Ciudad.objects.filter(activa=True),
             "frecuencias": Contrato.FRECUENCIA_CHOICES,
             "total_contratos": total_contratos,

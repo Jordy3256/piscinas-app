@@ -918,7 +918,11 @@
   {% block extra_head %}{% endblock %}
   <link rel="stylesheet" href="{% static 'dashboard/jvaqua-ui-v2.css' %}?v=3106">
   <script src="{% static 'dashboard/jvaqua-semantic-colors.js' %}?v=20260830-1" defer></script>
-</head>
+<style>
+.jv-global-back{max-width:1320px}.jv-global-back .btn{background:#fff;box-shadow:0 5px 16px rgba(15,23,42,.06)}
+form[method="get"]{position:relative} form[method="get"] .form-label{font-weight:700;color:#475569} form[method="get"] .form-control,form[method="get"] .form-select{border-radius:12px;min-height:42px}
+.dropdown-menu{border-radius:14px;border-color:#e2e8f0;box-shadow:0 16px 40px rgba(15,23,42,.13);padding:.45rem}.dropdown-item{border-radius:9px;padding:.6rem .75rem}
+</style></head>
 
 <body class="app-body {% if request.GET.support_float == '1' %}support-float-mode{% endif %}">
   <div class="app-shell">
@@ -993,6 +997,10 @@
       </div>
     </div>
 
+
+    {% if request.path != '/dashboard/inicio/' and request.path != '/dashboard/' %}
+    <div class="container pt-3 jv-global-back"><button type="button" class="btn btn-outline-secondary btn-sm" onclick="if(history.length>1){history.back()}else{location.href='/dashboard/inicio/'}">← Volver</button></div>
+    {% endif %}
 
     {% if '/dashboard/clientes/' in request.path or '/dashboard/contratos/' in request.path %}
     <div class="jv-context-wrap"><nav class="jv-context-nav" aria-label="Gestión comercial">

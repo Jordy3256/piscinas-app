@@ -634,6 +634,19 @@
   </div>
 </div>
 
+<div class="card shadow-sm mb-3 op-card-compact border-primary-subtle">
+  <div class="card-body">
+    <div class="op-section-title mb-2">📊 Período de análisis</div>
+    <form method="get" class="row g-2 align-items-end" id="periodoOperativoForm">
+      <input type="hidden" name="q" value="{{ q }}"><input type="hidden" name="ciudad" value="{{ ciudad }}"><input type="hidden" name="trabajador" value="{{ trabajador_id }}">
+      <div class="col-12 col-md-3"><label class="form-label mb-1">Ver por</label><select class="form-select" name="periodo" id="periodoTipo"><option value="dia" {% if periodo_tipo == 'dia' %}selected{% endif %}>Día</option><option value="semana" {% if periodo_tipo == 'semana' %}selected{% endif %}>Semana</option><option value="mes" {% if periodo_tipo == 'mes' %}selected{% endif %}>Mes</option><option value="rango" {% if periodo_tipo == 'rango' %}selected{% endif %}>Rango específico</option></select></div>
+      <div class="col-12 col-md-4" id="periodoFechaWrap"><label class="form-label mb-1">Fecha de referencia</label><input class="form-control" type="date" name="periodo_fecha" value="{{ periodo_fecha_str|default:hoy|date:'Y-m-d' }}"></div>
+      <div class="col-6 col-md-2 periodo-rango"><label class="form-label mb-1">Desde</label><input class="form-control" type="date" name="desde" value="{{ periodo_desde_str }}"></div>
+      <div class="col-6 col-md-2 periodo-rango"><label class="form-label mb-1">Hasta</label><input class="form-control" type="date" name="hasta" value="{{ periodo_hasta_str }}"></div>
+      <div class="col-12 col-md"><button class="btn btn-primary w-100" type="submit">Analizar</button></div>
+    </form>
+  </div>
+</div>
 <div class="card shadow-sm mb-3 mobile-op-card op-card-compact">
   <div class="card-body">
     <form class="row g-2 align-items-end" method="get">
@@ -727,6 +740,14 @@
 <div class="card shadow-sm mb-3 border-warning op-card-compact"><div class="card-body"><div class="op-section-title mb-2">⚠ Requieren atención</div><div class="d-flex flex-wrap gap-2">{% if total_atrasados_reales %}<span class="op-chip">🔴 {{ total_atrasados_reales }} atrasado{{ total_atrasados_reales|pluralize }}</span>{% endif %}{% if total_sin_asignar %}<span class="op-chip">🟠 {{ total_sin_asignar }} sin trabajador asignado</span>{% endif %}</div></div></div>
 {% endif %}
 
+{% if seleccion_inicio and seleccion_fin %}
+<div class="card shadow-sm mb-3 op-card-compact border-primary">
+ <div class="card-body"><div class="d-flex justify-content-between flex-wrap gap-2 mb-3"><div><div class="op-section-title">Análisis · {{ etiqueta_periodo }}</div><div class="op-subtitle">El resumen y la lista corresponden exclusivamente al período seleccionado.</div></div><span class="op-chip">{{ kpi_seleccion.cumplimiento|floatformat:1 }}% cumplimiento</span></div>
+ <div class="row g-2 mb-3"><div class="col-4"><div class="op-soft-box"><div class="small-label">Asignados</div><div class="big-number">{{ kpi_seleccion.total }}</div></div></div><div class="col-4"><div class="op-soft-box"><div class="small-label">Realizados</div><div class="big-number text-success">{{ kpi_seleccion.realizados }}</div></div></div><div class="col-4"><div class="op-soft-box"><div class="small-label">Pendientes</div><div class="big-number text-warning">{{ kpi_seleccion.pendientes }}</div></div></div></div>
+ {% if trabajadores_periodo %}<div class="row g-2">{% for r in trabajadores_periodo %}<div class="col-12 col-lg-6"><div class="op-soft-box h-100"><div class="d-flex justify-content-between"><strong>{{ r.nombre }}</strong><strong>{{ r.cumplimiento|floatformat:1 }}%</strong></div><div class="small text-muted mt-1">{{ r.total }} mantenimientos · {{ r.realizados }} realizados · {{ r.pendientes }} pendientes</div><div class="progress mt-2" style="height:7px"><div class="progress-bar" style="width:{{ r.cumplimiento }}%"></div></div></div></div>{% endfor %}</div>{% endif %}
+ </div>
+</div>
+{% endif %}
 <div class="card shadow-sm mb-3 op-card-compact">
   <div class="card-body">
     <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
@@ -1326,3 +1347,5 @@
   });
 })();
 </script>
+
+{% block extra_js %}<script>(function(){const t=document.getElementById('periodoTipo'); if(!t)return; const sync=()=>{const rango=t.value==='rango'; document.querySelectorAll('.periodo-rango').forEach(e=>e.style.display=rango?'block':'none'); const w=document.getElementById('periodoFechaWrap'); if(w)w.style.display=rango?'none':'block';}; t.addEventListener('change',sync); sync();})();</script>{% endblock %}

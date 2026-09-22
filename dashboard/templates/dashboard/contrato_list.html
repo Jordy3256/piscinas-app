@@ -103,7 +103,7 @@
         <p class="cp-subtitle">Administra contratos sin alterar su programación y accede rápidamente a la información de cada cliente.</p>
       </div>
       <div class="col-12 col-lg-auto cp-hero-actions d-flex gap-2 flex-wrap">
-        <a class="btn btn-outline-light" href="{% url 'contratos_datos_facturacion_pdf' %}">🧾 PDF datos de facturación</a>
+        <div class="dropdown"><button class="btn btn-outline-light dropdown-toggle" type="button" data-bs-toggle="dropdown">📄 Reportes PDF</button><div class="dropdown-menu dropdown-menu-end"><a class="dropdown-item" href="{% url 'contratos_datos_facturacion_pdf' %}">🧾 Datos de facturación</a></div></div>
         <a class="btn btn-light" href="/dashboard/contratos/nuevo/">➕ Crear contrato</a>
       </div>
     </div>
@@ -178,10 +178,18 @@
             {% endfor %}
           </select>
         </div>
+        <div class="col-6 col-lg-2">
+          <label class="form-label">Ordenar valor</label>
+          <select name="orden_valor" class="form-select">
+            <option value="">Predeterminado</option>
+            <option value="mayor" {% if orden_valor == "mayor" %}selected{% endif %}>Mayor a menor</option>
+            <option value="menor" {% if orden_valor == "menor" %}selected{% endif %}>Menor a mayor</option>
+          </select>
+        </div>
         <div class="col-12 col-lg-2">
           <div class="d-grid gap-2">
             <button type="submit" class="btn btn-outline-primary">🔎 Filtrar</button>
-            {% if q or estado or frecuencia or ciudad_id %}
+            {% if q or estado or frecuencia or ciudad_id or orden_valor %}
               <a class="btn btn-outline-secondary" href="/dashboard/contratos/">Limpiar</a>
             {% endif %}
           </div>
