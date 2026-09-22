@@ -50,6 +50,15 @@
   </div>
 </div>
 
+{% if es_admin and novedades_abiertas %}
+<div class="card shadow-sm mb-3 border-warning">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap mb-3"><div><div class="fw-bold fs-5">⚠️ Novedades de mantenimiento pendientes</div><div class="text-muted small">Requieren seguimiento administrativo y permanecen aquí aunque la notificación haya sido leída.</div></div><span class="badge bg-warning text-dark fs-6">{{ novedades_abiertas|length }}</span></div>
+    <div class="vstack gap-2">{% for nov in novedades_abiertas %}<a class="text-decoration-none border rounded-3 p-3 bg-light" href="/dashboard/mantenimientos/{{ nov.mantenimiento_id }}/#novedad-administrativa"><div class="d-flex justify-content-between gap-2 flex-wrap"><strong class="text-dark">{{ nov.mantenimiento.cliente }}</strong><span class="badge {% if nov.estado == 'revision' %}bg-primary{% else %}bg-warning text-dark{% endif %}">{{ nov.get_estado_display }}</span></div><div class="small text-muted mt-1">{{ nov.detalle|truncatechars:180 }}</div><div class="small text-muted mt-1">{{ nov.creada_en|date:"d/m/Y H:i" }}</div></a>{% endfor %}</div>
+  </div>
+</div>
+{% endif %}
+
 <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
   <div>
     <div class="fw-bold fs-4">Bandeja</div>

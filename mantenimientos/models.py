@@ -83,6 +83,46 @@ class Mantenimiento(models.Model):
         verbose_name_plural = "Mantenimientos"
 
 
+class NovedadMantenimiento(models.Model):
+    ESTADO_CHOICES = [
+        ("pendiente", "Pendiente"),
+        ("revision", "En revisión"),
+        ("resuelta", "Resuelta"),
+    ]
+
+    mantenimiento = models.OneToOneField(
+        Mantenimiento,
+        on_delete=models.CASCADE,
+        related_name="novedad_administrativa",
+    )
+    detalle = models.TextField()
+    estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default="pendiente", db_index=True)
+    reportada_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="novedades_mantenimiento_reportadas",
+    )
+    creada_en = models.DateTimeField(auto_now_add=True)
+    actualizada_en = models.DateTimeField(auto_now=True)
+    gestionada_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="novedades_mantenimiento_gestionadas",
+    )
+    gestionada_en = models.DateTimeField(null=True, blank=True)
+    nota_gestion = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-creada_en"]
+        verbose_name = "Novedad de mantenimiento"
+        verbose_name_plural = "Novedades de mantenimiento"
+
+    def __str__(self):
+        return f"Novedad #{self.pk or 'nueva'} · {self.mantenimiento}"
+
+
 class UsoInsumo(models.Model):
     ORIGEN_INVENTARIO_CHOICES = [
         ("trabajador", "Inventario del trabajador"),

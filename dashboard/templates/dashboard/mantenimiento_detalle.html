@@ -226,6 +226,27 @@
   {% endif %}
 </form>
 
+{% if novedad_administrativa %}
+<div class="card premium-card mb-3" id="novedad-administrativa" style="border:2px solid {% if novedad_administrativa.estado == 'resuelta' %}#198754{% else %}#f1ad14{% endif %}!important;">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap mb-3">
+      <div class="premium-title mb-0"><i class="bi bi-exclamation-triangle-fill"></i><span>⚠️ Novedad reportada</span></div>
+      {% if novedad_administrativa.estado == 'pendiente' %}<span class="badge bg-warning text-dark">Pendiente</span>{% elif novedad_administrativa.estado == 'revision' %}<span class="badge bg-primary">En revisión</span>{% else %}<span class="badge bg-success">Resuelta</span>{% endif %}
+    </div>
+    <div class="alert alert-warning rounded-4 mb-3"><strong>Detalle:</strong> {{ novedad_administrativa.detalle }}</div>
+    <div class="small text-muted mb-3">Reportada {{ novedad_administrativa.creada_en|date:"d/m/Y H:i" }}{% if novedad_administrativa.reportada_por %} por {{ novedad_administrativa.reportada_por.get_full_name|default:novedad_administrativa.reportada_por.username }}{% endif %}.</div>
+    {% if es_admin %}
+    <form method="post" class="row g-2">{% csrf_token %}<input type="hidden" name="accion" value="actualizar_novedad">
+      <div class="col-12 col-md-4"><label class="form-label fw-bold">Estado</label><select name="estado_novedad" class="form-select"><option value="pendiente" {% if novedad_administrativa.estado == 'pendiente' %}selected{% endif %}>Pendiente</option><option value="revision" {% if novedad_administrativa.estado == 'revision' %}selected{% endif %}>En revisión</option><option value="resuelta" {% if novedad_administrativa.estado == 'resuelta' %}selected{% endif %}>Resuelta</option></select></div>
+      <div class="col-12 col-md-8"><label class="form-label fw-bold">Nota de gestión</label><input type="text" name="nota_gestion" class="form-control" value="{{ novedad_administrativa.nota_gestion }}" placeholder="Ej. Se coordinó revisión de bomba con el cliente"></div>
+      <div class="col-12"><button class="btn btn-primary w-100">Guardar seguimiento de novedad</button></div>
+    </form>
+    {% if novedad_administrativa.gestionada_por %}<div class="small text-muted mt-2">Última gestión: {{ novedad_administrativa.gestionada_por.get_full_name|default:novedad_administrativa.gestionada_por.username }} · {{ novedad_administrativa.gestionada_en|date:"d/m/Y H:i" }}</div>{% endif %}
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
 {% if esta_realizado and es_admin %}
 <div class="card premium-card mb-3"><div class="card-body"><div class="premium-title"><i class="bi bi-shield-lock"></i><span>Control administrativo</span></div><div class="text-muted small mb-3">Este mantenimiento ya fue cerrado. Solo administración puede reabrirlo para realizar correcciones.</div><form method="post">{% csrf_token %}<input type="hidden" name="accion" value="marcar_pendiente"><button class="btn btn-warning btn-lg w-100">↩️ Reabrir y volver a pendiente</button></form></div></div>
 {% endif %}

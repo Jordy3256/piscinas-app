@@ -193,6 +193,7 @@ TEMPLATES = [
                 "django.contrib.messages.context_processors.messages",
 
                 "dashboard.context_processors.vapid_public_key",
+                "dashboard.context_processors.novedades_mantenimiento_admin",
                 "asistente_tecnico.context_processors.notificaciones_digitales",
             ],
         },

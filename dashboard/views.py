@@ -40,6 +40,7 @@ from mantenimientos.models import (
     UsoInsumo,
     FotoMantenimiento,
     ChecklistMantenimiento,
+    NovedadMantenimiento,
 )
 from finanzas.models import (
     Ingreso,
@@ -1429,6 +1430,33 @@ def _notificar_admins(titulo, mensaje, url="/dashboard/notificaciones/", enviar_
             url=url,
             enviar_push=enviar_push,
         )
+
+def _detalle_novedad_mantenimiento(mantenimiento, checklist):
+    partes = []
+    if checklist.bomba_estado == "novedad":
+        partes.append(f"Bomba: {checklist.bomba_novedad.strip() or 'Presenta novedad'}")
+    if checklist.filtro_estado == "novedad":
+        partes.append(f"Filtro: {checklist.filtro_novedad.strip() or 'Presenta novedad'}")
+    observacion = (mantenimiento.observaciones or "").strip()
+    if observacion:
+        partes.append(f"Observación general: {observacion}")
+    return " · ".join(partes)
+
+
+def _registrar_novedad_mantenimiento(mantenimiento, checklist, usuario):
+    detalle = _detalle_novedad_mantenimiento(mantenimiento, checklist)
+    if not detalle:
+        return None
+    novedad, creada = NovedadMantenimiento.objects.get_or_create(
+        mantenimiento=mantenimiento,
+        defaults={"detalle": detalle, "reportada_por": usuario, "estado": "pendiente"},
+    )
+    if not creada and novedad.estado != "resuelta":
+        novedad.detalle = detalle
+        if not novedad.reportada_por_id:
+            novedad.reportada_por = usuario
+        novedad.save(update_fields=["detalle", "reportada_por", "actualizada_en"])
+    return novedad
 
 
 # ==========================================================
@@ -3890,12 +3918,21 @@ def notificaciones_view(request):
     else:
         no_modelo_notificaciones = True
 
+    novedades_abiertas = []
+    if es_admin(request.user):
+        novedades_abiertas = list(
+            NovedadMantenimiento.objects.exclude(estado="resuelta")
+            .select_related("mantenimiento__cliente", "reportada_por")
+            .order_by("-creada_en")[:20]
+        )
+
     return render(
         request,
         "dashboard/notificaciones.html",
         {
             "subs_count": subs_count,
             "push_enabled": push_enabled,
+            "novedades_abiertas": novedades_abiertas,
             "notificaciones": notificaciones,
             "no_modelo_notificaciones": no_modelo_notificaciones,
             "es_admin": es_admin(request.user),
@@ -4878,6 +4915,23 @@ def mantenimiento_detalle_view(request, pk):
                 return next_url
             return f"/dashboard/mantenimientos/{mantenimiento.pk}/"
 
+        if accion == "actualizar_novedad":
+            if not es_usuario_admin:
+                messages.error(request, "Solo administración puede gestionar las novedades.")
+                return redirect(safe_return_url())
+            novedad = get_object_or_404(NovedadMantenimiento, mantenimiento=mantenimiento)
+            nuevo_estado = (request.POST.get("estado_novedad") or "").strip()
+            if nuevo_estado not in {"pendiente", "revision", "resuelta"}:
+                messages.error(request, "Estado de novedad no válido.")
+                return redirect(safe_return_url())
+            novedad.estado = nuevo_estado
+            novedad.nota_gestion = (request.POST.get("nota_gestion") or "").strip()
+            novedad.gestionada_por = request.user
+            novedad.gestionada_en = timezone.now()
+            novedad.save(update_fields=["estado", "nota_gestion", "gestionada_por", "gestionada_en", "actualizada_en"])
+            messages.success(request, f"Novedad actualizada: {novedad.get_estado_display()}.")
+            return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/#novedad-administrativa")
+
         if accion == "marcar_pendiente":
             if not es_usuario_admin:
                 messages.error(request, "Solo un administrador puede reabrir un mantenimiento realizado.")
@@ -5143,13 +5197,23 @@ def mantenimiento_detalle_view(request, pk):
 
         actor = request.user.username
         if finalizar:
-            _notificar_admins(
-                titulo="✅ Mantenimiento realizado",
-                mensaje=f"El mantenimiento de {mantenimiento.cliente} fue finalizado por {actor}.",
-                url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
-                enviar_push=True,
-                excluir_user_id=request.user.id if es_usuario_admin else None,
-            )
+            novedad = _registrar_novedad_mantenimiento(mantenimiento, checklist, request.user)
+            if novedad:
+                _notificar_admins(
+                    titulo="⚠️ Mantenimiento realizado CON NOVEDAD",
+                    mensaje=f"{mantenimiento.cliente} · {actor}. {novedad.detalle}",
+                    url=f"/dashboard/mantenimientos/{mantenimiento.pk}/#novedad-administrativa",
+                    enviar_push=True,
+                    excluir_user_id=request.user.id if es_usuario_admin else None,
+                )
+            else:
+                _notificar_admins(
+                    titulo="✅ Mantenimiento realizado",
+                    mensaje=f"El mantenimiento de {mantenimiento.cliente} fue finalizado por {actor}.",
+                    url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
+                    enviar_push=True,
+                    excluir_user_id=request.user.id if es_usuario_admin else None,
+                )
             _registrar_actividad(
                 user=request.user,
                 titulo="Mantenimiento realizado",
@@ -5231,6 +5295,7 @@ def mantenimiento_detalle_view(request, pk):
     foto_inicio = fotos_por_nombre.get("Inicio de Mantenimiento")
     foto_fin = fotos_por_nombre.get("Fin de Mantenimiento")
     foto_nivel = fotos_por_nombre.get("Nivel PH y Cl")
+    novedad_administrativa = NovedadMantenimiento.objects.filter(mantenimiento=mantenimiento).select_related("reportada_por", "gestionada_por").first()
 
     return render(
         request,
@@ -5257,6 +5322,7 @@ def mantenimiento_detalle_view(request, pk):
             "foto_inicio": foto_inicio,
             "foto_fin": foto_fin,
             "foto_nivel": foto_nivel,
+            "novedad_administrativa": novedad_administrativa,
             "historial_cliente_reciente": historial_cliente_reciente,
             "checklist": checklist,
             "checklist_limpieza_completados": checklist_limpieza_completados,

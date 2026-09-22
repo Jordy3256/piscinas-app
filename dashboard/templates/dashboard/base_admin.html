@@ -949,6 +949,11 @@ form[method="get"]{position:relative} form[method="get"] .form-label{font-weight
                       data-bs-target="#jvModuleLauncher"
                       aria-controls="jvModuleLauncher"
                       title="Explorar módulos">☰</button>
+              {% if novedades_mantenimiento_pendientes %}
+              <a class="btn btn-warning btn-sm fw-bold" href="/dashboard/notificaciones/" title="Novedades de mantenimiento pendientes">
+                ⚠️ Novedades {{ novedades_mantenimiento_pendientes }}
+              </a>
+              {% endif %}
               <div class="dropdown">
                 <a class="btn btn-outline-secondary btn-sm notif-btn dropdown-toggle"
                    href="#"
