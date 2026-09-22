@@ -863,6 +863,7 @@
               {% if dia.pendientes > 0 %}<span class="badge text-bg-warning">{{ dia.pendientes }} pendientes</span>{% endif %}
               {% if dia.realizados > 0 %}<span class="badge text-bg-success">{{ dia.realizados }} realizados</span>{% endif %}
               {% if dia.atrasados > 0 %}<span class="badge text-bg-danger">{{ dia.atrasados }} atrasados</span>{% endif %}
+              {% if dia.cancelados > 0 %}<span class="badge text-bg-secondary">{{ dia.cancelados }} cancelados</span>{% endif %}
               {% if dia.sin_asignar > 0 %}<span class="badge text-bg-dark">{{ dia.sin_asignar }} sin asignar</span>{% endif %}
             </div>
 
@@ -872,7 +873,7 @@
 
                 {% if bloque.items %}
                   {% for m in bloque.items %}
-                    <div class="agenda-item {% if m.estado == 'realizado' %}realizado{% elif m.estado == 'pendiente' and m.fecha < hoy %}atrasado{% else %}pendiente{% endif %}">
+                    <div class="agenda-item {% if m.estado == 'realizado' %}realizado{% elif m.estado == 'cancelado' %}cancelado{% elif m.estado == 'pendiente' and m.fecha < hoy %}atrasado{% else %}pendiente{% endif %}">
                       <div class="agenda-item-title">{{ m.cliente }}</div>
                       <div class="agenda-item-meta">
                         {{ m.contrato }}
@@ -881,6 +882,8 @@
                       <div class="d-flex gap-1 flex-wrap mb-2">
                         {% if m.estado == "realizado" %}
                           <span class="badge text-bg-success">Realizado</span>
+                        {% elif m.estado == "cancelado" %}
+                          <span class="badge text-bg-secondary">Cancelado</span>
                         {% else %}
                           <span class="badge text-bg-warning">Pendiente</span>
                         {% endif %}
@@ -985,12 +988,17 @@
                         </div>
 
                         <div class="mini-resumen">
-                          {% if dia.pendientes > 0 %}
-                          <div class="text-warning fw-semibold">⏳ {{ dia.pendientes }} pendientes</div>
+                          {% if dia.realizados > 0 %}
+                          <div class="text-success fw-semibold">✅ {{ dia.realizados }} realizados</div>
                           {% endif %}
-
                           {% if dia.atrasados > 0 %}
                           <div class="text-danger fw-semibold">🚨 {{ dia.atrasados }} atrasados</div>
+                          {% endif %}
+                          {% if dia.cancelados > 0 %}
+                          <div class="text-secondary fw-semibold">🚫 {{ dia.cancelados }} cancelados</div>
+                          {% endif %}
+                          {% if dia.pendientes > 0 %}
+                          <div class="text-warning fw-semibold">🗓 {{ dia.pendientes }} programados</div>
                           {% endif %}
 
                           {% if dia.sin_asignar > 0 %}
@@ -1014,8 +1022,10 @@
 
         <div class="op-legend">
           <div class="op-legend-item"><span class="op-legend-dot dot-total"></span> Total del día</div>
-          <div class="op-legend-item"><span class="op-legend-dot dot-pendiente"></span> Pendientes</div>
+          <div class="op-legend-item"><span class="op-legend-dot dot-pendiente"></span> Programados</div>
           <div class="op-legend-item"><span class="op-legend-dot dot-atrasado"></span> Atrasados</div>
+          <div class="op-legend-item">✅ Realizados</div>
+          <div class="op-legend-item">🚫 Cancelados</div>
           <div class="op-legend-item"><span class="op-legend-dot dot-sinasignar"></span> Sin asignar</div>
           <div class="op-legend-item"><span class="op-legend-dot dot-seleccionado"></span> Día seleccionado</div>
         </div>
@@ -1201,7 +1211,7 @@
     {% if dia_list %}
       <div class="vstack gap-2">
         {% for m in dia_list %}
-          <div class="card {% if not m.trabajadores.all %}border-danger bg-danger-subtle{% elif m.estado == 'realizado' %}border-success{% else %}border-warning{% endif %}">
+          <div class="card {% if m.estado == 'cancelado' %}border-secondary bg-light{% elif not m.trabajadores.all %}border-danger bg-danger-subtle{% elif m.estado == 'realizado' %}border-success{% else %}border-warning{% endif %}">
             <div class="card-body">
               <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
                 <div class="flex-grow-1">
@@ -1218,6 +1228,8 @@
                 <div class="d-flex gap-2 flex-wrap">
                   {% if m.estado == "realizado" %}
                     <span class="badge text-bg-success">Realizado</span>
+                  {% elif m.estado == "cancelado" %}
+                    <span class="badge text-bg-secondary">Cancelado</span>
                   {% else %}
                     <span class="badge text-bg-warning">Pendiente</span>
                   {% endif %}

@@ -405,6 +405,7 @@ def _build_calendario_mantenimientos(anio, mes, trabajador=None):
                     "realizados": 0,
                     "pendientes": 0,
                     "atrasados": 0,
+                    "cancelados": 0,
                     "sin_asignar": 0,
                 })
                 continue
@@ -412,10 +413,15 @@ def _build_calendario_mantenimientos(anio, mes, trabajador=None):
             fecha_actual = date(anio, mes, dia)
             items = por_fecha.get(fecha_actual, [])
             realizados = len([m for m in items if getattr(m, "estado", "") == "realizado"])
-            pendientes = len([m for m in items if getattr(m, "estado", "") == "pendiente"])
+            cancelados = len([m for m in items if getattr(m, "estado", "") == "cancelado"])
             atrasados = len([
                 m for m in items
                 if getattr(m, "estado", "") == "pendiente" and fecha_actual < timezone.localdate()
+            ])
+            # En fechas vencidas, un pendiente ya es un atraso. No se duplica visualmente.
+            pendientes = len([
+                m for m in items
+                if getattr(m, "estado", "") == "pendiente" and fecha_actual >= timezone.localdate()
             ])
 
             sin_asignar = 0
@@ -440,6 +446,7 @@ def _build_calendario_mantenimientos(anio, mes, trabajador=None):
                 "realizados": realizados,
                 "pendientes": pendientes,
                 "atrasados": atrasados,
+                "cancelados": cancelados,
                 "sin_asignar": sin_asignar,
             })
         semanas.append(fila)
@@ -447,6 +454,7 @@ def _build_calendario_mantenimientos(anio, mes, trabajador=None):
     total_mes = len(mantenimientos)
     total_realizados = len([m for m in mantenimientos if getattr(m, "estado", "") == "realizado"])
     total_pendientes = len([m for m in mantenimientos if getattr(m, "estado", "") == "pendiente"])
+    total_cancelados = len([m for m in mantenimientos if getattr(m, "estado", "") == "cancelado"])
 
     return {
         "anio": anio,
@@ -455,6 +463,7 @@ def _build_calendario_mantenimientos(anio, mes, trabajador=None):
         "total_mes": total_mes,
         "total_realizados": total_realizados,
         "total_pendientes": total_pendientes,
+        "total_cancelados": total_cancelados,
     }
 
 
@@ -523,6 +532,7 @@ def _build_agenda_semanal_mantenimientos(fecha_base, items):
     total_pendientes = 0
     total_realizados = 0
     total_atrasados = 0
+    total_cancelados = 0
     total_sin_asignar = 0
 
     for i in range(7):
@@ -547,6 +557,7 @@ def _build_agenda_semanal_mantenimientos(fecha_base, items):
         pendientes = 0
         realizados = 0
         atrasados = 0
+        cancelados = 0
         sin_asignar = 0
 
         for m in items_dia:
@@ -559,6 +570,8 @@ def _build_agenda_semanal_mantenimientos(fecha_base, items):
                 pendientes += 1
             elif estado_m == "realizado":
                 realizados += 1
+            elif estado_m == "cancelado":
+                cancelados += 1
 
             if estado_m == "pendiente" and fecha_actual < timezone.localdate():
                 atrasados += 1
@@ -573,6 +586,7 @@ def _build_agenda_semanal_mantenimientos(fecha_base, items):
         total_pendientes += pendientes
         total_realizados += realizados
         total_atrasados += atrasados
+        total_cancelados += cancelados
         total_sin_asignar += sin_asignar
 
         dias.append({
@@ -584,6 +598,7 @@ def _build_agenda_semanal_mantenimientos(fecha_base, items):
             "pendientes": pendientes,
             "realizados": realizados,
             "atrasados": atrasados,
+            "cancelados": cancelados,
             "sin_asignar": sin_asignar,
             "bloques": [
                 {"key": "manana", "label": "🌅 Mañana", "items": bloques["manana"]},
@@ -601,6 +616,7 @@ def _build_agenda_semanal_mantenimientos(fecha_base, items):
         "total_pendientes": total_pendientes,
         "total_realizados": total_realizados,
         "total_atrasados": total_atrasados,
+        "total_cancelados": total_cancelados,
         "total_sin_asignar": total_sin_asignar,
     }
 
@@ -4535,6 +4551,7 @@ def admin_operativo_view(request):
     total_resumen_dia = qs_resumen_dia.exclude(estado="cancelado").count()
     realizados_resumen_dia = qs_resumen_dia.filter(estado="realizado").count()
     pendientes_resumen_dia = qs_resumen_dia.filter(estado="pendiente").count()
+    cancelados_resumen_dia = qs_resumen_dia.filter(estado="cancelado").count()
     sin_asignar_resumen_dia = qs_resumen_dia.filter(
         estado="pendiente", trabajadores__isnull=True
     ).distinct().count()
@@ -4686,6 +4703,7 @@ def admin_operativo_view(request):
             "total_resumen_dia": total_resumen_dia,
             "realizados_resumen_dia": realizados_resumen_dia,
             "pendientes_resumen_dia": pendientes_resumen_dia,
+            "cancelados_resumen_dia": cancelados_resumen_dia,
             "sin_asignar_resumen_dia": sin_asignar_resumen_dia,
             "cumplimiento_resumen_dia": cumplimiento_resumen_dia,
             "kpi_dia": kpi_dia,
