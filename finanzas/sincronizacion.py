@@ -446,7 +446,15 @@ def materializar_finanzas_contrato(
     ):
         # Cartera respeta la programación comercial. En meses sin cobro (por
         # ejemplo, un contrato semestral), generar_factura_contrato no crea nada.
-        facturas, creadas = generar_factura_contrato(contrato, anio, mes)
+        calendario = contrato.calendario_cobros(anio, mes)
+        permitir_cambio = any(
+            (item.get("fecha_cobro_desde") or item.get("fecha_vencimiento")) >= timezone.localdate()
+            for item in calendario
+            if (item.get("fecha_cobro_desde") or item.get("fecha_vencimiento"))
+        )
+        facturas, creadas = generar_factura_contrato(
+            contrato, anio, mes, permitir_cambio_esquema=permitir_cambio
+        )
         resultado["facturas_creadas"] += creadas
 
         _, creada_nomina = _materializar_nomina_periodo(
@@ -469,29 +477,42 @@ def sincronizar_contrato_activo(contrato, *, desde_fecha=None, horizonte_meses=1
 
     resultado = {"facturas_actualizadas": 0, "obligaciones_actualizadas": 0}
 
+    hoy = timezone.localdate()
     for factura in Factura.objects.filter(contrato=contrato).prefetch_related("pagos"):
-        if factura.estado == Factura.ESTADO_ANULADA or factura.pagos.filter(activo=True).exists():
+        if factura.pagos.filter(activo=True).exists():
+            continue
+        # Una anulación hecha por Administración es una decisión contable y la
+        # sincronización automática nunca debe revertirla.
+        if factura.estado == Factura.ESTADO_ANULADA and factura.anulada_manual:
+            continue
+
+        # El pasado queda congelado. Solo reinterpretamos con la configuración
+        # vigente las cuentas cuyo cobro todavía no había comenzado al editar.
+        fecha_real = factura.fecha_cobro_desde or factura.fecha_vencimiento
+        es_futura = bool(fecha_real and fecha_real >= hoy)
+        if not es_futura:
+            # Historia contable: una edición del contrato nunca reescribe cobros
+            # cuya fecha real ya pasó, estén pagados o todavía pendientes.
             continue
 
         cuotas = contrato.calendario_cobros(factura.periodo_anio, factura.periodo_mes)
 
-        # Un periodo ya emitido conserva el esquema con el que nació. Si el
-        # contrato cambió después (p. ej. 1/1 -> 50/50), no reinterpretamos ni
-        # anulamos la factura histórica ni generamos cuotas retroactivas.
-        total_cuotas_actual = cuotas[0]["total_cuotas"] if cuotas else 1
-        if _periodo_materializado_con_esquema_distinto(
-            contrato, factura.periodo_anio, factura.periodo_mes, total_cuotas_actual
-        ):
-            continue
-
         cuota = next((item for item in cuotas if item["cuota_numero"] == factura.cuota_numero), None)
         if not cuota:
+            # Si la nueva forma de cobro ya no contempla esta cuota futura, se
+            # conserva como trazabilidad pero sale de Cartera.
             factura.estado = Factura.ESTADO_ANULADA
+            factura.anulada_manual = False
+            factura.anulada_manual_en = None
+            factura.anulada_manual_por = None
             factura.observaciones = _agregar_nota(
                 factura.observaciones,
                 "Anulada porque la programación del contrato ya no contempla esta cuota.",
             )
-            factura.save(update_fields=["estado", "observaciones", "actualizada_en"])
+            factura.save(update_fields=[
+                "estado", "anulada_manual", "anulada_manual_en",
+                "anulada_manual_por", "observaciones", "actualizada_en"
+            ])
             continue
 
         # Respeta promociones/descuentos. La lógica anterior podía devolver una
@@ -541,6 +562,9 @@ def sincronizar_contrato_activo(contrato, *, desde_fecha=None, horizonte_meses=1
         if factura.estado != estado_objetivo:
             factura.estado = estado_objetivo
             cambios.append("estado")
+        if factura.anulada_manual:
+            # Defensa adicional; las manuales ya fueron excluidas arriba.
+            continue
 
         if cambios:
             factura.save(update_fields=list(dict.fromkeys(cambios)) + ["actualizada_en"])

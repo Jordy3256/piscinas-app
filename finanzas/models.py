@@ -304,6 +304,12 @@ class Factura(models.Model):
     promocion_nombre = models.CharField(max_length=120, blank=True, default="")
     estado = models.CharField(max_length=10, choices=ESTADO_CHOICES, default=ESTADO_PENDIENTE)
     observaciones = models.TextField(blank=True, default="")
+    anulada_manual = models.BooleanField(default=False, db_index=True)
+    anulada_manual_en = models.DateTimeField(null=True, blank=True)
+    anulada_manual_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="facturas_anuladas_manualmente",
+    )
     ingreso_generado = models.OneToOneField(
         Ingreso, on_delete=models.SET_NULL, null=True, blank=True, related_name="factura_origen"
     )

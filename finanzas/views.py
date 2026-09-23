@@ -31,6 +31,7 @@ from .sincronizacion import (
     materializar_nomina_fija_trabajador,
     sincronizar_modalidad_remuneracion_trabajador,
     sincronizar_cartera_vigente,
+    sincronizar_contrato_activo,
 )
 from .alertas_financieras import generar_alertas_financieras
 from .facturacion_externa import sincronizar_avisos_facturacion
@@ -557,6 +558,65 @@ def factura_detalle(request, pk):
         factura.save(update_fields=["total", "actualizada_en"])
     factura.sincronizar_estado()
     return render(request, "finanzas/factura_detalle.html", {"factura": factura, "es_admin": True})
+
+
+@login_required
+@require_POST
+def factura_anular_manual(request, pk):
+    if not _es_admin(request.user):
+        return _denegado(request)
+    factura = get_object_or_404(Factura.objects.prefetch_related("pagos"), pk=pk)
+    if factura.pagos.filter(activo=True).exists() or factura.ingreso_generado_id:
+        messages.error(request, "No se puede anular una cuenta que tiene cobros registrados. Anula primero el pago si corresponde.")
+        return redirect("finanzas_factura_detalle", pk=factura.pk)
+    if factura.estado == Factura.ESTADO_ANULADA and factura.anulada_manual:
+        messages.info(request, "La cuenta ya estaba anulada manualmente.")
+        return redirect("finanzas_factura_detalle", pk=factura.pk)
+
+    motivo = (request.POST.get("motivo") or "Anulación manual desde Finanzas.").strip()
+    factura.estado = Factura.ESTADO_ANULADA
+    factura.anulada_manual = True
+    factura.anulada_manual_en = timezone.now()
+    factura.anulada_manual_por = request.user
+    factura.observaciones = ((factura.observaciones or "").strip() + f"\nAnulación manual: {motivo}").strip()
+    factura.save(update_fields=[
+        "estado", "anulada_manual", "anulada_manual_en", "anulada_manual_por",
+        "observaciones", "actualizada_en"
+    ])
+    messages.success(request, f"Cuenta {factura.numero} anulada. La generación automática no la reactivará.")
+    return redirect("finanzas_factura_detalle", pk=factura.pk)
+
+
+@login_required
+@require_POST
+def factura_reactivar_manual(request, pk):
+    if not _es_admin(request.user):
+        return _denegado(request)
+    factura = get_object_or_404(Factura.objects.select_related("contrato"), pk=pk)
+    if factura.estado != Factura.ESTADO_ANULADA:
+        messages.info(request, "La cuenta no está anulada.")
+        return redirect("finanzas_factura_detalle", pk=factura.pk)
+
+    calendario = factura.contrato.calendario_cobros(factura.periodo_anio, factura.periodo_mes)
+    cuota = next((x for x in calendario if x.get("cuota_numero") == factura.cuota_numero), None)
+    if not cuota:
+        messages.error(request, "No se puede reactivar: la configuración vigente del contrato ya no contempla esta cuota.")
+        return redirect("finanzas_factura_detalle", pk=factura.pk)
+
+    factura.anulada_manual = False
+    factura.anulada_manual_en = None
+    factura.anulada_manual_por = None
+    factura.estado = Factura.ESTADO_PENDIENTE
+    factura.observaciones = ((factura.observaciones or "").strip() + "\nReactivada manualmente desde Finanzas.").strip()
+    factura.save(update_fields=[
+        "estado", "anulada_manual", "anulada_manual_en", "anulada_manual_por",
+        "observaciones", "actualizada_en"
+    ])
+    sincronizar_contrato_activo(factura.contrato, desde_fecha=timezone.localdate(), horizonte_meses=12)
+    factura.refresh_from_db()
+    factura.sincronizar_estado()
+    messages.success(request, f"Cuenta {factura.numero} reactivada y sincronizada con el contrato vigente.")
+    return redirect("finanzas_factura_detalle", pk=factura.pk)
 
 
 @login_required

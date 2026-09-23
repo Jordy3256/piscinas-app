@@ -193,7 +193,7 @@ def previsualizar_facturas_periodo(anio, mes):
 
 
 @transaction.atomic
-def generar_factura_contrato(contrato, anio, mes, usuario=None):
+def generar_factura_contrato(contrato, anio, mes, usuario=None, *, permitir_cambio_esquema=False):
     if not contrato.activo or not contrato.precio_mensual or contrato.precio_mensual <= 0:
         return [], 0
 
@@ -202,8 +202,12 @@ def generar_factura_contrato(contrato, anio, mes, usuario=None):
     promo_datos = valores_promocion(contrato, anio, mes)
     cuotas = contrato.calendario_cobros(anio, mes)
     validar_calendario_cobros(contrato, cuotas)
-    if cuotas and _periodo_materializado_con_esquema_distinto(
-        contrato, anio, mes, cuotas[0]["total_cuotas"]
+    if (
+        cuotas
+        and not permitir_cambio_esquema
+        and _periodo_materializado_con_esquema_distinto(
+            contrato, anio, mes, cuotas[0]["total_cuotas"]
+        )
     ):
         return [], 0
 
