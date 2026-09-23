@@ -301,6 +301,7 @@ def notificar_movimientos_recurrentes_proximos():
     movimientos = MovimientoRecurrente.objects.filter(
         activo=True,
         tipo="egreso",
+        es_gasto_manual_recurrente=True,
         proxima_fecha=manana
     ).order_by("proxima_fecha", "id")
 
@@ -989,6 +990,7 @@ def procesar_movimientos_recurrentes():
     movimientos = MovimientoRecurrente.objects.filter(
         activo=True,
         tipo="egreso",
+        es_gasto_manual_recurrente=True,
         proxima_fecha__lte=hoy
     ).order_by("proxima_fecha", "id")
 
@@ -3047,6 +3049,8 @@ def dashboard_view(request):
         recurrentes_proximos_3_dias = list(
             MovimientoRecurrente.objects.filter(
                 activo=True,
+                tipo="egreso",
+                es_gasto_manual_recurrente=True,
                 proxima_fecha__gte=hoy,
                 proxima_fecha__lte=hoy + timedelta(days=3)
             ).order_by("proxima_fecha", "id")[:10]
@@ -6516,6 +6520,9 @@ def movimientos_recurrentes_view(request):
         return render(request, "dashboard/no_autorizado.html", status=403)
 
     notificar_movimientos_recurrentes_proximos()
+    # Solo procesa los gastos creados expresamente en esta nueva sección.
+    # Los recurrentes históricos quedan aislados y jamás generan movimientos.
+    procesar_movimientos_recurrentes()
 
     if request.method == "POST":
         tipo = "egreso"
@@ -6554,6 +6561,7 @@ def movimientos_recurrentes_view(request):
             proxima_fecha=proxima_fecha,
             dia_mes=proxima_fecha.day if frecuencia == "mensual" else None,
             activo=activo,
+            es_gasto_manual_recurrente=True,
         )
 
         _registrar_actividad(
@@ -6566,7 +6574,7 @@ def movimientos_recurrentes_view(request):
         messages.success(request, "Gasto recurrente creado correctamente.")
         return redirect("/dashboard/finanzas/recurrentes/")
 
-    movimientos = MovimientoRecurrente.objects.filter(tipo="egreso").order_by("activo", "proxima_fecha", "-id")
+    movimientos = MovimientoRecurrente.objects.filter(tipo="egreso", es_gasto_manual_recurrente=True).order_by("activo", "proxima_fecha", "-id")
     total_activos = movimientos.filter(activo=True).count()
     total_inactivos = movimientos.filter(activo=False).count()
     total_egresos = movimientos.filter(tipo="egreso", activo=True).count()
@@ -6621,7 +6629,7 @@ def movimiento_recurrente_editar_view(request, pk):
     if not es_admin(request.user):
         return render(request, "dashboard/no_autorizado.html", status=403)
 
-    movimiento = get_object_or_404(MovimientoRecurrente, pk=pk, tipo="egreso")
+    movimiento = get_object_or_404(MovimientoRecurrente, pk=pk, tipo="egreso", es_gasto_manual_recurrente=True)
 
     if request.method == "POST":
         tipo = "egreso"
@@ -6688,7 +6696,7 @@ def movimiento_recurrente_toggle_view(request, pk):
     if not es_admin(request.user):
         return render(request, "dashboard/no_autorizado.html", status=403)
 
-    movimiento = get_object_or_404(MovimientoRecurrente, pk=pk, tipo="egreso")
+    movimiento = get_object_or_404(MovimientoRecurrente, pk=pk, tipo="egreso", es_gasto_manual_recurrente=True)
 
     movimiento.activo = not movimiento.activo
     movimiento.save(update_fields=["activo"])
@@ -6711,7 +6719,7 @@ def movimiento_recurrente_eliminar_view(request, pk):
     if not es_admin(request.user):
         return render(request, "dashboard/no_autorizado.html", status=403)
 
-    movimiento = get_object_or_404(MovimientoRecurrente, pk=pk, tipo="egreso")
+    movimiento = get_object_or_404(MovimientoRecurrente, pk=pk, tipo="egreso", es_gasto_manual_recurrente=True)
 
     if request.method == "POST":
         concepto = movimiento.concepto

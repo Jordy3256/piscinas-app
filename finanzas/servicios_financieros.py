@@ -198,6 +198,7 @@ def obtener_resumen_financiero(anio: int, mes: int, ciudad: str = "") -> dict:
     recurrentes_pendientes = MovimientoRecurrente.objects.filter(
         activo=True,
         tipo="egreso",
+        es_gasto_manual_recurrente=True,
         proxima_fecha__range=(inicio, fin),
     )
     # Los recurrentes actuales no tienen ciudad asignada; por eso solo forman

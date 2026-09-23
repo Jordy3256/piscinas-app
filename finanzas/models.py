@@ -215,6 +215,11 @@ class MovimientoRecurrente(models.Model):
         help_text="Día original elegido para recurrencias mensuales; conserva, por ejemplo, el día 31 cuando existe.",
     )
     activo = models.BooleanField(default=True)
+    es_gasto_manual_recurrente = models.BooleanField(
+        default=True,
+        db_index=True,
+        help_text="Identifica exclusivamente los gastos recurrentes creados manualmente desde la nueva sección de Finanzas.",
+    )
 
     def __str__(self):
         return f"{self.tipo.upper()} - {self.concepto} - {self.monto}"
