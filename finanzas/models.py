@@ -137,6 +137,15 @@ class Egreso(MovimientoFinancieroMixin):
     fecha = models.DateField(default=date.today, db_index=True)
     proveedor = models.CharField(max_length=150, blank=True, default="")
     ciudad_proyecto = models.CharField(max_length=120, blank=True, default="")
+    recurrente = models.ForeignKey(
+        "MovimientoRecurrente", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="egresos_generados",
+        help_text="Gasto recurrente que originó esta obligación, cuando aplica.",
+    )
+    fecha_recurrente = models.DateField(
+        null=True, blank=True, db_index=True,
+        help_text="Fecha programada del gasto recurrente. Evita duplicar una misma obligación.",
+    )
     aprobado = models.BooleanField(default=True, db_index=True)
 
     @property
@@ -157,6 +166,13 @@ class Egreso(MovimientoFinancieroMixin):
         verbose_name = "Egreso"
         verbose_name_plural = "Egresos"
         ordering = ["-fecha", "-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["recurrente", "fecha_recurrente"],
+                condition=models.Q(recurrente__isnull=False),
+                name="uniq_egreso_recurrente_fecha",
+            )
+        ]
 
 
 class Ingreso(MovimientoFinancieroMixin):
@@ -194,6 +210,10 @@ class MovimientoRecurrente(models.Model):
     monto = models.DecimalField(max_digits=12, decimal_places=2)
     frecuencia = models.CharField(max_length=10, choices=FRECUENCIA_CHOICES, default="mensual")
     proxima_fecha = models.DateField()
+    dia_mes = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        help_text="Día original elegido para recurrencias mensuales; conserva, por ejemplo, el día 31 cuando existe.",
+    )
     activo = models.BooleanField(default=True)
 
     def __str__(self):

@@ -10,6 +10,7 @@ urlpatterns = [
     path("comprobantes-servicio/<int:pk>/pdf/", views.comprobante_servicio_pdf, name="finanzas_comprobante_servicio_pdf"),
     path("comprobantes-servicio/<int:pk>/anular/", views.comprobante_servicio_anular, name="finanzas_comprobante_servicio_anular"),
     path("resumen-mensual.pdf", views.resumen_mensual_cobros_pagos_pdf, name="finanzas_resumen_mensual_pdf"),
+    path("rentabilidad.pdf", views.rentabilidad_pdf, name="finanzas_rentabilidad_pdf"),
     path("movimientos-mensuales.pdf", views.movimientos_financieros_pdf, name="finanzas_movimientos_pdf"),
     path("cartera-mensual.pdf", views.cartera_mensual_pdf, name="finanzas_cartera_pdf"),
     path("nomina-mensual.pdf", views.nomina_mensual_pdf, name="finanzas_nomina_mensual_pdf"),

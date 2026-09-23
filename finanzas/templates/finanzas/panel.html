@@ -68,6 +68,7 @@
         <a class="btn fh-btn" href="{% url 'finanzas_cartera' %}">Cartera</a>
         <a class="btn fh-btn" href="{% url 'finanzas_nomina' %}">Nómina</a>
         <a class="btn fh-btn" href="{% url 'finanzas_movimientos' %}">Movimientos</a>
+        <a class="btn fh-btn" href="{% url 'movimientos_recurrentes' %}">🔁 Gastos recurrentes</a>
       </div>
     </div>
 
@@ -75,6 +76,7 @@
       <div class="fh-kicker">Documentos</div>
       <div class="fh-buttons">
         <div class="dropdown"><button class="btn fh-btn dropdown-toggle" type="button" data-bs-toggle="dropdown">📄 Reportes PDF</button><div class="dropdown-menu dropdown-menu-end">
+          <a class="dropdown-item fw-semibold" href="{% url 'finanzas_rentabilidad_pdf' %}?anio={{ anio }}&mes={{ mes }}">📈 Rentabilidad integral</a>
           <a class="dropdown-item" href="{% url 'finanzas_resumen_mensual_pdf' %}?anio={{ anio }}&mes={{ mes }}{% if ciudad %}&ciudad={{ ciudad|urlencode }}{% endif %}">📅 Planificación</a>
           <a class="dropdown-item" href="{% url 'finanzas_movimientos_pdf' %}?anio={{ anio }}&mes={{ mes }}">Movimientos reales</a>
           <a class="dropdown-item" href="{% url 'finanzas_cartera_pdf' %}?anio={{ anio }}&mes={{ mes }}">Cartera</a>

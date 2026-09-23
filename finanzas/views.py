@@ -2340,3 +2340,188 @@ def comprobante_servicio_pdf(request,pk):
     doc.build(story, onFirstPage=draw_jvaqua_pdf_page, onLaterPages=draw_jvaqua_pdf_page)
     return response
 
+
+
+def _clasificar_ingreso_rentabilidad(ingreso):
+    texto = (ingreso.concepto or "").lower()
+    if "venta de insumo" in texto or "venta insumo" in texto:
+        return "Ventas de insumos"
+    if ingreso.contrato_id:
+        try:
+            factura = ingreso.pago_factura.factura
+            if getattr(factura, "mantenimiento_id", None):
+                return "Cobros por visita"
+        except Exception:
+            pass
+        if "visita" in texto:
+            return "Visitas / servicios por visita"
+        return "Contratos de mantenimiento"
+    if "visita" in texto:
+        return "Visitas extras"
+    return "Otros ingresos"
+
+
+def _money(valor):
+    return f"${Decimal(valor or 0):,.2f}"
+
+
+@login_required
+def rentabilidad_pdf(request):
+    """Informe integral de rentabilidad real y costos atribuibles del periodo."""
+    if not _es_admin(request.user):
+        return _denegado(request)
+
+    hoy = timezone.localdate()
+    try:
+        anio = int(request.GET.get("anio", hoy.year))
+        mes = int(request.GET.get("mes", hoy.month))
+        if mes < 1 or mes > 12:
+            raise ValueError
+    except (TypeError, ValueError):
+        anio, mes = hoy.year, hoy.month
+    inicio, fin = _rango_mes(anio, mes)
+
+    from mantenimientos.models import UsoInsumo
+
+    ingresos = list(
+        Ingreso.objects.filter(fecha__range=(inicio, fin))
+        .exclude(estado=Ingreso.ESTADO_ANULADO)
+        .select_related("cliente", "contrato")
+        .order_by("fecha", "id")
+    )
+    egresos = list(
+        Egreso.objects.filter(fecha__range=(inicio, fin), aprobado=True)
+        .exclude(estado=Egreso.ESTADO_ANULADO)
+        .order_by("fecha", "id")
+    )
+
+    # Caja real: solo lo efectivamente cobrado/pagado registrado en el periodo.
+    ingresos_reales = sum((Decimal(x.monto_pagado or 0) for x in ingresos), Decimal("0.00"))
+    egresos_reales = sum((Decimal(x.monto_pagado or 0) for x in egresos), Decimal("0.00"))
+    utilidad_real = ingresos_reales - egresos_reales
+
+    ingresos_devengados = sum((Decimal(x.total or 0) for x in ingresos), Decimal("0.00"))
+    egresos_devengados = sum((Decimal(x.total or 0) for x in egresos), Decimal("0.00"))
+    pendientes_cobro = sum((Decimal(x.saldo or 0) for x in ingresos), Decimal("0.00"))
+    pendientes_pago = sum((Decimal(x.saldo or 0) for x in egresos), Decimal("0.00"))
+
+    por_ingreso = {}
+    for x in ingresos:
+        cat = _clasificar_ingreso_rentabilidad(x)
+        por_ingreso[cat] = por_ingreso.get(cat, Decimal("0.00")) + Decimal(x.monto_pagado or 0)
+    labels_egreso = dict(Egreso.CATEGORIA_CHOICES)
+    por_egreso = {}
+    for x in egresos:
+        cat = labels_egreso.get(x.categoria, x.categoria or "Otros gastos")
+        por_egreso[cat] = por_egreso.get(cat, Decimal("0.00")) + Decimal(x.monto_pagado or 0)
+
+    # Costos operativos imputados a contratos. No se vuelven a restar de caja:
+    # la compra de inventario ya constituye el egreso empresarial.
+    usos = list(
+        UsoInsumo.objects.filter(mantenimiento__fecha__range=(inicio, fin), mantenimiento__estado="realizado")
+        .select_related("mantenimiento__contrato__cliente", "insumo")
+    )
+    consumo_por_contrato = {}
+    consumo_sitio = Decimal("0.00")
+    consumo_trabajador = Decimal("0.00")
+    consumo_cliente = Decimal("0.00")
+    for uso in usos:
+        costo = Decimal(uso.costo_total or 0)
+        cid = uso.mantenimiento.contrato_id
+        consumo_por_contrato[cid] = consumo_por_contrato.get(cid, Decimal("0.00")) + costo
+        if uso.origen_inventario == "contrato":
+            consumo_sitio += costo
+        elif uso.origen_inventario == "trabajador":
+            consumo_trabajador += costo
+        else:
+            consumo_cliente += costo
+
+    ingresos_contrato = {}
+    for x in ingresos:
+        if x.contrato_id:
+            ingresos_contrato[x.contrato_id] = ingresos_contrato.get(x.contrato_id, Decimal("0.00")) + Decimal(x.monto_pagado or 0)
+
+    pagos_trabajador_contrato = {}
+    pagos_trabajador = (
+        PagoTrabajador.objects.filter(fecha__range=(inicio, fin), activo=True, obligacion__contrato__isnull=False)
+        .select_related("obligacion__contrato__cliente")
+    )
+    for pago in pagos_trabajador:
+        cid = pago.obligacion.contrato_id
+        pagos_trabajador_contrato[cid] = pagos_trabajador_contrato.get(cid, Decimal("0.00")) + Decimal(pago.monto or 0)
+
+    contratos_ids = set(ingresos_contrato) | set(pagos_trabajador_contrato) | set(consumo_por_contrato)
+    contratos = {c.id: c for c in Contrato.objects.filter(id__in=contratos_ids).select_related("cliente")}
+    filas_contratos = []
+    for cid in contratos_ids:
+        contrato = contratos.get(cid)
+        if not contrato:
+            continue
+        ingreso = ingresos_contrato.get(cid, Decimal("0.00"))
+        mano = pagos_trabajador_contrato.get(cid, Decimal("0.00"))
+        insumos = consumo_por_contrato.get(cid, Decimal("0.00"))
+        margen = ingreso - mano - insumos
+        filas_contratos.append((str(contrato.cliente), ingreso, mano, insumos, margen))
+    filas_contratos.sort(key=lambda r: r[4], reverse=True)
+
+    response = HttpResponse(content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename="rentabilidad_{anio}_{mes:02d}.pdf"'
+    doc = SimpleDocTemplate(response, pagesize=landscape(A4), rightMargin=12*mm, leftMargin=12*mm, topMargin=24*mm, bottomMargin=12*mm)
+    styles = getSampleStyleSheet()
+    title = ParagraphStyle("RentTitle", parent=styles["Title"], fontSize=18, alignment=TA_CENTER)
+    sub = ParagraphStyle("RentSub", parent=styles["Normal"], fontSize=9, textColor=colors.HexColor("#5b6472"), alignment=TA_CENTER)
+    h2 = ParagraphStyle("RentH2", parent=styles["Heading2"], fontSize=12, spaceBefore=7, spaceAfter=4, textColor=colors.HexColor("#123b66"))
+    body = ParagraphStyle("RentBody", parent=styles["BodyText"], fontSize=7.5, leading=9.5)
+
+    story = [
+        Paragraph("JVAQUA · Informe integral de rentabilidad", title),
+        Paragraph(f"{dict(MESES).get(mes, mes)} {anio} · Caja real, obligaciones y rentabilidad por contrato", sub),
+        Spacer(1, 5*mm),
+    ]
+
+    resumen = [
+        ["Ingresos cobrados", _money(ingresos_reales), "Egresos pagados", _money(egresos_reales), "UTILIDAD REAL", _money(utilidad_real)],
+        ["Ingresos registrados", _money(ingresos_devengados), "Egresos registrados", _money(egresos_devengados), "Margen de caja", f"{((utilidad_real / ingresos_reales) * 100 if ingresos_reales else 0):.1f}%"],
+        ["Pendiente de cobrar", _money(pendientes_cobro), "Pendiente de pagar", _money(pendientes_pago), "Resultado devengado", _money(ingresos_devengados-egresos_devengados)],
+    ]
+    t = Table(resumen, colWidths=[34*mm, 28*mm, 34*mm, 28*mm, 34*mm, 30*mm])
+    t.setStyle(TableStyle([("BACKGROUND", (0,0), (-1,-1), colors.HexColor("#eef4fb")), ("GRID", (0,0), (-1,-1), .25, colors.HexColor("#cbd5e1")), ("FONTNAME", (0,0), (-1,-1), "Helvetica"), ("FONTSIZE", (0,0), (-1,-1), 8), ("FONTNAME", (4,0), (5,0), "Helvetica-Bold"), ("ALIGN", (1,0), (1,-1), "RIGHT"), ("ALIGN", (3,0), (3,-1), "RIGHT"), ("ALIGN", (5,0), (5,-1), "RIGHT"), ("PADDING", (0,0), (-1,-1), 5)]))
+    story += [t, Spacer(1, 4*mm)]
+
+    def add_table(titulo, headers, rows, widths=None):
+        story.append(Paragraph(titulo, h2))
+        data = [[Paragraph(str(v), body) for v in headers]]
+        data += [[Paragraph(str(v), body) for v in row] for row in rows]
+        table = Table(data, repeatRows=1, colWidths=widths)
+        table.setStyle(TableStyle([("BACKGROUND", (0,0), (-1,0), colors.HexColor("#123b66")), ("TEXTCOLOR", (0,0), (-1,0), colors.white), ("GRID", (0,0), (-1,-1), .2, colors.HexColor("#cbd5e1")), ("VALIGN", (0,0), (-1,-1), "TOP"), ("PADDING", (0,0), (-1,-1), 4)]))
+        story.extend([table, Spacer(1, 3*mm)])
+
+    add_table("¿De dónde ingresó el dinero?", ["Origen", "Cobrado"], [(k, _money(v)) for k,v in sorted(por_ingreso.items(), key=lambda x:x[1], reverse=True)] or [("Sin ingresos cobrados", _money(0))], [110*mm, 40*mm])
+    add_table("¿En qué se gastó el dinero?", ["Categoría", "Pagado"], [(k, _money(v)) for k,v in sorted(por_egreso.items(), key=lambda x:x[1], reverse=True)] or [("Sin egresos pagados", _money(0))], [110*mm, 40*mm])
+
+    story.append(Paragraph("Costos de insumos imputados a los servicios", h2))
+    story.append(Paragraph("Estos valores muestran qué consumieron los contratos. Son costos operativos para analizar el margen de cada contrato; no se restan por segunda vez del flujo de caja cuando la compra del inventario ya fue registrada como egreso.", body))
+    add_table("", ["Origen del producto", "Costo consumido"], [
+        ("Inventario del trabajador", _money(consumo_trabajador)),
+        ("Inventario en sitio / contrato", _money(consumo_sitio)),
+        ("Producto proporcionado por cliente", _money(consumo_cliente)),
+    ], [110*mm, 40*mm])
+
+    add_table("Rentabilidad atribuible por contrato", ["Contrato / cliente", "Cobrado", "Trabajador", "Insumos usados", "Margen atribuible"], [
+        (n, _money(i), _money(m), _money(ins), _money(mar)) for n,i,m,ins,mar in filas_contratos
+    ] or [("Sin actividad atribuible en el periodo", _money(0), _money(0), _money(0), _money(0))], [70*mm, 34*mm, 34*mm, 34*mm, 38*mm])
+
+    story.append(PageBreak())
+    add_table("Detalle completo de ingresos", ["Fecha", "Concepto", "Cliente / contrato", "Total", "Cobrado", "Pendiente"], [
+        (x.fecha.strftime("%d/%m/%Y"), x.concepto, str(x.cliente or "—"), _money(x.total), _money(x.monto_pagado), _money(x.saldo)) for x in ingresos
+    ] or [("—", "Sin ingresos", "—", _money(0), _money(0), _money(0))], [24*mm, 75*mm, 55*mm, 28*mm, 28*mm, 28*mm])
+
+    add_table("Detalle completo de egresos", ["Fecha", "Concepto", "Categoría / proveedor", "Total", "Pagado", "Pendiente"], [
+        (x.fecha.strftime("%d/%m/%Y"), x.concepto or "Egreso", f"{labels_egreso.get(x.categoria, x.categoria or 'Otros')} · {x.proveedor or '—'}", _money(x.total), _money(x.monto_pagado), _money(x.saldo)) for x in egresos
+    ] or [("—", "Sin egresos", "—", _money(0), _money(0), _money(0))], [24*mm, 75*mm, 55*mm, 28*mm, 28*mm, 28*mm])
+
+    story.append(Paragraph("Lectura del informe", h2))
+    story.append(Paragraph("Utilidad real = dinero cobrado menos dinero efectivamente pagado en el periodo. El margen atribuible por contrato descuenta del ingreso cobrado los pagos a trabajadores asociados y el costo de insumos consumidos en sus mantenimientos realizados. Los costos de insumos consumidos no se vuelven a descontar de la utilidad de caja, evitando duplicar el egreso de la compra de inventario.", body))
+
+    doc.build(story, onFirstPage=draw_jvaqua_pdf_page, onLaterPages=draw_jvaqua_pdf_page)
+    return response

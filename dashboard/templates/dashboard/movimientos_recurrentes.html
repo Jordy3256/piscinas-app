@@ -5,13 +5,13 @@
     <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
         <div>
             <h2 class="mb-1">Movimientos recurrentes</h2>
-            <p class="text-muted mb-0">Administra ingresos y egresos automáticos del sistema.</p>
+            <p class="text-muted mb-0">Programa gastos fijos y otros movimientos. Los egresos se generan como obligaciones pendientes y solo cuentan como pagados cuando Administración registra el pago real.</p>
         </div>
 
         <form method="post" action="{% url 'movimientos_recurrentes_procesar' %}">
             {% csrf_token %}
             <button class="btn btn-success">
-                ⚙️ Procesar recurrentes ahora
+                ⚙️ Generar obligaciones pendientes
             </button>
         </form>
     </div>
@@ -65,7 +65,7 @@
 
     <div class="card shadow-sm border-0 mb-4">
         <div class="card-header bg-white">
-            <h5 class="mb-0">Nuevo movimiento recurrente</h5>
+            <h5 class="mb-0">Nuevo gasto / movimiento recurrente</h5>
         </div>
         <div class="card-body">
             <form method="post" class="row g-3">
@@ -75,7 +75,7 @@
                     <select name="tipo" class="form-select" required>
                         <option value="">Seleccione</option>
                         <option value="ingreso">Ingreso</option>
-                        <option value="egreso">Egreso</option>
+                        <option value="egreso" selected>Gasto recurrente</option>
                     </select>
                 </div>
 

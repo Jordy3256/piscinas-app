@@ -170,10 +170,13 @@ def _sumar_un_mes(fecha_base):
     return date(nuevo_anio, nuevo_mes, nuevo_dia)
 
 
-def _siguiente_fecha_recurrente(fecha_actual, frecuencia):
+def _siguiente_fecha_recurrente(fecha_actual, frecuencia, dia_mes=None):
     if frecuencia == "semanal":
         return fecha_actual + timedelta(days=7)
-    return _sumar_un_mes(fecha_actual)
+    siguiente = _sumar_un_mes(fecha_actual)
+    dia_objetivo = int(dia_mes or fecha_actual.day)
+    ultimo_dia = monthrange(siguiente.year, siguiente.month)[1]
+    return date(siguiente.year, siguiente.month, min(dia_objetivo, ultimo_dia))
 
 
 def _inicio_fin_mes(anio, mes):
@@ -1022,24 +1025,37 @@ def procesar_movimientos_recurrentes():
                 )
 
             elif mov.tipo == "egreso":
-                _crear_egreso_manual(
-                    concepto=mov.concepto,
-                    categoria="Recurrente",
-                    total=mov.monto,
-                    fecha=fecha_mov,
+                # Un gasto recurrente genera una OBLIGACIÓN pendiente, no un pago real.
+                # El pago se registra después manualmente desde Finanzas.
+                egreso, creado = Egreso.objects.get_or_create(
+                    recurrente=mov,
+                    fecha_recurrente=fecha_mov,
+                    defaults={
+                        "concepto": mov.concepto,
+                        "categoria": "administracion",
+                        "cantidad": 1,
+                        "costo_unitario": mov.monto,
+                        "total": mov.monto,
+                        "monto_pagado": Decimal("0.00"),
+                        "estado": Egreso.ESTADO_PENDIENTE,
+                        "fecha": fecha_mov,
+                        "fecha_vencimiento": fecha_mov,
+                        "observaciones": "Obligación generada automáticamente desde Gastos recurrentes. Registrar el pago real manualmente cuando se efectúe.",
+                    },
                 )
 
-                total_egresos += 1
-                generado_este_movimiento += 1
+                if creado:
+                    total_egresos += 1
+                    generado_este_movimiento += 1
 
-                _notificar_admins(
-                    titulo="💸 Pago recurrente generado",
-                    mensaje=f"Se registró el egreso recurrente '{mov.concepto}' por ${mov.monto} (fecha {fecha_mov}).",
-                    url="/dashboard/finanzas/flujo/",
-                    enviar_push=True,
-                )
+                    _notificar_admins(
+                        titulo="💸 Gasto recurrente pendiente",
+                        mensaje=f"Se generó la obligación '{mov.concepto}' por ${mov.monto} (vence {fecha_mov}). Aún no consta como pagada.",
+                        url="/dashboard/finanzas/flujo/",
+                        enviar_push=True,
+                    )
 
-            mov.proxima_fecha = _siguiente_fecha_recurrente(fecha_mov, mov.frecuencia)
+            mov.proxima_fecha = _siguiente_fecha_recurrente(fecha_mov, mov.frecuencia, mov.dia_mes)
             mov.save(update_fields=["proxima_fecha"])
 
         if generado_este_movimiento > 0:
@@ -6563,6 +6579,7 @@ def movimientos_recurrentes_view(request):
             monto=monto,
             frecuencia=frecuencia,
             proxima_fecha=proxima_fecha,
+            dia_mes=proxima_fecha.day if frecuencia == "mensual" else None,
             activo=activo,
         )
 
@@ -6675,6 +6692,7 @@ def movimiento_recurrente_editar_view(request, pk):
         movimiento.monto = monto
         movimiento.frecuencia = frecuencia
         movimiento.proxima_fecha = proxima_fecha
+        movimiento.dia_mes = proxima_fecha.day if frecuencia == "mensual" else None
         movimiento.activo = activo
         movimiento.save()
 
