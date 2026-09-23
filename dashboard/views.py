@@ -5045,6 +5045,12 @@ def mantenimiento_detalle_view(request, pk):
             mantenimiento.estado = "pendiente"
             mantenimiento.borrador_guardado = True
             mantenimiento.save(update_fields=["estado", "borrador_guardado"])
+            # En contratos Por visita, revertir la ejecución retira únicamente
+            # los movimientos pendientes originados por esa visita.
+            from finanzas.cuentas_por_cobrar import anular_factura_visita_no_realizada
+            from finanzas.sincronizacion import sincronizar_nomina_por_visita
+            anular_factura_visita_no_realizada(mantenimiento)
+            sincronizar_nomina_por_visita(mantenimiento)
 
             actor = request.user.username
             _notificar_admins(
@@ -5301,6 +5307,14 @@ def mantenimiento_detalle_view(request, pk):
                     mantenimiento.estado = "realizado"
                     mantenimiento.borrador_guardado = False
                     mantenimiento.save(update_fields=["estado", "borrador_guardado"])
+
+                    # Por visita: el hecho financiero nace aquí, no cuando se
+                    # programa la agenda. La transacción garantiza que no quede
+                    # un cobro/nómina sin mantenimiento realizado.
+                    from finanzas.cuentas_por_cobrar import generar_factura_visita_realizada
+                    from finanzas.sincronizacion import sincronizar_nomina_por_visita
+                    generar_factura_visita_realizada(mantenimiento, usuario=request.user)
+                    sincronizar_nomina_por_visita(mantenimiento)
 
         except (ValueError, InventarioTrabajador.DoesNotExist, InventarioContrato.DoesNotExist) as exc:
             messages.error(request, str(exc) or "No se pudo guardar el mantenimiento.")

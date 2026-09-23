@@ -59,7 +59,16 @@ def sincronizar_avisos_facturacion(*, hoy=None, meses_atras=4, meses_adelante=3)
 
                 eventos = []
                 if por_visita:
+                    # La facturación externa sigue el mismo hecho económico que
+                    # Cartera: una visita programada no genera aviso hasta que
+                    # realmente fue ejecutada.
+                    from mantenimientos.models import Mantenimiento
                     for cuota in contrato.calendario_cobros(anio, mes):
+                        mantenimiento_id = cuota.get("mantenimiento_id")
+                        if not mantenimiento_id or not Mantenimiento.objects.filter(
+                            pk=mantenimiento_id, estado="realizado"
+                        ).exists():
+                            continue
                         eventos.append({
                             "cuota_numero": int(cuota["cuota_numero"]),
                             "fecha_programada": cuota["fecha_cobro_desde"],

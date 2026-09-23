@@ -152,6 +152,74 @@ def _periodos_a_materializar(contrato, desde_fecha=None, horizonte_meses=12):
         yield anio, mes, periodo_inicio, periodo_fin
 
 
+@transaction.atomic
+def sincronizar_nomina_por_visita(mantenimiento):
+    """Ajusta la obligación del técnico al número de visitas realmente realizadas."""
+    contrato = mantenimiento.contrato
+    if not (
+        contrato.forma_pago == "por_visita"
+        or contrato.programacion_cobro == "por_visita"
+        or contrato.momento_facturacion == "por_visita"
+    ):
+        return None
+    trabajador = contrato.tecnico_designado
+    if not trabajador or trabajador.tipo_remuneracion == "mensual_fija" or not contrato.valor_tecnico_mensual or contrato.valor_tecnico_mensual <= 0:
+        return None
+
+    from .cuentas_por_cobrar import _cuota_de_mantenimiento
+    from mantenimientos.models import Mantenimiento
+    anio, mes, cuota = _cuota_de_mantenimiento(contrato, mantenimiento)
+    if not cuota:
+        return None
+    calendario = contrato.calendario_cobros(anio, mes)
+    ids = [c.get("mantenimiento_id") for c in calendario if c.get("mantenimiento_id")]
+    total_visitas = len(ids)
+    if not total_visitas:
+        return None
+    realizadas = Mantenimiento.objects.filter(pk__in=ids, estado="realizado").count()
+    valor_total = Decimal(contrato.valor_tecnico_mensual or 0).quantize(Decimal("0.01"))
+    valor_regular = (valor_total / Decimal(total_visitas)).quantize(Decimal("0.01"))
+    valor_devengado = (valor_regular * Decimal(realizadas)).quantize(Decimal("0.01"))
+    if realizadas == total_visitas:
+        valor_devengado = valor_total
+
+    obligacion = ObligacionTrabajador.objects.filter(
+        contrato=contrato, periodo_anio=anio, periodo_mes=mes
+    ).prefetch_related("pagos").first()
+    if realizadas == 0:
+        if obligacion and not obligacion.pagos.filter(activo=True).exists():
+            obligacion.delete()
+            return None
+        return obligacion
+
+    periodo_inicio, periodo_fin = contrato.periodo_servicio(anio, mes)
+    if not obligacion:
+        return ObligacionTrabajador.objects.create(
+            trabajador=trabajador, contrato=contrato, periodo_anio=anio, periodo_mes=mes,
+            valor_acordado=valor_devengado, periodo_servicio_inicio=periodo_inicio,
+            periodo_servicio_fin=periodo_fin, fecha_pago_programada=mantenimiento.fecha,
+            observaciones=f"Nómina por visita: {realizadas}/{total_visitas} visitas realizadas.",
+        )
+
+    pagado = obligacion.monto_pagado
+    # Nunca reducimos una obligación por debajo de dinero ya pagado. Ese caso
+    # requiere revisión administrativa, pero las visitas nuevas sí pueden aumentar el saldo.
+    nuevo_valor = max(valor_devengado, pagado)
+    obligacion.trabajador = trabajador
+    obligacion.valor_acordado = nuevo_valor
+    obligacion.periodo_servicio_inicio = periodo_inicio
+    obligacion.periodo_servicio_fin = periodo_fin
+    if mantenimiento.estado == "realizado" and mantenimiento.fecha > obligacion.fecha_pago_programada:
+        obligacion.fecha_pago_programada = mantenimiento.fecha
+    obligacion.observaciones = f"Nómina por visita: {realizadas}/{total_visitas} visitas realizadas."
+    obligacion.save(update_fields=[
+        "trabajador", "valor_acordado", "periodo_servicio_inicio", "periodo_servicio_fin",
+        "fecha_pago_programada", "observaciones", "actualizada_en"
+    ])
+    obligacion.sincronizar_estado()
+    return obligacion
+
+
 def _materializar_nomina_periodo(contrato, anio, mes, periodo_inicio, periodo_fin):
     """
     Crea/actualiza la obligación mensual del técnico.
@@ -160,6 +228,8 @@ def _materializar_nomina_periodo(contrato, anio, mes, periodo_inicio, periodo_fi
     obligaciones individuales; su nómina se materializa una sola vez por mes.
     """
     trabajador = contrato.tecnico_designado
+    if contrato.forma_pago == "por_visita" or contrato.programacion_cobro == "por_visita" or contrato.momento_facturacion == "por_visita":
+        return None, False
     if trabajador and trabajador.tipo_remuneracion == "mensual_fija":
         return None, False
 
@@ -477,8 +547,26 @@ def sincronizar_contrato_activo(contrato, *, desde_fecha=None, horizonte_meses=1
 
     resultado = {"facturas_actualizadas": 0, "obligaciones_actualizadas": 0}
 
+    es_por_visita = (
+        contrato.forma_pago == "por_visita"
+        or contrato.programacion_cobro == "por_visita"
+        or contrato.momento_facturacion == "por_visita"
+    )
+    if es_por_visita:
+        from mantenimientos.models import Mantenimiento
+        from .cuentas_por_cobrar import generar_factura_visita_realizada, anular_factura_visita_no_realizada
+        for visita in Mantenimiento.objects.filter(contrato=contrato).order_by("fecha", "id"):
+            if visita.estado == "realizado":
+                _, creada = generar_factura_visita_realizada(visita)
+                resultado["facturas_actualizadas"] += int(creada)
+            else:
+                resultado["facturas_actualizadas"] += int(anular_factura_visita_no_realizada(visita))
+            sincronizar_nomina_por_visita(visita)
+
     hoy = timezone.localdate()
     for factura in Factura.objects.filter(contrato=contrato).prefetch_related("pagos"):
+        if es_por_visita:
+            continue
         if factura.pagos.filter(activo=True).exists():
             continue
         # Una anulación hecha por Administración es una decisión contable y la
@@ -575,6 +663,8 @@ def sincronizar_contrato_activo(contrato, *, desde_fecha=None, horizonte_meses=1
     hoy = timezone.localdate()
 
     for obligacion in ObligacionTrabajador.objects.filter(contrato=contrato).prefetch_related("pagos"):
+        if es_por_visita:
+            continue
         if obligacion.pagos.filter(activo=True).exists():
             continue
 

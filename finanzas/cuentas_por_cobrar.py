@@ -86,6 +86,12 @@ def cuotas_programadas_para_mes_cobro(contrato, anio_cobro, mes_cobro, meses_atr
     for desplazamiento in range(-meses_atras, 1):
         periodo_anio, periodo_mes = _desplazar_mes(anio_cobro, mes_cobro, desplazamiento)
         for cuota in contrato.calendario_cobros(periodo_anio, periodo_mes):
+            if cuota.get("es_por_visita"):
+                from mantenimientos.models import Mantenimiento
+                if not Mantenimiento.objects.filter(
+                    pk=cuota.get("mantenimiento_id"), estado="realizado"
+                ).exists():
+                    continue
             fecha = cuota.get("fecha_cobro_desde") or cuota.get("fecha_vencimiento")
             if not fecha or fecha.year != int(anio_cobro) or fecha.month != int(mes_cobro):
                 continue
@@ -192,8 +198,107 @@ def previsualizar_facturas_periodo(anio, mes):
     }
 
 
+def _es_contrato_por_visita(contrato):
+    return (
+        contrato.forma_pago == "por_visita"
+        or contrato.programacion_cobro == "por_visita"
+        or contrato.momento_facturacion == "por_visita"
+    )
+
+
+def _cuota_de_mantenimiento(contrato, mantenimiento):
+    """Ubica la cuota operativa correspondiente a una visita concreta."""
+    candidatos = [(mantenimiento.fecha.year, mantenimiento.fecha.month)]
+    candidatos.append(_desplazar_mes(mantenimiento.fecha.year, mantenimiento.fecha.month, -1))
+    candidatos.append(_desplazar_mes(mantenimiento.fecha.year, mantenimiento.fecha.month, 1))
+    for anio, mes in candidatos:
+        for cuota in contrato.calendario_cobros(anio, mes):
+            if cuota.get("mantenimiento_id") == mantenimiento.pk:
+                return anio, mes, cuota
+    return None, None, None
+
+
+@transaction.atomic
+def generar_factura_visita_realizada(mantenimiento, usuario=None):
+    """Genera el cobro Por visita únicamente cuando el mantenimiento se realiza."""
+    contrato = mantenimiento.contrato
+    if not _es_contrato_por_visita(contrato) or mantenimiento.estado != "realizado":
+        return None, False
+    if not contrato.activo or not contrato.precio_mensual or contrato.precio_mensual <= 0:
+        return None, False
+
+    anio, mes, cuota = _cuota_de_mantenimiento(contrato, mantenimiento)
+    if not cuota:
+        return None, False
+
+    promo_datos = valores_promocion(contrato, anio, mes)
+    proporcion = Decimal(cuota["valor"]) / Decimal(contrato.precio_mensual or 1)
+    valor_base = (promo_datos["total"] * proporcion).quantize(Decimal("0.01"))
+    desglose = contrato.desglose_valor(valor_base)
+    descuento = max(Decimal(cuota["valor"]) - valor_base, Decimal("0.00"))
+    factura, creada = Factura.objects.get_or_create(
+        contrato=contrato, periodo_anio=anio, periodo_mes=mes,
+        cuota_numero=cuota["cuota_numero"],
+        defaults={
+            "cliente": contrato.cliente,
+            "periodo_inicio": cuota["periodo_inicio"], "periodo_fin": cuota["periodo_fin"],
+            "total_cuotas": cuota["total_cuotas"], "fecha_emision": mantenimiento.fecha,
+            "fecha_cobro_desde": mantenimiento.fecha, "fecha_vencimiento": mantenimiento.fecha,
+            "fecha_facturacion_programada": mantenimiento.fecha,
+            "requiere_factura": contrato.requiere_factura,
+            "subtotal": desglose["base"], "impuesto": desglose["impuesto"], "total": desglose["total"],
+            "valor_contractual": cuota["valor"], "descuento_promocion": descuento,
+            "promocion": promo_datos["promocion"],
+            "promocion_nombre": promo_datos["promocion"].nombre if promo_datos["promocion"] else "",
+            "estado": Factura.ESTADO_PROMOCION if desglose["total"] == 0 and promo_datos["promocion"] else Factura.ESTADO_PENDIENTE,
+            "observaciones": f"Cobro generado al realizar la visita #{mantenimiento.pk} del {mantenimiento.fecha:%d/%m/%Y}.",
+        },
+    )
+    if factura.anulada_manual:
+        return factura, False
+    if creada:
+        FacturaItem.objects.create(
+            factura=factura,
+            descripcion=f"Visita de mantenimiento realizada {mantenimiento.fecha:%d/%m/%Y} · visita {cuota['cuota_numero']}/{cuota['total_cuotas']}",
+            cantidad=Decimal("1.00"), precio_unitario=desglose["base"],
+        )
+    elif factura.estado == Factura.ESTADO_ANULADA and not factura.pagos.filter(activo=True).exists() and not factura.ingreso_generado_id:
+        factura.estado = Factura.ESTADO_PENDIENTE
+        factura.fecha_emision = mantenimiento.fecha
+        factura.fecha_cobro_desde = mantenimiento.fecha
+        factura.fecha_vencimiento = mantenimiento.fecha
+        factura.observaciones = f"Cobro reactivado automáticamente al realizar la visita #{mantenimiento.pk}."
+        factura.save(update_fields=["estado", "fecha_emision", "fecha_cobro_desde", "fecha_vencimiento", "observaciones", "actualizada_en"])
+    return factura, creada
+
+
+@transaction.atomic
+def anular_factura_visita_no_realizada(mantenimiento):
+    """Anula el cobro automático si administración revierte la visita."""
+    contrato = mantenimiento.contrato
+    if not _es_contrato_por_visita(contrato):
+        return False
+    anio, mes, cuota = _cuota_de_mantenimiento(contrato, mantenimiento)
+    if not cuota:
+        return False
+    factura = Factura.objects.filter(
+        contrato=contrato, periodo_anio=anio, periodo_mes=mes, cuota_numero=cuota["cuota_numero"]
+    ).first()
+    if not factura or factura.anulada_manual or factura.pagos.filter(activo=True).exists() or factura.ingreso_generado_id:
+        return False
+    if factura.estado != Factura.ESTADO_ANULADA:
+        factura.estado = Factura.ESTADO_ANULADA
+        factura.observaciones = f"Anulada automáticamente porque la visita #{mantenimiento.pk} dejó de estar realizada."
+        factura.save(update_fields=["estado", "observaciones", "actualizada_en"])
+        return True
+    return False
+
+
 @transaction.atomic
 def generar_factura_contrato(contrato, anio, mes, usuario=None, *, permitir_cambio_esquema=False):
+    # Por visita se materializa por evento, nunca por anticipado.
+    if _es_contrato_por_visita(contrato):
+        return [], 0
     if not contrato.activo or not contrato.precio_mensual or contrato.precio_mensual <= 0:
         return [], 0
 
