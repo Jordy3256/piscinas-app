@@ -377,10 +377,27 @@
         <div class="cd-card-title">🧪 Logística de químicos</div>
         <div class="small text-muted mt-1">Modalidad: {% if contrato.quimicos_proveedor == 'cliente' %}Químicos proporcionados por el cliente{% elif contrato.quimicos_almacenamiento == 'contrato' %}Inventario en sitio{% else %}Inventario del trabajador{% endif %}</div>
       </div>
-      <div class="d-flex gap-2 flex-wrap"><a class="btn btn-sm btn-outline-primary" href="/dashboard/contratos/{{ contrato.id }}/editar/#gestion-quimicos">Editar responsable</a><a class="btn btn-sm btn-primary" href="#productos-inventario-sitio">Editar stock mínimo</a></div>
+      <div class="d-flex gap-2 flex-wrap"><a class="btn btn-sm btn-primary" href="#responsable-reposicion-editor">Editar responsable</a><a class="btn btn-sm btn-primary" href="#productos-inventario-sitio">Editar stock mínimo</a></div>
     </div>
   </div>
   <div class="p-3 p-lg-4">
+    <div class="border rounded-4 p-3 mb-3" id="responsable-reposicion-editor">
+      <form method="post" action="{% url 'contrato_responsable_reposicion' contrato.id %}" class="row g-2 align-items-end">
+        {% csrf_token %}
+        <div class="col-lg-8">
+          <label class="form-label fw-semibold mb-1">Responsable de reposición</label>
+          <select class="form-select" name="responsable_reposicion">
+            <option value="">Usar técnico designado como respaldo</option>
+            {% for trabajador in trabajadores_reposicion %}
+              <option value="{{ trabajador.id }}" {% if contrato.responsable_reposicion_id == trabajador.id %}selected{% endif %}>{{ trabajador.user.get_full_name|default:trabajador.user.username }}</option>
+            {% endfor %}
+          </select>
+          <div class="form-text">Puede ser cualquier trabajador activo, aunque no sea el técnico asignado a los mantenimientos.</div>
+        </div>
+        <div class="col-lg-4 d-grid"><button class="btn btn-outline-primary" type="submit">Guardar responsable</button></div>
+      </form>
+    </div>
+
     <div class="row g-3 mb-3">
       <div class="col-6 col-lg-3"><div class="border rounded-4 p-3 h-100"><div class="small text-muted">Proveedor</div><div class="fw-bold">{{ contrato.get_quimicos_proveedor_display }}</div></div></div>
       <div class="col-6 col-lg-3"><div class="border rounded-4 p-3 h-100"><div class="small text-muted">Almacenamiento</div><div class="fw-bold">{% if contrato.quimicos_proveedor == 'cliente' %}Cliente{% else %}{{ contrato.get_quimicos_almacenamiento_display }}{% endif %}</div></div></div>

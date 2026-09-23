@@ -9531,6 +9531,11 @@ def contrato_detalle_view(request, pk):
     inventario_critico_contrato = sum(1 for x in inventario_contrato if x.estado_stock in {"critico", "agotado"})
     proxima_reposicion_dias = min((x.dias_hasta_minimo for x in inventario_contrato if x.dias_hasta_minimo is not None), default=None)
     insumos_inventario = Insumo.objects.filter(activo=True, puede_mantenimiento=True).order_by("nombre")
+    trabajadores_reposicion = (
+        Trabajador.objects.filter(activo=True)
+        .select_related("user")
+        .order_by("user__first_name", "user__last_name", "user__username")
+    )
 
     return render(
         request,
@@ -9559,12 +9564,38 @@ def contrato_detalle_view(request, pk):
             "inventario_critico_contrato": inventario_critico_contrato,
             "proxima_reposicion_dias": proxima_reposicion_dias,
             "insumos_inventario": insumos_inventario,
+            "trabajadores_reposicion": trabajadores_reposicion,
             "promociones_contrato": contrato.promociones.all()[:12],
             "renovaciones_contrato": contrato.renovaciones.select_related("registrada_por").all()[:12],
             "es_admin": True,
         },
     )
 
+
+
+@login_required
+def contrato_responsable_reposicion_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    if request.method != "POST":
+        return redirect("contrato_detalle", pk=pk)
+
+    contrato = get_object_or_404(Contrato, pk=pk)
+    trabajador_id = (request.POST.get("responsable_reposicion") or "").strip()
+    responsable = None
+    if trabajador_id:
+        responsable = Trabajador.objects.filter(pk=trabajador_id, activo=True).select_related("user").first()
+        if responsable is None:
+            messages.error(request, "El trabajador seleccionado no existe o está inactivo.")
+            return redirect(f"/dashboard/contratos/{pk}/#inventario-sitio")
+
+    contrato.responsable_reposicion = responsable
+    contrato.save(update_fields=["responsable_reposicion"])
+    if responsable:
+        messages.success(request, f"Responsable de reposición actualizado a {responsable}.")
+    else:
+        messages.success(request, "Responsable específico retirado. Se utilizará el técnico designado como respaldo.")
+    return redirect(f"/dashboard/contratos/{pk}/#inventario-sitio")
 
 
 @login_required
