@@ -7,15 +7,34 @@
 <section class="wh-hero"><div class="small text-uppercase fw-bold opacity-75 mb-1">Tu jornada</div><h2 class="fw-bold mb-1">Hola, {{ nombre_trabajador }}</h2><div class="opacity-75 wh-date">{{ hoy|date:"d/m/Y" }} · Aquí tienes lo importante para hoy.</div></section>
 
 <section class="wh-summary" aria-label="Resumen de hoy">
-  <div class="wh-summary-item"><div class="wh-summary-label">Mantenimientos hoy</div><div class="wh-summary-main"><span class="wh-summary-value">{{ mantenimientos_pendientes_hoy }}</span></div><div class="wh-summary-note ok">{{ mantenimientos_realizados_hoy }} realizados</div></div>
-  <div class="wh-summary-item"><div class="wh-summary-label">Órdenes pendientes</div><div class="wh-summary-main"><span class="wh-summary-value">{{ ordenes_pendientes }}</span></div><div class="wh-summary-note">{{ ordenes_hoy }} para hoy</div></div>
-  <div class="wh-summary-item"><div class="wh-summary-label">Seguimientos AQUO</div><div class="wh-summary-main"><span class="wh-summary-value">{{ seguimientos_pendientes }}</span></div><div class="wh-summary-note">Casos por verificar</div></div>
+  <div class="wh-summary-item"><div class="wh-summary-label">Mantenimientos hoy</div><div class="wh-summary-main"><span class="wh-summary-value">{{ mantenimientos_pendientes_hoy|default:0 }}</span></div><div class="wh-summary-note ok">{{ mantenimientos_realizados_hoy|default:0 }} realizados</div></div>
+  <div class="wh-summary-item"><div class="wh-summary-label">Órdenes pendientes</div><div class="wh-summary-main"><span class="wh-summary-value">{{ ordenes_pendientes|default:0 }}</span></div><div class="wh-summary-note">{{ ordenes_hoy|default:0 }} para hoy</div></div>
+  <div class="wh-summary-item"><div class="wh-summary-label">Seguimientos AQUO</div><div class="wh-summary-main"><span class="wh-summary-value">{{ seguimientos_pendientes|default:0 }}</span></div><div class="wh-summary-note">Casos por verificar</div></div>
   <div class="wh-summary-item"><div class="wh-summary-label">Próximo pago</div>{% if proximo_pago %}<div class="wh-summary-main"><span class="wh-summary-value">{{ proximo_pago.fecha_pago_programada|date:"d/m/Y" }}</span></div><div class="wh-summary-note">{{ proximo_pago.periodo_servicio_label }}</div>{% else %}<div class="wh-summary-main"><span class="wh-summary-value" style="font-size:.92rem">Sin pendiente</span></div><div class="wh-summary-note">Sin pago programado</div>{% endif %}</div>
 </section>
 
 <section><h5 class="wh-section-title">Accesos rápidos</h5><div class="wh-grid"><a class="wh-card" href="/dashboard/home/"><div class="wh-card-icon"><i class="bi bi-card-checklist"></i></div><h3>Mis mantenimientos</h3><p>Mantenimientos y órdenes de trabajo.</p></a><a class="wh-card" href="{% url 'asistente_tecnico:inicio' %}"><div class="wh-card-icon"><i class="bi bi-stars"></i></div><h3>AQUO</h3><p>Diagnóstico inteligente, dosificación y guía paso a paso.</p></a><a class="wh-card" href="{% url 'mi_inventario_trabajador' %}"><div class="wh-card-icon"><i class="bi bi-box-seam-fill"></i></div><h3>Mi inventario</h3><p>Consulta tus productos y cantidades.</p></a><a class="wh-card" href="{% url 'asistente_tecnico:academia_cms' %}?modo=aprender"><div class="wh-card-icon"><i class="bi bi-mortarboard-fill"></i></div><h3>Aprender</h3><p>Curso, biblioteca y procedimientos JVAQUA.</p></a></div></section>
 
 {% if acciones_trabajador %}<section><div class="d-flex justify-content-between mb-2"><h5 class="wh-section-title mb-0">Acciones pendientes</h5><span class="small text-muted">Prioridades</span></div><div class="wh-actions">{% for a in acciones_trabajador %}<div class="wh-action"><div class="wh-icon"><i class="bi {{ a.icono }}"></i></div><div><div class="fw-bold">{{ a.titulo }}</div><div class="small text-muted">{{ a.texto }}</div></div></div>{% endfor %}</div></section>{% endif %}
+
+{% if inventarios_sitio %}
+<section class="mt-3">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <h5 class="wh-section-title mb-0">Inventarios en sitio a tu cargo</h5>
+    <span class="small text-muted">{{ inventarios_sitio_total }} contrato{{ inventarios_sitio_total|pluralize }}</span>
+  </div>
+  <div class="wh-grid">
+    {% for item in inventarios_sitio %}
+      <a class="wh-card" href="{% url 'inventario_contrato_trabajador' item.contrato.id %}">
+        <div class="wh-card-icon"><i class="bi bi-box-seam-fill"></i></div>
+        <h3>{{ item.contrato.cliente }}</h3>
+        <p>Responsable de reposición · {{ item.stocks|length }} producto{{ item.stocks|length|pluralize }}.</p>
+        {% if item.criticos %}<span class="badge text-bg-warning">{{ item.criticos }} producto(s) requieren atención</span>{% else %}<span class="badge text-bg-success">Stock sin alertas críticas</span>{% endif %}
+      </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
 {% if consejo_jvaqua %}<aside class="wh-tip"><div class="fw-bold mb-1"><i class="bi bi-lightbulb-fill me-1"></i>{{ consejo_jvaqua.titulo }}</div><div class="small">{{ consejo_jvaqua.texto }}</div></aside>{% endif %}
 </div>
 {% endblock %}

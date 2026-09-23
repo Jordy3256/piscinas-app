@@ -2382,6 +2382,7 @@ def inicio_view(request):
         ctx["es_admin"] = False
         notificar_trabajadores_mantenimientos_hoy()
         _actualizar_seguimientos_asistente(request.user)
+        _actualizar_alertas_inventario_contratos(request.user)
         ctx.update(_inicio_trabajador_contexto(request.user))
         return render(request, "dashboard/home_trabajador.html", ctx)
 
@@ -2403,7 +2404,33 @@ def _inicio_trabajador_contexto(user):
     hoy = timezone.localdate()
     trabajador = getattr(user, "trabajador", None)
     if not trabajador:
-        return {"hoy": hoy, "nombre_trabajador": _nombre_usuario(user)}
+        # Un usuario del grupo Trabajadores sin ficha vinculada no debe romper
+        # el portal ni dejar indicadores en blanco. No se inventa una ficha: la
+        # vinculación debe corregirse desde administración para preservar el
+        # historial y las responsabilidades del trabajador correcto.
+        return {
+            "hoy": hoy,
+            "nombre_trabajador": _nombre_usuario(user),
+            "mantenimientos_pendientes_hoy": 0,
+            "mantenimientos_realizados_hoy": 0,
+            "mantenimientos_atrasados": 0,
+            "ordenes_hoy": 0,
+            "ordenes_pendientes": 0,
+            "seguimientos_pendientes": 0,
+            "proximo_pago": None,
+            "inventario_productos": 0,
+            "inventarios_sitio": [],
+            "inventarios_sitio_total": 0,
+            "inventarios_sitio_criticos": 0,
+            "acciones_trabajador": [{
+                "tipo": "warning",
+                "icono": "bi-person-exclamation",
+                "titulo": "Perfil laboral pendiente de vinculación",
+                "texto": "Tu usuario existe, pero todavía no está vinculado a tu ficha de trabajador. Administración debe vincularlo para mostrar asignaciones, inventarios y pagos.",
+            }],
+            "consejo_jvaqua": None,
+            "perfil_trabajador_vinculado": False,
+        }
 
     mantenimientos = Mantenimiento.objects.filter(trabajadores=trabajador)
     ordenes = OrdenTrabajo.objects.filter(trabajador=trabajador)
@@ -2438,6 +2465,41 @@ def _inicio_trabajador_contexto(user):
         )
 
     inventario_productos = InventarioTrabajador.objects.filter(trabajador=trabajador, stock__gt=0).count()
+
+    # Responsabilidades de inventario en sitio son independientes de los
+    # mantenimientos. El responsable explícito manda; el técnico designado solo
+    # actúa como respaldo cuando no existe responsable específico.
+    contratos_reposicion = list(
+        Contrato.objects.filter(
+            activo=True,
+            quimicos_proveedor="jvaqua",
+            quimicos_almacenamiento="contrato",
+        )
+        .filter(
+            Q(responsable_reposicion=trabajador)
+            | Q(responsable_reposicion__isnull=True, tecnico_designado=trabajador)
+        )
+        .select_related("cliente")
+        .order_by("cliente__nombre", "id")
+    )
+    ids_reposicion = [c.pk for c in contratos_reposicion]
+    stocks_sitio = list(
+        InventarioContrato.objects.filter(contrato_id__in=ids_reposicion)
+        .select_related("contrato__cliente", "insumo")
+        .order_by("contrato__cliente__nombre", "insumo__nombre")
+    )
+    stocks_por_contrato = defaultdict(list)
+    for stock in stocks_sitio:
+        stocks_por_contrato[stock.contrato_id].append(stock)
+
+    inventarios_sitio = []
+    inventarios_sitio_criticos = 0
+    for contrato in contratos_reposicion:
+        stocks = stocks_por_contrato.get(contrato.pk, [])
+        criticos = sum(1 for stock in stocks if stock.estado_stock in {"critico", "agotado"})
+        inventarios_sitio_criticos += criticos
+        inventarios_sitio.append({"contrato": contrato, "stocks": stocks, "criticos": criticos})
+
     consejo = None
     try:
         from asistente_tecnico.models import ConsejoJVAQUA
@@ -2454,6 +2516,8 @@ def _inicio_trabajador_contexto(user):
         acciones.append({"tipo":"warning","icono":"bi-tools","titulo":f"{ordenes_pendientes} orden(es) de trabajo pendiente(s)","texto":"Las órdenes extraordinarias están dentro de tu agenda de mantenimientos."})
     if seguimientos:
         acciones.append({"tipo":"info","icono":"bi-cpu-fill","titulo":f"{seguimientos} seguimiento(s) del Asistente","texto":"Cuéntanos cómo terminó el tratamiento para mejorar las recomendaciones."})
+    if inventarios_sitio_criticos:
+        acciones.append({"tipo":"warning","icono":"bi-box-seam-fill","titulo":f"{inventarios_sitio_criticos} producto(s) de inventario en sitio requieren atención","texto":"Revisa los contratos donde eres responsable de reposición."})
 
     return {
         "hoy": hoy,
@@ -2466,8 +2530,12 @@ def _inicio_trabajador_contexto(user):
         "seguimientos_pendientes": seguimientos,
         "proximo_pago": proximo_pago,
         "inventario_productos": inventario_productos,
+        "inventarios_sitio": inventarios_sitio,
+        "inventarios_sitio_total": len(inventarios_sitio),
+        "inventarios_sitio_criticos": inventarios_sitio_criticos,
         "acciones_trabajador": acciones[:4],
         "consejo_jvaqua": consejo,
+        "perfil_trabajador_vinculado": True,
     }
 
 
@@ -3670,7 +3738,8 @@ def dashboard_view(request):
         try:
             trabajador = request.user.trabajador
         except Exception:
-            return render(request, "dashboard/no_autorizado.html", status=403)
+            messages.warning(request, "Tu usuario todavía no está vinculado a una ficha de trabajador. Administración debe completar esa vinculación para mostrar tus asignaciones.")
+            return redirect("inicio")
 
         anio_cal = int(request.GET.get("anio_cal", hoy.year))
         mes_cal = int(request.GET.get("mes_cal", hoy.month))
@@ -5385,7 +5454,10 @@ def mantenimiento_whatsapp_cliente_view(request, pk):
 def mi_cuenta_trabajador_view(request):
     if not es_trabajador(request.user):
         return render(request, "dashboard/no_autorizado.html", status=403)
-    trabajador = get_object_or_404(Trabajador.objects.select_related("user"), user=request.user)
+    trabajador = Trabajador.objects.select_related("user").filter(user=request.user).first()
+    if trabajador is None:
+        messages.warning(request, "Tu usuario todavía no está vinculado a una ficha de trabajador. Administración debe completar esa vinculación para mostrar tu cuenta, asignaciones y pagos.")
+        return redirect("inicio")
     hoy = timezone.localdate()
     try:
         anio = int(request.GET.get("anio") or hoy.year)
@@ -7348,7 +7420,10 @@ def inventario_presentacion_eliminar_view(request, pk):
 def mi_inventario_trabajador_view(request):
     if not es_trabajador(request.user):
         return render(request, "dashboard/no_autorizado.html", status=403)
-    trabajador = get_object_or_404(Trabajador.objects.select_related("user"), user=request.user)
+    trabajador = Trabajador.objects.select_related("user").filter(user=request.user).first()
+    if trabajador is None:
+        messages.warning(request, "Tu usuario todavía no está vinculado a una ficha de trabajador. Administración debe completar esa vinculación para mostrar tu inventario.")
+        return redirect("inicio")
     stocks = list(InventarioTrabajador.objects.filter(trabajador=trabajador, stock__gt=0).select_related("insumo").order_by("insumo__nombre"))
     movimientos = list(MovimientoInventario.objects.filter(trabajador=trabajador).select_related("insumo", "mantenimiento__cliente").order_by("-creado_en")[:100])
     hoy = timezone.localdate(); inicio = hoy.replace(day=1)
