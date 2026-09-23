@@ -202,7 +202,7 @@ class Ingreso(MovimientoFinancieroMixin):
 
 
 class MovimientoRecurrente(models.Model):
-    TIPO_CHOICES = [("ingreso", "Ingreso"), ("egreso", "Egreso")]
+    TIPO_CHOICES = [("egreso", "Egreso manual recurrente")]
     FRECUENCIA_CHOICES = [("mensual", "Mensual"), ("semanal", "Semanal")]
 
     tipo = models.CharField(max_length=10, choices=TIPO_CHOICES)

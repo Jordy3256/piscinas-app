@@ -5,16 +5,16 @@
     <div class="mb-4">
         <h2 class="mb-1">
             {% if modo == "editar" %}
-                Editar movimiento recurrente
+                Editar gasto recurrente
             {% else %}
-                Eliminar movimiento recurrente
+                Eliminar gasto recurrente
             {% endif %}
         </h2>
         <p class="text-muted mb-0">
             {% if modo == "editar" %}
-                Actualiza los datos del movimiento recurrente.
+                Actualiza los datos del gasto recurrente.
             {% else %}
-                Confirma si deseas eliminar este movimiento.
+                Confirma si deseas eliminar este gasto recurrente.
             {% endif %}
         </p>
     </div>
@@ -24,14 +24,6 @@
             {% if modo == "editar" %}
             <form method="post" class="row g-3">
                 {% csrf_token %}
-
-                <div class="col-md-3">
-                    <label class="form-label">Tipo</label>
-                    <select name="tipo" class="form-select" required>
-                        <option value="ingreso" {% if movimiento.tipo == "ingreso" %}selected{% endif %}>Ingreso</option>
-                        <option value="egreso" {% if movimiento.tipo == "egreso" %}selected{% endif %}>Egreso</option>
-                    </select>
-                </div>
 
                 <div class="col-md-5">
                     <label class="form-label">Concepto</label>

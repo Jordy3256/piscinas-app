@@ -300,6 +300,7 @@ def notificar_movimientos_recurrentes_proximos():
 
     movimientos = MovimientoRecurrente.objects.filter(
         activo=True,
+        tipo="egreso",
         proxima_fecha=manana
     ).order_by("proxima_fecha", "id")
 
@@ -310,18 +311,11 @@ def notificar_movimientos_recurrentes_proximos():
     url = "/dashboard/finanzas/recurrentes/"
 
     for mov in movimientos:
-        if mov.tipo == "ingreso":
-            titulo = "💰 Cobro recurrente próximo"
-            mensaje = (
-                f"Mañana debes cobrar '{mov.concepto}' por ${mov.monto} "
-                f"(fecha {mov.proxima_fecha})."
-            )
-        else:
-            titulo = "💸 Pago recurrente próximo"
-            mensaje = (
-                f"Mañana debes pagar '{mov.concepto}' por ${mov.monto} "
-                f"(fecha {mov.proxima_fecha})."
-            )
+        titulo = "💸 Gasto recurrente próximo"
+        mensaje = (
+            f"Mañana vence el gasto manual recurrente '{mov.concepto}' por ${mov.monto} "
+            f"(fecha {mov.proxima_fecha})."
+        )
 
         for admin_user in admins:
             if _notificacion_recurrente_ya_existe_hoy(admin_user, titulo, mensaje, url):
@@ -994,10 +988,11 @@ def procesar_movimientos_recurrentes():
 
     movimientos = MovimientoRecurrente.objects.filter(
         activo=True,
+        tipo="egreso",
         proxima_fecha__lte=hoy
     ).order_by("proxima_fecha", "id")
 
-    total_ingresos = 0
+    total_ingresos = 0  # Compatibilidad con la respuesta existente; ya no se generan ingresos recurrentes.
     total_egresos = 0
     movimientos_procesados = 0
 
@@ -1007,53 +1002,35 @@ def procesar_movimientos_recurrentes():
         while mov.activo and mov.proxima_fecha <= hoy:
             fecha_mov = mov.proxima_fecha
 
-            if mov.tipo == "ingreso":
-                Ingreso.objects.create(
-                    concepto=mov.concepto,
-                    total=mov.monto,
-                    fecha=fecha_mov
-                )
+            # Un gasto recurrente genera una OBLIGACIÓN pendiente, no un pago real.
+            # El pago se registra después manualmente desde Finanzas.
+            egreso, creado = Egreso.objects.get_or_create(
+                recurrente=mov,
+                fecha_recurrente=fecha_mov,
+                defaults={
+                    "concepto": mov.concepto,
+                    "categoria": "administracion",
+                    "cantidad": 1,
+                    "costo_unitario": mov.monto,
+                    "total": mov.monto,
+                    "monto_pagado": Decimal("0.00"),
+                    "estado": Egreso.ESTADO_PENDIENTE,
+                    "fecha": fecha_mov,
+                    "fecha_vencimiento": fecha_mov,
+                    "observaciones": "Obligación generada automáticamente desde Gastos recurrentes. Registrar el pago real manualmente cuando se efectúe.",
+                },
+            )
 
-                total_ingresos += 1
+            if creado:
+                total_egresos += 1
                 generado_este_movimiento += 1
 
                 _notificar_admins(
-                    titulo="💰 Ingreso recurrente generado",
-                    mensaje=f"Se generó el ingreso recurrente '{mov.concepto}' por ${mov.monto} (fecha {fecha_mov}).",
+                    titulo="💸 Gasto recurrente pendiente",
+                    mensaje=f"Se generó la obligación '{mov.concepto}' por ${mov.monto} (vence {fecha_mov}). Aún no consta como pagada.",
                     url="/dashboard/finanzas/flujo/",
                     enviar_push=True,
                 )
-
-            elif mov.tipo == "egreso":
-                # Un gasto recurrente genera una OBLIGACIÓN pendiente, no un pago real.
-                # El pago se registra después manualmente desde Finanzas.
-                egreso, creado = Egreso.objects.get_or_create(
-                    recurrente=mov,
-                    fecha_recurrente=fecha_mov,
-                    defaults={
-                        "concepto": mov.concepto,
-                        "categoria": "administracion",
-                        "cantidad": 1,
-                        "costo_unitario": mov.monto,
-                        "total": mov.monto,
-                        "monto_pagado": Decimal("0.00"),
-                        "estado": Egreso.ESTADO_PENDIENTE,
-                        "fecha": fecha_mov,
-                        "fecha_vencimiento": fecha_mov,
-                        "observaciones": "Obligación generada automáticamente desde Gastos recurrentes. Registrar el pago real manualmente cuando se efectúe.",
-                    },
-                )
-
-                if creado:
-                    total_egresos += 1
-                    generado_este_movimiento += 1
-
-                    _notificar_admins(
-                        titulo="💸 Gasto recurrente pendiente",
-                        mensaje=f"Se generó la obligación '{mov.concepto}' por ${mov.monto} (vence {fecha_mov}). Aún no consta como pagada.",
-                        url="/dashboard/finanzas/flujo/",
-                        enviar_push=True,
-                    )
 
             mov.proxima_fecha = _siguiente_fecha_recurrente(fecha_mov, mov.frecuencia, mov.dia_mes)
             mov.save(update_fields=["proxima_fecha"])
@@ -6541,16 +6518,12 @@ def movimientos_recurrentes_view(request):
     notificar_movimientos_recurrentes_proximos()
 
     if request.method == "POST":
-        tipo = (request.POST.get("tipo", "") or "").strip()
+        tipo = "egreso"
         concepto = (request.POST.get("concepto", "") or "").strip()
         monto_str = (request.POST.get("monto", "") or "").strip()
         frecuencia = (request.POST.get("frecuencia", "") or "").strip()
         proxima_fecha_str = (request.POST.get("proxima_fecha", "") or "").strip()
         activo = request.POST.get("activo") == "on"
-
-        if tipo not in ["ingreso", "egreso"]:
-            messages.error(request, "Tipo de movimiento inválido.")
-            return redirect("/dashboard/finanzas/recurrentes/")
 
         if frecuencia not in ["mensual", "semanal"]:
             messages.error(request, "Frecuencia inválida.")
@@ -6585,18 +6558,17 @@ def movimientos_recurrentes_view(request):
 
         _registrar_actividad(
             user=request.user,
-            titulo="Movimiento recurrente creado",
+            titulo="Gasto recurrente creado",
             descripcion=f"{request.user.username} creó el movimiento recurrente '{concepto}' por ${monto}.",
             url="/dashboard/finanzas/recurrentes/",
         )
 
-        messages.success(request, "Movimiento recurrente creado correctamente.")
+        messages.success(request, "Gasto recurrente creado correctamente.")
         return redirect("/dashboard/finanzas/recurrentes/")
 
-    movimientos = MovimientoRecurrente.objects.all().order_by("activo", "proxima_fecha", "-id")
+    movimientos = MovimientoRecurrente.objects.filter(tipo="egreso").order_by("activo", "proxima_fecha", "-id")
     total_activos = movimientos.filter(activo=True).count()
     total_inactivos = movimientos.filter(activo=False).count()
-    total_ingresos = movimientos.filter(tipo="ingreso", activo=True).count()
     total_egresos = movimientos.filter(tipo="egreso", activo=True).count()
     pendientes = movimientos.filter(activo=True, proxima_fecha__lte=date.today()).count()
 
@@ -6607,7 +6579,6 @@ def movimientos_recurrentes_view(request):
             "movimientos": movimientos,
             "total_activos": total_activos,
             "total_inactivos": total_inactivos,
-            "total_ingresos": total_ingresos,
             "total_egresos": total_egresos,
             "pendientes": pendientes,
             "hoy": date.today(),
@@ -6629,8 +6600,7 @@ def movimientos_recurrentes_procesar_view(request):
         titulo="Recurrentes procesados",
         descripcion=(
             f"{request.user.username} ejecutó los movimientos recurrentes: "
-            f"{resultado['total_generados']} generados "
-            f"({resultado['ingresos_generados']} ingresos, {resultado['egresos_generados']} egresos)."
+            f"{resultado['egresos_generados']} obligaciones de gasto generadas."
         ),
         url="/dashboard/finanzas/recurrentes/",
     )
@@ -6638,8 +6608,7 @@ def movimientos_recurrentes_procesar_view(request):
     if resultado["total_generados"] > 0:
         messages.success(
             request,
-            f"Proceso completado: {resultado['total_generados']} movimientos generados "
-            f"({resultado['ingresos_generados']} ingresos y {resultado['egresos_generados']} egresos)."
+            f"Proceso completado: {resultado['egresos_generados']} obligaciones de gasto generadas."
         )
     else:
         messages.info(request, "No había movimientos recurrentes pendientes por procesar.")
@@ -6652,19 +6621,15 @@ def movimiento_recurrente_editar_view(request, pk):
     if not es_admin(request.user):
         return render(request, "dashboard/no_autorizado.html", status=403)
 
-    movimiento = get_object_or_404(MovimientoRecurrente, pk=pk)
+    movimiento = get_object_or_404(MovimientoRecurrente, pk=pk, tipo="egreso")
 
     if request.method == "POST":
-        tipo = (request.POST.get("tipo", "") or "").strip()
+        tipo = "egreso"
         concepto = (request.POST.get("concepto", "") or "").strip()
         monto_str = (request.POST.get("monto", "") or "").strip()
         frecuencia = (request.POST.get("frecuencia", "") or "").strip()
         proxima_fecha_str = (request.POST.get("proxima_fecha", "") or "").strip()
         activo = request.POST.get("activo") == "on"
-
-        if tipo not in ["ingreso", "egreso"]:
-            messages.error(request, "Tipo inválido.")
-            return redirect(f"/dashboard/finanzas/recurrentes/{pk}/editar/")
 
         if frecuencia not in ["mensual", "semanal"]:
             messages.error(request, "Frecuencia inválida.")
@@ -6723,7 +6688,7 @@ def movimiento_recurrente_toggle_view(request, pk):
     if not es_admin(request.user):
         return render(request, "dashboard/no_autorizado.html", status=403)
 
-    movimiento = get_object_or_404(MovimientoRecurrente, pk=pk)
+    movimiento = get_object_or_404(MovimientoRecurrente, pk=pk, tipo="egreso")
 
     movimiento.activo = not movimiento.activo
     movimiento.save(update_fields=["activo"])
@@ -6746,7 +6711,7 @@ def movimiento_recurrente_eliminar_view(request, pk):
     if not es_admin(request.user):
         return render(request, "dashboard/no_autorizado.html", status=403)
 
-    movimiento = get_object_or_404(MovimientoRecurrente, pk=pk)
+    movimiento = get_object_or_404(MovimientoRecurrente, pk=pk, tipo="egreso")
 
     if request.method == "POST":
         concepto = movimiento.concepto
