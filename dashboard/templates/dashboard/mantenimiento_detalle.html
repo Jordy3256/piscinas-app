@@ -157,13 +157,13 @@
     <div class="card-body">
       <div class="premium-title"><i class="bi bi-droplet-half"></i><span>Productos utilizados <span class="badge bg-light text-secondary">Opcional</span></span></div>
       {% if esta_cancelado %}<div class="alert alert-secondary border mb-3"><div class="fw-bold">🚫 Visita cancelada por administración</div><div class="mt-1">{{ m.motivo_cancelacion }}</div>{% if m.cancelado_en %}<div class="small text-muted mt-1">Cancelada el {{ m.cancelado_en|date:"d/m/Y H:i" }}{% if m.cancelado_por %} por {{ m.cancelado_por.get_full_name|default:m.cancelado_por.username }}{% endif %}.</div>{% endif %}</div>{% endif %}
-      <div class="text-muted small mb-3">Este es el único registro de productos/químicos del mantenimiento. {% if modalidad_quimicos == 'contrato' %}Los consumos se descuentan del inventario en sitio de este contrato.{% elif modalidad_quimicos == 'cliente' %}Los productos son proporcionados por el cliente: se registra lo aplicado sin descontar inventario JVAQUA.{% else %}Los consumos se descuentan del inventario del trabajador.{% endif %}</div>{% if modalidad_quimicos == 'contrato' %}<a class="btn btn-sm btn-outline-primary mb-3" href="{% url 'inventario_contrato_trabajador' m.contrato.id %}">🏊 Ver / reponer inventario en sitio</a>{% endif %}
+      <div class="text-muted small mb-3">Este es el único registro de productos/químicos del mantenimiento. {% if modalidad_quimicos == 'contrato' %}Este contrato tiene inventario en sitio: para cada producto puedes elegir si sale del inventario en sitio o de tu inventario personal.{% elif modalidad_quimicos == 'cliente' %}Los productos son proporcionados por el cliente: se registra lo aplicado sin descontar inventario JVAQUA.{% else %}Los consumos se descuentan del inventario del trabajador.{% endif %}</div>{% if modalidad_quimicos == 'contrato' %}<a class="btn btn-sm btn-outline-primary mb-3" href="{% url 'inventario_contrato_trabajador' m.contrato.id %}">🏊 Ver / reponer inventario en sitio</a>{% endif %}
 
       {% if lista_usos %}
       <div class="vstack gap-2 mb-3">
         {% for u in lista_usos %}
         <div class="usage-card d-flex justify-content-between align-items-center gap-2 flex-wrap">
-          <div><div class="fw-bold">{{ u.insumo.nombre }}</div><div class="small text-muted">{{ u.cantidad_mostrada|floatformat:"-3" }} {{ u.unidad_mostrada }} · {{ u.trabajador|default:'Histórico' }}</div></div>
+          <div><div class="fw-bold">{{ u.insumo.nombre }}</div><div class="small text-muted">{{ u.cantidad_mostrada|floatformat:"-3" }} {{ u.unidad_mostrada }} · {{ u.trabajador|default:'Histórico' }} · {% if u.origen_inventario == 'contrato' %}🏊 Inventario en sitio{% elif u.origen_inventario == 'trabajador' %}🧰 Inventario del trabajador{% elif u.origen_inventario == 'cliente' %}👤 Producto del cliente{% else %}{{ u.get_origen_inventario_display }}{% endif %}</div></div>
           <div class="text-end">{% if es_admin %}<div class="fw-bold">${{ u.subtotal|floatformat:2 }}</div>{% endif %}{% if not esta_realizado %}<a class="btn btn-sm btn-outline-primary mt-1" href="/dashboard/usos/{{ u.id }}/editar/">Editar</a> <a class="btn btn-sm btn-outline-danger mt-1" href="/dashboard/usos/{{ u.id }}/eliminar/">Eliminar</a>{% endif %}</div>
         </div>
         {% endfor %}
@@ -173,7 +173,7 @@
 
       {% if not esta_realizado %}
         {% if es_admin %}
-        <div class="mb-3"><label class="form-label fw-bold">Trabajador que utilizó los productos</label><select class="form-select" name="trabajador_consumo_id"><option value="">Selecciona trabajador solo si agregarás productos</option>{% for t in trabajadores_mantenimiento %}<option value="{{ t.id }}">{{ t.user.get_full_name|default:t.user.username }}</option>{% endfor %}</select></div>
+        <div class="mb-3"><label class="form-label fw-bold">Trabajador que utilizó los productos</label><select class="form-select" name="trabajador_consumo_id" id="trabajadorConsumoId"><option value="">Selecciona trabajador solo si agregarás productos</option>{% for t in trabajadores_mantenimiento %}<option value="{{ t.id }}">{{ t.user.get_full_name|default:t.user.username }}</option>{% endfor %}</select></div>
         {% endif %}
 
         <div id="productosNuevos" class="vstack gap-2"></div>
@@ -261,7 +261,34 @@
   <div class="product-row producto-nuevo-row">
     <div class="d-flex justify-content-between align-items-center mb-2"><strong>Producto a utilizar</strong><button type="button" class="btn btn-sm btn-outline-danger quitarProductoBtn">Quitar</button></div>
     <div class="row g-2">
-      <div class="col-12"><select class="form-select" name="producto_insumo_id"><option value="">-- Selecciona producto --</option>{% if modalidad_quimicos == 'contrato' %}{% for inv in inventario_mantenimiento %}<option value="{{ inv.insumo.id }}">{{ inv.insumo.nombre }} · estimado {{ inv.stock_estimado|floatformat:"-3" }} {{ inv.insumo.unidad_corta }}</option>{% endfor %}{% elif modalidad_quimicos == 'trabajador' and trabajador_actual %}{% for inv in inventario_mantenimiento %}<option value="{{ inv.insumo.id }}">{{ inv.insumo.nombre }} · disponible {{ inv.stock|floatformat:"-3" }} {{ inv.insumo.unidad_corta }}</option>{% endfor %}{% else %}{% for i in insumos %}<option value="{{ i.id }}">{{ i.nombre }}</option>{% endfor %}{% endif %}</select></div>
+      {% if modalidad_quimicos == 'contrato' %}
+      <div class="col-12">
+        <label class="form-label small fw-bold mb-1">¿De dónde sale este producto?</label>
+        <select class="form-select producto-origen" name="producto_origen" required>
+          <option value="">-- Selecciona el origen --</option>
+          <option value="contrato">🏊 Inventario en sitio</option>
+          <option value="trabajador">🧰 Mi inventario</option>
+        </select>
+      </div>
+      {% elif modalidad_quimicos == 'cliente' %}
+      <input type="hidden" name="producto_origen" value="cliente">
+      {% else %}
+      <input type="hidden" name="producto_origen" value="trabajador">
+      {% endif %}
+      <div class="col-12">
+        <select class="form-select producto-insumo" name="producto_insumo_id">
+          <option value="">-- Selecciona producto --</option>
+          {% if modalidad_quimicos == 'contrato' %}
+            {% for inv in inventario_contrato_mantenimiento %}<option value="{{ inv.insumo.id }}" data-origen="contrato">{{ inv.insumo.nombre }} · disponible {{ inv.stock_estimado|floatformat:"-3" }} {{ inv.insumo.unidad_corta }}</option>{% endfor %}
+            {% if trabajador_actual %}{% for inv in inventario_trabajador_mantenimiento %}<option value="{{ inv.insumo.id }}" data-origen="trabajador">{{ inv.insumo.nombre }} · disponible {{ inv.stock|floatformat:"-3" }} {{ inv.insumo.unidad_corta }}</option>{% endfor %}{% else %}{% for inv in inventario_trabajadores_admin %}<option value="{{ inv.insumo.id }}" data-origen="trabajador" data-trabajador="{{ inv.trabajador_id }}">{{ inv.insumo.nombre }} · disponible {{ inv.stock|floatformat:"-3" }} {{ inv.insumo.unidad_corta }}</option>{% endfor %}{% endif %}
+          {% elif modalidad_quimicos == 'trabajador' %}
+            {% if trabajador_actual %}{% for inv in inventario_trabajador_mantenimiento %}<option value="{{ inv.insumo.id }}" data-origen="trabajador">{{ inv.insumo.nombre }} · disponible {{ inv.stock|floatformat:"-3" }} {{ inv.insumo.unidad_corta }}</option>{% endfor %}{% else %}{% for inv in inventario_trabajadores_admin %}<option value="{{ inv.insumo.id }}" data-origen="trabajador" data-trabajador="{{ inv.trabajador_id }}">{{ inv.insumo.nombre }} · disponible {{ inv.stock|floatformat:"-3" }} {{ inv.insumo.unidad_corta }}</option>{% endfor %}{% endif %}
+          {% else %}
+            {% for i in insumos %}<option value="{{ i.id }}">{{ i.nombre }}</option>{% endfor %}
+          {% endif %}
+        </select>
+        <div class="form-text disponibilidad-producto"></div>
+      </div>
       <div class="col-7"><input class="form-control" type="number" step="0.001" min="0.001" name="producto_cantidad" placeholder="Cantidad"></div>
       <div class="col-5"><select class="form-select" name="producto_unidad"><option value="g">Gramos (g)</option><option value="kg">Kilogramos (kg)</option><option value="ml">Mililitros (ml)</option><option value="l">Litros (L)</option></select></div>
     </div>
@@ -279,7 +306,40 @@
     const clean=['aspirado','cepillado','recoleccion_basura','limpieza_filtros','retrolavado_arena','limpieza_filos'];let lim=0;clean.forEach(n=>{const e=document.querySelector('[name="'+n+'"]');if(e&&e.checked)lim++;});
     const ri=document.getElementById('resumenInspeccion'), rl=document.getElementById('resumenLimpieza'), rp=document.getElementById('resumenProductos'); if(ri)ri.textContent=ins;if(rl)rl.textContent=lim;if(rp)rp.textContent={{ cantidad_usos }}+(container?container.querySelectorAll('.producto-nuevo-row').length:0);
   }
-  if(addBtn&&container&&template){addBtn.addEventListener('click',()=>{container.appendChild(template.content.cloneNode(true));syncResumen();});container.addEventListener('click',e=>{if(e.target.classList.contains('quitarProductoBtn')){e.target.closest('.producto-nuevo-row').remove();syncResumen();}});}
+  function syncProductoRow(row){
+    if(!row)return;
+    const origen=row.querySelector('.producto-origen');
+    const producto=row.querySelector('.producto-insumo');
+    if(!producto)return;
+    const origenValor=origen?origen.value:(row.querySelector('input[name="producto_origen"]')||{}).value;
+    const trabajadorSelect=document.getElementById('trabajadorConsumoId');
+    const trabajadorId=trabajadorSelect?trabajadorSelect.value:'';
+    let visibles=0;
+    Array.from(producto.options).forEach((opt,idx)=>{
+      if(idx===0)return;
+      const coincideOrigen=!opt.dataset.origen||!origenValor||opt.dataset.origen===origenValor;
+      const coincideTrabajador=!opt.dataset.trabajador||!trabajadorSelect||opt.dataset.trabajador===trabajadorId;
+      opt.hidden=!(coincideOrigen&&coincideTrabajador);
+      opt.disabled=opt.hidden;
+      if(!opt.hidden)visibles++;
+    });
+    if(producto.selectedOptions.length&&producto.selectedOptions[0].hidden)producto.value='';
+    producto.disabled=!!origen && !origenValor;
+    const ayuda=row.querySelector('.disponibilidad-producto');
+    if(ayuda){
+      if(origen && !origenValor) ayuda.textContent='Primero selecciona el origen del producto.';
+      else if(trabajadorSelect && origenValor==='trabajador' && !trabajadorId) ayuda.textContent='Primero selecciona el trabajador que utilizó los productos.';
+      else if(!visibles) ayuda.textContent='No hay productos con stock disponible en este inventario.';
+      else ayuda.textContent='Solo se muestran productos con existencia disponible.';
+    }
+  }
+  function syncTodasLasFilas(){if(container)container.querySelectorAll('.producto-nuevo-row').forEach(syncProductoRow);}
+  if(addBtn&&container&&template){
+    addBtn.addEventListener('click',()=>{container.appendChild(template.content.cloneNode(true));const row=container.lastElementChild;syncProductoRow(row);syncResumen();});
+    container.addEventListener('click',e=>{if(e.target.classList.contains('quitarProductoBtn')){e.target.closest('.producto-nuevo-row').remove();syncResumen();}});
+    container.addEventListener('change',e=>{if(e.target.classList.contains('producto-origen'))syncProductoRow(e.target.closest('.producto-nuevo-row'));});
+  }
+  const trabajadorConsumo=document.getElementById('trabajadorConsumoId');if(trabajadorConsumo)trabajadorConsumo.addEventListener('change',syncTodasLasFilas);
   document.querySelectorAll('input,select').forEach(e=>e.addEventListener('change',syncResumen));syncResumen();
 
   const visor=document.getElementById('visorImagen'), img=document.getElementById('imagenAmpliada'), close=document.getElementById('cerrarVisor');document.querySelectorAll('.foto-clickable').forEach(el=>el.addEventListener('click',()=>{img.src=el.dataset.full||el.src;visor.classList.add('activo');}));if(close)close.addEventListener('click',()=>visor.classList.remove('activo'));if(visor)visor.addEventListener('click',e=>{if(e.target===visor)visor.classList.remove('activo');});

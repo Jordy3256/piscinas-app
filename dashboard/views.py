@@ -4920,20 +4920,48 @@ def mantenimiento_detalle_view(request, pk):
         "contrato" if contrato_quimicos.quimicos_almacenamiento == "contrato" else "trabajador"
     )
 
+    # Inventarios disponibles para registrar consumos. Un contrato con inventario
+    # en sitio puede mezclar, línea por línea, stock del contrato y stock personal
+    # del técnico. Los demás contratos conservan su modalidad normal.
+    inventario_contrato_mantenimiento = []
+    inventario_trabajador_mantenimiento = []
+    inventario_trabajadores_admin = []
+
     if modalidad_quimicos == "contrato":
-        inventario_mantenimiento = list(
+        inventario_contrato_mantenimiento = list(
             InventarioContrato.objects.filter(
                 contrato=contrato_quimicos,
+                stock__gt=0,
                 insumo__activo=True,
                 insumo__puede_mantenimiento=True,
             ).select_related("insumo").order_by("insumo__nombre")
         )
-        insumos = [x.insumo for x in inventario_mantenimiento]
+        if trabajador_actual:
+            inventario_trabajador_mantenimiento = list(
+                InventarioTrabajador.objects.filter(
+                    trabajador=trabajador_actual,
+                    stock__gt=0,
+                    insumo__activo=True,
+                    insumo__puede_mantenimiento=True,
+                ).select_related("insumo").order_by("insumo__nombre")
+            )
+        elif es_usuario_admin:
+            inventario_trabajadores_admin = list(
+                InventarioTrabajador.objects.filter(
+                    trabajador__in=mantenimiento.trabajadores.filter(activo=True),
+                    stock__gt=0,
+                    insumo__activo=True,
+                    insumo__puede_mantenimiento=True,
+                ).select_related("insumo", "trabajador", "trabajador__user")
+                .order_by("trabajador__user__username", "insumo__nombre")
+            )
+        inventario_mantenimiento = inventario_contrato_mantenimiento
+        insumos = [x.insumo for x in inventario_contrato_mantenimiento]
     elif modalidad_quimicos == "cliente":
         inventario_mantenimiento = []
         insumos = list(Insumo.objects.filter(activo=True, puede_mantenimiento=True).order_by("nombre"))
     elif trabajador_actual:
-        inventario_mantenimiento = list(
+        inventario_trabajador_mantenimiento = list(
             InventarioTrabajador.objects.filter(
                 trabajador=trabajador_actual,
                 stock__gt=0,
@@ -4941,12 +4969,21 @@ def mantenimiento_detalle_view(request, pk):
                 insumo__puede_mantenimiento=True,
             ).select_related("insumo").order_by("insumo__nombre")
         )
-        insumos = [x.insumo for x in inventario_mantenimiento]
+        inventario_mantenimiento = inventario_trabajador_mantenimiento
+        insumos = [x.insumo for x in inventario_trabajador_mantenimiento]
     else:
         inventario_mantenimiento = []
-        insumos = list(
-            Insumo.objects.filter(activo=True, puede_mantenimiento=True).order_by("nombre")
-        )
+        if es_usuario_admin:
+            inventario_trabajadores_admin = list(
+                InventarioTrabajador.objects.filter(
+                    trabajador__in=mantenimiento.trabajadores.filter(activo=True),
+                    stock__gt=0,
+                    insumo__activo=True,
+                    insumo__puede_mantenimiento=True,
+                ).select_related("insumo", "trabajador", "trabajador__user")
+                .order_by("trabajador__user__username", "insumo__nombre")
+            )
+        insumos = list(Insumo.objects.filter(activo=True, puede_mantenimiento=True).order_by("nombre"))
 
     trabajadores_mantenimiento = list(
         mantenimiento.trabajadores.filter(activo=True)
@@ -5127,6 +5164,7 @@ def mantenimiento_detalle_view(request, pk):
                 ids_insumo = request.POST.getlist("producto_insumo_id")
                 cantidades = request.POST.getlist("producto_cantidad")
                 unidades = request.POST.getlist("producto_unidad")
+                origenes = request.POST.getlist("producto_origen")
 
                 if trabajador_actual:
                     trabajador_consumo = trabajador_actual
@@ -5160,31 +5198,42 @@ def mantenimiento_detalle_view(request, pk):
 
                     cantidad_base = convertir_a_base(insumo, cantidad_ingresada, unidad)
                     contrato_consumo = mantenimiento.contrato
+
                     if contrato_consumo.quimicos_proveedor == "cliente":
                         origen_inventario = "cliente"
                         costo_unitario = Decimal("0.0000")
                         costo_total = Decimal("0.00")
-                    elif contrato_consumo.quimicos_almacenamiento == "contrato":
-                        origen_inventario = "contrato"
-                        movimiento = consumir_contrato(
-                            contrato=contrato_consumo,
-                            insumo=insumo,
-                            trabajador=trabajador_consumo,
-                            cantidad_base=cantidad_base,
-                            mantenimiento=mantenimiento,
-                            usuario=request.user,
-                        )
-                        costo_unitario = movimiento.costo_unitario
-                        costo_total = movimiento.total_costo
                     else:
-                        origen_inventario = "trabajador"
-                        movimiento = consumir_trabajador(
-                            insumo=insumo,
-                            trabajador=trabajador_consumo,
-                            cantidad_base=cantidad_base,
-                            mantenimiento=mantenimiento,
-                            usuario=request.user,
-                        )
+                        origen_solicitado = (origenes[index] if index < len(origenes) else "").strip()
+                        if contrato_consumo.quimicos_almacenamiento == "contrato":
+                            if origen_solicitado not in {"contrato", "trabajador"}:
+                                raise ValueError("Selecciona si el producto sale del inventario en sitio o de tu inventario.")
+                            origen_inventario = origen_solicitado
+                        else:
+                            # Los contratos sin inventario en sitio siempre consumen
+                            # del inventario del trabajador, aunque el navegador envíe
+                            # un valor manipulado.
+                            origen_inventario = "trabajador"
+
+                        if origen_inventario == "contrato":
+                            movimiento = consumir_contrato(
+                                contrato=contrato_consumo,
+                                insumo=insumo,
+                                trabajador=trabajador_consumo,
+                                cantidad_base=cantidad_base,
+                                mantenimiento=mantenimiento,
+                                usuario=request.user,
+                            )
+                        else:
+                            if not trabajador_consumo:
+                                raise ValueError("Selecciona el trabajador que utilizó los productos.")
+                            movimiento = consumir_trabajador(
+                                insumo=insumo,
+                                trabajador=trabajador_consumo,
+                                cantidad_base=cantidad_base,
+                                mantenimiento=mantenimiento,
+                                usuario=request.user,
+                            )
                         costo_unitario = movimiento.costo_unitario
                         costo_total = movimiento.total_costo
 
@@ -5253,7 +5302,7 @@ def mantenimiento_detalle_view(request, pk):
                     mantenimiento.borrador_guardado = False
                     mantenimiento.save(update_fields=["estado", "borrador_guardado"])
 
-        except (ValueError, InventarioTrabajador.DoesNotExist) as exc:
+        except (ValueError, InventarioTrabajador.DoesNotExist, InventarioContrato.DoesNotExist) as exc:
             messages.error(request, str(exc) or "No se pudo guardar el mantenimiento.")
             return redirect(safe_return_url())
         except Exception:
@@ -5375,6 +5424,9 @@ def mantenimiento_detalle_view(request, pk):
             "lista_usos": lista_usos,
             "lista_egresos": lista_egresos,
             "inventario_mantenimiento": inventario_mantenimiento,
+            "inventario_contrato_mantenimiento": inventario_contrato_mantenimiento,
+            "inventario_trabajador_mantenimiento": inventario_trabajador_mantenimiento,
+            "inventario_trabajadores_admin": inventario_trabajadores_admin,
             "modalidad_quimicos": modalidad_quimicos,
             "contrato_quimicos": contrato_quimicos,
             "trabajadores_mantenimiento": trabajadores_mantenimiento,
