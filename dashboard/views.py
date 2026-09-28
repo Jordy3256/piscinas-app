@@ -8962,29 +8962,27 @@ def contrato_list_view(request):
     ciudad_id = (request.GET.get("ciudad") or "").strip()
     orden_valor = (request.GET.get("orden_valor") or "").strip().lower()
 
-    contratos = (
-        Contrato.objects
-        .select_related("cliente")
-        .annotate(
-            total_mantenimientos=Count(
-                "mantenimiento",
-                distinct=True,
-            )
-        )
-        .order_by("-activo", "cliente__nombre", "id")
-    )
+    # Primero filtramos sobre un queryset simple. La versión anterior aplicaba
+    # Count() antes de los filtros; al combinar búsquedas/relaciones en PostgreSQL
+    # podía producir una consulta agregada innecesariamente compleja y terminar en
+    # error 500. La anotación de mantenimientos se agrega solo al final.
+    contratos = Contrato.objects.select_related("cliente", "ciudad_ref", "cliente__ciudad_ref")
 
     if q:
-        contratos = contratos.filter(
-            models.Q(cliente__nombre__icontains=q)
-            | models.Q(cliente__telefono__icontains=q)
-            | models.Q(cliente__email__icontains=q)
-            | models.Q(frecuencia_personalizada__icontains=q)
-            | models.Q(forma_pago_personalizada__icontains=q)
+        filtro_busqueda = (
+            Q(cliente__nombre__icontains=q)
+            | Q(cliente__telefono__icontains=q)
+            | Q(cliente__email__icontains=q)
+            | Q(frecuencia_personalizada__icontains=q)
+            | Q(forma_pago_personalizada__icontains=q)
         )
+        contratos = contratos.filter(filtro_busqueda)
 
     if ciudad_id.isdigit():
-        contratos = contratos.filter(models.Q(ciudad_ref_id=ciudad_id) | models.Q(ciudad_ref__isnull=True, cliente__ciudad_ref_id=ciudad_id))
+        contratos = contratos.filter(
+            Q(ciudad_ref_id=int(ciudad_id))
+            | Q(ciudad_ref__isnull=True, cliente__ciudad_ref_id=int(ciudad_id))
+        )
 
     if estado == "activo":
         contratos = contratos.filter(activo=True)
@@ -8998,6 +8996,8 @@ def contrato_list_view(request):
         contratos = contratos.order_by("-precio_mensual", "cliente__nombre", "id")
     elif orden_valor == "menor":
         contratos = contratos.order_by("precio_mensual", "cliente__nombre", "id")
+    else:
+        contratos = contratos.order_by("-activo", "cliente__nombre", "id")
 
     total_contratos = contratos.count()
     total_activos = contratos.filter(activo=True).count()
@@ -9023,6 +9023,12 @@ def contrato_list_view(request):
         )
         for precio, aplica_iva in contratos_activos_resumen.values_list("precio_mensual", "aplica_iva")
     ).quantize(Decimal("0.01"))
+
+    # La cuenta de mantenimientos se necesita únicamente para mostrar cada fila.
+    # Se anota después de calcular los KPI para mantener búsqueda/filtros estables.
+    contratos = contratos.annotate(
+        total_mantenimientos=Count("mantenimiento", distinct=True)
+    )
 
     paginator = Paginator(contratos, 20)
     page_number = request.GET.get("page")
