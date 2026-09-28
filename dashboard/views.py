@@ -3747,7 +3747,9 @@ def dashboard_view(request):
         fecha_seleccionada = parse_date(fecha_seleccionada_str) if fecha_seleccionada_str else None
 
         vista_actual = (request.GET.get("vista", "calendario") or "calendario").strip().lower()
-        ver_mas_proximos = request.GET.get("ver_mas_proximos") == "1"
+        # “Ver más” se despliega en la misma página; se mantiene la variable
+        # únicamente por compatibilidad con plantillas/enlaces históricos.
+        ver_mas_proximos = False
 
         calendario_trabajador = _build_calendario_mantenimientos(
             anio_cal,
@@ -3784,11 +3786,7 @@ def dashboard_view(request):
             )
             total_proximos_reales = qs_mantenimientos_proximos.count()
 
-            if ver_mas_proximos:
-                mantenimientos_proximos = qs_mantenimientos_proximos
-            else:
-                mantenimientos_proximos = qs_mantenimientos_proximos[:10]
-
+            mantenimientos_proximos = qs_mantenimientos_proximos
             mostrar_boton_ver_mas_proximos = total_proximos_reales > 10
 
             mantenimientos_atrasados = (
@@ -4496,9 +4494,11 @@ def admin_operativo_view(request):
     q = (request.GET.get("q", "") or "").strip()
     ciudad = (request.GET.get("ciudad", "") or "").strip()
     trabajador_id = (request.GET.get("trabajador", "") or "").strip()
-    ver_mas_atrasados = (request.GET.get("ver_mas_atrasados", "") or "").strip() == "1"
-    ver_mas_dia = (request.GET.get("ver_mas_dia", "") or "").strip() == "1"
-    ver_mas_proximos = (request.GET.get("ver_mas_proximos", "") or "").strip() == "1"
+    # Las listas “Ver más” se despliegan en cliente sin recargar la página.
+    # Se conservan estos nombres de contexto por compatibilidad con enlaces antiguos.
+    ver_mas_atrasados = False
+    ver_mas_dia = False
+    ver_mas_proximos = False
     vista_actual = (request.GET.get("vista", "calendario") or "calendario").strip().lower()
 
     fecha_seleccionada_str = (request.GET.get("fecha_seleccionada", "") or "").strip()
@@ -4616,15 +4616,12 @@ def admin_operativo_view(request):
             )
         )
 
-        limite_proximos = None if ver_mas_proximos else 10
+        # Cargamos la colección completa una sola vez. La plantilla muestra los
+        # primeros 10 y despliega el resto localmente, preservando filtros/fecha.
         qs_proximos = base_qs.filter(
             fecha__gt=hoy,
             estado="pendiente"
         )
-
-        if limite_proximos is not None:
-            qs_proximos = qs_proximos[:limite_proximos]
-
         proximos = list(qs_proximos)
         etiqueta_periodo = "Operativo de hoy"
 
@@ -4667,13 +4664,10 @@ def admin_operativo_view(request):
     for m in atrasados:
         m.dias_atraso = max((hoy - m.fecha).days, 0)
 
-    if not ver_mas_dia:
-        dia_list = dia_list[:20]
-    if not ver_mas_atrasados:
-        atrasados = atrasados[:20]
-
-    mostrar_ver_mas_dia = total_dia_reales > 20 and not ver_mas_dia
-    mostrar_ver_mas_atrasados = total_atrasados_reales > 20 and not ver_mas_atrasados
+    # No recortamos estas listas en backend: “Ver más” ahora funciona en la
+    # misma página y la plantilla oculta inicialmente los elementos excedentes.
+    mostrar_ver_mas_dia = total_dia_reales > 20
+    mostrar_ver_mas_atrasados = total_atrasados_reales > 20
 
     resumen_trabajadores = _resumen_trabajadores_desde_listas(dia_list, atrasados, proximos)
 
@@ -4691,7 +4685,7 @@ def admin_operativo_view(request):
 
     total_proximos_reales = base_qs.filter(fecha__gt=hoy, estado="pendiente").count()
     mostrar_boton_ver_mas_proximos = (
-        not filtro and not ver_mas_proximos and not fecha_seleccionada and total_proximos_reales > 10
+        not filtro and not fecha_seleccionada and total_proximos_reales > 10
     )
 
     # ==========================================
