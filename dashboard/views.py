@@ -4038,7 +4038,7 @@ def notificaciones_json_view(request):
             "mensaje": n.mensaje,
             "url": n.url or "/dashboard/notificaciones/",
             "leida": n.leida,
-            "creada_en": n.creada_en.strftime("%d/%m/%Y %H:%M"),
+            "creada_en": timezone.localtime(n.creada_en).strftime("%d/%m/%Y %H:%M"),
         })
 
     unread_count = Notificacion.objects.filter(
