@@ -9017,11 +9017,14 @@ def contrato_list_view(request):
     # values_list() obtiene solo los dos datos necesarios sin alterar el queryset principal.
     ingreso_mensual_con_iva = sum(
         (
-            (Decimal(precio or 0) * Decimal("1.15")).quantize(Decimal("0.01"))
-            if aplica_iva
-            else Decimal(precio or 0).quantize(Decimal("0.01"))
-        )
-        for precio, aplica_iva in contratos_activos_resumen.values_list("precio_mensual", "aplica_iva")
+            (
+                (Decimal(precio or 0) * Decimal("1.15")).quantize(Decimal("0.01"))
+                if aplica_iva
+                else Decimal(precio or 0).quantize(Decimal("0.01"))
+            )
+            for precio, aplica_iva in contratos_activos_resumen.values_list("precio_mensual", "aplica_iva")
+        ),
+        Decimal("0.00"),
     ).quantize(Decimal("0.01"))
 
     # La cuenta de mantenimientos se necesita únicamente para mostrar cada fila.
