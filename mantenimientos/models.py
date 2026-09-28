@@ -48,6 +48,38 @@ class Mantenimiento(models.Model):
         related_name="mantenimientos_cancelados",
     )
 
+    MOTIVO_FUERA_FECHA_CHOICES = [
+        ("trabajador", "Responsabilidad del trabajador"),
+        ("cliente", "Solicitud o responsabilidad del cliente"),
+        ("reprogramacion", "Reprogramación autorizada"),
+        ("extraordinario", "Caso extraordinario"),
+        ("otro", "Otro"),
+    ]
+    realizado_en = models.DateTimeField(null=True, blank=True)
+    motivo_fuera_fecha = models.CharField(
+        max_length=20, choices=MOTIVO_FUERA_FECHA_CHOICES, blank=True, default=""
+    )
+    nota_fuera_fecha = models.TextField(blank=True, default="")
+
+    @property
+    def fecha_realizacion(self):
+        if not self.realizado_en:
+            return None
+        from django.utils import timezone
+        return timezone.localtime(self.realizado_en).date()
+
+    @property
+    def dias_desfase_realizacion(self):
+        fecha_real = self.fecha_realizacion
+        if self.estado != "realizado" or not fecha_real:
+            return None
+        return (fecha_real - self.fecha).days
+
+    @property
+    def realizado_fuera_fecha(self):
+        desfase = self.dias_desfase_realizacion
+        return desfase is not None and desfase != 0
+
     ESTADO_AGUA_RAPIDO = [
         ("", "Sin seleccionar"),
         ("cristalina", "Agua cristalina"),

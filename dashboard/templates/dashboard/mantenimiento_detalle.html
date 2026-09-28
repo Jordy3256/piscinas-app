@@ -247,6 +247,22 @@
 </div>
 {% endif %}
 
+{% if esta_realizado and m.realizado_en %}
+<div class="card premium-card mb-3 {% if m.realizado_fuera_fecha %}border-warning{% else %}border-success{% endif %}"><div class="card-body">
+  <div class="premium-title"><i class="bi bi-calendar-check"></i><span>Cumplimiento de fecha</span></div>
+  <div><strong>Programado:</strong> {{ m.fecha|date:"d/m/Y" }} · <strong>Realizado:</strong> {{ m.realizado_en|date:"d/m/Y H:i" }}</div>
+  {% if m.dias_desfase_realizacion > 0 %}<div class="alert alert-warning mt-3 mb-2"><strong>Realizado {{ m.dias_desfase_realizacion }} día{{ m.dias_desfase_realizacion|pluralize }} después de la fecha programada.</strong></div>
+  {% elif m.dias_desfase_realizacion < 0 %}<div class="alert alert-info mt-3 mb-2"><strong>Realizado antes de la fecha programada.</strong></div>
+  {% else %}<div class="alert alert-success mt-3 mb-0"><strong>Realizado a tiempo.</strong></div>{% endif %}
+  {% if es_admin and m.realizado_fuera_fecha %}
+  <form method="post" class="row g-2 mt-1">{% csrf_token %}<input type="hidden" name="accion" value="clasificar_fuera_fecha">
+    <div class="col-12 col-md-5"><label class="form-label fw-bold">Responsabilidad / motivo</label><select class="form-select" name="motivo_fuera_fecha" required><option value="">Seleccionar...</option>{% for valor, etiqueta in m.MOTIVO_FUERA_FECHA_CHOICES %}<option value="{{ valor }}" {% if m.motivo_fuera_fecha == valor %}selected{% endif %}>{{ etiqueta }}</option>{% endfor %}</select></div>
+    <div class="col-12 col-md-7"><label class="form-label fw-bold">Observación administrativa</label><input class="form-control" name="nota_fuera_fecha" value="{{ m.nota_fuera_fecha }}" placeholder="Ej.: cliente solicitó mover la visita al día siguiente"></div>
+    <div class="col-12"><button class="btn btn-outline-primary w-100">Guardar clasificación</button></div>
+  </form>{% endif %}
+</div></div>
+{% endif %}
+
 {% if esta_realizado and es_admin %}
 <div class="card premium-card mb-3"><div class="card-body"><div class="premium-title"><i class="bi bi-shield-lock"></i><span>Control administrativo</span></div><div class="text-muted small mb-3">Este mantenimiento ya fue cerrado. Solo administración puede reabrirlo para realizar correcciones.</div><form method="post">{% csrf_token %}<input type="hidden" name="accion" value="marcar_pendiente"><button class="btn btn-warning btn-lg w-100">↩️ Reabrir y volver a pendiente</button></form></div></div>
 {% endif %}

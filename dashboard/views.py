@@ -5035,13 +5035,34 @@ def mantenimiento_detalle_view(request, pk):
             messages.success(request, f"Novedad actualizada: {novedad.get_estado_display()}.")
             return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/#novedad-administrativa")
 
+        if accion == "clasificar_fuera_fecha":
+            if not es_usuario_admin:
+                messages.error(request, "Solo administración puede clasificar una realización fuera de fecha.")
+                return redirect(safe_return_url())
+            if mantenimiento.estado != "realizado" or not mantenimiento.realizado_fuera_fecha:
+                messages.error(request, "Este mantenimiento no tiene una realización fuera de fecha para clasificar.")
+                return redirect(safe_return_url())
+            motivo = (request.POST.get("motivo_fuera_fecha") or "").strip()
+            motivos_validos = {x[0] for x in Mantenimiento.MOTIVO_FUERA_FECHA_CHOICES}
+            if motivo not in motivos_validos:
+                messages.error(request, "Selecciona un motivo válido.")
+                return redirect(safe_return_url())
+            mantenimiento.motivo_fuera_fecha = motivo
+            mantenimiento.nota_fuera_fecha = (request.POST.get("nota_fuera_fecha") or "").strip()
+            mantenimiento.save(update_fields=["motivo_fuera_fecha", "nota_fuera_fecha"])
+            messages.success(request, "Motivo de realización fuera de fecha actualizado.")
+            return redirect(safe_return_url())
+
         if accion == "marcar_pendiente":
             if not es_usuario_admin:
                 messages.error(request, "Solo un administrador puede reabrir un mantenimiento realizado.")
                 return redirect(safe_return_url())
             mantenimiento.estado = "pendiente"
             mantenimiento.borrador_guardado = True
-            mantenimiento.save(update_fields=["estado", "borrador_guardado"])
+            mantenimiento.realizado_en = None
+            mantenimiento.motivo_fuera_fecha = ""
+            mantenimiento.nota_fuera_fecha = ""
+            mantenimiento.save(update_fields=["estado", "borrador_guardado", "realizado_en", "motivo_fuera_fecha", "nota_fuera_fecha"])
             # En contratos Por visita, revertir la ejecución retira únicamente
             # los movimientos pendientes originados por esa visita.
             from finanzas.cuentas_por_cobrar import anular_factura_visita_no_realizada
@@ -5303,7 +5324,8 @@ def mantenimiento_detalle_view(request, pk):
                         )
                     mantenimiento.estado = "realizado"
                     mantenimiento.borrador_guardado = False
-                    mantenimiento.save(update_fields=["estado", "borrador_guardado"])
+                    mantenimiento.realizado_en = timezone.now()
+                    mantenimiento.save(update_fields=["estado", "borrador_guardado", "realizado_en"])
 
                     # Por visita: el hecho financiero nace aquí, no cuando se
                     # programa la agenda. La transacción garantiza que no quede

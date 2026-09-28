@@ -882,6 +882,9 @@
                       <div class="d-flex gap-1 flex-wrap mb-2">
                         {% if m.estado == "realizado" %}
                           <span class="badge text-bg-success">Realizado</span>
+                          {% if m.realizado_en %}
+                            {% if m.dias_desfase_realizacion > 0 %}<span class="badge text-bg-danger">Realizado {{ m.dias_desfase_realizacion }} día{{ m.dias_desfase_realizacion|pluralize }} después</span>{% elif m.dias_desfase_realizacion < 0 %}<span class="badge text-bg-info">Realizado antes de fecha</span>{% else %}<span class="badge text-bg-success">A tiempo</span>{% endif %}
+                          {% endif %}
                         {% elif m.estado == "cancelado" %}
                           <span class="badge text-bg-secondary">Cancelado</span>
                         {% else %}
@@ -1144,7 +1147,7 @@
                     </a>
                   </div>
                   <div class="text-muted small mt-1">
-                    📍 {{ m.cliente.ciudad|default:"Sin ciudad" }}{% if m.cliente.sector_urbanizacion %} · {{ m.cliente.sector_urbanizacion }}{% endif %}<br>📅 {{ m.fecha }} · {{ m.contrato }}
+                    📍 {{ m.cliente.ciudad|default:"Sin ciudad" }}{% if m.cliente.sector_urbanizacion %} · {{ m.cliente.sector_urbanizacion }}{% endif %}<br>📅 {{ m.fecha }} · {{ m.contrato }}{% if m.estado == "realizado" and m.realizado_en %}<br>✅ Fecha real: {{ m.realizado_en|date:"d/m/Y H:i" }}{% endif %}
                   </div>
                 </div>
 
@@ -1221,13 +1224,16 @@
                     </a>
                   </div>
                   <div class="text-muted small mt-1">
-                    📍 {{ m.cliente.ciudad|default:"Sin ciudad" }}{% if m.cliente.sector_urbanizacion %} · {{ m.cliente.sector_urbanizacion }}{% endif %}<br>📅 {{ m.fecha }} · {{ m.contrato }}
+                    📍 {{ m.cliente.ciudad|default:"Sin ciudad" }}{% if m.cliente.sector_urbanizacion %} · {{ m.cliente.sector_urbanizacion }}{% endif %}<br>📅 {{ m.fecha }} · {{ m.contrato }}{% if m.estado == "realizado" and m.realizado_en %}<br>✅ Fecha real: {{ m.realizado_en|date:"d/m/Y H:i" }}{% endif %}
                   </div>
                 </div>
 
                 <div class="d-flex gap-2 flex-wrap">
                   {% if m.estado == "realizado" %}
                     <span class="badge text-bg-success">Realizado</span>
+                          {% if m.realizado_en %}
+                            {% if m.dias_desfase_realizacion > 0 %}<span class="badge text-bg-danger">Realizado {{ m.dias_desfase_realizacion }} día{{ m.dias_desfase_realizacion|pluralize }} después</span>{% elif m.dias_desfase_realizacion < 0 %}<span class="badge text-bg-info">Realizado antes de fecha</span>{% else %}<span class="badge text-bg-success">A tiempo</span>{% endif %}
+                          {% endif %}
                   {% elif m.estado == "cancelado" %}
                     <span class="badge text-bg-secondary">Cancelado</span>
                   {% else %}
@@ -1314,7 +1320,7 @@
                     </a>
                   </div>
                   <div class="text-muted small mt-1">
-                    📍 {{ m.cliente.ciudad|default:"Sin ciudad" }}{% if m.cliente.sector_urbanizacion %} · {{ m.cliente.sector_urbanizacion }}{% endif %}<br>📅 {{ m.fecha }} · {{ m.contrato }}
+                    📍 {{ m.cliente.ciudad|default:"Sin ciudad" }}{% if m.cliente.sector_urbanizacion %} · {{ m.cliente.sector_urbanizacion }}{% endif %}<br>📅 {{ m.fecha }} · {{ m.contrato }}{% if m.estado == "realizado" and m.realizado_en %}<br>✅ Fecha real: {{ m.realizado_en|date:"d/m/Y H:i" }}{% endif %}
                   </div>
                 </div>
 
