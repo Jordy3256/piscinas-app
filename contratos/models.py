@@ -202,6 +202,18 @@ class Contrato(models.Model):
     fecha_inicio = models.DateField()
     fecha_inicio_original = models.DateField(null=True, blank=True, db_index=True)
 
+    # Trazabilidad administrativa de cambios realizados desde la ficha del contrato.
+    # No usa auto_now para evitar que procesos automáticos (programación, bajas, etc.)
+    # se presenten como una actualización manual del contrato.
+    ultima_actualizacion = models.DateTimeField(null=True, blank=True, db_index=True)
+    actualizado_por = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="contratos_actualizados",
+    )
+
     # Vigencia contractual. Vacío = contrato indefinido.
     vigencia_meses = models.PositiveSmallIntegerField(
         null=True,

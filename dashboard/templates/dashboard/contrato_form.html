@@ -2,11 +2,11 @@
 {% load l10n %}
 
 {% block title %}
-  {% if modo == "editar" %}Editar contrato{% else %}Nuevo contrato{% endif %}
+  {% if modo == "editar" %}Actualizar contrato{% else %}Nuevo contrato{% endif %}
 {% endblock %}
 
 {% block top_title %}
-  {% if modo == "editar" %}✏️ Editar contrato{% else %}➕ Nuevo contrato{% endif %}
+  {% if modo == "editar" %}🔄 Actualizar contrato{% else %}➕ Nuevo contrato{% endif %}
 {% endblock %}
 
 {% block top_actions %}
@@ -74,8 +74,8 @@
     <div class="row align-items-center g-3 position-relative" style="z-index:2">
       <div class="col">
         <div class="cf-eyebrow">Gestión comercial</div>
-        <h1 class="cf-title">{% if modo == "editar" %}Editar contrato{% else %}Registrar nuevo contrato{% endif %}</h1>
-        <p class="cf-subtitle">Completa la información comercial y operativa. Los datos podrán modificarse posteriormente.</p>
+        <h1 class="cf-title">{% if modo == "editar" %}Actualizar contrato{% else %}Registrar nuevo contrato{% endif %}</h1>
+        <p class="cf-subtitle">Completa la información comercial y operativa. Los datos podrán actualizarse posteriormente.</p>
       </div>
       <div class="col-12 col-md-auto">
         <a class="btn btn-light" href="/dashboard/contratos/">← Volver al listado</a>
@@ -496,7 +496,7 @@
             <div class="cf-card-body">
               <div class="d-grid gap-2">
                 <button type="submit" class="btn btn-primary btn-lg cf-submit" id="guardar-contrato">
-                  {% if modo == "editar" %}💾 Guardar cambios{% else %}✅ Crear contrato{% endif %}
+                  {% if modo == "editar" %}💾 Guardar actualización{% else %}✅ Crear contrato{% endif %}
                 </button>
                 {% if modo == "editar" and contrato %}
                   <a class="btn btn-outline-primary" href="/dashboard/contratos/{{ contrato.id }}/">Ver detalle</a>

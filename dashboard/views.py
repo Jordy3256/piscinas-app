@@ -9520,6 +9520,11 @@ def contrato_editar_view(request, pk):
             contrato.prioridad_visita = validacion["prioridad_visita"]
             _aplicar_ubicacion_contrato(contrato, request, validacion["cliente"])
             _aplicar_ficha_tecnica_contrato(contrato, request)
+            # Una edición administrativa se registra como una actualización del
+            # contrato. Los procesos automáticos que guarden el contrato no
+            # modifican estos campos de trazabilidad.
+            contrato.ultima_actualizacion = timezone.now()
+            contrato.actualizado_por = request.user
             contrato.save()
 
             if contrato.activo and contrato.generacion_automatica:

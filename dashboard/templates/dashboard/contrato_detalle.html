@@ -129,7 +129,7 @@
       <div class="col-12 col-lg-auto">
         <div class="d-flex gap-2 flex-wrap">
           <a class="btn btn-light" href="/dashboard/contratos/">← Volver</a>
-          <a class="btn btn-warning" href="/dashboard/contratos/{{ contrato.id }}/editar/">✏️ Editar contrato</a>
+          <a class="btn btn-warning" href="/dashboard/contratos/{{ contrato.id }}/editar/">🔄 Actualizar contrato</a>
           <a class="btn btn-success" href="{% url 'contrato_promocion_nueva' contrato.id %}">🎁 Aplicar promoción</a>
         </div>
       </div>
@@ -174,6 +174,7 @@
             <div class="col-12"><div class="detail-label">Forma de pago</div><div class="detail-value">{{ contrato.forma_pago_completa }}</div></div>
             <div class="col-6"><div class="detail-label">Fecha de inicio</div><div class="detail-value">{{ contrato.fecha_inicio|date:"d/m/Y" }}</div></div>
             <div class="col-6"><div class="detail-label">Estado</div><div class="detail-value">{% if contrato.activo %}<span class="cd-status cd-status-active">Activo</span>{% else %}<span class="cd-status cd-status-inactive">Inactivo</span>{% endif %}</div></div>
+            <div class="col-12"><div class="detail-label">Última actualización</div><div class="detail-value">{% if contrato.ultima_actualizacion %}{{ contrato.ultima_actualizacion|date:"d/m/Y · H:i" }}{% if contrato.actualizado_por %} · por {{ contrato.actualizado_por.get_full_name|default:contrato.actualizado_por.username }}{% endif %}{% else %}<span class="text-muted">Sin actualizaciones registradas</span>{% endif %}</div></div>
             <div class="col-6"><div class="detail-label">Automatización</div><div class="detail-value">{% if contrato.generacion_automatica %}<span class="text-success">● Activa</span>{% else %}<span class="text-secondary">● Desactivada</span>{% endif %}</div></div>
             <div class="col-6"><div class="detail-label">Programado hasta</div><div class="detail-value">{% if contrato.programado_hasta %}{{ contrato.programado_hasta|date:"d/m/Y" }}{% else %}<span class="text-muted">Sin programación</span>{% endif %}</div></div>
             <div class="col-6"><div class="detail-label">Próxima visita</div><div class="detail-value">{% if proximo_mantenimiento %}{{ proximo_mantenimiento.fecha|date:"d/m/Y" }}{% else %}<span class="text-muted">Sin visita futura</span>{% endif %}</div></div>
@@ -188,7 +189,7 @@
     <div class="cd-card-header">
       <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">
         <div><div class="cd-card-title">🏊 Ficha técnica de la piscina</div><div class="small text-muted mt-1">Información técnica guardada específicamente para esta piscina.</div></div>
-        <a class="btn btn-sm btn-outline-primary" href="/dashboard/contratos/{{ contrato.id }}/editar/">Editar ficha</a>
+        <a class="btn btn-sm btn-outline-primary" href="/dashboard/contratos/{{ contrato.id }}/editar/">Actualizar ficha</a>
       </div>
     </div>
     <div class="cd-card-body">
@@ -256,7 +257,7 @@
     </div>
     <div class="cd-card-body">
       <div class="cd-actions">
-        <a class="btn btn-primary" href="/dashboard/contratos/{{ contrato.id }}/editar/">✏️ Editar contrato</a>
+        <a class="btn btn-primary" href="/dashboard/contratos/{{ contrato.id }}/editar/">🔄 Actualizar contrato</a>
         <a class="btn btn-outline-primary" href="/dashboard/mantenimientos/historial/?q={{ contrato.cliente.nombre|urlencode }}">🛠 Ver mantenimientos</a>
         <a class="btn btn-outline-warning" href="{% url 'ordenes_trabajo:crear_desde_contrato' contrato.id %}">➕ Visita adicional</a>
         <a class="btn btn-outline-secondary" href="/dashboard/finanzas/facturas/">🧾 Ver facturas</a>
