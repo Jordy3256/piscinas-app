@@ -814,6 +814,7 @@ class CotizacionMantenimiento(models.Model):
     ciudad = models.ForeignKey("clientes.Ciudad", on_delete=models.SET_NULL, null=True, blank=True)
     cliente_referencia = models.ForeignKey("clientes.Cliente", on_delete=models.SET_NULL, null=True, blank=True)
     nombre_referencia = models.CharField(max_length=150, blank=True, default="")
+    tipo_piscina = models.CharField(max_length=30, blank=True, default="residencial")
     largo_m = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)
     ancho_m = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)
     profundidad_m = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)

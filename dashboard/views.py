@@ -8,7 +8,7 @@ import urllib.request
 import urllib.error
 import re
 from collections import defaultdict
-from decimal import Decimal
+from decimal import Decimal, ROUND_CEILING
 from datetime import date, timedelta
 from calendar import monthrange, monthcalendar
 from urllib.parse import quote, urlencode, unquote
@@ -10337,30 +10337,87 @@ def _dec_cotizador(valor, defecto="0"):
         return Decimal(defecto)
 
 
+def _redondear_comercial_5(valor):
+    """Redondea siempre hacia arriba al siguiente múltiplo de USD 5."""
+    valor = Decimal(valor or 0)
+    if valor <= 0:
+        return Decimal("0.00")
+    return ((valor / Decimal("5")).to_integral_value(rounding=ROUND_CEILING) * Decimal("5")).quantize(Decimal("0.00"))
+
+
+def _filtro_tipo_piscina(tipo):
+    """Usa la clasificación ya guardada en la ficha técnica de contratos."""
+    terminos = {
+        "residencial": ("residencial", "casa", "vivienda"),
+        "urbanizacion": ("urbanizacion", "urbanización", "condominio", "comunal"),
+        "hotel": ("hotel", "hospedaje", "hosteria", "hostería", "resort"),
+        "comercial": ("comercial", "institucional", "club", "colegio", "empresa"),
+        "otro": ("otro",),
+    }.get(tipo, ())
+    q = Q()
+    for termino in terminos:
+        q |= Q(piscina_uso__icontains=termino) | Q(piscina_tipo__icontains=termino)
+    return q
+
+
+def _texto_frecuencia_cotizacion(frecuencia):
+    return {
+        "1_semanal": "1 visita semanal",
+        "2_semanales": "2 visitas semanales",
+        "3_semanales": "3 visitas semanales",
+        "quincenal": "1 visita cada 15 días",
+        "personalizado": "la frecuencia personalizada acordada",
+    }.get(frecuencia, "la frecuencia acordada")
+
+
 def _calcular_cotizacion_mantenimiento(datos):
     ciudad = datos.get("ciudad")
     frecuencia = datos.get("frecuencia") or "1_semanal"
+    tipo_piscina = datos.get("tipo_piscina") or "residencial"
     volumen = datos.get("volumen") or Decimal("0")
-    similares = Contrato.objects.filter(activo=True, frecuencia=frecuencia)
+
+    # Base histórica: contratos reales con la misma frecuencia y, cuando se indicó,
+    # la misma ciudad. El tipo de piscina se usa como una capa adicional de similitud.
+    base_similares = Contrato.objects.filter(activo=True, frecuencia=frecuencia)
     if ciudad:
-        similares = similares.filter(cliente__ciudad_ref=ciudad)
+        base_similares = base_similares.filter(cliente__ciudad_ref=ciudad)
+
+    filtro_tipo = _filtro_tipo_piscina(tipo_piscina)
+    similares_tipo = base_similares.filter(filtro_tipo) if filtro_tipo else base_similares.none()
+    # Si todavía no hay suficientes contratos clasificados de ese tipo, no inventamos
+    # datos: conservamos la base histórica general y mostramos cuántos sí coincidieron.
+    similares = similares_tipo if similares_tipo.exists() else base_similares
     vals = list(similares.values_list("precio_mensual", "valor_tecnico_mensual"))
     n = len(vals)
+    n_tipo = similares_tipo.count() if filtro_tipo else 0
+
     if vals:
         prom_precio = sum((x[0] or Decimal("0") for x in vals), Decimal("0")) / n
         prom_tecnico = sum((x[1] or Decimal("0") for x in vals), Decimal("0")) / n
     else:
         bases={"quincenal":Decimal("45"),"1_semanal":Decimal("55"),"2_semanales":Decimal("80"),"3_semanales":Decimal("120"),"personalizado":Decimal("80")}
         prom_precio=bases.get(frecuencia,Decimal("55")); prom_tecnico=prom_precio*Decimal("0.35")
-    # Ajuste moderado por volumen respecto de una piscina residencial de 25 m3.
-    factor=Decimal("1")
+
+    # Cuando existen contratos clasificados, el propio histórico determina el efecto
+    # del tipo de piscina respecto del promedio general de esa frecuencia/ciudad.
+    factor_tipo = Decimal("1")
+    vals_base = list(base_similares.values_list("precio_mensual", flat=True))
+    if n_tipo and vals_base:
+        prom_general = sum((x or Decimal("0") for x in vals_base), Decimal("0")) / len(vals_base)
+        if prom_general > 0:
+            prom_tipo = sum((x or Decimal("0") for x in similares_tipo.values_list("precio_mensual", flat=True)), Decimal("0")) / n_tipo
+            factor_tipo = max(Decimal("0.80"), min(Decimal("1.50"), prom_tipo / prom_general))
+
+    # Ajuste moderado por volumen respecto de una piscina residencial de referencia.
+    factor_volumen=Decimal("1")
     if volumen>0:
-        factor=max(Decimal("0.85"),min(Decimal("1.65"),Decimal("0.75")+(volumen/Decimal("100"))))
+        factor_volumen=max(Decimal("0.85"),min(Decimal("1.65"),Decimal("0.75")+(volumen/Decimal("100"))))
+    factor = factor_volumen * factor_tipo
     base=(prom_precio*factor).quantize(Decimal("0.01"))
     tecnico_rec=(prom_tecnico*factor).quantize(Decimal("0.01"))
     tecnico_min=(tecnico_rec*Decimal("0.90")).quantize(Decimal("0.01"))
     tecnico_max=(tecnico_rec*Decimal("1.15")).quantize(Decimal("0.01"))
-    # Estimación química basada en consumos históricos recientes de contratos comparables.
+
     desde=timezone.localdate()-timedelta(days=90)
     usos=UsoInsumo.objects.filter(mantenimiento__contrato__in=similares,mantenimiento__fecha__gte=desde)
     total_q=usos.aggregate(t=Sum("costo_total"))["t"] or Decimal("0")
@@ -10369,29 +10426,52 @@ def _calcular_cotizacion_mantenimiento(datos):
         costo_q=(base*Decimal("0.16")).quantize(Decimal("0.01"))
     equipo=datos.get("equipamiento") or Decimal("0"); ajuste=datos.get("ajuste") or Decimal("0")
     costo_directo=tecnico_rec+costo_q+equipo
-    minimo=max(base+equipo+ajuste,(costo_directo/Decimal("0.75"))+ajuste).quantize(Decimal("0.01"))
-    recomendado=max(base+equipo+ajuste,(costo_directo/Decimal("0.65"))+ajuste).quantize(Decimal("0.01"))
-    objetivo=max(recomendado,(costo_directo/Decimal("0.60"))+ajuste).quantize(Decimal("0.01"))
+    minimo_exact=max(base+equipo+ajuste,(costo_directo/Decimal("0.75"))+ajuste).quantize(Decimal("0.01"))
+    recomendado_exact=max(base+equipo+ajuste,(costo_directo/Decimal("0.65"))+ajuste).quantize(Decimal("0.01"))
+    objetivo_exact=max(recomendado_exact,(costo_directo/Decimal("0.60"))+ajuste).quantize(Decimal("0.01"))
+
+    # Precio mostrado/comercial: siempre hacia arriba en múltiplos de USD 5.
+    minimo=_redondear_comercial_5(minimo_exact)
+    recomendado=_redondear_comercial_5(recomendado_exact)
+    objetivo=_redondear_comercial_5(objetivo_exact)
     utilidad=(recomendado-costo_directo).quantize(Decimal("0.01"))
     margen=((utilidad/recomendado)*100).quantize(Decimal("0.01")) if recomendado else Decimal("0")
-    return {"contratos_similares":n,"promedio":prom_precio.quantize(Decimal("0.01")),"costo_quimico":costo_q,"tecnico_min":tecnico_min,"tecnico_rec":tecnico_rec,"tecnico_max":tecnico_max,"precio_min":minimo,"precio_rec":recomendado,"precio_obj":objetivo,"utilidad":utilidad,"margen":margen}
+    frecuencia_texto=_texto_frecuencia_cotizacion(frecuencia)
+    if datos.get("quimicos_incluidos"):
+        quimicos_texto="Aplicación del tratamiento químico necesario para mantener el agua limpia y en óptimas condiciones."
+    else:
+        quimicos_texto="Aplicación y control de los productos químicos proporcionados por el cliente."
+    mensaje=(
+        f"Nuestro servicio de mantenimiento de piscina tiene un valor de ${recomendado:.0f} mensuales e incluye {frecuencia_texto}.\n\n"
+        "El servicio comprende:\n"
+        "✅ Limpieza general de la piscina.\n"
+        "✅ Aspirado del fondo.\n"
+        "✅ Cepillado de paredes y piso.\n"
+        "✅ Limpieza de canastillas y sistema de filtración.\n"
+        f"✅ {quimicos_texto}\n"
+        "✅ Control y ajuste de los parámetros del agua.\n\n"
+        "Importante: el cambio de arena del filtro no está incluido dentro de la mensualidad, ya que corresponde a un mantenimiento preventivo que normalmente se realiza una vez al año y se cotiza por separado.\n\n"
+        "JVAQUA Pool Services\nPiscinas en las mejores manos."
+    )
+    return {"contratos_similares":n,"contratos_tipo":n_tipo,"promedio":prom_precio.quantize(Decimal("0.01")),"costo_quimico":costo_q,"tecnico_min":tecnico_min,"tecnico_rec":tecnico_rec,"tecnico_max":tecnico_max,"precio_min":minimo,"precio_rec":recomendado,"precio_obj":objetivo,"precio_rec_exacto":recomendado_exact,"utilidad":utilidad,"margen":margen,"factor_tipo":factor_tipo.quantize(Decimal("0.01")),"mensaje_cliente":mensaje,"frecuencia_texto":frecuencia_texto}
 
 @login_required
 def cotizador_inteligente_admin_view(request):
     if not es_admin(request.user):
         return render(request,"dashboard/no_autorizado.html",status=403)
     ciudades=Ciudad.objects.filter(activa=True).order_by("orden","nombre")
+    tipos_piscina=[("residencial","Residencial"),("urbanizacion","Urbanización / Condominio"),("hotel","Hotel / Hospedaje"),("comercial","Comercial / Institucional"),("otro","Otro")]
     resultado=None; guardada=None
-    datos={"frecuencia":"1_semanal","quimicos_incluidos":True}
+    datos={"frecuencia":"1_semanal","quimicos_incluidos":True,"tipo_piscina":"residencial"}
     if request.method=="POST":
         ciudad=Ciudad.objects.filter(pk=request.POST.get("ciudad")).first()
         largo=_dec_cotizador(request.POST.get("largo")); ancho=_dec_cotizador(request.POST.get("ancho")); prof=_dec_cotizador(request.POST.get("profundidad"))
         volumen=_dec_cotizador(request.POST.get("volumen"))
         if volumen<=0 and largo>0 and ancho>0 and prof>0: volumen=(largo*ancho*prof).quantize(Decimal("0.01"))
-        datos={"ciudad":ciudad,"nombre":(request.POST.get("nombre_referencia") or "").strip(),"largo":largo or None,"ancho":ancho or None,"profundidad":prof or None,"volumen":volumen or None,"frecuencia":request.POST.get("frecuencia") or "1_semanal","quimicos_incluidos":request.POST.get("quimicos_incluidos")=="on","equipamiento":_dec_cotizador(request.POST.get("equipamiento_mensual")),"ajuste":_dec_cotizador(request.POST.get("ajuste_especial_mensual")),"observaciones":(request.POST.get("observaciones") or "").strip()}
+        datos={"ciudad":ciudad,"nombre":(request.POST.get("nombre_referencia") or "").strip(),"tipo_piscina":request.POST.get("tipo_piscina") or "residencial","largo":largo or None,"ancho":ancho or None,"profundidad":prof or None,"volumen":volumen or None,"frecuencia":request.POST.get("frecuencia") or "1_semanal","quimicos_incluidos":request.POST.get("quimicos_incluidos")=="on","equipamiento":_dec_cotizador(request.POST.get("equipamiento_mensual")),"ajuste":_dec_cotizador(request.POST.get("ajuste_especial_mensual")),"observaciones":(request.POST.get("observaciones") or "").strip()}
         resultado=_calcular_cotizacion_mantenimiento(datos)
         if request.POST.get("accion")=="guardar":
-            guardada=CotizacionMantenimiento.objects.create(creada_por=request.user,ciudad=ciudad,nombre_referencia=datos["nombre"],largo_m=datos["largo"],ancho_m=datos["ancho"],profundidad_m=datos["profundidad"],volumen_m3=datos["volumen"],frecuencia=datos["frecuencia"],quimicos_incluidos=datos["quimicos_incluidos"],equipamiento_mensual=datos["equipamiento"],ajuste_especial_mensual=datos["ajuste"],observaciones=datos["observaciones"],contratos_similares=resultado["contratos_similares"],promedio_mercado_interno=resultado["promedio"],costo_quimico_estimado=resultado["costo_quimico"],pago_tecnico_minimo=resultado["tecnico_min"],pago_tecnico_recomendado=resultado["tecnico_rec"],pago_tecnico_maximo=resultado["tecnico_max"],precio_minimo=resultado["precio_min"],precio_recomendado=resultado["precio_rec"],precio_objetivo=resultado["precio_obj"],utilidad_estimada=resultado["utilidad"],margen_estimado=resultado["margen"])
+            guardada=CotizacionMantenimiento.objects.create(creada_por=request.user,ciudad=ciudad,nombre_referencia=datos["nombre"],tipo_piscina=datos["tipo_piscina"],largo_m=datos["largo"],ancho_m=datos["ancho"],profundidad_m=datos["profundidad"],volumen_m3=datos["volumen"],frecuencia=datos["frecuencia"],quimicos_incluidos=datos["quimicos_incluidos"],equipamiento_mensual=datos["equipamiento"],ajuste_especial_mensual=datos["ajuste"],observaciones=datos["observaciones"],contratos_similares=resultado["contratos_similares"],promedio_mercado_interno=resultado["promedio"],costo_quimico_estimado=resultado["costo_quimico"],pago_tecnico_minimo=resultado["tecnico_min"],pago_tecnico_recomendado=resultado["tecnico_rec"],pago_tecnico_maximo=resultado["tecnico_max"],precio_minimo=resultado["precio_min"],precio_recomendado=resultado["precio_rec"],precio_objetivo=resultado["precio_obj"],utilidad_estimada=resultado["utilidad"],margen_estimado=resultado["margen"])
             messages.success(request,f"Cotización #{guardada.pk} guardada correctamente.")
     recientes=CotizacionMantenimiento.objects.select_related("ciudad").order_by("-creada_en")[:8]
-    return render(request,"dashboard/cotizador_inteligente_admin.html",{"ciudades":ciudades,"frecuencias":Contrato.FRECUENCIA_CHOICES,"datos":datos,"resultado":resultado,"guardada":guardada,"recientes":recientes})
+    return render(request,"dashboard/cotizador_inteligente_admin.html",{"ciudades":ciudades,"frecuencias":Contrato.FRECUENCIA_CHOICES,"tipos_piscina":tipos_piscina,"datos":datos,"resultado":resultado,"guardada":guardada,"recientes":recientes})
