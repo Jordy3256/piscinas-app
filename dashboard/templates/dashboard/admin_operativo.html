@@ -565,180 +565,75 @@
       display: none;
     }
   }
+
+  .op-compact-head{background:#fff;border:1px solid #e7edf5;border-radius:22px;padding:18px 20px;box-shadow:0 8px 24px rgba(15,43,78,.05)}
+  .op-compact-title{font-size:1.65rem;font-weight:800;color:#14243b}
+  .op-kpi-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+  .op-kpi-strip>div{background:#f7f9fc;border:1px solid #e8edf4;border-radius:14px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .op-kpi-strip span{font-size:.78rem;color:#718096;font-weight:700}.op-kpi-strip strong{font-size:1.35rem}
+  .op-quick-links .btn{border-radius:10px}
+  @media(max-width:767px){.op-compact-head{padding:14px}.op-kpi-strip{grid-template-columns:repeat(2,1fr)}.op-kpi-strip>div{padding:9px 11px}.op-compact-title{font-size:1.4rem}}
 </style>
 
 
 <div class="operativo-page">
 
-  <section class="op-hero">
-    <div class="op-hero-content">
-      <div class="op-hero-eyebrow">🧭 Centro de operaciones</div>
-      <h1 class="op-hero-title">Control operativo de JVAQUA</h1>
-      <p class="op-hero-subtitle">
-        Supervisa mantenimientos, asignaciones, atrasos y planificación semanal
-        desde una sola pantalla organizada para la gestión diaria.
-      </p>
+  <section class="op-compact-head mb-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+      <div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+          <h1 class="op-compact-title mb-0">Operativo</h1>
+          <span class="op-chip">{{ fecha_resumen|date:"d/m/Y" }}</span>
+          <span class="op-chip">{{ cumplimiento_resumen_dia|floatformat:0 }}% completado</span>
+          {% if total_atrasados_reales %}<a class="op-chip text-decoration-none" href="/dashboard/operativo/?filtro=atrasados">🔴 {{ total_atrasados_reales }} atrasado{{ total_atrasados_reales|pluralize }}</a>{% endif %}
+        </div>
+        <div class="op-subtitle mt-1">{{ fecha_resumen|date:"l, d \d\e F \d\e Y"|capfirst }}</div>
+      </div>
+      <div class="d-flex flex-wrap gap-2">
+        <a class="btn btn-primary btn-sm" href="/dashboard/operativo/">Mantenimientos</a>
+        <a class="btn btn-outline-primary btn-sm" href="{% url 'ordenes_trabajo:lista' %}">Órdenes</a>
+        <a class="btn btn-outline-secondary btn-sm" href="{% url 'ordenes_trabajo:crear' %}">＋ Nueva visita / trabajo</a>
+      </div>
+    </div>
+
+    <div class="op-kpi-strip mb-3">
+      <div><span>Programados</span><strong class="text-primary">{{ total_resumen_dia }}</strong></div>
+      <div><span>Realizados</span><strong class="text-success">{{ realizados_resumen_dia }}</strong></div>
+      <div><span>Pendientes</span><strong class="text-warning">{{ pendientes_resumen_dia }}</strong></div>
+      <div><span>Sin asignar</span><strong class="{% if sin_asignar_resumen_dia %}text-danger{% endif %}">{{ sin_asignar_resumen_dia }}</strong></div>
+    </div>
+
+    <form class="row g-2 align-items-end" method="get">
+      <input type="hidden" name="filtro" value="{{ modo_actual }}"><input type="hidden" name="anio_cal" value="{{ anio_cal }}"><input type="hidden" name="mes_cal" value="{{ mes_cal }}"><input type="hidden" name="vista" value="{{ vista_actual }}">{% if fecha_seleccionada_str %}<input type="hidden" name="fecha_seleccionada" value="{{ fecha_seleccionada_str }}">{% endif %}
+      <div class="col-12 col-lg-4"><input type="text" class="form-control" name="q" value="{{ q }}" placeholder="Buscar cliente, sector, ciudad o trabajador"></div>
+      <div class="col-6 col-lg-3"><select class="form-select" name="ciudad"><option value="">Todas las ciudades</option>{% for c in ciudades %}<option value="{{ c.nombre }}" {% if ciudad == c.nombre %}selected{% endif %}>{{ c.nombre }}</option>{% endfor %}</select></div>
+      <div class="col-6 col-lg-3"><select class="form-select" name="trabajador"><option value="">Todos los trabajadores</option>{% for t in trabajadores_filtro %}<option value="{{ t.id }}" {% if trabajador_id == t.id|stringformat:"s" %}selected{% endif %}>{{ t.user.get_full_name|default:t.user.username }}</option>{% endfor %}</select></div>
+      <div class="col-12 col-lg-2 d-grid"><button class="btn btn-primary" type="submit">Filtrar</button></div>
+    </form>
+
+    <div class="d-flex flex-wrap gap-2 mt-2 op-quick-links">
+      <a class="btn btn-sm {% if not modo_actual and not fecha_seleccionada_str %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/dashboard/operativo/?vista={{ vista_actual }}{% if q %}&q={{ q|urlencode }}{% endif %}">Hoy</a>
+      <a class="btn btn-sm {% if modo_actual == 'pendientes_hoy' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/dashboard/operativo/?filtro=pendientes_hoy&anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}&vista={{ vista_actual }}">Pendientes hoy</a>
+      <a class="btn btn-sm {% if modo_actual == 'sin_asignar' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/dashboard/operativo/?filtro=sin_asignar&anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}&vista={{ vista_actual }}">Sin asignar</a>
+      <a class="btn btn-sm {% if modo_actual == 'atrasados' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/dashboard/operativo/?filtro=atrasados&anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}&vista={{ vista_actual }}">Atrasados</a>
+      <button type="button" class="btn btn-sm btn-outline-primary" id="toggleAdminPlanning">📅 Calendario / programación</button>
+      <a class="btn btn-sm btn-outline-secondary" href="/dashboard/mantenimientos/historial/">Historial</a>
     </div>
   </section>
 
-<div class="card shadow-sm mb-3 op-card-compact">
-  <div class="card-body">
-    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
-      <div>
-        <div class="op-section-title">⚡ Accesos operativos</div>
-        <div class="op-subtitle">Mantenimientos recurrentes y trabajos extraordinarios, cada uno en su lugar.</div>
-      </div>
-      <div class="d-flex flex-wrap gap-2">
-        <a class="btn btn-primary" href="/dashboard/operativo/"><i class="bi bi-calendar-check"></i> Mantenimientos</a>
-        <a class="btn btn-outline-primary" href="{% url 'ordenes_trabajo:lista' %}"><i class="bi bi-tools"></i> Órdenes de trabajo</a>
-        <a class="btn btn-outline-secondary" href="{% url 'ordenes_trabajo:crear' %}"><i class="bi bi-plus-lg"></i> ＋ Nueva visita / trabajo</a>
-      </div>
-    </div>
+  <div class="admin-planning-panel d-none">
+    <div class="card shadow-sm mb-3 op-card-compact border-primary-subtle"><div class="card-body">
+      <div class="op-section-title mb-2">📊 Análisis</div>
+      <form method="get" class="row g-2 align-items-end" id="periodoOperativoForm">
+        <input type="hidden" name="q" value="{{ q }}"><input type="hidden" name="ciudad" value="{{ ciudad }}"><input type="hidden" name="trabajador" value="{{ trabajador_id }}">
+        <div class="col-12 col-md-3"><select class="form-select" name="periodo" id="periodoTipo"><option value="dia" {% if periodo_tipo == 'dia' %}selected{% endif %}>Día</option><option value="semana" {% if periodo_tipo == 'semana' %}selected{% endif %}>Semana</option><option value="mes" {% if periodo_tipo == 'mes' %}selected{% endif %}>Mes</option><option value="rango" {% if periodo_tipo == 'rango' %}selected{% endif %}>Rango específico</option></select></div>
+        <div class="col-12 col-md-4" id="periodoFechaWrap"><input class="form-control" type="date" name="periodo_fecha" value="{{ periodo_fecha_str|default:hoy|date:'Y-m-d' }}"></div>
+        <div class="col-6 col-md-2 periodo-rango"><input class="form-control" type="date" name="desde" value="{{ periodo_desde_str }}"></div><div class="col-6 col-md-2 periodo-rango"><input class="form-control" type="date" name="hasta" value="{{ periodo_hasta_str }}"></div>
+        <div class="col-12 col-md"><button class="btn btn-primary w-100" type="submit">Analizar</button></div>
+      </form>
+    </div></div>
+    <div class="card shadow-sm mb-3 op-card-compact"><div class="card-body d-flex flex-wrap justify-content-between align-items-center gap-2"><strong>Vista de programación</strong><div class="btn-group"><a href="/dashboard/operativo/?vista=calendario&anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}" class="btn {% if vista_actual != 'agenda' %}btn-primary{% else %}btn-outline-primary{% endif %}">📅 Calendario</a><a href="/dashboard/operativo/?vista=agenda&anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}" class="btn {% if vista_actual == 'agenda' %}btn-primary{% else %}btn-outline-primary{% endif %}">🗓 Agenda semanal</a></div></div></div>
   </div>
-</div>
-
-<div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
-  <div>
-    <div class="fw-bold fs-4 mobile-op-title">
-      {% if fecha_seleccionada %}
-        📅 {{ etiqueta_periodo }}
-      {% else %}
-        Operativo diario
-      {% endif %}
-    </div>
-
-    <div class="op-subtitle">
-      {% if fecha_seleccionada %}
-        Mantenimientos programados para el día seleccionado.
-      {% else %}
-        {{ etiqueta_periodo }}
-      {% endif %}
-    </div>
-  </div>
-
-  <div class="d-flex gap-2 flex-wrap w-100 w-md-auto">
-    {% if q %}
-      <div class="op-chip">Filtro: "{{ q }}"</div>
-    {% endif %}
-
-    {% if fecha_seleccionada_str %}
-      <a class="btn btn-success btn-sm w-100 w-md-auto"
-         href="/dashboard/operativo/?anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}&vista={{ vista_actual }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if modo_actual %}&filtro={{ modo_actual }}{% endif %}">
-        ✨ Limpiar día seleccionado
-      </a>
-    {% endif %}
-
-    <a class="btn btn-outline-secondary btn-sm w-100 w-md-auto" href="/dashboard/mantenimientos/historial/">
-      🗂 Historial
-    </a>
-  </div>
-</div>
-
-<div class="card shadow-sm mb-3 op-card-compact border-primary-subtle">
-  <div class="card-body">
-    <div class="op-section-title mb-2">📊 Período de análisis</div>
-    <form method="get" class="row g-2 align-items-end" id="periodoOperativoForm">
-      <input type="hidden" name="q" value="{{ q }}"><input type="hidden" name="ciudad" value="{{ ciudad }}"><input type="hidden" name="trabajador" value="{{ trabajador_id }}">
-      <div class="col-12 col-md-3"><label class="form-label mb-1">Ver por</label><select class="form-select" name="periodo" id="periodoTipo"><option value="dia" {% if periodo_tipo == 'dia' %}selected{% endif %}>Día</option><option value="semana" {% if periodo_tipo == 'semana' %}selected{% endif %}>Semana</option><option value="mes" {% if periodo_tipo == 'mes' %}selected{% endif %}>Mes</option><option value="rango" {% if periodo_tipo == 'rango' %}selected{% endif %}>Rango específico</option></select></div>
-      <div class="col-12 col-md-4" id="periodoFechaWrap"><label class="form-label mb-1">Fecha de referencia</label><input class="form-control" type="date" name="periodo_fecha" value="{{ periodo_fecha_str|default:hoy|date:'Y-m-d' }}"></div>
-      <div class="col-6 col-md-2 periodo-rango"><label class="form-label mb-1">Desde</label><input class="form-control" type="date" name="desde" value="{{ periodo_desde_str }}"></div>
-      <div class="col-6 col-md-2 periodo-rango"><label class="form-label mb-1">Hasta</label><input class="form-control" type="date" name="hasta" value="{{ periodo_hasta_str }}"></div>
-      <div class="col-12 col-md"><button class="btn btn-primary w-100" type="submit">Analizar</button></div>
-    </form>
-  </div>
-</div>
-<div class="card shadow-sm mb-3 mobile-op-card op-card-compact">
-  <div class="card-body">
-    <form class="row g-2 align-items-end" method="get">
-      <input type="hidden" name="filtro" value="{{ modo_actual }}">
-      <input type="hidden" name="anio_cal" value="{{ anio_cal }}">
-      <input type="hidden" name="mes_cal" value="{{ mes_cal }}">
-      <input type="hidden" name="vista" value="{{ vista_actual }}">
-      {% if fecha_seleccionada_str %}
-      <input type="hidden" name="fecha_seleccionada" value="{{ fecha_seleccionada_str }}">
-      {% endif %}
-
-      <div class="col-12 col-lg-4">
-        <label class="form-label mb-1">Buscar</label>
-        <input
-          type="text"
-          class="form-control"
-          name="q"
-          value="{{ q }}"
-          placeholder="Cliente, sector, ciudad o trabajador"
-        >
-      </div>
-
-      <div class="col-6 col-lg-3"><label class="form-label mb-1">Ciudad</label><select class="form-select" name="ciudad"><option value="">Todas las ciudades</option>{% for c in ciudades %}<option value="{{ c.nombre }}" {% if ciudad == c.nombre %}selected{% endif %}>{{ c.nombre }}</option>{% endfor %}</select></div>
-      <div class="col-6 col-lg-3"><label class="form-label mb-1">Trabajador</label><select class="form-select" name="trabajador"><option value="">Todos</option>{% for t in trabajadores_filtro %}<option value="{{ t.id }}" {% if trabajador_id == t.id|stringformat:"s" %}selected{% endif %}>{{ t.user.get_full_name|default:t.user.username }}</option>{% endfor %}</select></div>
-      <div class="col-12 col-lg-2 d-grid"><button class="btn btn-primary" type="submit">Aplicar filtros</button></div>
-
-      <div class="col-12">
-        <div class="d-grid d-md-flex gap-2">
-          <a class="btn {% if not modo_actual and not fecha_seleccionada_str %}btn-primary{% else %}btn-outline-secondary{% endif %}"
-             href="/dashboard/operativo/?vista={{ vista_actual }}{% if q %}&q={{ q|urlencode }}{% endif %}">
-            Hoy
-          </a>
-
-          <a class="btn {% if modo_actual == 'pendientes_hoy' %}btn-primary{% else %}btn-outline-secondary{% endif %}"
-             href="/dashboard/operativo/?filtro=pendientes_hoy&anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}&vista={{ vista_actual }}{% if q %}&q={{ q|urlencode }}{% endif %}">
-            Pendientes hoy
-          </a>
-
-          <a class="btn {% if modo_actual == 'sin_asignar' %}btn-primary{% else %}btn-outline-secondary{% endif %}"
-             href="/dashboard/operativo/?filtro=sin_asignar&anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}&vista={{ vista_actual }}{% if q %}&q={{ q|urlencode }}{% endif %}">
-            Sin asignar
-          </a>
-
-          <a class="btn {% if modo_actual == 'atrasados' %}btn-primary{% else %}btn-outline-secondary{% endif %}"
-             href="/dashboard/operativo/?filtro=atrasados&anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}&vista={{ vista_actual }}{% if q %}&q={{ q|urlencode }}{% endif %}">
-            Atrasados
-          </a>
-
-          <a class="btn {% if modo_actual == 'urgentes' %}btn-primary{% else %}btn-outline-secondary{% endif %}"
-             href="/dashboard/operativo/?filtro=urgentes&anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}&vista={{ vista_actual }}{% if q %}&q={{ q|urlencode }}{% endif %}">
-            Urgentes
-          </a>
-        </div>
-      </div>
-    </form>
-  </div>
-</div>
-
-<div class="card shadow-sm mb-3 op-card-compact admin-planning-panel d-none">
-  <div class="card-body">
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
-      <div>
-        <div class="op-section-title">🧭 Vista operativa</div>
-        <div class="op-subtitle">Cambia entre calendario mensual y agenda semanal.</div>
-      </div>
-
-      <div class="btn-group op-view-switch" role="group">
-        <a href="/dashboard/operativo/?vista=calendario&anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if modo_actual %}&filtro={{ modo_actual }}{% endif %}{% if fecha_seleccionada_str %}&fecha_seleccionada={{ fecha_seleccionada_str }}{% endif %}{% if ver_mas_proximos %}&ver_mas_proximos=1{% endif %}"
-           class="btn {% if vista_actual != 'agenda' %}btn-primary{% else %}btn-outline-primary{% endif %}">
-          📅 Calendario
-        </a>
-        <a href="/dashboard/operativo/?vista=agenda&anio_cal={{ anio_cal }}&mes_cal={{ mes_cal }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if modo_actual %}&filtro={{ modo_actual }}{% endif %}{% if fecha_seleccionada_str %}&fecha_seleccionada={{ fecha_seleccionada_str }}{% endif %}{% if ver_mas_proximos %}&ver_mas_proximos=1{% endif %}"
-           class="btn {% if vista_actual == 'agenda' %}btn-primary{% else %}btn-outline-primary{% endif %}">
-          🗓 Agenda semanal
-        </a>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div class="d-grid d-md-flex gap-2 mb-3">
-  <button type="button" class="btn btn-outline-primary" id="toggleAdminPlanning">
-    <i class="bi bi-calendar3 me-1"></i> Ver programación / calendario
-  </button>
-  <a class="btn btn-outline-secondary" href="/dashboard/mantenimientos/historial/">
-    <i class="bi bi-clock-history me-1"></i> Historial completo
-  </a>
-</div>
-
-{% if total_atrasados_reales or total_sin_asignar %}
-<div class="card shadow-sm mb-3 border-warning op-card-compact"><div class="card-body"><div class="op-section-title mb-2">⚠ Requieren atención</div><div class="d-flex flex-wrap gap-2">{% if total_atrasados_reales %}<span class="op-chip">🔴 {{ total_atrasados_reales }} atrasado{{ total_atrasados_reales|pluralize }}</span>{% endif %}{% if total_sin_asignar %}<span class="op-chip">🟠 {{ total_sin_asignar }} sin trabajador asignado</span>{% endif %}</div></div></div>
-{% endif %}
 
 {% if seleccion_inicio and seleccion_fin %}
 <div class="card shadow-sm mb-3 op-card-compact border-primary">
@@ -748,35 +643,6 @@
  </div>
 </div>
 {% endif %}
-<div class="card shadow-sm mb-3 op-card-compact">
-  <div class="card-body">
-    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
-      <div>
-        <div class="op-section-title">Resumen del día</div>
-        <div class="op-subtitle">{{ fecha_resumen|date:"l, d \d\e F \d\e Y"|capfirst }} · solo datos de esta fecha</div>
-      </div>
-      <span class="op-chip">{{ cumplimiento_resumen_dia|floatformat:0 }}% completado</span>
-    </div>
-    <div class="row g-2">
-      <div class="col-6 col-lg-3"><div class="op-soft-box h-100"><div class="small-label">Programados</div><div class="big-number text-primary">{{ total_resumen_dia }}</div></div></div>
-      <div class="col-6 col-lg-3"><div class="op-soft-box h-100"><div class="small-label">Realizados</div><div class="big-number text-success">{{ realizados_resumen_dia }}</div></div></div>
-      <div class="col-6 col-lg-3"><div class="op-soft-box h-100"><div class="small-label">Pendientes</div><div class="big-number text-warning">{{ pendientes_resumen_dia }}</div></div></div>
-      <div class="col-6 col-lg-3"><div class="op-soft-box h-100"><div class="small-label">Sin asignar</div><div class="big-number {% if sin_asignar_resumen_dia %}text-danger{% endif %}">{{ sin_asignar_resumen_dia }}</div></div></div>
-    </div>
-  </div>
-</div>
-
-<div class="card shadow-sm mb-3 op-card-compact">
-  <div class="card-body">
-    <div class="op-section-title mb-3">Resumen general</div>
-    <div class="row g-2">
-      <div class="col-12 col-lg-4"><div class="op-soft-box h-100"><div class="small-label">Día seleccionado</div><div class="big-number">{{ kpi_dia.realizados }}/{{ kpi_dia.total }}</div><div class="small text-muted">{{ kpi_dia.pendientes }} pendientes · {{ kpi_dia.cumplimiento|floatformat:0 }}% realizado</div></div></div>
-      <div class="col-12 col-lg-4"><div class="op-soft-box h-100"><div class="small-label">Semana {{ agenda_semanal.inicio|date:"d/m" }}–{{ agenda_semanal.fin|date:"d/m" }}</div><div class="big-number">{{ kpi_semana.realizados }}/{{ kpi_semana.total }}</div><div class="small text-muted">{{ kpi_semana.pendientes }} pendientes · {{ kpi_semana.cumplimiento|floatformat:0 }}% realizado</div></div></div>
-      <div class="col-12 col-lg-4"><div class="op-soft-box h-100"><div class="small-label">Mes visible</div><div class="big-number">{{ kpi_mes.realizados }}/{{ kpi_mes.total }}</div><div class="small text-muted">{{ kpi_mes.pendientes }} pendientes · {{ kpi_mes.cumplimiento|floatformat:0 }}% realizado</div></div></div>
-    </div>
-  </div>
-</div>
-
 {% if total_sin_asignar > 0 %}
   <div class="alert alert-danger py-2 mb-3">
     <div class="fw-semibold mb-2">
