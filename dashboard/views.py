@@ -1126,44 +1126,51 @@ def sw_js_view(request):
 # Manifest servido por Django
 # -------------------
 def manifest_json_view(request):
-    data = {
-        "name": "Piscinas App",
-        "short_name": "Piscinas",
-        "description": "Gestión de mantenimientos, operativo y finanzas.",
-        "id": "/dashboard/",
-        "start_url": "/dashboard/inicio/",
-        "scope": "/dashboard/",
-        "display": "standalone",
-        "background_color": "#ffffff",
-        "theme_color": "#0d6efd",
-        "orientation": "portrait",
-        "icons": [
-            {
-                "src": static("dashboard/icons/icon-192.png"),
-                "sizes": "192x192",
-                "type": "image/png",
-                "purpose": "any",
-            },
-            {
-                "src": static("dashboard/icons/icon-192-maskable.png"),
-                "sizes": "192x192",
-                "type": "image/png",
-                "purpose": "maskable",
-            },
-            {
-                "src": static("dashboard/icons/icon-512.png"),
-                "sizes": "512x512",
-                "type": "image/png",
-                "purpose": "any",
-            },
-            {
-                "src": static("dashboard/icons/icon-512-maskable.png"),
-                "sizes": "512x512",
-                "type": "image/png",
-                "purpose": "maskable",
-            },
-        ],
-    }
+    # La PWA comparte el scope /dashboard/, pero la identidad instalada cambia
+    # según el perfil. Administración y trabajadores conservan JVAQUA; los
+    # clientes/suscriptores (y la pantalla pública de acceso) usan AQUO 360.
+    es_equipo_jvaqua = request.user.is_authenticated and (
+        es_admin(request.user) or es_trabajador(request.user)
+    )
+
+    if es_equipo_jvaqua:
+        data = {
+            "name": "JVAQUA",
+            "short_name": "JVAQUA",
+            "description": "Gestión de mantenimientos, operativo y finanzas.",
+            "id": "/dashboard/",
+            "start_url": "/dashboard/inicio/",
+            "scope": "/dashboard/",
+            "display": "standalone",
+            "background_color": "#ffffff",
+            "theme_color": "#0d6efd",
+            "orientation": "portrait",
+            "icons": [
+                {"src": static("dashboard/icons/icon-192.png"), "sizes": "192x192", "type": "image/png", "purpose": "any"},
+                {"src": static("dashboard/icons/icon-192-maskable.png"), "sizes": "192x192", "type": "image/png", "purpose": "maskable"},
+                {"src": static("dashboard/icons/icon-512.png"), "sizes": "512x512", "type": "image/png", "purpose": "any"},
+                {"src": static("dashboard/icons/icon-512-maskable.png"), "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+            ],
+        }
+    else:
+        data = {
+            "name": "AQUO 360",
+            "short_name": "AQUO 360",
+            "description": "Tu asistente inteligente para el cuidado de piscinas, by JVAQUA.",
+            "id": "/dashboard/",
+            "start_url": "/dashboard/inicio/",
+            "scope": "/dashboard/",
+            "display": "standalone",
+            "background_color": "#ffffff",
+            "theme_color": "#063f83",
+            "orientation": "portrait",
+            "icons": [
+                {"src": static("dashboard/icons/aquo-192.png"), "sizes": "192x192", "type": "image/png", "purpose": "any"},
+                {"src": static("dashboard/icons/aquo-192-maskable.png"), "sizes": "192x192", "type": "image/png", "purpose": "maskable"},
+                {"src": static("dashboard/icons/aquo-512.png"), "sizes": "512x512", "type": "image/png", "purpose": "any"},
+                {"src": static("dashboard/icons/aquo-512-maskable.png"), "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+            ],
+        }
 
     resp = JsonResponse(data)
     resp["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"

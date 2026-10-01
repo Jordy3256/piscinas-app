@@ -14,6 +14,13 @@ const PRECACHE_URLS = [
   "/static/dashboard/icons/icon-192-maskable.png",
   "/static/dashboard/icons/icon-512.png",
   "/static/dashboard/icons/icon-512-maskable.png",
+  "/static/dashboard/icons/aquo-192.png",
+  "/static/dashboard/icons/aquo-192-maskable.png",
+  "/static/dashboard/icons/aquo-512.png",
+  "/static/dashboard/icons/aquo-512-maskable.png",
+  "/static/dashboard/icons/aquo-apple-touch.png",
+  "/static/dashboard/icons/aquo-favicon-32.png",
+  "/static/dashboard/icons/aquo-favicon-48.png",
 ];
 
 function log(...args) {
