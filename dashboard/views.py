@@ -9749,7 +9749,7 @@ def contrato_responsable_reposicion_view(request, pk):
         responsable = Trabajador.objects.filter(pk=trabajador_id, activo=True).select_related("user").first()
         if responsable is None:
             messages.error(request, "El trabajador seleccionado no existe o está inactivo.")
-            return redirect(f"/dashboard/contratos/{pk}/#inventario-sitio")
+            return redirect("inventario_contrato_trabajador", pk=pk)
 
     contrato.responsable_reposicion = responsable
     contrato.save(update_fields=["responsable_reposicion"])
@@ -9757,7 +9757,7 @@ def contrato_responsable_reposicion_view(request, pk):
         messages.success(request, f"Responsable de reposición actualizado a {responsable}.")
     else:
         messages.success(request, "Responsable específico retirado. Se utilizará el técnico designado como respaldo.")
-    return redirect(f"/dashboard/contratos/{pk}/#inventario-sitio")
+    return redirect("inventario_contrato_trabajador", pk=pk)
 
 
 @login_required
@@ -9854,13 +9854,17 @@ def inventario_contrato_trabajador_view(request, pk):
 
     stocks = list(InventarioContrato.objects.filter(contrato=contrato).select_related("insumo").order_by("insumo__nombre"))
     movimientos = MovimientoInventario.objects.filter(contrato=contrato).select_related("insumo", "trabajador__user", "usuario").order_by("-creado_en")[:40]
-    return render(request, "dashboard/inventario_contrato_trabajador.html", {
+    contexto = {
         "contrato": contrato,
         "stocks": stocks,
         "movimientos": movimientos,
         "es_admin": usuario_admin,
         "base_template": "dashboard/base_admin.html" if usuario_admin else "dashboard/base_trabajador.html",
-    })
+    }
+    if usuario_admin:
+        contexto["insumos_disponibles"] = Insumo.objects.filter(activo=True).order_by("nombre")
+        contexto["trabajadores_reposicion"] = Trabajador.objects.filter(activo=True).select_related("user").order_by("user__first_name", "user__last_name", "user__username")
+    return render(request, "dashboard/inventario_contrato_trabajador.html", contexto)
 
 
 @login_required
@@ -9880,7 +9884,7 @@ def contrato_inventario_configurar_view(request, pk):
             raise ValueError
     except Exception:
         messages.error(request, "Revisa el stock mínimo y el consumo diario estimado.")
-        return redirect(f"/dashboard/contratos/{contrato.pk}/#inventario-sitio")
+        return redirect("inventario_contrato_trabajador", pk=contrato.pk)
     inv, creado = InventarioContrato.objects.get_or_create(contrato=contrato, insumo=insumo)
     if not creado:
         # Cierra el período anterior con la tasa antigua para no recalcular
@@ -9898,7 +9902,41 @@ def contrato_inventario_configurar_view(request, pk):
         url=f"/dashboard/contratos/{contrato.pk}/#inventario-sitio",
     )
     messages.success(request, "Producto configurado en el inventario del contrato.")
-    return redirect(f"/dashboard/contratos/{contrato.pk}/#inventario-sitio")
+    return redirect("inventario_contrato_trabajador", pk=contrato.pk)
+
+
+@login_required
+@require_http_methods(["POST"])
+def contrato_inventario_eliminar_view(request, pk, inventario_id):
+    """Retira un producto de la configuración activa del inventario en sitio sin borrar su historial."""
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    contrato = get_object_or_404(Contrato.objects.select_related("cliente"), pk=pk)
+    inv = get_object_or_404(InventarioContrato.objects.select_related("insumo"), pk=inventario_id, contrato=contrato)
+
+    # Cierra la estimación pendiente con la tasa vigente antes de retirar la configuración.
+    from inventario.services import _materializar_estimado_contrato
+    _materializar_estimado_contrato(inv, hoy=timezone.localdate(), usuario=request.user)
+    inv.refresh_from_db()
+    nombre_insumo = inv.insumo.nombre
+    existencia_final = inv.stock_estimado
+    unidad = inv.insumo.unidad_corta
+    inv.delete()
+
+    _registrar_actividad(
+        user=request.user,
+        titulo="Producto retirado del inventario en sitio",
+        descripcion=(
+            f"{request.user.username} retiró {nombre_insumo} del inventario activo de {contrato.cliente}. "
+            f"Existencia estimada al retirar: {existencia_final:.3f} {unidad}. El historial logístico se conserva."
+        ),
+        url=f"/dashboard/mi-inventario/contrato/{contrato.pk}/",
+    )
+    messages.success(
+        request,
+        f"{nombre_insumo} fue retirado del inventario en sitio. Ya no generará alertas de stock ni reposición; el historial anterior se conserva.",
+    )
+    return redirect("inventario_contrato_trabajador", pk=contrato.pk)
 
 
 @login_required
@@ -9924,14 +9962,14 @@ def contrato_inventario_reponer_view(request, pk):
         )
     except (ValueError, InventarioContrato.DoesNotExist) as exc:
         messages.error(request, str(exc))
-        return redirect(f"/dashboard/contratos/{contrato.pk}/#inventario-sitio")
+        return redirect("inventario_contrato_trabajador", pk=contrato.pk)
     _registrar_actividad(
         user=request.user, titulo="Reposición en sitio",
         descripcion=f"{request.user.username} llevó {cantidad} {insumo.unidad_corta} de {insumo.nombre} a {contrato.cliente}.",
         url=f"/dashboard/contratos/{contrato.pk}/#inventario-sitio",
     )
     messages.success(request, "Reposición registrada. Se descontó automáticamente de la bodega general.")
-    return redirect(f"/dashboard/contratos/{contrato.pk}/#inventario-sitio")
+    return redirect("inventario_contrato_trabajador", pk=contrato.pk)
 
 
 @login_required
@@ -9954,9 +9992,9 @@ def contrato_inventario_ajustar_view(request, pk, inventario_id):
         )
     except ValueError as exc:
         messages.error(request, str(exc))
-        return redirect(f"/dashboard/contratos/{contrato.pk}/#inventario-sitio")
+        return redirect("inventario_contrato_trabajador", pk=contrato.pk)
     messages.success(request, "Existencia física del contrato actualizada y registrada en Kardex.")
-    return redirect(f"/dashboard/contratos/{contrato.pk}/#inventario-sitio")
+    return redirect("inventario_contrato_trabajador", pk=contrato.pk)
 
 @login_required
 @require_http_methods(["POST"])
