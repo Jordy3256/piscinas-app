@@ -2234,12 +2234,19 @@ def _centro_acciones_contexto():
     except Exception:
         facturas_por_emitir = []
 
+    # Inicio debe resumir exactamente la misma nómina del período que Finanzas > Nómina.
+    # Antes se tomaban todas las obligaciones históricas vencidas (<= hoy), lo que podía
+    # mostrar trabajadores de meses anteriores y, al mismo tiempo, omitir obligaciones
+    # del mes actual cuya fecha de pago todavía no había llegado.
     obligaciones = list(
         ObligacionTrabajador.objects
         .exclude(estado=ObligacionTrabajador.ESTADO_ANULADO)
         .select_related("trabajador", "trabajador__user", "contrato", "contrato__cliente")
         .prefetch_related("pagos")
-        .filter(fecha_pago_programada__lte=hoy)
+        .filter(
+            fecha_pago_programada__year=hoy.year,
+            fecha_pago_programada__month=hoy.month,
+        )
         .order_by("fecha_pago_programada", "trabajador_id", "id")
     )
     obligaciones_pendientes = [o for o in obligaciones if o.saldo > 0]
