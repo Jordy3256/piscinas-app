@@ -80,8 +80,15 @@ def generar_alertas_financieras(*, enviar_push=True):
         .select_related("cliente", "contrato")
         .prefetch_related("pagos")
     )
+    # Nómina: la campana debe reflejar exactamente el mismo período que la
+    # pantalla Finanzas > Nómina cuando se abre sin filtros: el mes actual de
+    # la FECHA PROGRAMADA DE PAGO. No arrastramos obligaciones vencidas de
+    # meses anteriores, porque esas obligaciones históricas pueden seguir
+    # existiendo legítimamente en la base pero no forman parte de la nómina
+    # operativa mostrada para el mes actual.
     obligaciones = (
         ObligacionTrabajador.objects.exclude(estado=ObligacionTrabajador.ESTADO_ANULADO)
+        .filter(fecha_pago_programada__year=hoy.year, fecha_pago_programada__month=hoy.month)
         .select_related("trabajador", "contrato", "contrato__cliente")
         .prefetch_related("pagos")
     )
