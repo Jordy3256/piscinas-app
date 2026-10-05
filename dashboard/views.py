@@ -4956,8 +4956,10 @@ def mantenimiento_detalle_view(request, pk):
         inventario_mantenimiento = inventario_contrato_mantenimiento
         insumos = [x.insumo for x in inventario_contrato_mantenimiento]
     elif modalidad_quimicos == "cliente":
+        # Los químicos pertenecen al cliente. No se ofrece catálogo ni inventario
+        # JVAQUA para evitar consumos accidentales y cualquier impacto en costos.
         inventario_mantenimiento = []
-        insumos = list(Insumo.objects.filter(activo=True, puede_mantenimiento=True).order_by("nombre"))
+        insumos = []
     elif trabajador_actual:
         inventario_trabajador_mantenimiento = list(
             InventarioTrabajador.objects.filter(
@@ -5190,6 +5192,17 @@ def mantenimiento_detalle_view(request, pk):
                 cantidades = request.POST.getlist("producto_cantidad")
                 unidades = request.POST.getlist("producto_unidad")
                 origenes = request.POST.getlist("producto_origen")
+
+                # Regla de negocio: cuando el cliente proporciona los químicos,
+                # este mantenimiento no puede registrar nuevos consumos. Además
+                # de ocultarlo en la interfaz, se fuerza aquí en servidor para
+                # que un POST manipulado nunca descuente inventario ni genere
+                # costos/egresos en JVAQUA.
+                if mantenimiento.contrato.quimicos_proveedor == "cliente":
+                    ids_insumo = []
+                    cantidades = []
+                    unidades = []
+                    origenes = []
 
                 if trabajador_actual:
                     trabajador_consumo = trabajador_actual

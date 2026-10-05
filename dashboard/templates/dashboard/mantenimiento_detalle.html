@@ -157,7 +157,14 @@
     <div class="card-body">
       <div class="premium-title"><i class="bi bi-droplet-half"></i><span>Productos utilizados <span class="badge bg-light text-secondary">Opcional</span></span></div>
       {% if esta_cancelado %}<div class="alert alert-secondary border mb-3"><div class="fw-bold">🚫 Visita cancelada por administración</div><div class="mt-1">{{ m.motivo_cancelacion }}</div>{% if m.cancelado_en %}<div class="small text-muted mt-1">Cancelada el {{ m.cancelado_en|date:"d/m/Y H:i" }}{% if m.cancelado_por %} por {{ m.cancelado_por.get_full_name|default:m.cancelado_por.username }}{% endif %}.</div>{% endif %}</div>{% endif %}
-      <div class="text-muted small mb-3">Este es el único registro de productos/químicos del mantenimiento. {% if modalidad_quimicos == 'contrato' %}Este contrato tiene inventario en sitio: para cada producto puedes elegir si sale del inventario en sitio o de tu inventario personal.{% elif modalidad_quimicos == 'cliente' %}Los productos son proporcionados por el cliente: se registra lo aplicado sin descontar inventario JVAQUA.{% else %}Los consumos se descuentan del inventario del trabajador.{% endif %}</div>{% if modalidad_quimicos == 'contrato' %}<a class="btn btn-sm btn-outline-primary mb-3" href="{% url 'inventario_contrato_trabajador' m.contrato.id %}">🏊 Ver / reponer inventario en sitio</a>{% endif %}
+      {% if modalidad_quimicos == 'cliente' %}
+      <div class="alert alert-info border mb-3">
+        <div class="fw-bold">👤 Insumos proporcionados por el cliente</div>
+        <div class="small mt-1">Este contrato no utiliza inventario JVAQUA. El registro de productos está bloqueado para evitar descuentos de stock o costos que no corresponden a la empresa.</div>
+      </div>
+      {% else %}
+      <div class="text-muted small mb-3">Este es el único registro de productos/químicos del mantenimiento. {% if modalidad_quimicos == 'contrato' %}Este contrato tiene inventario en sitio: para cada producto puedes elegir si sale del inventario en sitio o de tu inventario personal.{% else %}Los consumos se descuentan del inventario del trabajador.{% endif %}</div>{% if modalidad_quimicos == 'contrato' %}<a class="btn btn-sm btn-outline-primary mb-3" href="{% url 'inventario_contrato_trabajador' m.contrato.id %}">🏊 Ver / reponer inventario en sitio</a>{% endif %}
+      {% endif %}
 
       {% if lista_usos %}
       <div class="vstack gap-2 mb-3">
@@ -171,7 +178,7 @@
       {% if es_admin %}<div class="d-flex justify-content-between border-top pt-3 mb-3"><strong>Costo químico actual</strong><strong>${{ total_egresos|floatformat:2 }}</strong></div>{% endif %}
       {% endif %}
 
-      {% if not esta_realizado %}
+      {% if not esta_realizado and modalidad_quimicos != 'cliente' %}
         {% if es_admin %}
         <div class="mb-3"><label class="form-label fw-bold">Trabajador que utilizó los productos</label><select class="form-select" name="trabajador_consumo_id" id="trabajadorConsumoId"><option value="">Selecciona trabajador solo si agregarás productos</option>{% for t in trabajadores_mantenimiento %}<option value="{{ t.id }}">{{ t.user.get_full_name|default:t.user.username }}</option>{% endfor %}</select></div>
         {% endif %}
