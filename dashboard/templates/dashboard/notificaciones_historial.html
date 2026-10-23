@@ -249,4 +249,79 @@ if (btnMarcarTodasHistorial) {
   });
 }
 </script>
+
+{% if page_obj and page_obj.paginator.num_pages > 1 %}
+<script>
+(function () {
+  "use strict";
+  const total = {{ page_obj.paginator.num_pages }};
+  const current = {{ page_obj.number }};
+  const allNavs = Array.from(document.querySelectorAll('nav'));
+  const pager = allNavs.reverse().find(el => /Anterior|Siguiente|Página\s*\d+\s*de|\d+\s*de\s*\d+/i.test(el.textContent || ''));
+  if (!pager || pager.dataset.jvaquaPagination) return;
+  pager.dataset.jvaquaPagination = '1';
+  const makeLink = (num, label) => {
+    const a = document.createElement('a');
+    a.textContent = label || String(num);
+    const url = new URL(window.location.href);
+    url.searchParams.set('page', String(num));
+    a.href = url.pathname + url.search + url.hash;
+    a.className = 'btn btn-sm ' + (num === current ? 'btn-primary' : 'btn-outline-primary');
+    a.style.cssText = 'min-width:36px; border-radius:9px; text-decoration:none;';
+    if (num === current) a.setAttribute('aria-current', 'page');
+    return a;
+  };
+  const wrap = document.createElement('div');
+  wrap.className = 'd-flex flex-wrap justify-content-center align-items-center gap-2 mt-3 mb-3';
+  wrap.setAttribute('aria-label', 'Navegación directa por páginas');
+  const visible = new Set([1, total]);
+  for (let i = Math.max(1, current - 2); i <= Math.min(total, current + 2); i++) visible.add(i);
+  let previous = 0;
+  Array.from(visible).sort((a,b) => a-b).forEach(num => {
+    if (previous && num - previous > 1) {
+      const dots = document.createElement('span');
+      dots.textContent = '…';
+      dots.className = 'px-1';
+      wrap.appendChild(dots);
+    }
+    wrap.appendChild(makeLink(num));
+    previous = num;
+  });
+  if (total > 5) {
+    const form = document.createElement('form');
+    form.className = 'd-inline-flex align-items-center gap-2 ms-2';
+    const label = document.createElement('label');
+    label.textContent = 'Ir a página';
+    label.className = 'small mb-0';
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.min = '1';
+    input.max = String(total);
+    input.required = true;
+    input.placeholder = String(current);
+    input.setAttribute('aria-label', 'Número de página');
+    input.className = 'form-control form-control-sm';
+    input.style.width = '80px';
+    const submit = document.createElement('button');
+    submit.type = 'submit';
+    submit.textContent = 'Ir';
+    submit.className = 'btn btn-sm btn-outline-primary';
+    form.append(label, input, submit);
+    form.addEventListener('submit', function (event) {
+      event.preventDefault();
+      const n = Number(input.value);
+      if (!Number.isInteger(n) || n < 1 || n > total) {
+        input.setCustomValidity('Selecciona una página entre 1 y ' + total);
+        input.reportValidity();
+        input.setCustomValidity('');
+        return;
+      }
+      window.location.assign(makeLink(n).href);
+    });
+    wrap.appendChild(form);
+  }
+  pager.insertAdjacentElement('afterend', wrap);
+})();
+</script>
+{% endif %}
 {% endblock %}

@@ -20,4 +20,79 @@
 {% for cliente in page_obj %}<div class="col-12 col-xl-6"><div class="cc-card cc-client h-100 {% if not cliente.contratos_activos %}cc-client-inactive{% endif %}"><div class="d-flex justify-content-between gap-3"><div><div class="cc-name">{{ cliente.nombre }}</div><div class="cc-meta mt-1">📞 {{ cliente.telefono }}</div></div>{% if cliente.contratos_activos %}<span class="cc-badge align-self-start">Con contrato activo</span>{% else %}<span class="cc-badge-inactive align-self-start" style="background-color:#fee2e2 !important;color:#b91c1c !important;border:1px solid #fca5a5 !important;">Sin contrato activo</span>{% endif %}</div><hr><div class="row g-2 mb-3"><div class="col-6"><small class="text-muted">Contratos</small><div class="fw-bold">{{ cliente.total_contratos }}</div></div><div class="col-6"><small class="text-muted">Activos</small><div class="fw-bold">{{ cliente.contratos_activos }}</div></div></div><div class="d-flex flex-wrap gap-2"><a class="btn btn-sm btn-outline-primary" href="/dashboard/clientes/{{ cliente.id }}/">Ver cliente</a><a class="btn btn-sm btn-outline-secondary" href="/dashboard/clientes/{{ cliente.id }}/editar/">Editar</a><a class="btn btn-sm btn-success" href="/dashboard/contratos/nuevo/?cliente={{ cliente.id }}">Crear contrato</a></div></div></div>{% empty %}<div class="col-12"><div class="cc-card p-5 text-center"><h4>No se encontraron clientes</h4><p class="text-muted">Registra el primer cliente directamente desde la aplicación.</p><a class="btn btn-primary" href="/dashboard/clientes/nuevo/">Nuevo cliente</a></div></div>{% endfor %}
 </div>
 {% if page_obj.paginator.num_pages > 1 %}<nav class="mt-4"><ul class="pagination justify-content-center">{% if page_obj.has_previous %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if querystring %}&{{ querystring }}{% endif %}">Anterior</a></li>{% endif %}<li class="page-item active"><span class="page-link">{{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span></li>{% if page_obj.has_next %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}{% if querystring %}&{{ querystring }}{% endif %}">Siguiente</a></li>{% endif %}</ul></nav>{% endif %}
-</div>{% endblock %}
+</div>
+{% if page_obj and page_obj.paginator.num_pages > 1 %}
+<script>
+(function () {
+  "use strict";
+  const total = {{ page_obj.paginator.num_pages }};
+  const current = {{ page_obj.number }};
+  const allNavs = Array.from(document.querySelectorAll('nav'));
+  const pager = allNavs.reverse().find(el => /Anterior|Siguiente|Página\s*\d+\s*de|\d+\s*de\s*\d+/i.test(el.textContent || ''));
+  if (!pager || pager.dataset.jvaquaPagination) return;
+  pager.dataset.jvaquaPagination = '1';
+  const makeLink = (num, label) => {
+    const a = document.createElement('a');
+    a.textContent = label || String(num);
+    const url = new URL(window.location.href);
+    url.searchParams.set('page', String(num));
+    a.href = url.pathname + url.search + url.hash;
+    a.className = 'btn btn-sm ' + (num === current ? 'btn-primary' : 'btn-outline-primary');
+    a.style.cssText = 'min-width:36px; border-radius:9px; text-decoration:none;';
+    if (num === current) a.setAttribute('aria-current', 'page');
+    return a;
+  };
+  const wrap = document.createElement('div');
+  wrap.className = 'd-flex flex-wrap justify-content-center align-items-center gap-2 mt-3 mb-3';
+  wrap.setAttribute('aria-label', 'Navegación directa por páginas');
+  const visible = new Set([1, total]);
+  for (let i = Math.max(1, current - 2); i <= Math.min(total, current + 2); i++) visible.add(i);
+  let previous = 0;
+  Array.from(visible).sort((a,b) => a-b).forEach(num => {
+    if (previous && num - previous > 1) {
+      const dots = document.createElement('span');
+      dots.textContent = '…';
+      dots.className = 'px-1';
+      wrap.appendChild(dots);
+    }
+    wrap.appendChild(makeLink(num));
+    previous = num;
+  });
+  if (total > 5) {
+    const form = document.createElement('form');
+    form.className = 'd-inline-flex align-items-center gap-2 ms-2';
+    const label = document.createElement('label');
+    label.textContent = 'Ir a página';
+    label.className = 'small mb-0';
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.min = '1';
+    input.max = String(total);
+    input.required = true;
+    input.placeholder = String(current);
+    input.setAttribute('aria-label', 'Número de página');
+    input.className = 'form-control form-control-sm';
+    input.style.width = '80px';
+    const submit = document.createElement('button');
+    submit.type = 'submit';
+    submit.textContent = 'Ir';
+    submit.className = 'btn btn-sm btn-outline-primary';
+    form.append(label, input, submit);
+    form.addEventListener('submit', function (event) {
+      event.preventDefault();
+      const n = Number(input.value);
+      if (!Number.isInteger(n) || n < 1 || n > total) {
+        input.setCustomValidity('Selecciona una página entre 1 y ' + total);
+        input.reportValidity();
+        input.setCustomValidity('');
+        return;
+      }
+      window.location.assign(makeLink(n).href);
+    });
+    wrap.appendChild(form);
+  }
+  pager.insertAdjacentElement('afterend', wrap);
+})();
+</script>
+{% endif %}
+{% endblock %}
