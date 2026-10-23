@@ -31,7 +31,7 @@ def ejecutar_proceso_diario_jvaqua(*, hoy=None, enviar_push=True, usuario=None):
 
     # 2. Programación operativa.
     try:
-        resultado["programacion"] = mantener_programacion_automatica(horizonte_dias=14)
+        resultado["programacion"] = mantener_programacion_automatica(horizonte_dias=60)
         for item in resultado["programacion"].get("errores", []):
             resultado["errores"].append({"etapa": "programacion", "error": str(item)})
     except Exception as exc:

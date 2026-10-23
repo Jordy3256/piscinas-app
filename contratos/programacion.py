@@ -239,51 +239,35 @@ def cancelar_programacion_futura(contrato, desde=None):
     return eliminados
 
 
-def mantener_programacion_automatica(horizonte_dias=14):
-    """Mantiene un mes futuro de visitas para todos los contratos automáticos activos.
+def mantener_programacion_automatica(horizonte_dias=60):
+    """Garantiza visitas de todos los contratos activos hasta el horizonte.
 
-    Se ejecuta al entrar al ERP. Si un contrato está sin programación o entra
-    dentro del horizonte de renovación, agrega el siguiente bloque sin tocar
-    visitas realizadas ni crear duplicados.
+    No confía exclusivamente en programado_hasta: ese marcador puede existir
+    aunque falten visitas intermedias. get_or_create evita duplicados y
+    preserva visitas realizadas, canceladas y manuales.
     """
     from contratos.models import Contrato
 
     hoy = timezone.localdate()
     limite = hoy + timedelta(days=horizonte_dias)
     contratos = (
-        Contrato.objects
-        .filter(activo=True, generacion_automatica=True)
-        .select_related("tecnico_designado", "cliente")
-        .order_by("id")
+        Contrato.objects.filter(activo=True, generacion_automatica=True)
+        .select_related("tecnico_designado", "cliente").order_by("id")
     )
-
-    renovados = 0
-    creados = 0
+    revisados = creados = existentes = 0
     errores = []
-    for contrato in contratos:
+    for contrato in contratos.iterator():
         if contrato.fecha_fin_contrato and contrato.fecha_fin_contrato < hoy:
             continue
-        if contrato.programado_hasta and contrato.programado_hasta > limite:
-            continue
-
-        desde = (
-            contrato.programado_hasta + timedelta(days=1)
-            if contrato.programado_hasta and contrato.programado_hasta >= hoy
-            else max(contrato.fecha_inicio, hoy)
-        )
-        hasta = sumar_un_mes(desde)
-        if contrato.fecha_fin_contrato:
-            hasta = min(hasta, contrato.fecha_fin_contrato)
+        inicio = max(hoy, contrato.fecha_inicio)
+        fin = min(limite, contrato.fecha_fin_contrato) if contrato.fecha_fin_contrato else limite
         resultado = generar_mantenimientos_contrato(
-            contrato,
-            desde=desde,
-            hasta=hasta,
-            reconciliar=False,
+            contrato, desde=inicio, hasta=fin, reconciliar=False,
         )
         if resultado.get("errores"):
             errores.append({"contrato": contrato.pk, "errores": resultado["errores"]})
             continue
-        renovados += 1
+        revisados += 1
         creados += resultado.get("creados", 0)
-
-    return {"renovados": renovados, "creados": creados, "errores": errores}
+        existentes += resultado.get("existentes", 0)
+    return {"renovados": revisados, "creados": creados, "existentes": existentes, "errores": errores}

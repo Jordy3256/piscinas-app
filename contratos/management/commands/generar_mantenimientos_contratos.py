@@ -1,45 +1,23 @@
 from django.core.management.base import BaseCommand
-from django.utils import timezone
-
-from contratos.models import Contrato
-from contratos.programacion import generar_mantenimientos_contrato, sumar_un_mes
+from contratos.programacion import mantener_programacion_automatica
 
 
 class Command(BaseCommand):
-    help = "Mantiene un mes de visitas futuras generado para todos los contratos activos."
+    help = "Verifica y completa las visitas futuras de todos los contratos activos sin duplicarlas."
+
+    def add_arguments(self, parser):
+        parser.add_argument("--dias", type=int, default=60, help="Horizonte de programación (por defecto 60 días).")
 
     def handle(self, *args, **options):
-        hoy = timezone.localdate()
-        horizonte = sumar_un_mes(hoy)
-        contratos = Contrato.objects.filter(
-            activo=True,
-            generacion_automatica=True,
-            tecnico_designado__isnull=False,
-        ).select_related("cliente", "tecnico_designado")
-
-        total_creados = 0
-        total_existentes = 0
-        con_error = 0
-
-        for contrato in contratos.iterator():
-            resultado = generar_mantenimientos_contrato(
-                contrato,
-                desde=max(hoy, contrato.fecha_inicio),
-                hasta=horizonte,
-                reconciliar=False,
-            )
-            if resultado.get("errores"):
-                con_error += 1
-                self.stderr.write(
-                    f"Contrato #{contrato.pk}: {'; '.join(resultado['errores'])}"
-                )
-                continue
-            total_creados += resultado["creados"]
-            total_existentes += resultado["existentes"]
-
-        self.stdout.write(
-            self.style.SUCCESS(
-                f"Programación completada. Nuevos: {total_creados}. "
-                f"Ya existentes: {total_existentes}. Con error: {con_error}."
-            )
-        )
+        dias = options["dias"]
+        if not 1 <= dias <= 365:
+            raise ValueError("--dias debe estar entre 1 y 365")
+        resultado = mantener_programacion_automatica(horizonte_dias=dias)
+        self.stdout.write(self.style.SUCCESS(
+            f"Contratos revisados: {resultado['renovados']}; "
+            f"visitas creadas: {resultado['creados']}; "
+            f"existentes: {resultado['existentes']}; "
+            f"contratos con error: {len(resultado['errores'])}."
+        ))
+        for error in resultado["errores"]:
+            self.stderr.write(f"Contrato #{error['contrato']}: {error['errores']}")
