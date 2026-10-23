@@ -8509,7 +8509,7 @@ def cliente_list_view(request):
             filter=models.Q(contratos__activo=True),
             distinct=True,
         ),
-    ).order_by("nombre", "id")
+    ).order_by("-contratos_activos", "nombre", "id")
 
     if q:
         clientes = clientes.filter(
@@ -8819,9 +8819,10 @@ def clientes_contratos_pdf_view(request):
     qs = Cliente.objects.select_related("ciudad_ref").prefetch_related(
         models.Prefetch("contratos", queryset=contratos_pdf_qs, to_attr="contratos_pdf")
     ).order_by("ciudad", "nombre", "id")
-    if estado_pdf in {"activos", "inactivos"}:
-        filtro_activo = estado_pdf == "activos"
-        qs = qs.filter(contratos__activo=filtro_activo).distinct()
+    if estado_pdf == "activos":
+        qs = qs.filter(contratos__activo=True).distinct()
+    elif estado_pdf == "inactivos":
+        qs = qs.exclude(contratos__activo=True)
     titulo = "Registro General de Clientes y Contratos"
     subtitulo = {"activos":"Solo clientes con contratos activos","inactivos":"Solo clientes sin contratos activos / contratos inactivos","todos":"Todos los clientes y contratos registrados"}.get(estado_pdf,"Todos los clientes y contratos registrados")
     nombre = "registro_general_clientes_contratos.pdf"
