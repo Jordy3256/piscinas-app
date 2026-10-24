@@ -63,54 +63,6 @@
 {% endblock %}
 
 {% block content %}
-<div class="card border-0 shadow-sm rounded-4 mb-3">
-  <div class="card-body p-3 p-md-4">
-    <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
-      <div>
-        <div class="small text-muted fw-bold text-uppercase">Vigencia contractual</div>
-        {% if contrato.fecha_fin_contrato %}
-          <h5 class="fw-bold mb-1">
-            {{ contrato.fecha_inicio|date:"d/m/Y" }} → {{ contrato.fecha_fin_contrato|date:"d/m/Y" }}
-          </h5>
-          {% if contrato.estado_vigencia == "vencido" %}
-            <span class="badge text-bg-danger">Vencido</span>
-          {% elif contrato.estado_vigencia == "por_vencer" %}
-            <span class="badge text-bg-warning">Por vencer · {{ contrato.dias_para_vencer }} días</span>
-          {% else %}
-            <span class="badge text-bg-success">Vigente</span>
-          {% endif %}
-          <span class="text-muted small ms-1">{{ contrato.vigencia_meses }} meses</span>
-        {% else %}
-          <h5 class="fw-bold mb-1">Contrato indefinido</h5>
-          <span class="badge text-bg-primary">Sin fecha de vencimiento</span>
-        {% endif %}
-      </div>
-      {% if contrato.fecha_fin_contrato %}
-      <form method="post" action="{% url 'contrato_renovar' contrato.pk %}" class="d-flex align-items-end gap-2 flex-wrap">
-        {% csrf_token %}
-        <div>
-          <label class="form-label small fw-bold mb-1">Renovar por</label>
-          <select class="form-select form-select-sm" name="vigencia_meses">
-            <option value="6">6 meses</option>
-            <option value="12" selected>12 meses</option>
-            <option value="24">24 meses</option>
-          </select>
-        </div>
-        <button class="btn btn-primary btn-sm" type="submit">↻ Renovar contrato</button>
-      </form>
-      {% endif %}
-    </div>
-    {% if renovaciones_contrato %}
-    <div class="mt-3 pt-3 border-top">
-      <div class="small fw-bold text-muted mb-2">Historial de renovaciones</div>
-      {% for r in renovaciones_contrato %}
-        <div class="small mb-1">• {{ r.fecha_renovacion|date:"d/m/Y" }} · {{ r.nuevo_inicio|date:"d/m/Y" }} → {{ r.nuevo_fin|date:"d/m/Y" }} · {{ r.vigencia_meses }} meses</div>
-      {% endfor %}
-    </div>
-    {% endif %}
-  </div>
-</div>
-
 <div class="contract-detail-page">
 
   <section class="cd-hero">
@@ -124,7 +76,23 @@
             <span class="cd-status cd-status-inactive">● Contrato inactivo</span>
           {% endif %}
         </div>
-        <div class="cd-meta">Contrato #{{ contrato.id }} · Inicio: {{ contrato.fecha_inicio|date:"d/m/Y" }}</div>
+        <div class="cd-meta d-flex align-items-center gap-2 flex-wrap">
+          <span>Contrato #{{ contrato.id }} · Inicio: {{ contrato.fecha_inicio|date:"d/m/Y" }}</span>
+          <span aria-hidden="true">·</span>
+          {% if contrato.fecha_fin_contrato %}
+            <span>Vence: {{ contrato.fecha_fin_contrato|date:"d/m/Y" }}</span>
+            {% if contrato.estado_vigencia == "vencido" %}
+              <span class="badge text-bg-danger">Vencido</span>
+            {% elif contrato.estado_vigencia == "por_vencer" %}
+              <span class="badge text-bg-warning">Por vencer · {{ contrato.dias_para_vencer }} días</span>
+            {% else %}
+              <span class="badge text-bg-success">Vigente</span>
+            {% endif %}
+            <span>{{ contrato.vigencia_meses }} meses</span>
+          {% else %}
+            <span>Contrato indefinido · Sin fecha de vencimiento</span>
+          {% endif %}
+        </div>
       </div>
       <div class="col-12 col-lg-auto">
         <div class="d-flex gap-2 flex-wrap">
@@ -140,6 +108,21 @@
           <li><form method="post" action="/dashboard/contratos/{{ contrato.id }}/regenerar-programacion/" class="m-0">
             {% csrf_token %}<button type="submit" class="dropdown-item text-success" onclick="return confirm('Se sincronizarán únicamente los mantenimientos futuros automáticos pendientes. ¿Continuar?');">🔄 Regenerar programación</button>
           </form></li>
+          {% endif %}
+          {% if contrato.fecha_fin_contrato %}
+          <li><hr class="dropdown-divider"></li>
+          <li class="px-3 py-2">
+            <form method="post" action="{% url 'contrato_renovar' contrato.pk %}">
+              {% csrf_token %}
+              <label for="vigencia_meses_renovar" class="form-label small fw-bold mb-1">Renovar contrato por</label>
+              <select id="vigencia_meses_renovar" class="form-select form-select-sm mb-2" name="vigencia_meses">
+                <option value="6">6 meses</option>
+                <option value="12" selected>12 meses</option>
+                <option value="24">24 meses</option>
+              </select>
+              <button class="btn btn-sm btn-primary w-100" type="submit">↻ Renovar contrato</button>
+            </form>
+          </li>
           {% endif %}
           <li><hr class="dropdown-divider"></li>
           {% if contrato.activo %}
@@ -157,6 +140,16 @@
       </div>
     </div>
   </section>
+  {% if renovaciones_contrato %}
+  <details class="mb-3 px-2">
+    <summary class="small fw-bold text-secondary" style="cursor:pointer">Historial de renovaciones ({{ renovaciones_contrato|length }})</summary>
+    <div class="small text-muted mt-2 ps-3">
+      {% for r in renovaciones_contrato %}
+        <div class="mb-1">• {{ r.fecha_renovacion|date:"d/m/Y" }} · {{ r.nuevo_inicio|date:"d/m/Y" }} → {{ r.nuevo_fin|date:"d/m/Y" }} · {{ r.vigencia_meses }} meses</div>
+      {% endfor %}
+    </div>
+  </details>
+  {% endif %}
 
   <div class="row g-3 mb-3">
     <div class="col-12 col-lg-7">

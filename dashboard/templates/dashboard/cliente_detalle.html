@@ -3,7 +3,7 @@
 {% block top_title %}👤 Cliente{% endblock %}
 {% block extra_head %}
 <style>
-.cd .hero{border-radius:22px;padding:26px;color:#fff;background:linear-gradient(135deg,#0f172a,#0f766e 70%,#14b8a6);margin-bottom:18px}
+.cd .hero{position:relative;z-index:2;border-radius:22px;padding:26px;color:#fff;background:linear-gradient(135deg,#0f172a,#0f766e 70%,#14b8a6);margin-bottom:18px}
 .cd .cardx{border:1px solid #e2e8f0;border-radius:20px;background:#fff;box-shadow:0 12px 32px rgba(15,23,42,.055)}
 .cd .pad{padding:22px}.cd .btn{border-radius:12px;font-weight:700}.cd .kpi strong{font-size:1.65rem;display:block}
 .cd .label{font-size:.77rem;color:#64748b;font-weight:750;text-transform:uppercase;letter-spacing:.035em}
@@ -23,10 +23,16 @@
     <div class="row align-items-center g-3">
       <div class="col"><div class="small text-uppercase fw-bold opacity-75">Ficha del cliente</div><h1 class="fw-bold mb-1">{{ cliente.nombre }}</h1><div class="opacity-75">Información de contacto y contratos asociados</div></div>
       <div class="col-12 col-lg-auto d-flex flex-wrap gap-2">
-        <a class="btn btn-light" href="/dashboard/clientes/{{ cliente.id }}/editar/">Editar</a>
-        <a class="btn btn-outline-light" href="{% url 'finanzas_cliente_estado_cuenta_pdf' cliente.id %}">📄 Estado de cuenta</a>
-        <a class="btn btn-outline-light" href="{% url 'cliente_contratos_pdf' cliente.id %}">📚 Ficha cliente + contratos</a>
-        <a class="btn btn-warning" href="/dashboard/contratos/nuevo/?cliente={{ cliente.id }}">➕ Crear contrato</a>
+        <div class="dropdown">
+          <button class="btn btn-light dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">⚡ Acciones rápidas</button>
+          <ul class="dropdown-menu dropdown-menu-end shadow-lg" style="min-width:255px;z-index:1080">
+            <li><a class="dropdown-item" href="/dashboard/clientes/{{ cliente.id }}/editar/">✏️ Editar cliente</a></li>
+            <li><a class="dropdown-item" href="{% url 'finanzas_cliente_estado_cuenta_pdf' cliente.id %}">📄 Estado de cuenta</a></li>
+            <li><a class="dropdown-item" href="{% url 'cliente_contratos_pdf' cliente.id %}">📚 Ficha cliente + contratos</a></li>
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item" href="/dashboard/contratos/nuevo/?cliente={{ cliente.id }}">➕ Crear contrato</a></li>
+          </ul>
+        </div>
       </div>
     </div>
   </section>
