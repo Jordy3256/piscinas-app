@@ -8248,6 +8248,18 @@ def _validar_datos_contrato(request):
     facturacion_telefono = (request.POST.get("facturacion_telefono") or "").strip()
     facturacion_correo = (request.POST.get("facturacion_correo") or "").strip()
 
+    # La identidad fiscal pertenece al cliente, no al contrato. Los campos
+    # heredados se mantienen como instantáneas compatibles para PDFs/reportes.
+    cliente_fiscal_id = request.POST.get("cliente")
+    cliente_fiscal = Cliente.objects.filter(pk=cliente_fiscal_id).first() if str(cliente_fiscal_id or "").isdigit() else None
+    if cliente_fiscal and not cliente_fiscal.facturacion_revision_pendiente:
+        facturacion_tipo_identificacion = cliente_fiscal.facturacion_tipo_identificacion
+        facturacion_identificacion = cliente_fiscal.facturacion_identificacion
+        facturacion_razon_social = cliente_fiscal.facturacion_razon_social
+        facturacion_direccion = cliente_fiscal.facturacion_direccion
+        facturacion_telefono = cliente_fiscal.facturacion_telefono
+        facturacion_correo = cliente_fiscal.facturacion_correo
+
     # Coherencia obligatoria: "Por visita" gobierna Cartera y, si aplica,
     # Facturación Externa. No aceptamos una fecha mensual contradictoria.
     if forma_pago == "por_visita":
@@ -8307,7 +8319,7 @@ def _validar_datos_contrato(request):
 
     if requiere_factura and momento_facturacion not in MOMENTOS_FACTURACION_VALIDOS:
         errores.append("Selecciona cuándo debe emitirse la factura.")
-    if requiere_factura:
+    if requiere_factura and not (cliente_fiscal and cliente_fiscal.facturacion_revision_pendiente):
         # En los datos administrativos de facturación únicamente la identificación
         # es obligatoria. El resto de campos puede completarse cuando el cliente
         # facilite la información, sin impedir guardar el contrato.
@@ -8319,10 +8331,7 @@ def _validar_datos_contrato(request):
             errores.append("El RUC debe tener 13 dígitos.")
         elif facturacion_tipo_identificacion == "cedula" and len(facturacion_identificacion) != 10:
             errores.append("La cédula debe tener 10 dígitos.")
-    else:
-        facturacion_tipo_identificacion = facturacion_identificacion = ""
-        facturacion_razon_social = facturacion_direccion = ""
-        facturacion_telefono = facturacion_correo = ""
+    # No borrar datos fiscales históricos cuando el contrato no requiere factura.
 
     if quimicos_proveedor not in QUIMICOS_PROVEEDORES_VALIDOS:
         errores.append("Selecciona quién proporciona los químicos.")
@@ -8432,6 +8441,9 @@ def _normalizar_telefono_cliente(valor):
     return "".join(caracter for caracter in (valor or "") if caracter.isdigit())
 
 
+CAMPOS_FISCALES_CLIENTE = ('facturacion_tipo_identificacion', 'facturacion_identificacion', 'facturacion_razon_social', 'facturacion_direccion', 'facturacion_telefono', 'facturacion_correo')
+
+
 def _datos_cliente_desde_request(request, cliente_actual=None):
     # La ubicación pertenece al contrato. Preservar los valores heredados del
     # cliente para compatibilidad con consultas históricas y rutas antiguas.
@@ -8444,6 +8456,7 @@ def _datos_cliente_desde_request(request, cliente_actual=None):
         )
     }
     return {
+        **{campo: (request.POST.get(campo) or "").strip() for campo in CAMPOS_FISCALES_CLIENTE},
         "nombre": (request.POST.get("nombre") or "").strip(),
         "telefono": (request.POST.get("telefono") or "").strip(),
         "email": (request.POST.get("email") or "").strip(),
@@ -8732,7 +8745,6 @@ def contratos_datos_facturacion_pdf_view(request):
     hoy = timezone.localdate()
     contratos = list(
         Contrato.objects.filter(requiere_factura=True, activo=True)
-        .exclude(facturacion_identificacion="")
         .select_related("cliente", "ciudad_ref")
         .order_by("facturacion_razon_social", "cliente__nombre", "id")
     )
@@ -8767,15 +8779,20 @@ def contratos_datos_facturacion_pdf_view(request):
             contrato.ciudad or getattr(contrato.cliente, "ciudad", ""),
             contrato.sector_urbanizacion or getattr(contrato.cliente, "sector_urbanizacion", ""),
         ])) or "No registrada"
+        fiscal = contrato if contrato.cliente.facturacion_revision_pendiente else contrato.cliente
+        if not fiscal.facturacion_identificacion:
+            fiscal = contrato  # compatibilidad con expedientes incompletos
+        if not fiscal.facturacion_identificacion:
+            continue
         data.append([
             P(f"{contrato.cliente.nombre} · {ubicacion}"),
             P(fecha_facturacion.strftime("%d/%m/%Y") if fecha_facturacion else "No programada"),
-            P(contrato.get_facturacion_tipo_identificacion_display()),
-            P(contrato.facturacion_identificacion),
-            P(contrato.facturacion_razon_social),
-            P(contrato.facturacion_direccion),
-            P(contrato.facturacion_telefono),
-            P(contrato.facturacion_correo),
+            P(fiscal.get_facturacion_tipo_identificacion_display()),
+            P(fiscal.facturacion_identificacion),
+            P(fiscal.facturacion_razon_social),
+            P(fiscal.facturacion_direccion),
+            P(fiscal.facturacion_telefono),
+            P(fiscal.facturacion_correo),
         ])
 
     story = [
@@ -8862,6 +8879,7 @@ def cliente_crear_view(request):
         "nombre": "", "telefono": "", "email": "", "ciudad": "",
         "sector_urbanizacion": "", "direccion": "", "enlace_google_maps": "",
         "latitud": "", "longitud": "",
+        **{campo: "" for campo in CAMPOS_FISCALES_CLIENTE},
     }
     if request.method == "POST":
         datos = _datos_cliente_desde_request(request)
@@ -8902,6 +8920,7 @@ def cliente_editar_view(request, pk):
         "enlace_google_maps": cliente.enlace_google_maps,
         "latitud": cliente.latitud if cliente.latitud is not None else "",
         "longitud": cliente.longitud if cliente.longitud is not None else "",
+        **{campo: getattr(cliente, campo, "") for campo in CAMPOS_FISCALES_CLIENTE},
     }
     if request.method == "POST":
         datos = _datos_cliente_desde_request(request, cliente_actual=cliente)
@@ -9483,6 +9502,12 @@ def contrato_editar_view(request, pk):
                 valor_actual = getattr(contrato, campo, None)
                 if valor_actual not in (None, ""):
                     validacion[campo] = valor_actual
+
+        # No destruir instantáneas fiscales históricas en contratos con datos
+        # aún pendientes de consolidación o sin ficha fiscal completada.
+        if contrato.cliente.facturacion_revision_pendiente or not contrato.cliente.facturacion_identificacion:
+            for campo in CAMPOS_FISCALES_CLIENTE:
+                validacion[campo] = getattr(contrato, campo)
 
         # El técnico asignado también se conserva si una edición parcial no
         # incluye ese control. Esto evita perder la base de nómina existente.

@@ -30,6 +30,15 @@ class Cliente(models.Model):
     enlace_google_maps = models.URLField(max_length=500, blank=True, default="")
     latitud = models.DecimalField(max_digits=9, decimal_places=6, blank=True, null=True)
     longitud = models.DecimalField(max_digits=9, decimal_places=6, blank=True, null=True)
+    # Datos fiscales centralizados. Los campos antiguos de Contrato permanecen
+    # como instantáneas históricas para compatibilidad y auditoría.
+    facturacion_tipo_identificacion = models.CharField(max_length=12, blank=True, default="", choices=[("ruc", "RUC"), ("cedula", "Cédula"), ("pasaporte", "Pasaporte"), ("otro", "Otro")])
+    facturacion_identificacion = models.CharField(max_length=20, blank=True, default="")
+    facturacion_razon_social = models.CharField(max_length=200, blank=True, default="")
+    facturacion_direccion = models.CharField(max_length=300, blank=True, default="")
+    facturacion_telefono = models.CharField(max_length=30, blank=True, default="")
+    facturacion_correo = models.EmailField(blank=True, default="")
+    facturacion_revision_pendiente = models.BooleanField(default=False)
     activo = models.BooleanField(default=True)
     fecha_registro = models.DateTimeField(auto_now_add=True)
 
