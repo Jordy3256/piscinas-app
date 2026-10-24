@@ -132,6 +132,7 @@
             <button class="btn btn-light dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">⚡ Acciones rápidas</button>
             <ul class="dropdown-menu dropdown-menu-end shadow-lg" style="min-width:260px;z-index:1080">
           <li><a class="dropdown-item" href="/dashboard/contratos/{{ contrato.id }}/editar/">🔄 Actualizar contrato</a></li>
+          <li><a class="dropdown-item" href="{% url 'contrato_promocion_nueva' contrato.id %}">🎁 Aplicar promoción</a></li>
           <li><a class="dropdown-item" href="/dashboard/mantenimientos/historial/?q={{ contrato.cliente.nombre|urlencode }}">🛠 Ver mantenimientos</a></li>
           <li><a class="dropdown-item" href="{% url 'ordenes_trabajo:crear_desde_contrato' contrato.id %}">➕ Visita adicional</a></li>
           <li><a class="dropdown-item" href="/dashboard/finanzas/facturas/">🧾 Ver facturas</a></li>
@@ -152,8 +153,6 @@
             </ul>
           </div>
           <a class="btn btn-light" href="/dashboard/contratos/">← Volver</a>
-          <a class="btn btn-warning" href="/dashboard/contratos/{{ contrato.id }}/editar/">🔄 Actualizar contrato</a>
-          <a class="btn btn-success" href="{% url 'contrato_promocion_nueva' contrato.id %}">🎁 Aplicar promoción</a>
         </div>
       </div>
     </div>
