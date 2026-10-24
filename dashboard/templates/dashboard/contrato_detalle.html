@@ -17,7 +17,7 @@
     --cd-muted:#64748b;--cd-line:#e2e8f0;--cd-soft:#f8fafc
   }
   .contract-detail-page .cd-hero{
-    position:relative;overflow:hidden;border-radius:24px;padding:28px;margin-bottom:22px;color:#fff;
+    position:relative;overflow:visible;border-radius:24px;padding:28px;margin-bottom:22px;color:#fff;
     background:linear-gradient(135deg,#0f172a 0%,#0f766e 68%,#14b8a6 100%);
     box-shadow:0 24px 60px rgba(15,23,42,.18)
   }
@@ -128,6 +128,29 @@
       </div>
       <div class="col-12 col-lg-auto">
         <div class="d-flex gap-2 flex-wrap">
+          <div class="dropdown">
+            <button class="btn btn-light dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">⚡ Acciones rápidas</button>
+            <ul class="dropdown-menu dropdown-menu-end shadow-lg" style="min-width:260px;z-index:1080">
+          <li><a class="dropdown-item" href="/dashboard/contratos/{{ contrato.id }}/editar/">🔄 Actualizar contrato</a></li>
+          <li><a class="dropdown-item" href="/dashboard/mantenimientos/historial/?q={{ contrato.cliente.nombre|urlencode }}">🛠 Ver mantenimientos</a></li>
+          <li><a class="dropdown-item" href="{% url 'ordenes_trabajo:crear_desde_contrato' contrato.id %}">➕ Visita adicional</a></li>
+          <li><a class="dropdown-item" href="/dashboard/finanzas/facturas/">🧾 Ver facturas</a></li>
+          {% if contrato.activo and contrato.generacion_automatica %}
+          <li><form method="post" action="/dashboard/contratos/{{ contrato.id }}/regenerar-programacion/" class="m-0">
+            {% csrf_token %}<button type="submit" class="dropdown-item text-success" onclick="return confirm('Se sincronizarán únicamente los mantenimientos futuros automáticos pendientes. ¿Continuar?');">🔄 Regenerar programación</button>
+          </form></li>
+          {% endif %}
+          <li><hr class="dropdown-divider"></li>
+          {% if contrato.activo %}
+          <li><form method="post" action="/dashboard/contratos/{{ contrato.id }}/toggle/" class="m-0">
+            {% csrf_token %}<input type="hidden" name="next" value="/dashboard/contratos/{{ contrato.id }}/">
+            <button type="submit" class="dropdown-item text-danger" onclick="return confirm('¿Deseas desactivar este contrato?');">⏸ Desactivar contrato</button>
+          </form></li>
+          {% else %}
+          <li><a class="dropdown-item text-success" href="{% url 'contrato_reactivar' contrato.id %}?next={{ request.get_full_path|urlencode }}">♻️ Reactivar contrato</a></li>
+          {% endif %}
+            </ul>
+          </div>
           <a class="btn btn-light" href="/dashboard/contratos/">← Volver</a>
           <a class="btn btn-warning" href="/dashboard/contratos/{{ contrato.id }}/editar/">🔄 Actualizar contrato</a>
           <a class="btn btn-success" href="{% url 'contrato_promocion_nueva' contrato.id %}">🎁 Aplicar promoción</a>
@@ -245,36 +268,6 @@
     <div class="col-12 col-md-4"><div class="cd-kpi"><div class="cd-kpi-body"><div class="cd-kpi-label">Total facturado</div><div class="cd-kpi-value">${{ total_facturado|floatformat:2 }}</div></div></div></div>
     <div class="col-12 col-md-4"><div class="cd-kpi"><div class="cd-kpi-body"><div class="cd-kpi-label">Total pagado</div><div class="cd-kpi-value text-success">${{ total_pagado|floatformat:2 }}</div></div></div></div>
     <div class="col-12 col-md-4"><div class="cd-kpi"><div class="cd-kpi-body"><div class="cd-kpi-label">Saldo pendiente</div><div class="cd-kpi-value text-danger">${{ total_pendiente|floatformat:2 }}</div></div></div></div>
-  </div>
-
-  <div class="cd-card mb-3">
-    <div class="cd-card-header">
-      <div class="cd-card-title">⚡ Acciones rápidas</div>
-      <div class="small text-muted mt-1">Accesos relacionados con este contrato.</div>
-    </div>
-    <div class="cd-card-body">
-      <div class="cd-actions">
-        <a class="btn btn-primary" href="/dashboard/contratos/{{ contrato.id }}/editar/">🔄 Actualizar contrato</a>
-        <a class="btn btn-outline-primary" href="/dashboard/mantenimientos/historial/?q={{ contrato.cliente.nombre|urlencode }}">🛠 Ver mantenimientos</a>
-        <a class="btn btn-outline-warning" href="{% url 'ordenes_trabajo:crear_desde_contrato' contrato.id %}">➕ Visita adicional</a>
-        <a class="btn btn-outline-secondary" href="/dashboard/finanzas/facturas/">🧾 Ver facturas</a>
-        {% if contrato.activo and contrato.generacion_automatica %}
-          <form method="post" action="/dashboard/contratos/{{ contrato.id }}/regenerar-programacion/" class="d-inline">
-            {% csrf_token %}
-            <button type="submit" class="btn btn-outline-success" onclick="return confirm('Se sincronizarán únicamente los mantenimientos futuros automáticos pendientes. ¿Continuar?');">🔄 Regenerar programación</button>
-          </form>
-        {% endif %}
-        {% if contrato.activo %}
-          <form method="post" action="/dashboard/contratos/{{ contrato.id }}/toggle/" class="d-inline">
-            {% csrf_token %}
-            <input type="hidden" name="next" value="/dashboard/contratos/{{ contrato.id }}/">
-            <button type="submit" class="btn btn-outline-danger" onclick="return confirm('¿Deseas desactivar este contrato?');">⏸ Desactivar contrato</button>
-          </form>
-        {% else %}
-          <a class="btn btn-outline-success" href="{% url 'contrato_reactivar' contrato.id %}?next={{ request.get_full_path|urlencode }}">♻️ Reactivar contrato</a>
-        {% endif %}
-      </div>
-    </div>
   </div>
 
   <div class="row g-3">
