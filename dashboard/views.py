@@ -8432,17 +8432,22 @@ def _normalizar_telefono_cliente(valor):
     return "".join(caracter for caracter in (valor or "") if caracter.isdigit())
 
 
-def _datos_cliente_desde_request(request):
+def _datos_cliente_desde_request(request, cliente_actual=None):
+    # La ubicación pertenece al contrato. Preservar los valores heredados del
+    # cliente para compatibilidad con consultas históricas y rutas antiguas.
+    # Nunca tomar ubicación del POST de la ficha del cliente.
+    ubicacion = {
+        campo: getattr(cliente_actual, campo, defecto) if cliente_actual else defecto
+        for campo, defecto in (
+            ("ciudad", ""), ("sector_urbanizacion", ""), ("direccion", ""),
+            ("enlace_google_maps", ""), ("latitud", None), ("longitud", None),
+        )
+    }
     return {
         "nombre": (request.POST.get("nombre") or "").strip(),
         "telefono": (request.POST.get("telefono") or "").strip(),
         "email": (request.POST.get("email") or "").strip(),
-        "ciudad": (request.POST.get("ciudad") or "").strip(),
-        "sector_urbanizacion": (request.POST.get("sector_urbanizacion") or "").strip(),
-        "direccion": (request.POST.get("direccion") or "").strip(),
-        "enlace_google_maps": (request.POST.get("enlace_google_maps") or "").strip(),
-        "latitud": (request.POST.get("latitud") or "").strip() or None,
-        "longitud": (request.POST.get("longitud") or "").strip() or None,
+        **ubicacion,
     }
 
 
@@ -8451,9 +8456,6 @@ def _validar_cliente(datos, cliente_actual=None):
     for campo, etiqueta in (
         ("nombre", "El nombre"),
         ("telefono", "El teléfono principal"),
-        ("ciudad", "La ciudad"),
-        ("sector_urbanizacion", "El sector o urbanización"),
-        ("direccion", "La dirección"),
     ):
         if not datos.get(campo):
             errores.append(f"{etiqueta} es obligatorio.")
@@ -8902,7 +8904,7 @@ def cliente_editar_view(request, pk):
         "longitud": cliente.longitud if cliente.longitud is not None else "",
     }
     if request.method == "POST":
-        datos = _datos_cliente_desde_request(request)
+        datos = _datos_cliente_desde_request(request, cliente_actual=cliente)
         errores = _validar_cliente(datos, cliente_actual=cliente)
         if errores:
             for error in errores:
