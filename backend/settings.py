@@ -79,8 +79,25 @@ if not VAPID_PUBLIC_KEY:
     else:
         VAPID_PUBLIC_KEY = VAPID_PUBLIC_KEY_FALLBACK
 
-# ✅ pywebpush firma con PEM (string PEM)
-VAPID_PRIVATE_KEY = VAPID_PRIVATE_PEM
+# La clave pública entregada al navegador DEBE corresponder a la privada
+# utilizada por pywebpush. Una VAPID_PUBLIC_KEY antigua en Render puede
+# pertenecer a otro par: priorizamos la derivada de la PEM válida.
+if VAPID_PRIVATE_PEM:
+    try:
+        from cryptography.hazmat.primitives.serialization import load_pem_private_key, Encoding, PublicFormat
+        _vapid_key = load_pem_private_key(VAPID_PRIVATE_PEM.encode("utf-8"), password=None)
+        _vapid_public_bytes = _vapid_key.public_key().public_bytes(Encoding.X962, PublicFormat.UncompressedPoint)
+        VAPID_PUBLIC_KEY = base64.urlsafe_b64encode(_vapid_public_bytes).decode("ascii").rstrip("=")
+        VAPID_PRIVATE_KEY = VAPID_PRIVATE_PEM
+        del _vapid_key, _vapid_public_bytes
+    except (ValueError, TypeError):
+        # No publicar una clave diferente si no se puede verificar la pareja.
+        VAPID_PUBLIC_KEY = ""
+        VAPID_PRIVATE_KEY = ""
+else:
+    # Sin PEM válida no hay una pareja verificable para emitir push.
+    VAPID_PUBLIC_KEY = ""
+    VAPID_PRIVATE_KEY = ""
 
 # =========================
 # HOSTS

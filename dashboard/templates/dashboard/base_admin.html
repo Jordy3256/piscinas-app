@@ -1526,9 +1526,19 @@ form[method="get"]{position:relative} form[method="get"] .form-label{font-weight
         if (perm !== "granted") return;
 
         let sub = await reg.pushManager.getSubscription();
+        const keyBytes = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
+        if (!keyBytes || !keyBytes.length) return;
+        if (sub) {
+          const oldKey = sub.options && sub.options.applicationServerKey;
+          const oldBytes = oldKey ? new Uint8Array(oldKey) : null;
+          const matches = oldBytes && oldBytes.length === keyBytes.length &&
+            oldBytes.every((byte, i) => byte === keyBytes[i]);
+          if (!matches) {
+            await sub.unsubscribe();
+            sub = null;
+          }
+        }
         if (!sub) {
-          const keyBytes = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
-          if (!keyBytes || !keyBytes.length) return;
           sub = await reg.pushManager.subscribe({
             userVisibleOnly: true,
             applicationServerKey: keyBytes,

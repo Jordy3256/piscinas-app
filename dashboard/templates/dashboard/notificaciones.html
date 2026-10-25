@@ -174,6 +174,19 @@
     return existing || navigator.serviceWorker.register('/dashboard/sw.js', {scope: '/dashboard/'});
   };
   const current = async () => (await registration()).pushManager.getSubscription();
+  const serverKey = async () => {
+    const res = await fetch('/dashboard/push/vapid_public_key/', {credentials:'same-origin'});
+    const data = await res.json();
+    if (!res.ok || !data.publicKey) throw new Error('No existe una pareja VAPID válida en el servidor.');
+    const raw = atob(data.publicKey.replace(/-/g,'+').replace(/_/g,'/') + '='.repeat((4-data.publicKey.length%4)%4));
+    return Uint8Array.from(raw, c => c.charCodeAt(0));
+  };
+  const sameKey = (sub, key) => {
+    const currentKey = sub && sub.options && sub.options.applicationServerKey;
+    if (!currentKey) return false;
+    const bytes = new Uint8Array(currentKey);
+    return bytes.length === key.length && bytes.every((b,i) => b === key[i]);
+  };
   const request = async (url, data) => {
     const response = await fetch(url, {
       method: 'POST', credentials: 'same-origin',
@@ -197,7 +210,7 @@
       const sub = await current();
       test.disabled = !(sub && Notification.permission === 'granted');
       state(sub && Notification.permission === 'granted'
-        ? 'Este navegador tiene una suscripción push. Puedes registrarla nuevamente o enviar una prueba.'
+        ? 'Este navegador tiene una suscripción push. Si es antigua, pulsa «Activar notificaciones» para renovarla antes de probar.'
         : 'Este dispositivo aún no tiene una suscripción push activa.', sub ? 'success' : 'secondary');
     } catch (e) {
       state('No se pudo consultar el dispositivo: ' + e.message, 'warning');
@@ -212,14 +225,14 @@
       if (permission !== 'granted') throw new Error('Permiso no concedido. Revisa la configuración del sitio en Chrome.');
       const reg = await registration();
       let sub = await reg.pushManager.getSubscription();
-      if (!sub) {
-        const res = await fetch('/dashboard/push/vapid_public_key/', {credentials:'same-origin'});
-        const data = await res.json();
-        if (!res.ok || !data.publicKey) throw new Error('Falta configurar VAPID_PUBLIC_KEY en el servidor.');
-        const raw = atob(data.publicKey.replace(/-/g,'+').replace(/_/g,'/') + '='.repeat((4-data.publicKey.length%4)%4));
-        const key = Uint8Array.from(raw, c => c.charCodeAt(0));
-        sub = await reg.pushManager.subscribe({userVisibleOnly: true, applicationServerKey: key});
+      const key = await serverKey();
+      if (sub && !sameKey(sub, key)) {
+        // Renovación explícita al pulsar Activar; conserva los registros
+        // históricos en el servidor hasta que caduquen normalmente.
+        await sub.unsubscribe();
+        sub = null;
       }
+      if (!sub) sub = await reg.pushManager.subscribe({userVisibleOnly: true, applicationServerKey: key});
       await request('/dashboard/push/save_subscription/', sub.toJSON());
       result.textContent = 'Dispositivo registrado. Ya puedes enviar una prueba.';
       await refresh();
@@ -232,6 +245,7 @@
     try {
       const sub = await current();
       if (!sub) throw new Error('Activa las notificaciones primero.');
+      if (!sameKey(sub, await serverKey())) throw new Error('La suscripción usa una clave anterior. Pulsa «Activar notificaciones» para renovarla.');
       const data = await request('/dashboard/push/test/', {endpoint: sub.endpoint});
       result.textContent = `Prueba enviada al servicio push (${data.sent || 0}). Comprueba las notificaciones de Android.`;
     } catch (e) { result.textContent = 'Falló la prueba: ' + e.message; }
