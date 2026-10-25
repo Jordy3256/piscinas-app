@@ -1,3 +1,4 @@
+from .comunicados import comunicados_view
 from django.urls import path
 
 from .views import (
@@ -154,6 +155,7 @@ from .views import (
 
 
 urlpatterns = [
+    path("comunicados/", comunicados_view, name="comunicados"),
     # ======================
     # PWA
     # ======================

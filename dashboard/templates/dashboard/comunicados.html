@@ -1,0 +1,22 @@
+{% extends base_template %}
+{% block title %}Comunicados{% endblock %}
+{% block top_title %}Comunicados a trabajadores{% endblock %}
+{% block content %}
+<div class="card shadow-sm border-0 mx-auto" style="max-width:780px;border-radius:18px">
+ <div class="card-body p-4">
+  <h4 class="mb-2">Nuevo comunicado</h4>
+  <p class="text-muted">Envía avisos importantes a todos los trabajadores o a uno específico. Quedarán guardados en su bandeja de notificaciones.</p>
+  <form method="post">{% csrf_token %}
+   <div class="mb-3"><label class="form-label fw-semibold" for="destinatario">Destinatarios</label>
+    <select class="form-select" id="destinatario" name="destinatario" required>
+     <option value="todos">Todos los trabajadores activos</option>
+     {% for t in trabajadores %}<option value="{{ t.pk }}">{{ t.user.get_full_name|default:t.user.username }} ({{ t.user.username }})</option>{% endfor %}
+    </select>
+   </div>
+   <div class="mb-3"><label class="form-label fw-semibold" for="titulo">Asunto</label><input class="form-control" id="titulo" name="titulo" maxlength="150" required></div>
+   <div class="mb-3"><label class="form-label fw-semibold" for="mensaje">Mensaje</label><textarea class="form-control" id="mensaje" name="mensaje" maxlength="2000" rows="5" required></textarea></div>
+   <div class="d-flex gap-2 justify-content-end"><a class="btn btn-outline-secondary" href="/dashboard/notificaciones/">Volver</a><button class="btn btn-primary" type="submit" onclick="return confirm('¿Enviar este comunicado a los destinatarios seleccionados?')">Enviar comunicado</button></div>
+  </form>
+ </div>
+</div>
+{% endblock %}

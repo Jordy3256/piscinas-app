@@ -32,6 +32,19 @@
   }
 </style>
 
+<div class="card shadow-sm mb-3" id="aquo-push-panel">
+  <div class="card-body">
+    <div class="fw-bold fs-5 mb-1">🔔 Notificaciones en este dispositivo</div>
+    <p class="text-muted small mb-2">Activa los avisos de AQUO 360 en este teléfono o computadora. El permiso y la suscripción son independientes de los registros de otros dispositivos.</p>
+    <div id="aquo-push-state" class="alert alert-secondary py-2" role="status" aria-live="polite">Comprobando compatibilidad y permisos…</div>
+    <div class="d-flex gap-2 flex-wrap">
+      <button type="button" id="aquo-push-enable" class="btn btn-primary">Activar notificaciones</button>
+      <button type="button" id="aquo-push-test" class="btn btn-outline-primary" disabled>Enviar prueba a este dispositivo</button>
+    </div>
+    <div id="aquo-push-result" class="small mt-2" role="status" aria-live="polite"></div>
+  </div>
+</div>
+
 <div class="card shadow-sm mb-3">
   <div class="card-body">
     <div class="fw-bold mb-2">Estado de notificaciones push</div>
@@ -66,6 +79,7 @@
   </div>
 
   <div class="d-grid d-md-flex gap-2 notif-top-actions w-100 w-md-auto">
+    {% if es_admin %}<a href="/dashboard/comunicados/" class="btn btn-primary btn-sm">Enviar comunicado</a>{% endif %}
     <a href="/dashboard/notificaciones/historial/" class="btn btn-outline-secondary btn-sm">Ver historial</a>
 
     {% if notificaciones %}
@@ -138,6 +152,94 @@
 {% endblock %}
 
 {% block extra_js %}
+<script>
+(() => {
+  const status = document.getElementById('aquo-push-state');
+  const enable = document.getElementById('aquo-push-enable');
+  const test = document.getElementById('aquo-push-test');
+  const result = document.getElementById('aquo-push-result');
+  const csrf = () => {
+    const meta = document.querySelector('meta[name="csrf-token"]');
+    if (meta?.content) return meta.content;
+    const m = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+    return m ? decodeURIComponent(m[1]) : '';
+  };
+  const state = (message, kind='secondary') => {
+    status.className = 'alert alert-' + kind + ' py-2';
+    status.textContent = message;
+  };
+  const compatible = () => window.isSecureContext && ('serviceWorker' in navigator) && ('PushManager' in window) && ('Notification' in window);
+  const registration = async () => {
+    const existing = await navigator.serviceWorker.getRegistration('/dashboard/');
+    return existing || navigator.serviceWorker.register('/dashboard/sw.js', {scope: '/dashboard/'});
+  };
+  const current = async () => (await registration()).pushManager.getSubscription();
+  const request = async (url, data) => {
+    const response = await fetch(url, {
+      method: 'POST', credentials: 'same-origin',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf(), 'Accept': 'application/json'},
+      body: JSON.stringify(data)
+    });
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok || !json.ok) throw new Error(json.error || `Error HTTP ${response.status}`);
+    return json;
+  };
+  async function refresh() {
+    if (!compatible()) {
+      state('Este navegador no admite Web Push o la conexión no es segura. Usa Chrome actualizado y HTTPS.', 'warning');
+      enable.disabled = true; test.disabled = true; return;
+    }
+    if (Notification.permission === 'denied') {
+      state('Las notificaciones están bloqueadas para este sitio. Habilítalas en la configuración de Chrome y vuelve a cargar.', 'warning');
+      test.disabled = true; return;
+    }
+    try {
+      const sub = await current();
+      test.disabled = !(sub && Notification.permission === 'granted');
+      state(sub && Notification.permission === 'granted'
+        ? 'Este navegador tiene una suscripción push. Puedes registrarla nuevamente o enviar una prueba.'
+        : 'Este dispositivo aún no tiene una suscripción push activa.', sub ? 'success' : 'secondary');
+    } catch (e) {
+      state('No se pudo consultar el dispositivo: ' + e.message, 'warning');
+      test.disabled = true;
+    }
+  }
+  enable.addEventListener('click', async () => {
+    enable.disabled = true; result.textContent = '';
+    try {
+      if (!compatible()) throw new Error('Navegador no compatible o sin HTTPS.');
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') throw new Error('Permiso no concedido. Revisa la configuración del sitio en Chrome.');
+      const reg = await registration();
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) {
+        const res = await fetch('/dashboard/push/vapid_public_key/', {credentials:'same-origin'});
+        const data = await res.json();
+        if (!res.ok || !data.publicKey) throw new Error('Falta configurar VAPID_PUBLIC_KEY en el servidor.');
+        const raw = atob(data.publicKey.replace(/-/g,'+').replace(/_/g,'/') + '='.repeat((4-data.publicKey.length%4)%4));
+        const key = Uint8Array.from(raw, c => c.charCodeAt(0));
+        sub = await reg.pushManager.subscribe({userVisibleOnly: true, applicationServerKey: key});
+      }
+      await request('/dashboard/push/save_subscription/', sub.toJSON());
+      result.textContent = 'Dispositivo registrado. Ya puedes enviar una prueba.';
+      await refresh();
+    } catch (e) {
+      result.textContent = 'No se pudo activar: ' + e.message;
+    } finally { enable.disabled = false; }
+  });
+  test.addEventListener('click', async () => {
+    test.disabled = true; result.textContent = 'Enviando prueba…';
+    try {
+      const sub = await current();
+      if (!sub) throw new Error('Activa las notificaciones primero.');
+      const data = await request('/dashboard/push/test/', {endpoint: sub.endpoint});
+      result.textContent = `Prueba enviada al servicio push (${data.sent || 0}). Comprueba las notificaciones de Android.`;
+    } catch (e) { result.textContent = 'Falló la prueba: ' + e.message; }
+    finally { await refresh(); }
+  });
+  refresh();
+})();
+</script>
 <script>
 function getCSRFToken() {
   const meta = document.querySelector('meta[name="csrf-token"]');

@@ -332,45 +332,13 @@ def notificar_movimientos_recurrentes_proximos():
 
 
 def notificar_trabajadores_mantenimientos_hoy():
+    """Avisos individuales desactivados a favor de resúmenes programados.
+
+    Se mantiene la función para compatibilidad con vistas existentes.
     """
-    Envía notificación al trabajador el mismo día del mantenimiento.
-    Evita duplicados por día/mantenimiento.
-    """
-    hoy = timezone.localdate()
-
-    mantenimientos_hoy = (
-        Mantenimiento.objects.filter(fecha=hoy)
-        .select_related("cliente", "contrato")
-        .prefetch_related("trabajadores", "trabajadores__user")
-        .order_by("id")
-    )
-
-    for mantenimiento in mantenimientos_hoy:
-        try:
-            trabajadores = mantenimiento.trabajadores.all()
-        except Exception:
-            trabajadores = []
-
-        for trabajador in trabajadores:
-            user = getattr(trabajador, "user", None)
-            if not user or not getattr(user, "is_active", False):
-                continue
-
-            if _notificacion_mantenimiento_hoy_ya_existe(user, mantenimiento):
-                continue
-
-            _crear_notificacion(
-                user=user,
-                titulo="📅 Mantenimiento para hoy",
-                mensaje=f"Hoy te toca el mantenimiento de {mantenimiento.cliente}.",
-                url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
-                enviar_push=True,
-            )
+    return None
 
 
-# -------------------
-# Helpers calendario visual
-# -------------------
 def _build_calendario_mantenimientos(anio, mes, trabajador=None):
     primer_dia, ultimo_dia = _inicio_fin_mes(anio, mes)
 
@@ -2174,6 +2142,51 @@ def push_test_view(request):
         return JsonResponse(
             {"ok": True, "msg": "push_test_view OK. Usa POST para enviar push."}
         )
+
+    # Prueba dirigida al dispositivo actual: nunca enviar a todas las suscripciones
+    # antiguas cuando el navegador proporciona su endpoint.
+    endpoint = ""
+    try:
+        data = json.loads(request.body.decode("utf-8") or "{}")
+        if isinstance(data, dict):
+            endpoint = _clean_str(data.get("endpoint"))
+    except (ValueError, UnicodeDecodeError):
+        return JsonResponse({"ok": False, "error": "JSON inválido"}, status=400)
+
+    if endpoint:
+        if PushSubscription is None:
+            return JsonResponse({"ok": False, "error": "Suscripciones no disponibles"}, status=500)
+        sub = PushSubscription.objects.filter(user=request.user, endpoint=endpoint).first()
+        if sub is None:
+            return JsonResponse({"ok": False, "error": "Este dispositivo no está registrado. Activa las notificaciones primero."}, status=400)
+        private_key = (getattr(settings, "VAPID_PRIVATE_KEY", "") or "").strip()
+        if not private_key:
+            return JsonResponse({"ok": False, "error": "Falta configurar VAPID_PRIVATE_KEY"}, status=400)
+        payload = json.dumps({
+            "title": "AQUO 360 · Notificación de prueba",
+            "body": "Este dispositivo está recibiendo notificaciones correctamente.",
+            "url": "/dashboard/notificaciones/",
+            "tag": f"aquo-test-{request.user.pk}",
+        })
+        try:
+            webpush(
+                subscription_info={"endpoint": sub.endpoint, "keys": {"p256dh": sub.p256dh, "auth": sub.auth}},
+                data=payload,
+                vapid_private_key=private_key,
+                vapid_claims={"sub": (getattr(settings, "VAPID_SUBJECT", "") or "mailto:admin@piscinas-app.local").strip()},
+                content_encoding="aes128gcm",
+                ttl=60,
+            )
+            return JsonResponse({"ok": True, "sent": 1, "failed": 0, "device_only": True})
+        except WebPushException as ex:
+            status = _push_status_code_from_exception(ex)
+            if status in (404, 410):
+                sub.delete()
+            logger.warning("Prueba push fallida usuario=%s status=%s", request.user.pk, status)
+            return JsonResponse({"ok": False, "error": "El servicio push rechazó la suscripción. Vuelve a activarla.", "status": status}, status=400)
+        except Exception:
+            logger.exception("Error en prueba push para usuario=%s", request.user.pk)
+            return JsonResponse({"ok": False, "error": "No se pudo enviar la prueba. Revisa la configuración VAPID y los logs."}, status=400)
 
     result = _send_push_to_user(
         user=request.user,
