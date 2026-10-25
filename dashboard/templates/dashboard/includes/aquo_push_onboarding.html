@@ -1,0 +1,77 @@
+<style>
+#aquo-push-onboard[hidden]{display:none!important}
+#aquo-push-onboard{position:fixed;inset:0;z-index:99999;background:rgba(13,27,48,.56);display:flex;align-items:center;justify-content:center;padding:18px}
+#aquo-push-onboard .aquo-push-dialog{background:#fff;border-radius:22px;max-width:400px;width:100%;padding:28px 24px;box-shadow:0 20px 65px rgba(0,0,0,.23);text-align:center;color:#18273c}
+#aquo-push-onboard .aquo-push-icon{font-size:38px;margin-bottom:8px}
+#aquo-push-onboard h2{font-size:22px;font-weight:800;margin:0 0 12px}
+#aquo-push-onboard p{color:#607086;line-height:1.5;margin-bottom:20px}
+#aquo-push-onboard button{cursor:pointer}
+#aquo-push-onboard .aquo-primary{border:0;background:#0866dc;color:white;border-radius:12px;padding:13px 18px;width:100%;font-weight:700}
+#aquo-push-onboard .aquo-secondary{border:0;background:transparent;color:#62758c;padding:12px;margin-top:7px}
+#aquo-push-onboard .aquo-push-error{font-size:13px;color:#a52b34;margin-top:12px;white-space:pre-line}
+</style>
+<div id="aquo-push-onboard" hidden role="dialog" aria-modal="true" aria-labelledby="aquo-push-onboard-title">
+ <div class="aquo-push-dialog">
+  <div class="aquo-push-icon" aria-hidden="true">🔔</div>
+  <h2 id="aquo-push-onboard-title">Activa tus notificaciones</h2>
+  <p>Mantente al día con las novedades y avisos importantes de AQUO 360.</p>
+  <button class="aquo-primary" type="button" id="aquo-push-onboard-enable">Activar notificaciones</button>
+  <button class="aquo-secondary" type="button" id="aquo-push-onboard-later">Ahora no</button>
+  <div id="aquo-push-onboard-error" class="aquo-push-error" role="status" aria-live="polite"></div>
+ </div>
+</div>
+<script>
+(() => {
+  const modal = document.getElementById('aquo-push-onboard');
+  const enable = document.getElementById('aquo-push-onboard-enable');
+  const later = document.getElementById('aquo-push-onboard-later');
+  const error = document.getElementById('aquo-push-onboard-error');
+  const snoozeKey = 'aquo-push-prompt-later-v1';
+  const supported = () => window.isSecureContext && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  const csrf = () => document.querySelector('meta[name="csrf-token"]')?.content || decodeURIComponent(document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/)?.[1] || '');
+  function close() { modal.hidden = true; }
+  function open() { error.textContent = ''; modal.hidden = false; }
+  window.aquoOpenPushSettings = open;
+  later.addEventListener('click', () => { try { localStorage.setItem(snoozeKey, String(Date.now())); } catch (_) {} close(); });
+  enable.addEventListener('click', async () => {
+    enable.disabled = true;
+    error.textContent = '';
+    try {
+      if (!supported()) throw new Error('Este dispositivo no admite notificaciones push.');
+      if (Notification.permission === 'denied') throw new Error('Las notificaciones están bloqueadas. Habilítalas en los ajustes del navegador o de Android.');
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') throw new Error('Para recibir avisos debes aceptar el permiso de notificaciones.');
+      const reg = await (navigator.serviceWorker.getRegistration('/dashboard/') || navigator.serviceWorker.register('/dashboard/sw.js', {scope:'/dashboard/'}));
+      const keyRes = await fetch('/dashboard/push/vapid_public_key/', {credentials:'same-origin'});
+      const keyData = await keyRes.json();
+      if (!keyRes.ok || !keyData.publicKey) throw new Error('No se pudo obtener la configuración de notificaciones.');
+      const keyText = keyData.publicKey;
+      const key = Uint8Array.from(atob(keyText.replace(/-/g,'+').replace(/_/g,'/') + '='.repeat((4-keyText.length%4)%4)), c => c.charCodeAt(0));
+      let sub = await reg.pushManager.getSubscription();
+      if (sub) {
+        const old = sub.options?.applicationServerKey;
+        const bytes = old ? new Uint8Array(old) : null;
+        if (!bytes || bytes.length !== key.length || !bytes.every((b,i) => b === key[i])) { await sub.unsubscribe(); sub = null; }
+      }
+      if (!sub) sub = await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:key});
+      const res = await fetch('/dashboard/push/save_subscription/', {method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRFToken':csrf(),'Accept':'application/json'},body:JSON.stringify(sub.toJSON())});
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) throw new Error(data.error || 'No se pudo registrar este dispositivo.');
+      try { localStorage.removeItem(snoozeKey); } catch (_) {}
+      close();
+    } catch (e) { error.textContent = e.message || 'No se pudieron activar las notificaciones.'; }
+    finally { enable.disabled = false; }
+  });
+  window.addEventListener('load', async () => {
+    if (!supported() || Notification.permission === 'denied') return;
+    try {
+      const last = Number(localStorage.getItem(snoozeKey) || 0);
+      if (last && Date.now() - last < 7*24*60*60*1000) return;
+      const reg = await navigator.serviceWorker.getRegistration('/dashboard/');
+      const sub = reg ? await reg.pushManager.getSubscription() : null;
+      if (Notification.permission === 'granted' && sub) return;
+      open();
+    } catch (_) { /* No bloquear el inicio de sesión por errores del navegador. */ }
+  });
+})();
+</script>
