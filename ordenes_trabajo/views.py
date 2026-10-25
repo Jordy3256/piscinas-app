@@ -1,4 +1,7 @@
 from urllib.parse import quote
+import logging
+
+logger = logging.getLogger(__name__)
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -51,6 +54,7 @@ def _registrar(user, titulo, descripcion, url=""):
 
 
 def _notificar_trabajador(orden, titulo, mensaje):
+    """Registra el aviso y diagnostica el resultado real del envío push."""
     try:
         destinatario = orden.trabajador.user
         url = f"/dashboard/ordenes/{orden.pk}/"
@@ -62,22 +66,40 @@ def _notificar_trabajador(orden, titulo, mensaje):
             tipo="general",
             referencia_id=orden.pk,
         )
-        # El registro interno no envía push por sí mismo.
-        # Se realiza tras confirmar la transacción de la orden.
+        logger.info(
+            "ORDEN_PUSH registrado orden_id=%s user_id=%s",
+            orden.pk, destinatario.pk,
+        )
+
         def enviar_push():
             try:
                 from dashboard.views import _send_push_to_user
-                _send_push_to_user(destinatario, titulo, mensaje, url=url,
-                                   tag=f"orden-{orden.pk}-{destinatario.pk}")
-            except Exception:
-                import logging
-                logging.getLogger(__name__).exception(
-                    "No se pudo enviar push de orden %s", orden.pk
+                resultado = _send_push_to_user(
+                    destinatario, titulo, mensaje, url=url,
+                    tag=f"orden-{orden.pk}-{destinatario.pk}",
                 )
+                if resultado.get("ok"):
+                    logger.info(
+                        "ORDEN_PUSH enviado orden_id=%s user_id=%s sent=%s failed=%s",
+                        orden.pk, destinatario.pk,
+                        resultado.get("sent", 0), resultado.get("failed", 0),
+                    )
+                else:
+                    logger.warning(
+                        "ORDEN_PUSH sin_entrega orden_id=%s user_id=%s resultado=%s",
+                        orden.pk, destinatario.pk, resultado,
+                    )
+            except Exception:
+                logger.exception(
+                    "ORDEN_PUSH excepcion orden_id=%s user_id=%s",
+                    orden.pk, destinatario.pk,
+                )
+
         transaction.on_commit(enviar_push)
     except Exception:
-        import logging
-        logging.getLogger(__name__).exception("Error notificando asignación de orden %s", orden.pk)
+        logger.exception(
+            "ORDEN_PUSH error_registro orden_id=%s", getattr(orden, "pk", None)
+        )
 
 
 @login_required

@@ -85,3 +85,15 @@ class OrdenTrabajoPushTests(TestCase):
         self.assertEqual(notif.referencia_id, 123)
         push.assert_called_once()
         self.assertEqual(push.call_args.kwargs['url'], notif.url)
+
+    @patch('dashboard.views._send_push_to_user', return_value={'ok': False, 'error': 'Usuario sin suscripciones push'})
+    def test_orden_registra_diagnostico_si_no_hay_entrega(self, push):
+        from types import SimpleNamespace
+        from ordenes_trabajo.views import _notificar_trabajador
+        orden = SimpleNamespace(pk=124, trabajador=self.trabajador)
+        with self.assertLogs('ordenes_trabajo.views', level='WARNING') as registros:
+            with self.captureOnCommitCallbacks(execute=True):
+                _notificar_trabajador(orden, 'Orden asignada', 'Nueva orden')
+        self.assertTrue(any('ORDEN_PUSH sin_entrega' in linea for linea in registros.output))
+        self.assertEqual(Notificacion.objects.filter(user=self.user, referencia_id=124).count(), 1)
+        push.assert_called_once()
