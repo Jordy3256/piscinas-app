@@ -25,3 +25,44 @@ class NotificacionesInteligentesTests(TestCase):
         result = enviar_resumenes(8, dry_run=False, fecha=date(2026, 10, 24))
         self.assertEqual(result['trabajadores'], 0)
         self.assertFalse(Notificacion.objects.exists())
+
+
+class SuscripcionesCaducadasTests(TestCase):
+    def setUp(self):
+        from dashboard.models import PushSubscription
+        self.user = get_user_model().objects.create_user('push_caducado_prueba', password='test-only')
+        self.expirada = PushSubscription.objects.create(
+            user=self.user, endpoint='https://push.example.invalid/expired',
+            p256dh='test-p256dh', auth='test-auth',
+        )
+        self.vigente = PushSubscription.objects.create(
+            user=self.user, endpoint='https://push.example.invalid/valid',
+            p256dh='test-p256dh', auth='test-auth',
+        )
+
+    @patch('dashboard.views.webpush')
+    @patch('dashboard.views._push_status_code_from_exception', return_value=410)
+    @patch('dashboard.views.settings')
+    def test_410_elimina_solo_suscripcion_caducada(self, settings, status, webpush_mock):
+        from dashboard.models import PushSubscription
+        from dashboard.views import _send_push_to_user, WebPushException
+        settings.VAPID_PRIVATE_KEY = 'test-key'
+        settings.VAPID_SUBJECT = 'mailto:test@example.com'
+        webpush_mock.side_effect = lambda **kwargs: (_ for _ in ()).throw(WebPushException('gone')) if kwargs['subscription_info']['endpoint'].endswith('/expired') else None
+        result = _send_push_to_user(self.user, 'Prueba', 'Texto')
+        self.assertEqual(result['sent'], 1)
+        self.assertEqual(result['failed'], 1)
+        self.assertFalse(PushSubscription.objects.filter(pk=self.expirada.pk).exists())
+        self.assertTrue(PushSubscription.objects.filter(pk=self.vigente.pk).exists())
+
+    @patch('dashboard.views.webpush')
+    @patch('dashboard.views._push_status_code_from_exception', return_value=500)
+    @patch('dashboard.views.settings')
+    def test_error_temporal_no_elimina_suscripciones(self, settings, status, webpush_mock):
+        from dashboard.models import PushSubscription
+        from dashboard.views import _send_push_to_user, WebPushException
+        settings.VAPID_PRIVATE_KEY = 'test-key'
+        settings.VAPID_SUBJECT = 'mailto:test@example.com'
+        webpush_mock.side_effect = WebPushException('temporary')
+        _send_push_to_user(self.user, 'Prueba', 'Texto')
+        self.assertEqual(PushSubscription.objects.filter(user=self.user).count(), 2)

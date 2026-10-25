@@ -25,6 +25,9 @@ def _notify_once(user, tipo, key, titulo, mensaje, url, *, push=True, dry_run=Fa
     if dry_run:
         return True
     with transaction.atomic():
+        # Serializa ejecuciones simultáneas por usuario en PostgreSQL.
+        # No requiere migraciones ni altera las notificaciones existentes.
+        get_user_model().objects.select_for_update().get(pk=user.pk)
         obj, created = Notificacion.objects.get_or_create(
             user=user, tipo=tipo, referencia_id=key,
             defaults={'titulo': titulo, 'mensaje': mensaje, 'url': url},
