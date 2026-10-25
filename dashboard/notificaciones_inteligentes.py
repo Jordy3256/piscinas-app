@@ -44,26 +44,43 @@ def enviar_resumenes(hora, *, dry_run=False, fecha=None):
         raise ValueError('Horario no permitido: 08, 14 o 20')
     fecha = fecha or timezone.localtime(timezone.now(), ECUADOR).date()
     key = int(fecha.strftime('%Y%m%d')) * 100 + hora
-    pendientes = Mantenimiento.objects.filter(fecha=fecha, estado='pendiente').prefetch_related('trabajadores__user')
-    por_trabajador = defaultdict(int)
+    # Incluye visitas anteriores aún pendientes: no solamente las del día.
+    pendientes = Mantenimiento.objects.filter(
+        fecha__lte=fecha, estado='pendiente'
+    ).prefetch_related('trabajadores__user')
+    por_trabajador = defaultdict(lambda: {'hoy': 0, 'atrasados': 0})
     for m in pendientes.iterator(chunk_size=200):
+        categoria = 'atrasados' if m.fecha < fecha else 'hoy'
         for t in m.trabajadores.all():
             if t.activo and t.user.is_active:
-                por_trabajador[t.pk] += 1
-    resultado = {'trabajadores': 0, 'administradores': 0, 'pendientes': sum(por_trabajador.values())}
+                por_trabajador[t.pk][categoria] += 1
+    resultado = {
+        'trabajadores': 0,
+        'administradores': 0,
+        'pendientes': sum(sum(v.values()) for v in por_trabajador.values()),
+    }
     trabajadores = list(Trabajador.objects.filter(pk__in=por_trabajador.keys()).select_related('user'))
     if hora in (8, 14):
         for t in trabajadores:
-            n = por_trabajador[t.pk]
-            if n and _notify_once(t.user, 'resumen_trabajador', key,
-                f'{n} mantenimiento(s) pendiente(s) hoy',
-                f'A las {SLOTS[hora]} tienes {n} mantenimiento(s) programado(s) aún sin registrar como realizado(s).',
-                '/dashboard/', dry_run=dry_run):
+            cantidades = por_trabajador[t.pk]
+            hoy_n, atrasados_n = cantidades['hoy'], cantidades['atrasados']
+            total = hoy_n + atrasados_n
+            if total and _notify_once(
+                t.user, 'resumen_trabajador', key,
+                f'{total} mantenimiento(s) pendiente(s)',
+                f'A las {SLOTS[hora]} tienes {hoy_n} visita(s) pendiente(s) de hoy y '
+                f'{atrasados_n} atrasada(s) de días anteriores.',
+                '/dashboard/', dry_run=dry_run,
+            ):
                 resultado['trabajadores'] += 1
     if por_trabajador:
-        detalle = ', '.join(f'{t.user.get_full_name() or t.user.username}: {por_trabajador[t.pk]}' for t in sorted(trabajadores, key=lambda t: t.user.username.lower()))
-        titulo = f'Operativo {SLOTS[hora]}: {sum(por_trabajador.values())} asignación(es) pendiente(s)'
-        mensaje = f'Pendientes de hoy por trabajador: {detalle}'
+        detalle = ', '.join(
+            f'{t.user.get_full_name() or t.user.username}: '
+            f"{por_trabajador[t.pk]['hoy']} hoy, {por_trabajador[t.pk]['atrasados']} atrasadas"
+            for t in sorted(trabajadores, key=lambda t: t.user.username.lower())
+        )
+        titulo = f"Operativo {SLOTS[hora]}: {resultado['pendientes']} asignación(es) pendiente(s)"
+        mensaje = f'Pendientes por trabajador (hoy y atrasadas): {detalle}'
         for admin in _admin_users():
             if _notify_once(admin, 'resumen_admin', key, titulo, mensaje[:2000],
                             '/dashboard/operativo/', dry_run=dry_run):

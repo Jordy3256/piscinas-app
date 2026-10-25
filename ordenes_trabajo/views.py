@@ -52,16 +52,32 @@ def _registrar(user, titulo, descripcion, url=""):
 
 def _notificar_trabajador(orden, titulo, mensaje):
     try:
+        destinatario = orden.trabajador.user
+        url = f"/dashboard/ordenes/{orden.pk}/"
         Notificacion.objects.create(
-            user=orden.trabajador.user,
+            user=destinatario,
             titulo=titulo,
             mensaje=mensaje,
-            url=f"/dashboard/ordenes/{orden.pk}/",
+            url=url,
             tipo="general",
-            referencia_id=None,
+            referencia_id=orden.pk,
         )
+        # El registro interno no envía push por sí mismo.
+        # Se realiza tras confirmar la transacción de la orden.
+        def enviar_push():
+            try:
+                from dashboard.views import _send_push_to_user
+                _send_push_to_user(destinatario, titulo, mensaje, url=url,
+                                   tag=f"orden-{orden.pk}-{destinatario.pk}")
+            except Exception:
+                import logging
+                logging.getLogger(__name__).exception(
+                    "No se pudo enviar push de orden %s", orden.pk
+                )
+        transaction.on_commit(enviar_push)
     except Exception:
-        pass
+        import logging
+        logging.getLogger(__name__).exception("Error notificando asignación de orden %s", orden.pk)
 
 
 @login_required
@@ -136,6 +152,7 @@ def orden_editar_view(request, pk):
     if request.method == "POST":
         form = OrdenTrabajoForm(request.POST, instance=orden)
         if form.is_valid():
+            trabajador_anterior_id = orden.trabajador_id
             orden = form.save(commit=False)
             if orden.contrato_id:
                 orden.sincronizar_desde_contrato()
@@ -148,6 +165,11 @@ def orden_editar_view(request, pk):
                 orden.direccion = orden.direccion or c.direccion or ""
                 orden.enlace_google_maps = orden.enlace_google_maps or c.enlace_google_maps or ""
             orden.save()
+            if orden.trabajador_id != trabajador_anterior_id and orden.estado != 'cancelada':
+                _notificar_trabajador(
+                    orden, 'Orden de trabajo asignada',
+                    f'Se te asignó {orden.codigo} para el {orden.fecha:%d/%m/%Y}.',
+                )
             _registrar(request.user, "Orden de trabajo actualizada", f"Se actualizó {orden.codigo}.", f"/dashboard/ordenes/{orden.pk}/")
             messages.success(request, "Orden actualizada correctamente.")
             return redirect("ordenes_trabajo:detalle", pk=orden.pk)

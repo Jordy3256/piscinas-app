@@ -66,3 +66,22 @@ class SuscripcionesCaducadasTests(TestCase):
         webpush_mock.side_effect = WebPushException('temporary')
         _send_push_to_user(self.user, 'Prueba', 'Texto')
         self.assertEqual(PushSubscription.objects.filter(user=self.user).count(), 2)
+
+class OrdenTrabajoPushTests(TestCase):
+    def setUp(self):
+        from trabajadores.models import Trabajador
+        self.user = get_user_model().objects.create_user('orden_push_prueba', password='test-only')
+        self.trabajador = Trabajador.objects.create(user=self.user, telefono='0999999999')
+
+    @patch('dashboard.views._send_push_to_user')
+    def test_orden_genera_notificacion_interna_y_push(self, push):
+        from types import SimpleNamespace
+        from ordenes_trabajo.views import _notificar_trabajador
+        orden = SimpleNamespace(pk=123, trabajador=self.trabajador)
+        with self.captureOnCommitCallbacks(execute=True):
+            _notificar_trabajador(orden, 'Orden asignada', 'Nueva orden')
+        notif = Notificacion.objects.get(user=self.user)
+        self.assertEqual(notif.url, '/dashboard/ordenes/123/')
+        self.assertEqual(notif.referencia_id, 123)
+        push.assert_called_once()
+        self.assertEqual(push.call_args.kwargs['url'], notif.url)
