@@ -1,7 +1,7 @@
 """Pruebas de regresión para la pareja VAPID y la renovación en navegador."""
 from django.conf import settings
 from django.test import SimpleTestCase
-from cryptography.hazmat.primitives.serialization import load_pem_private_key, Encoding, PublicFormat
+from cryptography.hazmat.primitives.serialization import load_der_private_key, Encoding, PublicFormat
 import base64
 
 
@@ -10,7 +10,7 @@ class VapidConfigurationTests(SimpleTestCase):
         if not settings.VAPID_PRIVATE_KEY:
             self.assertFalse(settings.VAPID_PUBLIC_KEY)
             return
-        private = load_pem_private_key(settings.VAPID_PRIVATE_KEY.encode(), password=None)
+        private = load_der_private_key(base64.urlsafe_b64decode(settings.VAPID_PRIVATE_KEY + "=" * (-len(settings.VAPID_PRIVATE_KEY) % 4)), password=None)
         expected = base64.urlsafe_b64encode(
             private.public_key().public_bytes(Encoding.X962, PublicFormat.UncompressedPoint)
         ).decode().rstrip('=')

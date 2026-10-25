@@ -84,11 +84,15 @@ if not VAPID_PUBLIC_KEY:
 # pertenecer a otro par: priorizamos la derivada de la PEM válida.
 if VAPID_PRIVATE_PEM:
     try:
-        from cryptography.hazmat.primitives.serialization import load_pem_private_key, Encoding, PublicFormat
+        from cryptography.hazmat.primitives.serialization import load_pem_private_key, Encoding, PublicFormat, PrivateFormat, NoEncryption
         _vapid_key = load_pem_private_key(VAPID_PRIVATE_PEM.encode("utf-8"), password=None)
         _vapid_public_bytes = _vapid_key.public_key().public_bytes(Encoding.X962, PublicFormat.UncompressedPoint)
         VAPID_PUBLIC_KEY = base64.urlsafe_b64encode(_vapid_public_bytes).decode("ascii").rstrip("=")
-        VAPID_PRIVATE_KEY = VAPID_PRIVATE_PEM
+        # pywebpush/py-vapid interpreta una cadena como DER codificado en Base64URL,
+        # no como el texto PEM. Conservamos exactamente la misma clave EC P-256.
+        _vapid_der = _vapid_key.private_bytes(Encoding.DER, PrivateFormat.TraditionalOpenSSL, NoEncryption())
+        VAPID_PRIVATE_KEY = base64.urlsafe_b64encode(_vapid_der).decode("ascii").rstrip("=")
+        del _vapid_der
         del _vapid_key, _vapid_public_bytes
     except (ValueError, TypeError):
         # No publicar una clave diferente si no se puede verificar la pareja.
