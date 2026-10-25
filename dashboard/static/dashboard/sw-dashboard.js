@@ -1,6 +1,6 @@
 /* dashboard/static/dashboard/sw-dashboard.js */
 
-const VERSION = "v2026-09-16-aquo360-01";
+const VERSION = "v2026-10-25-click-01";
 const CACHE = {
   static: `static-${VERSION}`,
   pages: `pages-${VERSION}`,
@@ -220,32 +220,52 @@ self.addEventListener("push", (event) => {
   event.waitUntil(self.registration.showNotification(title, options));
 });
 
+// Navegación al tocar una notificación, incluso con la PWA cerrada.
 self.addEventListener("notificationclick", (event) => {
-  event.notification.close();
+  const notification = event.notification;
+  const rawUrl = notification?.data?.url || "/dashboard/notificaciones/";
+  notification.close();
 
-  const url = event.notification?.data?.url || "/dashboard/home/";
+  event.waitUntil((async () => {
+    // Nunca permitir destinos externos desde una carga push.
+    let target;
+    try {
+      const parsed = new URL(rawUrl, self.location.origin);
+      target = parsed.origin === self.location.origin &&
+        parsed.pathname.startsWith("/dashboard/")
+        ? parsed.href : new URL("/dashboard/notificaciones/", self.location.origin).href;
+    } catch (error) {
+      target = new URL("/dashboard/notificaciones/", self.location.origin).href;
+    }
 
-  event.waitUntil(
-    (async () => {
-      const allClients = await clients.matchAll({
-        type: "window",
-        includeUncontrolled: true,
-      });
+    const windows = await clients.matchAll({type: "window", includeUncontrolled: true});
+    const existing = windows.find((windowClient) => {
+      try {
+        const current = new URL(windowClient.url);
+        return current.origin === self.location.origin &&
+          current.pathname.startsWith("/dashboard/");
+      } catch (error) { return false; }
+    });
 
-      for (const client of allClients) {
-        if (client.url.includes("/dashboard/")) {
-          if ("navigate" in client) {
-            await client.navigate(url);
-          }
-          if ("focus" in client) {
-            return client.focus();
-          }
+    if (existing) {
+      try {
+        // Navegar primero y enfocar la ventana devuelta, no la anterior.
+        const navigated = await existing.navigate(target);
+        if (navigated) {
+          await navigated.focus();
+          return;
         }
+      } catch (error) {
+        warn("notificationclick: no se pudo navegar ventana existente", error);
       }
+    }
 
-      if (clients.openWindow) return clients.openWindow(url);
-    })()
-  );
+    // Si no hay ventana o falló navigate, abrir una nueva.
+    if (clients.openWindow) {
+      const opened = await clients.openWindow(target);
+      if (opened && "focus" in opened) await opened.focus();
+    }
+  })());
 });
 
 self.addEventListener("fetch", (event) => {

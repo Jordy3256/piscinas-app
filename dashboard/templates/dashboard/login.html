@@ -239,7 +239,7 @@
   if('serviceWorker' in navigator){
     window.addEventListener('load',()=>{
       navigator.serviceWorker
-        .register('/dashboard/sw.js?v=20260916-01',{scope:'/dashboard/'})
+        .register('/dashboard/sw.js?v=20261025-click-01',{scope:'/dashboard/'})
         .catch(e=>console.warn('[AQUO 360] Service Worker:',e));
     });
   }
