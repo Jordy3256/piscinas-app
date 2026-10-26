@@ -24,62 +24,49 @@
   .save-bar{position:sticky;bottom:10px;z-index:20;padding:.7rem;border:1px solid rgba(16,35,63,.08);border-radius:18px;background:rgba(255,255,255,.96);box-shadow:0 15px 40px rgba(16,35,63,.15);backdrop-filter:blur(10px)}
   .visor{display:none;position:fixed;inset:0;z-index:9999;align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,.9)}.visor.activo{display:flex}.visor img{max-width:96vw;max-height:92vh;border-radius:16px}.visor button{position:absolute;top:18px;right:18px;width:44px;height:44px;border:0;border-radius:50%;font-size:1.5rem}
   @media(max-width:767.98px){.detail-hero{padding:1rem;border-radius:20px}.premium-card .card-body{padding:.9rem}.summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.save-bar .btn{width:100%}.save-bar{bottom:6px}.inspection-choice{grid-template-columns:1fr 1fr}}
+
+  /* Identificación unificada: datos reales del cliente/contrato, sin alterar nombres guardados. */
+  .client-identity-hero{padding:1.35rem 1.5rem;margin-bottom:1rem}
+  .client-identity-layout{display:flex;justify-content:space-between;align-items:flex-start;gap:1.1rem}
+  .client-identity-main{min-width:0;flex:1}
+  .client-identity-kicker{display:flex;align-items:center;gap:.4rem;margin-bottom:.55rem;font-size:.68rem;font-weight:850;letter-spacing:.12em;color:rgba(255,255,255,.77)}
+  .client-identity-hero .detail-client-name{font-size:clamp(1.55rem,3.7vw,2.15rem);line-height:1.16;letter-spacing:-.035em;overflow-wrap:anywhere}
+  .client-location-tags{display:flex;flex-wrap:wrap;gap:.45rem;margin-top:.85rem}
+  .client-location-tag{display:inline-flex;align-items:center;gap:.35rem;padding:.4rem .7rem;border:1px solid rgba(255,255,255,.28);border-radius:999px;background:rgba(255,255,255,.14);font-size:.79rem;font-weight:800}
+  .client-visit-meta{display:flex;align-items:center;gap:.4rem;margin-top:.8rem;font-size:.82rem;color:rgba(255,255,255,.82)}
+  .client-identity-side{display:flex;flex-direction:column;align-items:flex-end;gap:.85rem;flex-shrink:0}
+  .client-primary-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:.5rem}
+  .client-primary-actions .btn{display:inline-flex;align-items:center;justify-content:center;gap:.45rem;min-height:44px;border-radius:12px;padding:.58rem .9rem;font-weight:850;box-shadow:0 5px 16px rgba(0,0,0,.08)}
+  .client-action-whatsapp{background:#14a46e;color:#fff;border:1px solid #14a46e}.client-action-whatsapp:hover{background:#0b8658;color:#fff}
+  .client-action-gps{background:#fff;color:#0956bb;border:1px solid #fff}.client-action-gps:hover{background:#e9f3ff;color:#064a9e}
+  .client-address-line{display:flex;gap:.55rem;align-items:flex-start;margin-top:1rem;padding-top:.8rem;border-top:1px solid rgba(255,255,255,.2);font-size:.84rem;color:rgba(255,255,255,.9)}
+  .client-address-line i{flex-shrink:0}
+  .client-contact-hint{display:flex;gap:.8rem;flex-wrap:wrap;margin-top:.65rem;font-size:.74rem;color:rgba(255,255,255,.72)}
+  @media(max-width:640px){.client-identity-hero{padding:1.1rem}.client-identity-layout{flex-direction:column}.client-identity-side{width:100%;flex-direction:row;justify-content:space-between;align-items:center;flex-wrap:wrap}.client-primary-actions{justify-content:flex-start}.client-primary-actions .btn{min-width:115px}.client-identity-hero .detail-client-name{font-size:1.65rem}}
 </style>
 
-<section class="detail-hero">
-  <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
-    <div>
-      <h1 class="detail-client-name">{{ m.cliente }}</h1>
-      <div class="detail-meta"><i class="bi bi-calendar3 me-1"></i>{{ m.fecha|date:"d/m/Y" }} · <i class="bi bi-file-earmark-text me-1"></i>{{ m.contrato }}</div>
+<section class="detail-hero client-identity-hero" aria-label="Identificación del cliente">
+  <div class="client-identity-layout">
+    <div class="client-identity-main">
+      <div class="client-identity-kicker"><i class="bi bi-person-badge"></i> CLIENTE · MANTENIMIENTO</div>
+      <h1 class="detail-client-name">{{ cliente_operativo.nombre|default:m.cliente }}</h1>
+      <div class="client-location-tags">
+        {% if cliente_operativo.ciudad %}<span class="client-location-tag"><i class="bi bi-geo-alt-fill"></i> {{ cliente_operativo.ciudad }}</span>{% endif %}
+        {% if cliente_operativo.sector_urbanizacion %}<span class="client-location-tag"><i class="bi bi-houses-fill"></i> {{ cliente_operativo.sector_urbanizacion }}</span>{% endif %}
+      </div>
+      <div class="client-visit-meta"><i class="bi bi-calendar3"></i> {{ m.fecha|date:"d/m/Y" }}</div>
     </div>
-    {% if m.estado == "realizado" %}<span class="detail-status"><i class="bi bi-check-circle-fill"></i> Realizado</span>{% else %}<span class="detail-status"><i class="bi bi-hourglass-split"></i> Pendiente{% if m.borrador_guardado %} · Borrador{% endif %}</span>{% endif %}
+    <div class="client-identity-side">
+      {% if m.estado == "realizado" %}<span class="detail-status"><i class="bi bi-check-circle-fill"></i> Realizado</span>{% else %}<span class="detail-status"><i class="bi bi-hourglass-split"></i> Pendiente{% if m.borrador_guardado %} · Borrador{% endif %}</span>{% endif %}
+      <div class="client-primary-actions">
+        {% if whatsapp_disponible %}<a class="btn client-action-whatsapp" href="{% url 'mantenimiento_whatsapp_cliente' m.pk %}" target="_blank" rel="noopener" aria-label="Abrir WhatsApp del cliente"><i class="bi bi-whatsapp"></i> WhatsApp</a>{% endif %}
+        {% if maps_url %}<a class="btn client-action-gps" href="{{ maps_url }}" target="_blank" rel="noopener" aria-label="Abrir GPS del cliente"><i class="bi bi-geo-alt-fill"></i> GPS</a>{% endif %}
+      </div>
+    </div>
   </div>
+  {% if cliente_operativo.direccion %}<div class="client-address-line"><i class="bi bi-signpost-2"></i><span>{{ cliente_operativo.direccion }}</span></div>{% endif %}
+  {% if not whatsapp_disponible or not maps_url %}<div class="client-contact-hint">{% if not whatsapp_disponible %}<span><i class="bi bi-whatsapp"></i> WhatsApp no registrado</span>{% endif %}{% if not maps_url %}<span><i class="bi bi-geo-alt"></i> GPS no disponible</span>{% endif %}</div>{% endif %}
 </section>
-
-<div class="client-operational-card mb-3">
-  <div class="card-body">
-    <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-3">
-      <div>
-        <div class="client-op-label mb-1">Información para la visita</div>
-        <div class="client-op-name"><i class="bi bi-person-circle me-1"></i>{{ cliente_operativo.nombre }}</div>
-      </div>
-      <div class="client-op-actions">
-        {% if whatsapp_disponible %}
-          <a class="btn btn-whatsapp" href="{% url 'mantenimiento_whatsapp_cliente' m.pk %}" target="_blank" rel="noopener">
-            <i class="bi bi-whatsapp me-1"></i> WhatsApp
-          </a>
-        {% endif %}
-        {% if maps_url %}
-          <a class="btn btn-outline-primary" href="{{ maps_url }}" target="_blank" rel="noopener">
-            <i class="bi bi-geo-alt-fill me-1"></i> Navegar
-          </a>
-        {% endif %}
-      </div>
-    </div>
-
-    <div class="row g-3">
-      <div class="col-12 col-lg-7">
-        <div class="client-op-label">Dirección</div>
-        <div class="client-op-value">
-          {% if cliente_operativo.sector_urbanizacion %}{{ cliente_operativo.sector_urbanizacion }}{% if cliente_operativo.direccion %} · {% endif %}{% endif %}{{ cliente_operativo.direccion|default:"No registrada" }}
-        </div>
-        {% if cliente_operativo.ciudad %}<div class="text-muted small mt-1">{{ cliente_operativo.ciudad }}</div>{% endif %}
-      </div>
-      <div class="col-12 col-sm-6 col-lg-3">
-        <div class="client-op-label">Frecuencia</div>
-        <div class="client-op-value">{{ m.contrato.frecuencia_completa }}</div>
-      </div>
-      <div class="col-12 col-sm-6 col-lg-2">
-        <div class="client-op-label">Visita</div>
-        <div class="client-op-value">{{ m.fecha|date:"d/m/Y" }}</div>
-      </div>
-    </div>
-
-    {% if not whatsapp_disponible and not es_admin %}
-      <div class="text-muted small mt-3"><i class="bi bi-info-circle me-1"></i>No hay un número de WhatsApp disponible para este cliente.</div>
-    {% endif %}
-  </div>
-</div>
 
 {% if esta_realizado %}
 <div class="alert alert-secondary shadow-sm border-0 rounded-4">
