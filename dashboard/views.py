@@ -5019,10 +5019,7 @@ def mantenimiento_detalle_view(request, pk):
     maps_url = (cliente_operativo.enlace_google_maps or "").strip()
     if not maps_url and direccion_operativa:
         maps_url = "https://www.google.com/maps/search/?api=1&query=" + quote(direccion_operativa)
-    whatsapp_disponible = bool(
-        trabajador_actual
-        and _telefono_whatsapp_ecuador(cliente_operativo.telefono)
-    )
+    whatsapp_disponible = bool(_telefono_whatsapp_ecuador(cliente_operativo.telefono))
 
     if request.method == "POST" and esta_cancelado:
         messages.error(request, "Esta visita fue cancelada por administración y no puede registrarse como realizada.")
@@ -5534,16 +5531,16 @@ def mantenimiento_whatsapp_cliente_view(request, pk):
         pk=pk,
     )
 
-    if not es_trabajador(request.user):
-        return render(request, "dashboard/no_autorizado.html", status=403)
-
-    try:
-        trabajador = request.user.trabajador
-    except Exception:
-        return render(request, "dashboard/no_autorizado.html", status=403)
-
-    if not mantenimiento.trabajadores.filter(pk=trabajador.pk).exists():
-        return render(request, "dashboard/no_autorizado.html", status=403)
+    es_usuario_admin = es_admin(request.user)
+    if not es_usuario_admin:
+        if not es_trabajador(request.user):
+            return render(request, "dashboard/no_autorizado.html", status=403)
+        try:
+            trabajador = request.user.trabajador
+        except Exception:
+            return render(request, "dashboard/no_autorizado.html", status=403)
+        if not mantenimiento.trabajadores.filter(pk=trabajador.pk).exists():
+            return render(request, "dashboard/no_autorizado.html", status=403)
 
     telefono = _telefono_whatsapp_ecuador(mantenimiento.cliente.telefono)
     if not telefono:
@@ -5551,10 +5548,13 @@ def mantenimiento_whatsapp_cliente_view(request, pk):
         return redirect("mantenimiento_detalle", pk=mantenimiento.pk)
 
     nombre_trabajador = (request.user.get_full_name() or "").strip() or request.user.username
-    mensaje = (
-        f"Hola, buenos días. Soy {nombre_trabajador}, técnico de JVAQUA. "
-        "Me encuentro aquí en su domicilio para realizar el mantenimiento de su piscina."
-    )
+    if es_usuario_admin:
+        mensaje = "Hola, buenos días. Le contactamos de JVAQUA sobre el servicio de mantenimiento de su piscina."
+    else:
+        mensaje = (
+            f"Hola, buenos días. Soy {nombre_trabajador}, técnico de JVAQUA. "
+            "Me encuentro aquí en su domicilio para realizar el mantenimiento de su piscina."
+        )
 
     _registrar_actividad(
         user=request.user,
