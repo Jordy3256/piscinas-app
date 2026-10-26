@@ -3934,6 +3934,9 @@ def dashboard_view(request):
             "mantenimientos_hoy": mantenimientos_hoy,
             "mantenimientos_proximos": mantenimientos_proximos,
             "total_proximos_reales": total_proximos_reales,
+            "mantenimientos_manana_total": Mantenimiento.objects.filter(
+                fecha=hoy + timedelta(days=1), trabajadores=trabajador, estado="pendiente"
+            ).count(),
             "mostrar_boton_ver_mas_proximos": mostrar_boton_ver_mas_proximos,
             "ver_mas_proximos": ver_mas_proximos,
             "mantenimientos_atrasados": mantenimientos_atrasados,
@@ -3985,10 +3988,12 @@ def notificaciones_view(request):
     no_modelo_notificaciones = False
 
     if Notificacion is not None:
-        notificaciones = list(
-            Notificacion.objects.filter(user=request.user)
-            .order_by("-creada_en")[:20]
-        )
+        from .avisos_vigentes import avisos_vigentes
+        # Solo avisos nuevos en la bandeja. El historial conserva los registros.
+        candidatas = list(Notificacion.objects.filter(
+            user=request.user, leida=False
+        ).order_by("-creada_en")[:60])
+        notificaciones = avisos_vigentes(request.user, candidatas)[:20]
 
         ids_no_leidas = [n.id for n in notificaciones if not n.leida]
         if ids_no_leidas:
@@ -4053,7 +4058,11 @@ def notificaciones_json_view(request):
             "unread_count": 0,
         })
 
-    qs = Notificacion.objects.filter(user=request.user).order_by("-creada_en")[:10]
+    from .avisos_vigentes import avisos_vigentes
+    qs = avisos_vigentes(request.user, list(
+        Notificacion.objects.filter(user=request.user, leida=False)
+        .order_by("-creada_en")[:40]
+    ))[:10]
 
     items = []
     for n in qs:
@@ -4066,10 +4075,9 @@ def notificaciones_json_view(request):
             "creada_en": timezone.localtime(n.creada_en).strftime("%d/%m/%Y %H:%M"),
         })
 
-    unread_count = Notificacion.objects.filter(
-        user=request.user,
-        leida=False
-    ).count()
+    unread_count = len(avisos_vigentes(request.user, list(
+        Notificacion.objects.filter(user=request.user, leida=False).order_by("-creada_en")[:200]
+    )))
 
     return JsonResponse({
         "ok": True,

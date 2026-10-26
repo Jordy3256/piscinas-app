@@ -24,6 +24,9 @@
     }
   }
 
+  .notif-card {border:1px solid #e3ecf6;border-radius:20px;overflow:hidden;transition:transform .18s ease,box-shadow .18s ease}
+  .notif-card:hover {transform:translateY(-2px);box-shadow:0 12px 28px rgba(13,65,120,.1)!important}
+  .notif-card .card-body {padding:1.15rem}
   .notif-card.nueva {
     border-left: 4px solid #dc3545;
   }
@@ -44,23 +47,15 @@
 
 <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
   <div>
-    <div class="fw-bold fs-4">Bandeja</div>
-    <div class="text-muted small">Últimas {{ notificaciones|length }} notificaciones</div>
+    <div class="fw-bold fs-4">🔔 Tus avisos</div>
+    <div class="text-muted small">Al abrir esta bandeja, los avisos quedan leídos. Los trabajos resueltos desaparecen automáticamente de aquí y el historial se conserva.</div>
   </div>
 
   <div class="d-grid d-md-flex gap-2 notif-top-actions w-100 w-md-auto">
     {% if es_admin %}<a href="/dashboard/comunicados/" class="btn btn-primary btn-sm">Enviar comunicado</a>{% endif %}
     <a href="/dashboard/notificaciones/historial/" class="btn btn-outline-secondary btn-sm">Ver historial</a>
 
-    {% if notificaciones %}
-      <button id="btn-marcar-todas" class="btn btn-outline-success btn-sm">
-        ✓ Marcar todas leídas
-      </button>
 
-      <button id="btn-eliminar-todas" class="btn btn-outline-danger btn-sm">
-        🗑 Eliminar todas
-      </button>
-    {% endif %}
   </div>
 </div>
 
@@ -101,9 +96,7 @@
               <a href="{{ n.url }}" class="btn btn-outline-primary btn-sm">Abrir</a>
             {% endif %}
 
-            <button class="btn btn-outline-danger btn-sm btn-eliminar" data-id="{{ n.id }}">
-              🗑 Eliminar
-            </button>
+
           </div>
         </div>
       </div>
@@ -113,7 +106,7 @@
   <div class="card shadow-sm">
     <div class="card-body">
       <div class="text-muted">
-        No tienes notificaciones por ahora.
+        ✨ ¡Estás al día! No tienes avisos nuevos. Puedes consultar los anteriores en «Ver historial».
       </div>
     </div>
   </div>
