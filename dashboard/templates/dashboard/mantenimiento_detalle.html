@@ -51,8 +51,8 @@
       <div class="client-identity-kicker"><i class="bi bi-person-badge"></i> CLIENTE · MANTENIMIENTO</div>
       <h1 class="detail-client-name">{{ cliente_operativo.nombre|default:m.cliente }}</h1>
       <div class="client-location-tags">
-        {% if cliente_operativo.ciudad %}<span class="client-location-tag"><i class="bi bi-geo-alt-fill"></i> {{ cliente_operativo.ciudad }}</span>{% endif %}
-        {% if cliente_operativo.sector_urbanizacion %}<span class="client-location-tag"><i class="bi bi-houses-fill"></i> {{ cliente_operativo.sector_urbanizacion }}</span>{% endif %}
+        {% if contrato_operativo.ciudad %}<span class="client-location-tag"><i class="bi bi-geo-alt-fill"></i> {{ contrato_operativo.ciudad }}</span>{% endif %}
+        {% if contrato_operativo.sector_urbanizacion %}<span class="client-location-tag"><i class="bi bi-houses-fill"></i> {{ contrato_operativo.sector_urbanizacion }}</span>{% endif %}
       </div>
       <div class="client-visit-meta"><i class="bi bi-calendar3"></i> {{ m.fecha|date:"d/m/Y" }}</div>
     </div>
@@ -64,7 +64,7 @@
       </div>
     </div>
   </div>
-  {% if cliente_operativo.direccion %}<div class="client-address-line"><i class="bi bi-signpost-2"></i><span>{{ cliente_operativo.direccion }}</span></div>{% endif %}
+  {% if contrato_operativo.direccion %}<div class="client-address-line"><i class="bi bi-signpost-2"></i><span>{{ contrato_operativo.direccion }}</span></div>{% endif %}
   {% if not whatsapp_disponible or not maps_url %}<div class="client-contact-hint">{% if not whatsapp_disponible %}<span><i class="bi bi-whatsapp"></i> WhatsApp no registrado</span>{% endif %}{% if not maps_url %}<span><i class="bi bi-geo-alt"></i> GPS no disponible</span>{% endif %}</div>{% endif %}
 </section>
 

@@ -5014,11 +5014,25 @@ def mantenimiento_detalle_view(request, pk):
     esta_cancelado = mantenimiento.estado == "cancelado"
     checklist, _ = ChecklistMantenimiento.objects.get_or_create(mantenimiento=mantenimiento)
 
+    # Contacto personal desde Cliente; ubicación de la piscina desde el contrato
+    # específico de esta visita. No modificar ni copiar datos históricos.
     cliente_operativo = mantenimiento.cliente
-    direccion_operativa = (cliente_operativo.direccion or "").strip()
-    maps_url = (cliente_operativo.enlace_google_maps or "").strip()
-    if not maps_url and direccion_operativa:
-        maps_url = "https://www.google.com/maps/search/?api=1&query=" + quote(direccion_operativa)
+    contrato_operativo = mantenimiento.contrato
+    direccion_operativa = (contrato_operativo.direccion or "").strip()
+    maps_url = (contrato_operativo.enlace_google_maps or "").strip()
+    if not maps_url and contrato_operativo.latitud is not None and contrato_operativo.longitud is not None:
+        maps_url = "https://www.google.com/maps/search/?api=1&query=" + quote(
+            f"{contrato_operativo.latitud},{contrato_operativo.longitud}"
+        )
+    if not maps_url:
+        partes_ubicacion = [
+            direccion_operativa,
+            (contrato_operativo.sector_urbanizacion or "").strip(),
+            (contrato_operativo.ciudad or "").strip(),
+        ]
+        consulta_ubicacion = ", ".join(p for p in partes_ubicacion if p)
+        if consulta_ubicacion:
+            maps_url = "https://www.google.com/maps/search/?api=1&query=" + quote(consulta_ubicacion)
     whatsapp_disponible = bool(_telefono_whatsapp_ecuador(cliente_operativo.telefono))
 
     if request.method == "POST" and esta_cancelado:
@@ -5516,6 +5530,7 @@ def mantenimiento_detalle_view(request, pk):
             "checklist_total": checklist_total,
             "checklist_porcentaje": checklist_porcentaje,
             "cliente_operativo": cliente_operativo,
+            "contrato_operativo": contrato_operativo,
             "maps_url": maps_url,
             "whatsapp_disponible": whatsapp_disponible,
         },
