@@ -1,6 +1,7 @@
 /* AQUO 360 Modern 3.0: navegación única y centro de jornada */
 :root{--aquo-v3-blue:#1266e7;--aquo-v3-ink:#102c4e}
-.mobile-orbit-nav{display:none!important}
+/* Se restaura el botón flotante original y su menú radial. */
+@media(max-width:767.98px){.mobile-orbit-nav{display:block!important}.bottom-nav{display:none!important}.aquo-jornada-focused{padding:1.05rem 1.15rem!important}.aquo-jornada-focused h2{margin:.25rem 0!important}.aquo-jornada-focused p{max-width:32rem}.spacer-bottom{height:calc(92px + env(safe-area-inset-bottom))!important}}
 #template-debug-badge{display:none!important}
 .bottom-nav{z-index:1040!important}
 .bottom-nav-panel{background:rgba(255,255,255,.97)!important;backdrop-filter:blur(18px);border:1px solid rgba(21,93,170,.1)!important;box-shadow:0 -10px 38px rgba(12,62,117,.12)!important}
@@ -26,3 +27,6 @@
 .worker-summary .card{border-radius:18px!important;box-shadow:0 9px 20px rgba(16,53,93,.07)!important}
 @media(max-width:420px){.aquo-jornada-hero{padding:1rem}.aquo-jornada-shortcuts{grid-template-columns:repeat(2,minmax(0,1fr))}.aquo-jornada-shortcuts a{flex-direction:row;align-items:center}.aquo-shortcut-icon{width:33px;height:33px;flex:0 0 33px}.bottom-nav-links .nav-item-app{font-size:.64rem!important}}
 @media(prefers-reduced-motion:no-preference){.aquo-jornada-shortcuts a{transition:transform .18s ease,box-shadow .18s ease}.aquo-jornada-shortcuts a:active{transform:scale(.97)}}
+
+/* Resumen compacto: la pantalla de mantenimientos no duplica accesos a herramientas. */
+.aquo-jornada-focused{margin-bottom:1rem;padding:1.1rem 1.25rem}.aquo-jornada-focused .aquo-jornada-hero-icon{opacity:.55}

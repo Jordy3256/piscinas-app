@@ -854,15 +854,6 @@
 
 </style>
 
-<div class="card border-0 shadow-sm mb-3" style="border-radius:18px;overflow:hidden;">
-  <div class="card-body p-2">
-    <div class="nav nav-pills nav-fill gap-2" aria-label="Trabajo asignado">
-      <a class="nav-link active fw-bold" href="/dashboard/home/"><i class="bi bi-calendar-check me-1"></i>Mantenimientos</a>
-      <a class="nav-link fw-bold" href="{% url 'ordenes_trabajo:mis_ordenes' %}"><i class="bi bi-tools me-1"></i>Órdenes de trabajo</a>
-    </div>
-  </div>
-</div>
-
 <section class="worker-page-header">
   <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
     <div>
@@ -898,19 +889,13 @@
   </div>
 </section>
 
-<section class="aquo-jornada-hero" aria-label="Accesos de la jornada">
+<section class="aquo-jornada-hero aquo-jornada-focused" aria-label="Resumen de mantenimientos">
   <div class="aquo-jornada-hero-top">
-    <div><span class="aquo-jornada-eyebrow">💧 AQUO 360 · MI DÍA</span>
-      <h2>Tu jornada, a un toque</h2>
-      <p>Ubica tu próxima piscina y accede rápidamente a tus herramientas.</p>
+    <div><span class="aquo-jornada-eyebrow">💧 AQUO 360 · MANTENIMIENTOS</span>
+      <h2>Tu jornada de piscinas</h2>
+      <p>Identifica cada visita por su sector y revisa los mantenimientos de hoy, atrasados y próximos.</p>
     </div>
     <span class="aquo-jornada-hero-icon" aria-hidden="true"><i class="bi bi-water"></i></span>
-  </div>
-  <div class="aquo-jornada-shortcuts">
-    <a href="#mantenimientos-hoy" data-worker-scroll="today"><span class="aquo-shortcut-icon aqua"><i class="bi bi-droplet-fill"></i></span><span>Mantenimientos</span><i class="bi bi-arrow-up-right"></i></a>
-    <a href="{% url 'ordenes_trabajo:mis_ordenes' %}"><span class="aquo-shortcut-icon violet"><i class="bi bi-tools"></i></span><span>Órdenes</span><i class="bi bi-arrow-up-right"></i></a>
-    <a href="{% url 'mi_inventario_trabajador' %}"><span class="aquo-shortcut-icon orange"><i class="bi bi-box-seam-fill"></i></span><span>Inventario</span><i class="bi bi-arrow-up-right"></i></a>
-    <a href="{% url 'asistente_tecnico:inicio' %}"><span class="aquo-shortcut-icon blue"><i class="bi bi-stars"></i></span><span>AQUO</span><i class="bi bi-arrow-up-right"></i></a>
   </div>
 </section>
 
@@ -1305,14 +1290,14 @@
                 <div class="text-muted small">📅 {{ m.fecha|date:"d/m/Y" }}</div>
                 <div class="worker-location-row">
                   {% if m.contrato.sector_urbanizacion %}
-                    <span class="worker-sector-label">🏘️ {{ m.contrato.sector_urbanizacion }}</span>
+                    <span class="worker-sector-label">{{ m.contrato.sector_urbanizacion }}</span>
                   {% endif %}
                   {% if m.contrato.ciudad %}
-                    <span class="worker-city-label">📍 {{ m.contrato.ciudad }}</span>
+                    <span class="worker-city-label">{{ m.contrato.ciudad }}</span>
                   {% elif m.contrato.ciudad_ref %}
-                    <span class="worker-city-label">📍 {{ m.contrato.ciudad_ref.nombre }}</span>
+                    <span class="worker-city-label">{{ m.contrato.ciudad_ref.nombre }}</span>
                   {% else %}
-                    <span class="worker-city-label worker-location-missing">📍 Ciudad no registrada en contrato</span>
+                    <span class="worker-city-label worker-location-missing">Ciudad no registrada en contrato</span>
                   {% endif %}
                 </div>
               </div>
@@ -1362,14 +1347,14 @@
               <div class="text-muted small">📅 {{ m.fecha|date:"d/m/Y" }}</div>
                 <div class="worker-location-row">
                   {% if m.contrato.sector_urbanizacion %}
-                    <span class="worker-sector-label">🏘️ {{ m.contrato.sector_urbanizacion }}</span>
+                    <span class="worker-sector-label">{{ m.contrato.sector_urbanizacion }}</span>
                   {% endif %}
                   {% if m.contrato.ciudad %}
-                    <span class="worker-city-label">📍 {{ m.contrato.ciudad }}</span>
+                    <span class="worker-city-label">{{ m.contrato.ciudad }}</span>
                   {% elif m.contrato.ciudad_ref %}
-                    <span class="worker-city-label">📍 {{ m.contrato.ciudad_ref.nombre }}</span>
+                    <span class="worker-city-label">{{ m.contrato.ciudad_ref.nombre }}</span>
                   {% else %}
-                    <span class="worker-city-label worker-location-missing">📍 Ciudad no registrada en contrato</span>
+                    <span class="worker-city-label worker-location-missing">Ciudad no registrada en contrato</span>
                   {% endif %}
                 </div>
             </div>
@@ -1425,14 +1410,14 @@
                 <div class="text-muted small">📅 {{ m.fecha|date:"d/m/Y" }}</div>
                 <div class="worker-location-row">
                   {% if m.contrato.sector_urbanizacion %}
-                    <span class="worker-sector-label">🏘️ {{ m.contrato.sector_urbanizacion }}</span>
+                    <span class="worker-sector-label">{{ m.contrato.sector_urbanizacion }}</span>
                   {% endif %}
                   {% if m.contrato.ciudad %}
-                    <span class="worker-city-label">📍 {{ m.contrato.ciudad }}</span>
+                    <span class="worker-city-label">{{ m.contrato.ciudad }}</span>
                   {% elif m.contrato.ciudad_ref %}
-                    <span class="worker-city-label">📍 {{ m.contrato.ciudad_ref.nombre }}</span>
+                    <span class="worker-city-label">{{ m.contrato.ciudad_ref.nombre }}</span>
                   {% else %}
-                    <span class="worker-city-label worker-location-missing">📍 Ciudad no registrada en contrato</span>
+                    <span class="worker-city-label worker-location-missing">Ciudad no registrada en contrato</span>
                   {% endif %}
                 </div>
               </div>

@@ -670,7 +670,7 @@
 .app-content .form-control,.app-content .form-select{border-radius:14px;min-height:46px}.app-content .btn{font-weight:800}.bottom-nav-panel{box-shadow:0 -8px 30px rgba(7,59,130,.10)}
 </style>
 <link rel="stylesheet" href="{% static 'dashboard/aquo-worker-modern.css' %}?v=20261026-01">
-  <link href="{% static 'dashboard/aquo-worker-modern-v3.css' %}?v=20261026-3" rel="stylesheet">
+  <link href="{% static 'dashboard/aquo-worker-modern-v3.css' %}?v=20261026-31" rel="stylesheet">
 </head>
 
 
@@ -806,6 +806,18 @@
           </button>
         </div>
       </div>
+    </nav>
+    <nav class="mobile-orbit-nav" aria-label="Menú flotante del trabajador">
+      <div class="mobile-orbit-backdrop"></div>
+      <div id="workerOrbitItems" class="mobile-orbit-items count-6">
+        <a class="mobile-orbit-item {% if request.path == '/dashboard/inicio/' %}active{% endif %}" href="/dashboard/inicio/"><span class="orbit-icon"><i class="bi bi-house-door-fill"></i></span><span class="orbit-label">Inicio</span></a>
+        <a class="mobile-orbit-item {% if request.path == '/dashboard/home/' or '/mantenimientos/' in request.path %}active{% endif %}" href="/dashboard/home/"><span class="orbit-icon"><i class="bi bi-calendar2-check-fill"></i></span><span class="orbit-label">Mantenimientos</span></a>
+        <a class="mobile-orbit-item {% if '/dashboard/ordenes/' in request.path %}active{% endif %}" href="{% url 'ordenes_trabajo:mis_ordenes' %}"><span class="orbit-icon"><i class="bi bi-tools"></i></span><span class="orbit-label">Órdenes</span></a>
+        <a class="mobile-orbit-item {% if '/dashboard/asistente/' in request.path %}active{% endif %}" href="{% url 'asistente_tecnico:inicio' %}"><span class="orbit-icon"><i class="bi bi-stars"></i></span><span class="orbit-label">AQUO</span></a>
+        <a class="mobile-orbit-item {% if '/dashboard/mi-inventario/' in request.path %}active{% endif %}" href="{% url 'mi_inventario_trabajador' %}"><span class="orbit-icon"><i class="bi bi-box-seam-fill"></i></span><span class="orbit-label">Inventario</span></a>
+        <a class="mobile-orbit-item {% if '/dashboard/mi-cuenta/' in request.path %}active{% endif %}" href="{% url 'mi_cuenta_trabajador' %}"><span class="orbit-icon"><i class="bi bi-person-circle"></i></span><span class="orbit-label">Mi cuenta</span></a>
+      </div>
+      <div class="mobile-orbit-dock"><button class="mobile-orbit-toggle" type="button" aria-label="Abrir menú" aria-expanded="false" aria-controls="workerOrbitItems"><span class="orbit-grid">▦</span><span class="orbit-close">×</span></button></div>
     </nav>
 
   </div>
