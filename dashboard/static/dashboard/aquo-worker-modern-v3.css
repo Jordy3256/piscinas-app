@@ -1,0 +1,28 @@
+/* AQUO 360 Modern 3.0: navegación única y centro de jornada */
+:root{--aquo-v3-blue:#1266e7;--aquo-v3-ink:#102c4e}
+.mobile-orbit-nav{display:none!important}
+#template-debug-badge{display:none!important}
+.bottom-nav{z-index:1040!important}
+.bottom-nav-panel{background:rgba(255,255,255,.97)!important;backdrop-filter:blur(18px);border:1px solid rgba(21,93,170,.1)!important;box-shadow:0 -10px 38px rgba(12,62,117,.12)!important}
+.bottom-nav-links{display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr))!important;gap:2px!important}
+.bottom-nav-links .nav-item-app{min-width:0!important;display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;gap:4px!important;border:0;background:transparent;cursor:pointer;color:#64758e!important;font-family:inherit;font-weight:750;font-size:.7rem!important;white-space:nowrap}
+.bottom-nav-links .nav-item-app i{font-size:1.3rem!important;line-height:1.2}
+.bottom-nav-links .nav-item-app.active{color:#0b5ed7!important;background:#e9f2ff!important;border-radius:15px!important}
+.bottom-nav-links .nav-item-app:focus-visible,.aquo-jornada-shortcuts a:focus-visible{outline:3px solid #29b6e9;outline-offset:2px}
+.aquo-jornada-hero{margin-bottom:1rem;padding:1.25rem;border-radius:24px;color:#fff;background:radial-gradient(circle at 94% 4%,rgba(95,225,244,.4),transparent 35%),linear-gradient(125deg,#093f91,#0d6be0 60%,#0899bd);box-shadow:0 14px 32px rgba(12,82,164,.18)}
+.aquo-jornada-hero-top{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.aquo-jornada-eyebrow{display:block;font-size:.7rem;letter-spacing:.13em;font-weight:850;color:#c7f5ff}
+.aquo-jornada-hero h2{font-size:clamp(1.22rem,3vw,1.65rem);font-weight:900;letter-spacing:-.03em;margin:.45rem 0}
+.aquo-jornada-hero p{font-size:.85rem;color:#e5f3ff;margin:0;max-width:35rem}
+.aquo-jornada-hero-icon{font-size:2rem;opacity:.75}
+.aquo-jornada-shortcuts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin-top:1.1rem}
+.aquo-jornada-shortcuts a{display:flex;flex-direction:column;align-items:flex-start;gap:7px;padding:12px 10px;min-width:0;border-radius:16px;background:rgba(255,255,255,.96);color:#17345c;font-size:.76rem;font-weight:850;box-shadow:0 5px 13px rgba(0,27,71,.09)}
+.aquo-jornada-shortcuts a>i{display:none}
+.aquo-shortcut-icon{display:inline-flex;align-items:center;justify-content:center;width:37px;height:37px;border-radius:12px;font-size:1.1rem}
+.aquo-shortcut-icon.aqua{background:#dff8ff;color:#007da5}.aquo-shortcut-icon.violet{background:#eee7ff;color:#7541d8}.aquo-shortcut-icon.orange{background:#fff0d9;color:#c36d04}.aquo-shortcut-icon.blue{background:#e5edff;color:#225bda}
+.worker-summary>.col-4:nth-child(1) .card{border-left:5px solid #159de1!important}
+.worker-summary>.col-4:nth-child(2) .card{border-left:5px solid #ef6b67!important}
+.worker-summary>.col-4:nth-child(3) .card{border-left:5px solid #8b66e9!important}
+.worker-summary .card{border-radius:18px!important;box-shadow:0 9px 20px rgba(16,53,93,.07)!important}
+@media(max-width:420px){.aquo-jornada-hero{padding:1rem}.aquo-jornada-shortcuts{grid-template-columns:repeat(2,minmax(0,1fr))}.aquo-jornada-shortcuts a{flex-direction:row;align-items:center}.aquo-shortcut-icon{width:33px;height:33px;flex:0 0 33px}.bottom-nav-links .nav-item-app{font-size:.64rem!important}}
+@media(prefers-reduced-motion:no-preference){.aquo-jornada-shortcuts a{transition:transform .18s ease,box-shadow .18s ease}.aquo-jornada-shortcuts a:active{transform:scale(.97)}}

@@ -898,6 +898,22 @@
   </div>
 </section>
 
+<section class="aquo-jornada-hero" aria-label="Accesos de la jornada">
+  <div class="aquo-jornada-hero-top">
+    <div><span class="aquo-jornada-eyebrow">💧 AQUO 360 · MI DÍA</span>
+      <h2>Tu jornada, a un toque</h2>
+      <p>Ubica tu próxima piscina y accede rápidamente a tus herramientas.</p>
+    </div>
+    <span class="aquo-jornada-hero-icon" aria-hidden="true"><i class="bi bi-water"></i></span>
+  </div>
+  <div class="aquo-jornada-shortcuts">
+    <a href="#mantenimientos-hoy" data-worker-scroll="today"><span class="aquo-shortcut-icon aqua"><i class="bi bi-droplet-fill"></i></span><span>Mantenimientos</span><i class="bi bi-arrow-up-right"></i></a>
+    <a href="{% url 'ordenes_trabajo:mis_ordenes' %}"><span class="aquo-shortcut-icon violet"><i class="bi bi-tools"></i></span><span>Órdenes</span><i class="bi bi-arrow-up-right"></i></a>
+    <a href="{% url 'mi_inventario_trabajador' %}"><span class="aquo-shortcut-icon orange"><i class="bi bi-box-seam-fill"></i></span><span>Inventario</span><i class="bi bi-arrow-up-right"></i></a>
+    <a href="{% url 'asistente_tecnico:inicio' %}"><span class="aquo-shortcut-icon blue"><i class="bi bi-stars"></i></span><span>AQUO</span><i class="bi bi-arrow-up-right"></i></a>
+  </div>
+</section>
+
 <div class="card shadow-sm mb-3 worker-view-card worker-planning-panel d-none">
   <div class="card-body">
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
@@ -1608,5 +1624,13 @@ document.addEventListener('DOMContentLoaded', function(){
   document.getElementById('routeClose')?.addEventListener('click',closeRoute);
   stops.forEach(x=>x._c=(x.lat!==null&&x.lng!==null&&Number.isFinite(Number(x.lat))&&Number.isFinite(Number(x.lng)))?{lat:Number(x.lat),lng:Number(x.lng)}:coords(x.maps)); chooseRoute();
 })();
+</script>
+<script>
+document.querySelectorAll('[data-worker-scroll="today"]').forEach(function(link){
+  link.addEventListener('click', function(event){
+    var target = document.getElementById('mantenimientos-hoy') || document.querySelector('.worker-summary');
+    if(target){event.preventDefault();target.scrollIntoView({behavior:'smooth',block:'start'});}
+  });
+});
 </script>
 {% endblock %}

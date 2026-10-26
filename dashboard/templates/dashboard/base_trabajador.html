@@ -670,6 +670,7 @@
 .app-content .form-control,.app-content .form-select{border-radius:14px;min-height:46px}.app-content .btn{font-weight:800}.bottom-nav-panel{box-shadow:0 -8px 30px rgba(7,59,130,.10)}
 </style>
 <link rel="stylesheet" href="{% static 'dashboard/aquo-worker-modern.css' %}?v=20261026-01">
+  <link href="{% static 'dashboard/aquo-worker-modern-v3.css' %}?v=20261026-3" rel="stylesheet">
 </head>
 
 
@@ -788,39 +789,28 @@
     <nav class="bottom-nav" aria-label="Navegación principal">
       <div class="bottom-nav-panel">
         <div class="bottom-nav-links">
-          <a class="nav-item-app {% if request.path == '/dashboard/inicio/' %}active{% endif %}" href="/dashboard/inicio/">
+          <a class="nav-item-app {% if request.path == '/dashboard/inicio/' %}active{% endif %}" href="/dashboard/inicio/" {% if request.path == '/dashboard/inicio/' %}aria-current="page"{% endif %}>
             <i class="bi bi-house-door-fill"></i><span>Inicio</span>
           </a>
-          <a class="nav-item-app {% if request.path == '/dashboard/home/' or '/mantenimientos/' in request.path or '/dashboard/ordenes/' in request.path %}active{% endif %}" href="/dashboard/home/">
-            <i class="bi bi-card-checklist"></i><span>Mi jornada</span>
+          <a class="nav-item-app {% if request.path == '/dashboard/home/' or '/mantenimientos/' in request.path %}active{% endif %}" href="/dashboard/home/" {% if request.path == '/dashboard/home/' %}aria-current="page"{% endif %}>
+            <i class="bi bi-calendar2-check-fill"></i><span>Jornada</span>
+          </a>
+          <a class="nav-item-app {% if '/dashboard/ordenes/' in request.path %}active{% endif %}" href="{% url 'ordenes_trabajo:mis_ordenes' %}">
+            <i class="bi bi-tools"></i><span>Órdenes</span>
           </a>
           <a class="nav-item-app {% if '/dashboard/asistente/' in request.path %}active{% endif %}" href="{% url 'asistente_tecnico:inicio' %}">
             <i class="bi bi-stars"></i><span>AQUO</span>
           </a>
-          <a class="nav-item-app {% if '/dashboard/mi-inventario/' in request.path %}active{% endif %}" href="{% url 'mi_inventario_trabajador' %}">
-            <i class="bi bi-box-seam-fill"></i><span>Inventario</span>
-          </a>
-          <a class="nav-item-app {% if '/dashboard/mi-cuenta/' in request.path %}active{% endif %}" href="{% url 'mi_cuenta_trabajador' %}">
-            <i class="bi bi-person-circle"></i><span>Mi cuenta</span>
-          </a>
+          <button class="nav-item-app worker-more-trigger" type="button" data-bs-toggle="offcanvas" data-bs-target="#workerLauncher" aria-controls="workerLauncher" aria-label="Más herramientas">
+            <i class="bi bi-grid-fill"></i><span>Más</span>
+          </button>
         </div>
       </div>
     </nav>
 
-<nav class="mobile-orbit-nav" aria-label="Menú móvil">
-<div class="mobile-orbit-backdrop"></div>
-<div class="mobile-orbit-items count-5">
-<a class="mobile-orbit-item {% if request.path == '/dashboard/inicio/' %}active{% endif %}" href="/dashboard/inicio/"><span class="orbit-icon"><i class="bi bi-house-door-fill"></i></span><span class="orbit-label">Inicio</span></a>
-<a class="mobile-orbit-item {% if request.path == '/dashboard/home/' or '/mantenimientos/' in request.path or '/dashboard/ordenes/' in request.path %}active{% endif %}" href="/dashboard/home/"><span class="orbit-icon"><i class="bi bi-card-checklist"></i></span><span class="orbit-label">Jornada</span></a>
-<a class="mobile-orbit-item {% if '/dashboard/asistente/' in request.path %}active{% endif %}" href="{% url 'asistente_tecnico:inicio' %}"><span class="orbit-icon"><i class="bi bi-stars"></i></span><span class="orbit-label">AQUO</span></a>
-<a class="mobile-orbit-item {% if '/dashboard/mi-inventario/' in request.path %}active{% endif %}" href="{% url 'mi_inventario_trabajador' %}"><span class="orbit-icon"><i class="bi bi-box-seam-fill"></i></span><span class="orbit-label">Inventario</span></a>
-<a class="mobile-orbit-item {% if '/dashboard/mi-cuenta/' in request.path %}active{% endif %}" href="{% url 'mi_cuenta_trabajador' %}"><span class="orbit-icon"><i class="bi bi-person-circle"></i></span><span class="orbit-label">Cuenta</span></a>
-</div>
-<div class="mobile-orbit-dock"><button class="mobile-orbit-toggle" type="button" aria-label="Abrir menú" aria-expanded="false"><span class="orbit-grid">▦</span><span class="orbit-close">×</span></button></div>
-</nav>
   </div>
 
-  <div id="template-debug-badge">BASE_TRABAJADOR PREMIUM · 20260728</div>
+
 
 
 <div class="offcanvas offcanvas-end" tabindex="-1" id="workerLauncher" aria-labelledby="workerLauncherLabel" style="--bs-offcanvas-width:min(430px,94vw)">
