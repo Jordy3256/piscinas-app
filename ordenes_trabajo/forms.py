@@ -27,6 +27,7 @@ class OrdenTrabajoForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["tipo"].queryset = TipoOrdenTrabajo.objects.filter(activo=True)
         self.fields["trabajador"].queryset = Trabajador.objects.filter(activo=True).select_related("user").order_by("user__first_name", "user__username")
+        self.fields["nombre_contacto"].required = False
         self.fields["cliente"].queryset = Cliente.objects.filter(activo=True).order_by("nombre")
         self.fields["contrato"].queryset = Contrato.objects.filter(activo=True).select_related("cliente").order_by("cliente__nombre", "id")
         for field in self.fields.values():
@@ -56,10 +57,33 @@ class OrdenTrabajoForm(forms.ModelForm):
         cleaned = super().clean()
         origen = cleaned.get("origen")
         contrato = cleaned.get("contrato")
-        if origen == "contrato" and not contrato:
-            self.add_error("contrato", "Selecciona el contrato relacionado.")
+        cliente = cleaned.get("cliente")
+        if origen == "contrato":
+            if not cliente and contrato:
+                cliente = contrato.cliente
+                cleaned["cliente"] = cliente
+            if not cliente:
+                self.add_error("cliente", "Selecciona un cliente existente.")
+            else:
+                contratos = list(Contrato.objects.filter(cliente=cliente, activo=True).order_by("pk"))
+                if contrato and (contrato.cliente_id != cliente.pk or not contrato.activo):
+                    self.add_error("contrato", "El contrato no corresponde a este cliente activo.")
+                elif len(contratos) == 1:
+                    cleaned["contrato"] = contratos[0]
+                elif len(contratos) > 1 and not contrato:
+                    self.add_error("contrato", "Selecciona uno de los contratos de este cliente.")
+                elif not contratos:
+                    cleaned["contrato"] = None
+            # Los datos de contacto se derivan del registro, no del navegador.
+        else:
+            cleaned["cliente"] = None
+            cleaned["contrato"] = None
         if origen == "puntual" and not (cleaned.get("nombre_contacto") or "").strip():
             self.add_error("nombre_contacto", "Indica el nombre de la persona o cliente.")
+        if cleaned.get("valor_cliente") is not None and cleaned["valor_cliente"] < 0:
+            self.add_error("valor_cliente", "El importe no puede ser negativo.")
+        if cleaned.get("pago_trabajador") is not None and cleaned["pago_trabajador"] < 0:
+            self.add_error("pago_trabajador", "El importe no puede ser negativo.")
         if cleaned.get("cortesia"):
             cleaned["valor_cliente"] = None
         return cleaned

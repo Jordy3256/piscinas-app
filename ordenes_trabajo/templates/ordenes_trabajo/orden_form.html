@@ -5,12 +5,45 @@
 <style>.ot-form-card{border:1px solid #e2e8f0;border-radius:22px;background:#fff;box-shadow:0 14px 38px rgba(15,23,42,.07)}.ot-section{padding:20px;border-bottom:1px solid #edf2f7}.ot-section:last-child{border-bottom:0}.ot-section-title{font-weight:900;color:#0f172a;margin-bottom:4px}.ot-help{font-size:.82rem;color:#64748b}</style>
 <form method="post" class="ot-form-card" id="orden-form">
 {% csrf_token %}
-<div class="ot-section"><div class="ot-section-title">1. Tipo de orden</div><div class="ot-help mb-3">Elige si se relaciona con un contrato o si es una visita puntual.</div>
+<div class="ot-section"><div class="ot-section-title">1. Tipo de orden</div><div class="ot-help mb-3">Selecciona un cliente registrado o una visita para un cliente nuevo.</div>
 <div class="row g-3"><div class="col-12 col-md-6"><label class="form-label fw-bold">Origen</label>{{ form.origen }}{{ form.origen.errors }}</div><div class="col-12 col-md-6"><label class="form-label fw-bold">Tipo de trabajo</label>{{ form.tipo }}{{ form.tipo.errors }}</div></div></div>
-<div class="ot-section"><div class="ot-section-title">2. Cliente / ubicación</div><div class="ot-help mb-3">Con contrato, los datos se toman automáticamente al guardar. En una visita puntual puedes escribirlos directamente.</div>
-<div class="row g-3"><div class="col-12 col-md-6"><label class="form-label fw-bold">Contrato</label>{{ form.contrato }}{{ form.contrato.errors }}</div><div class="col-12 col-md-6"><label class="form-label fw-bold">Cliente existente (opcional)</label>{{ form.cliente }}</div><div class="col-12 col-md-6"><label class="form-label fw-bold">Nombre / contacto</label>{{ form.nombre_contacto }}{{ form.nombre_contacto.errors }}</div><div class="col-12 col-md-6"><label class="form-label fw-bold">WhatsApp</label>{{ form.telefono }}</div><div class="col-12 col-md-6"><label class="form-label fw-bold">Ciudad</label>{{ form.ciudad }}</div><div class="col-12 col-md-6"><label class="form-label fw-bold">Sector / urbanización</label>{{ form.sector_urbanizacion }}</div><div class="col-12"><label class="form-label fw-bold">Dirección</label>{{ form.direccion }}</div><div class="col-12"><label class="form-label fw-bold">Google Maps</label>{{ form.enlace_google_maps }}</div></div></div>
+<div class="ot-section"><div class="ot-section-title">2. Cliente / ubicación</div><div class="ot-help mb-3">Los datos del cliente registrado se completan automáticamente. Para un cliente nuevo, ingrésalos manualmente.</div>
+<div class="row g-3"><div class="col-12 col-md-6" id="ot-contrato-wrap"><label class="form-label fw-bold">Contrato</label>{{ form.contrato }}{{ form.contrato.errors }}</div><div class="col-12 col-md-6" id="ot-cliente-wrap"><label class="form-label fw-bold">Cliente existente</label>{{ form.cliente }}</div><div class="col-12 col-md-6 ot-contacto"><label class="form-label fw-bold">Nombre / contacto</label>{{ form.nombre_contacto }}{{ form.nombre_contacto.errors }}</div><div class="col-12 col-md-6 ot-contacto"><label class="form-label fw-bold">WhatsApp</label>{{ form.telefono }}</div><div class="col-12 col-md-6 ot-contacto"><label class="form-label fw-bold">Ciudad</label>{{ form.ciudad }}</div><div class="col-12 col-md-6 ot-contacto"><label class="form-label fw-bold">Sector / urbanización</label>{{ form.sector_urbanizacion }}</div><div class="col-12 ot-contacto"><label class="form-label fw-bold">Dirección</label>{{ form.direccion }}</div><div class="col-12 ot-contacto"><label class="form-label fw-bold">Google Maps</label>{{ form.enlace_google_maps }}</div></div></div>
 <div class="ot-section"><div class="ot-section-title">3. Programación</div><div class="row g-3"><div class="col-12 col-md-4"><label class="form-label fw-bold">Fecha</label>{{ form.fecha }}</div><div class="col-12 col-md-4"><label class="form-label fw-bold">Hora (opcional)</label>{{ form.hora }}</div><div class="col-12 col-md-4"><label class="form-label fw-bold">Técnico asignado</label>{{ form.trabajador }}{{ form.trabajador.errors }}</div><div class="col-12"><label class="form-label fw-bold">Título / motivo breve</label>{{ form.titulo }}</div><div class="col-12"><label class="form-label fw-bold">Instrucciones para el técnico</label>{{ form.observaciones_admin }}</div></div></div>
-<div class="ot-section"><div class="ot-section-title">4. Valores opcionales</div><div class="ot-help mb-3">Se guardan como referencia. Esta primera fase no crea cobros ni nómina automáticamente.</div><div class="row g-3"><div class="col-12 col-md-4"><label class="form-label fw-bold">Valor al cliente</label>{{ form.valor_cliente }}</div><div class="col-12 col-md-4"><label class="form-label fw-bold">Pago al trabajador</label>{{ form.pago_trabajador }}</div><div class="col-12 col-md-4 d-flex align-items-end"><div class="form-check mb-2">{{ form.cortesia }} <label class="form-check-label fw-bold" for="{{ form.cortesia.id_for_label }}">Visita de cortesía / incluida</label></div></div></div></div>
+<div class="ot-section"><div class="ot-section-title">4. Valores opcionales</div><div class="ot-help mb-3">Valores acordados para la orden. La integración contable se habilitará en una fase posterior; no se generan cobros ni pagos automáticamente.</div><div class="row g-3"><div class="col-12 col-md-4"><label class="form-label fw-bold">Valor al cliente</label>{{ form.valor_cliente }}</div><div class="col-12 col-md-4"><label class="form-label fw-bold">Pago al trabajador</label>{{ form.pago_trabajador }}</div><div class="col-12 col-md-4 d-flex align-items-end"><div class="form-check mb-2">{{ form.cortesia }} <label class="form-check-label fw-bold" for="{{ form.cortesia.id_for_label }}">Visita de cortesía / incluida</label></div></div></div></div>
 <div class="ot-section d-flex gap-2 justify-content-end flex-wrap"><a href="{% if orden %}{% url 'ordenes_trabajo:detalle' orden.pk %}{% else %}{% url 'ordenes_trabajo:lista' %}{% endif %}" class="btn btn-outline-secondary">Cancelar</a><button class="btn btn-primary px-4">{% if editando %}Guardar cambios{% else %}Crear y asignar{% endif %}</button></div>
 </form>
+{% endblock %}
+
+{% block extra_js %}{{ block.super }}
+{{ clientes_json|json_script:"ot-clientes-data" }}
+<script>
+(function(){
+const data=JSON.parse(document.getElementById('ot-clientes-data').textContent);
+const origen=document.getElementById('id_origen'), cliente=document.getElementById('id_cliente'), contrato=document.getElementById('id_contrato');
+const campos=['nombre_contacto','telefono','ciudad','sector_urbanizacion','direccion','enlace_google_maps'];
+const originalOptions=Array.from(contrato.options).map(o=>({value:o.value,text:o.text}));
+function update(){
+ const existente=origen.value==='contrato';
+ document.getElementById('ot-cliente-wrap').hidden=!existente;
+ document.querySelectorAll('.ot-contacto').forEach(el=>el.hidden=existente);
+ const c=data.find(x=>String(x.id)===cliente.value);
+ const opciones=existente && c ? c.contratos : [];
+ const prev=contrato.value;
+ contrato.replaceChildren(new Option('---------',''));
+ opciones.forEach(x=>contrato.add(new Option('Contrato #'+x.id+' · '+(x.direccion||x.sector_urbanizacion||'Sin dirección'),x.id)));
+ if(opciones.some(x=>String(x.id)===prev)) contrato.value=prev;
+ else if(opciones.length===1) contrato.value=String(opciones[0].id);
+ document.getElementById('ot-contrato-wrap').hidden=!existente || opciones.length<2;
+ if(existente && c){
+   const selected=opciones.find(x=>String(x.id)===contrato.value);
+   campos.forEach(k=>{const input=document.getElementById('id_'+k);if(input) input.value=(selected && selected[k])||c[k]||'';});
+ }
+ if(!existente){cliente.value='';contrato.value='';}
+}
+cliente.addEventListener('change',update); contrato.addEventListener('change',update);
+origen.addEventListener('change',()=>{if(origen.value==='puntual'){campos.forEach(k=>{const el=document.getElementById('id_'+k);if(el)el.value='';});}update();});
+update();
+})();
+</script>
 {% endblock %}

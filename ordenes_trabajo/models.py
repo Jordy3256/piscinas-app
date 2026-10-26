@@ -104,10 +104,11 @@ class OrdenTrabajo(models.Model):
         c = self.contrato.cliente
         self.nombre_contacto = c.nombre
         self.telefono = c.telefono or ""
-        self.ciudad = c.ciudad or ""
-        self.sector_urbanizacion = c.sector_urbanizacion or ""
-        self.direccion = c.direccion or ""
-        self.enlace_google_maps = c.enlace_google_maps or ""
+        # La ubicación de cada piscina pertenece al contrato seleccionado.
+        self.ciudad = self.contrato.ciudad or c.ciudad or ""
+        self.sector_urbanizacion = self.contrato.sector_urbanizacion or c.sector_urbanizacion or ""
+        self.direccion = self.contrato.direccion or c.direccion or ""
+        self.enlace_google_maps = self.contrato.enlace_google_maps or c.enlace_google_maps or ""
         if not self.trabajador_id and self.contrato.tecnico_designado_id:
             self.trabajador = self.contrato.tecnico_designado
 

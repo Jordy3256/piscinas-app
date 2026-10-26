@@ -12,11 +12,25 @@ from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
 
 from contratos.models import Contrato
+from clientes.models import Cliente
 from dashboard.models import ActividadSistema, Notificacion
 from trabajadores.models import Trabajador
 
 from .forms import OrdenTrabajoForm
 from .models import FotoOrdenTrabajo, OrdenTrabajo, TipoOrdenTrabajo
+
+
+def _clientes_orden_json():
+    """Datos públicos dentro del formulario administrativo autenticado."""
+    contratos = {}
+    for c in Contrato.objects.filter(activo=True).values("id", "cliente_id", "ciudad", "sector_urbanizacion", "direccion", "enlace_google_maps"):
+        contratos.setdefault(str(c["cliente_id"]), []).append(c)
+    return [{
+        "id": c.pk, "nombre": c.nombre, "telefono": c.telefono,
+        "ciudad": c.ciudad, "sector_urbanizacion": c.sector_urbanizacion,
+        "direccion": c.direccion, "enlace_google_maps": c.enlace_google_maps,
+        "contratos": contratos.get(str(c.pk), []),
+    } for c in Cliente.objects.filter(activo=True).order_by("nombre")]
 
 
 def _es_admin(user):
@@ -143,12 +157,12 @@ def orden_crear_view(request, contrato_id=None):
                     orden.sincronizar_desde_contrato()
                 elif orden.cliente_id:
                     c = orden.cliente
-                    orden.nombre_contacto = orden.nombre_contacto or c.nombre
-                    orden.telefono = orden.telefono or c.telefono or ""
-                    orden.ciudad = orden.ciudad or c.ciudad or ""
-                    orden.sector_urbanizacion = orden.sector_urbanizacion or c.sector_urbanizacion or ""
-                    orden.direccion = orden.direccion or c.direccion or ""
-                    orden.enlace_google_maps = orden.enlace_google_maps or c.enlace_google_maps or ""
+                    orden.nombre_contacto = c.nombre
+                    orden.telefono = c.telefono or ""
+                    orden.ciudad = c.ciudad or ""
+                    orden.sector_urbanizacion = c.sector_urbanizacion or ""
+                    orden.direccion = c.direccion or ""
+                    orden.enlace_google_maps = c.enlace_google_maps or ""
                 orden.creada_por = request.user
                 orden.save()
             _notificar_trabajador(
@@ -162,7 +176,7 @@ def orden_crear_view(request, contrato_id=None):
     else:
         form = OrdenTrabajoForm(contrato_inicial=contrato)
 
-    return render(request, "ordenes_trabajo/orden_form.html", {"form": form, "contrato_inicial": contrato, "editando": False})
+    return render(request, "ordenes_trabajo/orden_form.html", {"form": form, "contrato_inicial": contrato, "editando": False, "clientes_json": _clientes_orden_json()})
 
 
 @login_required
@@ -197,7 +211,7 @@ def orden_editar_view(request, pk):
             return redirect("ordenes_trabajo:detalle", pk=orden.pk)
     else:
         form = OrdenTrabajoForm(instance=orden)
-    return render(request, "ordenes_trabajo/orden_form.html", {"form": form, "orden": orden, "editando": True})
+    return render(request, "ordenes_trabajo/orden_form.html", {"form": form, "orden": orden, "editando": True, "clientes_json": _clientes_orden_json()})
 
 
 @login_required
