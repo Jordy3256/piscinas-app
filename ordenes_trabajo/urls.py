@@ -12,5 +12,6 @@ urlpatterns = [
     path("<int:pk>/editar/", views.orden_editar_view, name="editar"),
     path("<int:pk>/iniciar/", views.orden_iniciar_view, name="iniciar"),
     path("<int:pk>/guardar/", views.orden_guardar_trabajador_view, name="guardar_trabajador"),
+    path("<int:pk>/revisar/", views.orden_revisar_view, name="revisar"),
     path("<int:pk>/cancelar/", views.orden_cancelar_view, name="cancelar"),
 ]

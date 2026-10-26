@@ -7,6 +7,8 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.db.models import Q
+from decimal import Decimal, InvalidOperation
+from django.contrib.auth import get_user_model
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
@@ -260,6 +262,23 @@ def orden_iniciar_view(request, pk):
     return redirect("ordenes_trabajo:detalle", pk=orden.pk)
 
 
+def _avisar_administracion(orden, titulo, mensaje):
+    """Aviso interno y push sin bloquear el guardado de la orden."""
+    url = f"/dashboard/ordenes/{orden.pk}/"
+    for usuario in get_user_model().objects.filter(is_active=True).filter(Q(is_staff=True) | Q(is_superuser=True)).distinct():
+        try:
+            Notificacion.objects.create(user=usuario, titulo=titulo, mensaje=mensaje, url=url, tipo="general", referencia_id=orden.pk)
+            def enviar(destinatario=usuario):
+                try:
+                    from dashboard.views import _send_push_to_user
+                    _send_push_to_user(destinatario, titulo, mensaje, url=url, tag=f"revision-orden-{orden.pk}-{destinatario.pk}")
+                except Exception:
+                    logger.exception("Error push revisión de orden %s", orden.pk)
+            transaction.on_commit(enviar)
+        except Exception:
+            logger.exception("Error aviso revisión de orden %s", orden.pk)
+
+
 @login_required
 @require_POST
 def orden_guardar_trabajador_view(request, pk):
@@ -270,31 +289,108 @@ def orden_guardar_trabajador_view(request, pk):
         trabajador = None
     if not trabajador or orden.trabajador_id != trabajador.id:
         return render(request, "dashboard/no_autorizado.html", status=403)
-    if orden.estado in {"completada", "cancelada"}:
-        messages.warning(request, "Esta orden ya está cerrada.")
-        return redirect("ordenes_trabajo:detalle", pk=orden.pk)
+    if orden.estado in {"completada", "cancelada", "no_completada"} or orden.pendiente_revision:
+        messages.warning(request, "Esta orden ya fue reportada y está pendiente de administración o cerrada.")
+        return redirect("ordenes_trabajo:detalle", pk=pk)
 
-    orden.reporte_trabajador = (request.POST.get("reporte_trabajador") or "").strip()
     finalizar = request.POST.get("accion") == "finalizar"
-    if finalizar:
-        orden.estado = "completada"
-        orden.completada_en = timezone.now()
-        if not orden.iniciada_en:
-            orden.iniciada_en = orden.completada_en
-    elif orden.estado == "pendiente":
-        orden.estado = "en_proceso"
-        orden.iniciada_en = timezone.now()
-    orden.save()
+    resultado = request.POST.get("resultado")
+    if finalizar and resultado not in {"realizado", "no_realizado"}:
+        messages.error(request, "Indica si el trabajo fue realizado o no completado.")
+        return redirect("ordenes_trabajo:detalle", pk=pk)
+    try:
+        monto_texto = (request.POST.get("cobro_reportado") or "").strip().replace(",", ".")
+        monto = Decimal(monto_texto) if monto_texto else None
+        if monto is not None and (not monto.is_finite() or monto < 0):
+            raise InvalidOperation
+        if monto is not None and monto.as_tuple().exponent < -2:
+            raise InvalidOperation
+        if monto is not None and monto >= Decimal("100000000"):
+            raise InvalidOperation
+    except (InvalidOperation, ValueError):
+        messages.error(request, "El valor cobrado debe ser un importe válido no negativo con máximo dos decimales.")
+        return redirect("ordenes_trabajo:detalle", pk=pk)
+    imagenes = request.FILES.getlist("fotos")
+    imagenes += [request.FILES[k] for k in ("foto_antes", "foto_durante", "foto_despues") if k in request.FILES]
+    if any(not f.content_type.startswith("image/") or f.size > 12 * 1024 * 1024 for f in imagenes):
+        messages.error(request, "Cada fotografía debe ser una imagen de máximo 12 MB.")
+        return redirect("ordenes_trabajo:detalle", pk=pk)
+    with transaction.atomic():
+        orden.reporte_trabajador = (request.POST.get("reporte_trabajador") or "").strip()
+        orden.cobro_reportado = monto
+        orden.cobro_metodo = (request.POST.get("cobro_metodo") or "")[:30] if monto and monto > 0 else ""
+        orden.cobro_observacion = (request.POST.get("cobro_observacion") or "").strip()
+        if request.FILES.get("cobro_comprobante"):
+            comprobante = request.FILES["cobro_comprobante"]
+            if comprobante.size > 12 * 1024 * 1024:
+                messages.error(request, "El comprobante no puede superar 12 MB.")
+                return redirect("ordenes_trabajo:detalle", pk=pk)
+            orden.cobro_comprobante = comprobante
+        if finalizar:
+            orden.resultado_reportado = resultado
+            orden.pendiente_revision = True
+            orden.completada_en = timezone.now()
+            if not orden.iniciada_en:
+                orden.iniciada_en = orden.completada_en
+        elif orden.estado == "pendiente":
+            orden.estado = "en_proceso"
+            orden.iniciada_en = timezone.now()
+        orden.save()
+        for imagen in imagenes:
+            FotoOrdenTrabajo.objects.create(orden=orden, imagen=imagen, tipo="otro")
+        if finalizar:
+            _avisar_administracion(orden, "Orden pendiente de revisión", f"{orden.codigo}: el técnico reportó {'trabajo realizado' if resultado == 'realizado' else 'trabajo no completado'}.")
+    _registrar(request.user, "Orden reportada" if finalizar else "Avance de orden", f"{orden.codigo}: {orden.nombre_contacto}.", f"/dashboard/ordenes/{pk}/")
+    messages.success(request, "Reporte enviado. Administración debe revisar y cerrar la orden." if finalizar else "Avance guardado correctamente.")
+    return redirect("ordenes_trabajo:detalle", pk=pk)
 
-    tipos = ["antes", "durante", "despues"]
-    for tipo in tipos:
-        archivo = request.FILES.get(f"foto_{tipo}")
-        if archivo:
-            FotoOrdenTrabajo.objects.create(orden=orden, imagen=archivo, tipo=tipo)
 
-    _registrar(request.user, "Orden de trabajo completada" if finalizar else "Orden de trabajo actualizada", f"{orden.codigo}: {orden.nombre_contacto}.", f"/dashboard/ordenes/{orden.pk}/")
-    messages.success(request, "Orden completada correctamente." if finalizar else "Avance guardado correctamente.")
-    return redirect("ordenes_trabajo:detalle", pk=orden.pk)
+@login_required
+@require_POST
+def orden_revisar_view(request, pk):
+    if not _es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    with transaction.atomic():
+        orden = get_object_or_404(OrdenTrabajo.objects.select_for_update(), pk=pk)
+        if not orden.pendiente_revision:
+            messages.warning(request, "No hay un reporte pendiente de revisión.")
+            return redirect("ordenes_trabajo:detalle", pk=pk)
+        accion = request.POST.get("accion")
+        if accion == "devolver":
+            orden.pendiente_revision = False
+            orden.resultado_reportado = ""
+            orden.estado = "en_proceso"
+            orden.completada_en = None
+            orden.observaciones_revision = (request.POST.get("observaciones_revision") or "").strip()
+            orden.save()
+            _notificar_trabajador(orden, "Orden devuelta para corrección", f"Administración devolvió {orden.codigo} para revisión.")
+            messages.success(request, "Orden devuelta al trabajador.")
+            return redirect("ordenes_trabajo:detalle", pk=pk)
+        if accion != "aprobar":
+            messages.error(request, "Acción no reconocida.")
+            return redirect("ordenes_trabajo:detalle", pk=pk)
+        if orden.resultado_reportado == "realizado" and orden.es_facturable:
+            try:
+                cobro = Decimal((request.POST.get("cobro_confirmado") or "0").replace(",", "."))
+                if not cobro.is_finite() or cobro < 0 or cobro > orden.valor_cliente or cobro.as_tuple().exponent < -2:
+                    raise InvalidOperation
+            except (InvalidOperation, ValueError):
+                messages.error(request, "Introduce un cobro verificado válido, entre $0 y el valor de la orden.")
+                return redirect("ordenes_trabajo:detalle", pk=pk)
+            orden.cobro_confirmado = cobro
+            orden.cobro_confirmado_metodo = (request.POST.get("cobro_confirmado_metodo") or "")[:30]
+            orden.cobro_verificado = True
+            orden.cobro_confirmado_en = timezone.now()
+            orden.cobro_confirmado_por = request.user
+        orden.pendiente_revision = False
+        orden.revisado_por = request.user
+        orden.revision_admin_en = timezone.now()
+        orden.observaciones_revision = (request.POST.get("observaciones_revision") or "").strip()
+        orden.estado = "completada" if orden.resultado_reportado == "realizado" else "no_completada"
+        orden.save()
+    _registrar(request.user, "Orden revisada", f"Administración cerró {orden.codigo}.", f"/dashboard/ordenes/{pk}/")
+    messages.success(request, "Orden revisada y cerrada. El cobro confirmado queda registrado en la orden; todavía no se contabiliza automáticamente en Finanzas.")
+    return redirect("ordenes_trabajo:detalle", pk=pk)
 
 
 @login_required
@@ -303,7 +399,7 @@ def orden_cancelar_view(request, pk):
     if not _es_admin(request.user):
         return render(request, "dashboard/no_autorizado.html", status=403)
     orden = get_object_or_404(OrdenTrabajo, pk=pk)
-    if orden.estado != "completada":
+    if orden.estado not in {"completada", "no_completada"} and not orden.pendiente_revision:
         orden.estado = "cancelada"
         orden.save(update_fields=["estado", "actualizada_en"])
         _registrar(request.user, "Orden cancelada", f"Se canceló {orden.codigo}.", f"/dashboard/ordenes/{orden.pk}/")

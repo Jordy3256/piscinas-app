@@ -37,6 +37,7 @@ class OrdenTrabajo(models.Model):
         ("en_proceso", "En proceso"),
         ("completada", "Completada"),
         ("cancelada", "Cancelada"),
+        ("no_completada", "No completada"),
     ]
 
     origen = models.CharField(max_length=20, choices=ORIGEN_CHOICES, default="puntual")
@@ -61,6 +62,20 @@ class OrdenTrabajo(models.Model):
     titulo = models.CharField(max_length=160, blank=True, default="")
     observaciones_admin = models.TextField(blank=True, default="")
     reporte_trabajador = models.TextField(blank=True, default="")
+    resultado_reportado = models.CharField(max_length=20, blank=True, default="", choices=[("realizado", "Realizado"), ("no_realizado", "No realizado")])
+    pendiente_revision = models.BooleanField(default=False, db_index=True)
+    revision_admin_en = models.DateTimeField(null=True, blank=True)
+    revisado_por = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="ordenes_revisadas")
+    cobro_reportado = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    cobro_metodo = models.CharField(max_length=30, blank=True, default="")
+    cobro_comprobante = models.FileField(upload_to="ordenes_trabajo/comprobantes/", null=True, blank=True)
+    cobro_observacion = models.TextField(blank=True, default="")
+    cobro_verificado = models.BooleanField(default=False)
+    cobro_confirmado = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    cobro_confirmado_metodo = models.CharField(max_length=30, blank=True, default="")
+    cobro_confirmado_en = models.DateTimeField(null=True, blank=True)
+    cobro_confirmado_por = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="ordenes_cobro_verificado")
+    observaciones_revision = models.TextField(blank=True, default="")
 
     valor_cliente = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     pago_trabajador = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
