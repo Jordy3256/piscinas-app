@@ -1,0 +1,46 @@
+/* AQUO 360 Modern 2.0 · Worker UI only · no behavior changes */
+:root{--aquo-ink:#12243f;--aquo-blue:#2563eb;--aquo-cyan:#06b6d4;--aquo-mint:#0ea58b;--aquo-violet:#7c3aed;--aquo-coral:#ef5962;--aquo-amber:#f59e0b}
+body{background:radial-gradient(ellipse at 8% 0%,rgba(56,189,248,.12),transparent 36%),radial-gradient(ellipse at 95% 22%,rgba(139,92,246,.08),transparent 35%),#f3f7fc!important;color:var(--aquo-ink)}
+.app-content{max-width:1450px;margin:0 auto}
+.app-content .card{border-radius:22px!important;border:1px solid rgba(70,105,155,.11)!important;box-shadow:0 9px 27px rgba(24,58,112,.07)!important;transition:transform .18s ease,box-shadow .18s ease}
+.app-content .card-tap:hover,.app-content a.card:hover{transform:translateY(-2px);box-shadow:0 16px 32px rgba(24,58,112,.13)!important}
+.app-content .btn{border-radius:13px;font-weight:750;transition:transform .16s ease,filter .16s ease}
+.app-content .btn:active{transform:scale(.98)}
+.app-content .btn-primary{background:linear-gradient(115deg,#2563eb,#087ecb);border-color:transparent;box-shadow:0 5px 13px rgba(37,99,235,.18)}
+.app-content .form-control,.app-content .form-select{border-radius:12px;border-color:#dbe5f3;min-height:42px}
+.app-content .form-control:focus,.app-content .form-select:focus{border-color:#38bdf8;box-shadow:0 0 0 .2rem rgba(56,189,248,.13)}
+.app-content .badge{font-weight:800;letter-spacing:.01em}
+.worker-page-header{border-radius:28px!important;padding:clamp(1.2rem,3vw,2rem)!important;background:radial-gradient(circle at 86% 14%,rgba(255,255,255,.23),transparent 20%),linear-gradient(120deg,#102b68 0%,#2156d6 52%,#05b6d4 100%)!important;box-shadow:0 22px 42px rgba(27,80,166,.21)!important}
+.worker-page-title{font-size:clamp(1.55rem,3.6vw,2.15rem)!important;letter-spacing:-.04em}
+.worker-section-title{font-size:1.07rem!important;letter-spacing:-.025em}
+.worker-section-title:before{content:'✦';color:#0ea5e9;margin-right:.45rem;font-size:.88em}
+.worker-summary .card{overflow:hidden;position:relative;min-height:98px;background:#fff!important}
+.worker-summary .card:before{content:'';position:absolute;inset:0 auto 0 0;width:5px;background:linear-gradient(#38bdf8,#2563eb)}
+.worker-summary>.col:nth-child(2) .card:before,.worker-summary>[class*=col-]:nth-child(2) .card:before{background:linear-gradient(#34d399,#059669)}
+.worker-summary>.col:nth-child(3) .card:before,.worker-summary>[class*=col-]:nth-child(3) .card:before{background:linear-gradient(#fbbf24,#f97316)}
+.worker-summary>.col:nth-child(4) .card:before,.worker-summary>[class*=col-]:nth-child(4) .card:before{background:linear-gradient(#fb7185,#e11d48)}
+.worker-summary .card-body{padding:1.05rem!important}
+.worker-summary .fw-bold{letter-spacing:-.02em}
+.worker-card{overflow:hidden;position:relative;border-radius:22px!important}
+.worker-card:before{content:'';position:absolute;top:0;bottom:0;left:0;width:5px;background:linear-gradient(#22c3f2,#2563eb)}
+.worker-card.border-danger:before{background:linear-gradient(#fb7185,#ef4444)}
+.worker-card .card-body{padding:1.1rem 1.15rem!important}
+.worker-client-name{font-size:1.18rem!important;font-weight:900!important;letter-spacing:-.025em}
+.worker-location-row{gap:.5rem!important;margin-top:.75rem!important}
+.worker-sector-label{background:linear-gradient(105deg,#dbeafe,#e0f7ff)!important;color:#1246a4!important;border:1px solid #b7d8ff;border-radius:12px!important;font-size:1rem!important;padding:.62rem .8rem!important;box-shadow:inset 0 1px rgba(255,255,255,.7)}
+.worker-sector-label:before{content:'🏘️';margin-right:.5rem}
+.worker-city-label{background:#e4f8f2!important;color:#087d6b!important;border:1px solid #bcebdd;border-radius:11px!important;padding:.5rem .7rem!important}
+.worker-city-label:before{content:'📍';margin-right:.3rem}
+.worker-card .btn{min-height:44px}
+.worker-view-card,.worker-calendar-card,.route-today-card{background:linear-gradient(180deg,#fff,#f9fcff)!important}
+.worker-view-switch{background:#eaf2fc;padding:4px;border-radius:14px!important}
+.worker-view-switch .btn{border-radius:11px!important}
+.worker-legend{background:#fff;border-radius:14px;padding:.6rem .8rem}
+.worker-empty{background:linear-gradient(120deg,#f8fbff,#edf6ff)!important}
+.detail-hero{background:radial-gradient(circle at 90% 12%,rgba(255,255,255,.22),transparent 22%),linear-gradient(120deg,#122e73,#2563eb 57%,#0891b2)!important;border-radius:27px!important}
+.client-operational-card{border-radius:24px!important}
+.client-op-actions .btn{min-height:46px!important}
+.app-content input[type=checkbox],.app-content input[type=radio]{accent-color:#2563eb}
+@media(min-width:768px){.app-content .card-tap:hover{transform:translateY(-3px)}}
+@media(max-width:767.98px){.app-content{padding-bottom:calc(16px + env(safe-area-inset-bottom))}.worker-page-header{padding:1.35rem!important;border-radius:23px!important}.worker-summary{gap:.3rem 0}.worker-summary .card{min-height:88px}.worker-card .card-body{padding:1rem!important}.worker-client-name{font-size:1.12rem!important}.worker-location-row{align-items:stretch!important}.worker-sector-label{width:100%;font-size:.96rem!important}.worker-city-label{align-self:flex-start}.app-content .btn{min-height:42px}.mobile-orbit-dock{filter:drop-shadow(0 9px 22px rgba(15,48,100,.2))}}
+@media(prefers-reduced-motion:reduce){.app-content .card,.app-content .btn{transition:none!important}}
