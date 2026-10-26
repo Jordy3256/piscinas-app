@@ -1,11 +1,17 @@
+from finanzas.reconciliacion import reconciliar_cartera_nomina
+from finanzas.sincronizacion import sincronizar_cartera_vigente
 # dashboard/views.py
 import json
 import logging
+import os
+import urllib.request
+import urllib.error
+import re
 from collections import defaultdict
-from decimal import Decimal
+from decimal import Decimal, ROUND_CEILING
 from datetime import date, timedelta
 from calendar import monthrange, monthcalendar
-from urllib.parse import quote
+from urllib.parse import quote, urlencode, unquote
 
 from django.conf import settings
 from django.contrib import messages
@@ -15,25 +21,26 @@ from django.contrib.auth.models import User
 from django.contrib.staticfiles import finders
 from django.core.paginator import Paginator
 from django.db import transaction, models
-from django.db.models import Sum, Count
+from django.db.models import Sum, Count, Q
 from django.db.models import F
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.templatetags.static import static
 from django.utils import timezone
-from django.utils.dateparse import parse_date
+from django.utils.dateparse import parse_date, parse_time
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_http_methods, require_GET
 
 from pywebpush import webpush, WebPushException
 
 from trabajadores.models import Trabajador
-from inventario.models import Insumo, InventarioTrabajador, SolicitudReposicion
+from inventario.models import Insumo, InventarioTrabajador, InventarioContrato, MovimientoInventario, SolicitudReposicion
 from mantenimientos.models import (
     Mantenimiento,
     UsoInsumo,
     FotoMantenimiento,
     ChecklistMantenimiento,
+    NovedadMantenimiento,
 )
 from finanzas.models import (
     Ingreso,
@@ -45,12 +52,15 @@ from finanzas.models import (
     PagoTrabajador,
     LotePagoTrabajador,
     AnticipoTrabajador,
+    PromocionContrato,
 )
-from clientes.models import Cliente
-from contratos.models import Contrato
+from clientes.models import Cliente, Ciudad
+from contratos.models import Contrato, ReactivacionContrato, CotizacionMantenimiento, EquipamientoContrato, RenovacionContrato
+from ordenes_trabajo.models import OrdenTrabajo
 from contratos.programacion import (
     DIAS_SEMANA,
     cancelar_programacion_futura,
+    mantener_programacion_automatica,
     generar_mantenimientos_contrato,
     normalizar_dias,
     validar_programacion,
@@ -62,9 +72,10 @@ except Exception:
     PushSubscription = None
 
 try:
-    from .models import Notificacion
+    from .models import Notificacion, MetaEmpresa
 except Exception:
     Notificacion = None
+    MetaEmpresa = None
 
 try:
     from .models import ActividadSistema
@@ -74,10 +85,21 @@ except Exception:
 logger = logging.getLogger(__name__)
 
 try:
-    from asistente_tecnico.models import CasoAsistenteTecnico
+    from asistente_tecnico.models import CasoAsistenteTecnico, PerfilSuscriptor
 except Exception:
     CasoAsistenteTecnico = None
+    PerfilSuscriptor = None
 
+
+from .salud_erp import diagnosticar_salud_erp
+from .inteligencia_rentabilidad import analizar_rentabilidad
+from .inteligencia_crecimiento import analizar_crecimiento_retencion
+from .aquo_ejecutivo import responder_aquo_ejecutivo
+from .centro_decisiones import construir_centro_decisiones
+from .inteligencia_cartera import analizar_cartera_inteligente
+from .inteligencia_operativa import analizar_operacion
+from .inteligencia_inventario import analizar_inventario_inteligente
+from backend.pdf_branding import draw_jvaqua_pdf_page
 
 # -------------------
 # Helpers de roles
@@ -148,10 +170,13 @@ def _sumar_un_mes(fecha_base):
     return date(nuevo_anio, nuevo_mes, nuevo_dia)
 
 
-def _siguiente_fecha_recurrente(fecha_actual, frecuencia):
+def _siguiente_fecha_recurrente(fecha_actual, frecuencia, dia_mes=None):
     if frecuencia == "semanal":
         return fecha_actual + timedelta(days=7)
-    return _sumar_un_mes(fecha_actual)
+    siguiente = _sumar_un_mes(fecha_actual)
+    dia_objetivo = int(dia_mes or fecha_actual.day)
+    ultimo_dia = monthrange(siguiente.year, siguiente.month)[1]
+    return date(siguiente.year, siguiente.month, min(dia_objetivo, ultimo_dia))
 
 
 def _inicio_fin_mes(anio, mes):
@@ -275,6 +300,8 @@ def notificar_movimientos_recurrentes_proximos():
 
     movimientos = MovimientoRecurrente.objects.filter(
         activo=True,
+        tipo="egreso",
+        es_gasto_manual_recurrente=True,
         proxima_fecha=manana
     ).order_by("proxima_fecha", "id")
 
@@ -285,18 +312,11 @@ def notificar_movimientos_recurrentes_proximos():
     url = "/dashboard/finanzas/recurrentes/"
 
     for mov in movimientos:
-        if mov.tipo == "ingreso":
-            titulo = "💰 Cobro recurrente próximo"
-            mensaje = (
-                f"Mañana debes cobrar '{mov.concepto}' por ${mov.monto} "
-                f"(fecha {mov.proxima_fecha})."
-            )
-        else:
-            titulo = "💸 Pago recurrente próximo"
-            mensaje = (
-                f"Mañana debes pagar '{mov.concepto}' por ${mov.monto} "
-                f"(fecha {mov.proxima_fecha})."
-            )
+        titulo = "💸 Gasto recurrente próximo"
+        mensaje = (
+            f"Mañana vence el gasto manual recurrente '{mov.concepto}' por ${mov.monto} "
+            f"(fecha {mov.proxima_fecha})."
+        )
 
         for admin_user in admins:
             if _notificacion_recurrente_ya_existe_hoy(admin_user, titulo, mensaje, url):
@@ -312,45 +332,13 @@ def notificar_movimientos_recurrentes_proximos():
 
 
 def notificar_trabajadores_mantenimientos_hoy():
+    """Avisos individuales desactivados a favor de resúmenes programados.
+
+    Se mantiene la función para compatibilidad con vistas existentes.
     """
-    Envía notificación al trabajador el mismo día del mantenimiento.
-    Evita duplicados por día/mantenimiento.
-    """
-    hoy = timezone.localdate()
-
-    mantenimientos_hoy = (
-        Mantenimiento.objects.filter(fecha=hoy)
-        .select_related("cliente", "contrato")
-        .prefetch_related("trabajadores", "trabajadores__user")
-        .order_by("id")
-    )
-
-    for mantenimiento in mantenimientos_hoy:
-        try:
-            trabajadores = mantenimiento.trabajadores.all()
-        except Exception:
-            trabajadores = []
-
-        for trabajador in trabajadores:
-            user = getattr(trabajador, "user", None)
-            if not user or not getattr(user, "is_active", False):
-                continue
-
-            if _notificacion_mantenimiento_hoy_ya_existe(user, mantenimiento):
-                continue
-
-            _crear_notificacion(
-                user=user,
-                titulo="📅 Mantenimiento para hoy",
-                mensaje=f"Hoy te toca el mantenimiento de {mantenimiento.cliente}.",
-                url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
-                enviar_push=True,
-            )
+    return None
 
 
-# -------------------
-# Helpers calendario visual
-# -------------------
 def _build_calendario_mantenimientos(anio, mes, trabajador=None):
     primer_dia, ultimo_dia = _inicio_fin_mes(anio, mes)
 
@@ -384,6 +372,7 @@ def _build_calendario_mantenimientos(anio, mes, trabajador=None):
                     "realizados": 0,
                     "pendientes": 0,
                     "atrasados": 0,
+                    "cancelados": 0,
                     "sin_asignar": 0,
                 })
                 continue
@@ -391,16 +380,26 @@ def _build_calendario_mantenimientos(anio, mes, trabajador=None):
             fecha_actual = date(anio, mes, dia)
             items = por_fecha.get(fecha_actual, [])
             realizados = len([m for m in items if getattr(m, "estado", "") == "realizado"])
-            pendientes = len([m for m in items if getattr(m, "estado", "") == "pendiente"])
+            cancelados = len([m for m in items if getattr(m, "estado", "") == "cancelado"])
             atrasados = len([
                 m for m in items
                 if getattr(m, "estado", "") == "pendiente" and fecha_actual < timezone.localdate()
+            ])
+            # En fechas vencidas, un pendiente ya es un atraso. No se duplica visualmente.
+            pendientes = len([
+                m for m in items
+                if getattr(m, "estado", "") == "pendiente" and fecha_actual >= timezone.localdate()
             ])
 
             sin_asignar = 0
             for m in items:
                 try:
-                    if not m.trabajadores.exists():
+                    cache = getattr(m, "_prefetched_objects_cache", {})
+                    asignados = cache.get("trabajadores")
+                    if asignados is not None:
+                        if len(asignados) == 0:
+                            sin_asignar += 1
+                    elif not m.trabajadores.exists():
                         sin_asignar += 1
                 except Exception:
                     pass
@@ -414,6 +413,7 @@ def _build_calendario_mantenimientos(anio, mes, trabajador=None):
                 "realizados": realizados,
                 "pendientes": pendientes,
                 "atrasados": atrasados,
+                "cancelados": cancelados,
                 "sin_asignar": sin_asignar,
             })
         semanas.append(fila)
@@ -421,6 +421,7 @@ def _build_calendario_mantenimientos(anio, mes, trabajador=None):
     total_mes = len(mantenimientos)
     total_realizados = len([m for m in mantenimientos if getattr(m, "estado", "") == "realizado"])
     total_pendientes = len([m for m in mantenimientos if getattr(m, "estado", "") == "pendiente"])
+    total_cancelados = len([m for m in mantenimientos if getattr(m, "estado", "") == "cancelado"])
 
     return {
         "anio": anio,
@@ -429,6 +430,7 @@ def _build_calendario_mantenimientos(anio, mes, trabajador=None):
         "total_mes": total_mes,
         "total_realizados": total_realizados,
         "total_pendientes": total_pendientes,
+        "total_cancelados": total_cancelados,
     }
 
 
@@ -497,6 +499,7 @@ def _build_agenda_semanal_mantenimientos(fecha_base, items):
     total_pendientes = 0
     total_realizados = 0
     total_atrasados = 0
+    total_cancelados = 0
     total_sin_asignar = 0
 
     for i in range(7):
@@ -521,6 +524,7 @@ def _build_agenda_semanal_mantenimientos(fecha_base, items):
         pendientes = 0
         realizados = 0
         atrasados = 0
+        cancelados = 0
         sin_asignar = 0
 
         for m in items_dia:
@@ -533,6 +537,8 @@ def _build_agenda_semanal_mantenimientos(fecha_base, items):
                 pendientes += 1
             elif estado_m == "realizado":
                 realizados += 1
+            elif estado_m == "cancelado":
+                cancelados += 1
 
             if estado_m == "pendiente" and fecha_actual < timezone.localdate():
                 atrasados += 1
@@ -547,6 +553,7 @@ def _build_agenda_semanal_mantenimientos(fecha_base, items):
         total_pendientes += pendientes
         total_realizados += realizados
         total_atrasados += atrasados
+        total_cancelados += cancelados
         total_sin_asignar += sin_asignar
 
         dias.append({
@@ -558,6 +565,7 @@ def _build_agenda_semanal_mantenimientos(fecha_base, items):
             "pendientes": pendientes,
             "realizados": realizados,
             "atrasados": atrasados,
+            "cancelados": cancelados,
             "sin_asignar": sin_asignar,
             "bloques": [
                 {"key": "manana", "label": "🌅 Mañana", "items": bloques["manana"]},
@@ -575,6 +583,7 @@ def _build_agenda_semanal_mantenimientos(fecha_base, items):
         "total_pendientes": total_pendientes,
         "total_realizados": total_realizados,
         "total_atrasados": total_atrasados,
+        "total_cancelados": total_cancelados,
         "total_sin_asignar": total_sin_asignar,
     }
 
@@ -948,10 +957,12 @@ def procesar_movimientos_recurrentes():
 
     movimientos = MovimientoRecurrente.objects.filter(
         activo=True,
+        tipo="egreso",
+        es_gasto_manual_recurrente=True,
         proxima_fecha__lte=hoy
     ).order_by("proxima_fecha", "id")
 
-    total_ingresos = 0
+    total_ingresos = 0  # Compatibilidad con la respuesta existente; ya no se generan ingresos recurrentes.
     total_egresos = 0
     movimientos_procesados = 0
 
@@ -961,42 +972,37 @@ def procesar_movimientos_recurrentes():
         while mov.activo and mov.proxima_fecha <= hoy:
             fecha_mov = mov.proxima_fecha
 
-            if mov.tipo == "ingreso":
-                Ingreso.objects.create(
-                    concepto=mov.concepto,
-                    total=mov.monto,
-                    fecha=fecha_mov
-                )
+            # Un gasto recurrente genera una OBLIGACIÓN pendiente, no un pago real.
+            # El pago se registra después manualmente desde Finanzas.
+            egreso, creado = Egreso.objects.get_or_create(
+                recurrente=mov,
+                fecha_recurrente=fecha_mov,
+                defaults={
+                    "concepto": mov.concepto,
+                    "categoria": "administracion",
+                    "cantidad": 1,
+                    "costo_unitario": mov.monto,
+                    "total": mov.monto,
+                    "monto_pagado": Decimal("0.00"),
+                    "estado": Egreso.ESTADO_PENDIENTE,
+                    "fecha": fecha_mov,
+                    "fecha_vencimiento": fecha_mov,
+                    "observaciones": "Obligación generada automáticamente desde Gastos recurrentes. Registrar el pago real manualmente cuando se efectúe.",
+                },
+            )
 
-                total_ingresos += 1
-                generado_este_movimiento += 1
-
-                _notificar_admins(
-                    titulo="💰 Ingreso recurrente generado",
-                    mensaje=f"Se generó el ingreso recurrente '{mov.concepto}' por ${mov.monto} (fecha {fecha_mov}).",
-                    url="/dashboard/finanzas/flujo/",
-                    enviar_push=True,
-                )
-
-            elif mov.tipo == "egreso":
-                _crear_egreso_manual(
-                    concepto=mov.concepto,
-                    categoria="Recurrente",
-                    total=mov.monto,
-                    fecha=fecha_mov,
-                )
-
+            if creado:
                 total_egresos += 1
                 generado_este_movimiento += 1
 
                 _notificar_admins(
-                    titulo="💸 Pago recurrente generado",
-                    mensaje=f"Se registró el egreso recurrente '{mov.concepto}' por ${mov.monto} (fecha {fecha_mov}).",
+                    titulo="💸 Gasto recurrente pendiente",
+                    mensaje=f"Se generó la obligación '{mov.concepto}' por ${mov.monto} (vence {fecha_mov}). Aún no consta como pagada.",
                     url="/dashboard/finanzas/flujo/",
                     enviar_push=True,
                 )
 
-            mov.proxima_fecha = _siguiente_fecha_recurrente(fecha_mov, mov.frecuencia)
+            mov.proxima_fecha = _siguiente_fecha_recurrente(fecha_mov, mov.frecuencia, mov.dia_mes)
             mov.save(update_fields=["proxima_fecha"])
 
         if generado_este_movimiento > 0:
@@ -1037,6 +1043,14 @@ def login_view(request):
         if user is not None:
             login(request, user)
             messages.success(request, "Bienvenido.")
+            if not next_url:
+                try:
+                    perfil_digital = user.perfil_suscriptor
+                    if perfil_digital.tiene_acceso:
+                        return redirect("/dashboard/asistente/digital/")
+                    return redirect("/dashboard/asistente/digital/suscripcion/")
+                except Exception:
+                    pass
             return redirect(safe_redirect_target(next_url))
 
         ctx["error"] = "Usuario o contraseña incorrectos"
@@ -1080,44 +1094,51 @@ def sw_js_view(request):
 # Manifest servido por Django
 # -------------------
 def manifest_json_view(request):
-    data = {
-        "name": "Piscinas App",
-        "short_name": "Piscinas",
-        "description": "Gestión de mantenimientos, operativo y finanzas.",
-        "id": "/dashboard/",
-        "start_url": "/dashboard/inicio/",
-        "scope": "/dashboard/",
-        "display": "standalone",
-        "background_color": "#ffffff",
-        "theme_color": "#0d6efd",
-        "orientation": "portrait",
-        "icons": [
-            {
-                "src": static("dashboard/icons/icon-192.png"),
-                "sizes": "192x192",
-                "type": "image/png",
-                "purpose": "any",
-            },
-            {
-                "src": static("dashboard/icons/icon-192-maskable.png"),
-                "sizes": "192x192",
-                "type": "image/png",
-                "purpose": "maskable",
-            },
-            {
-                "src": static("dashboard/icons/icon-512.png"),
-                "sizes": "512x512",
-                "type": "image/png",
-                "purpose": "any",
-            },
-            {
-                "src": static("dashboard/icons/icon-512-maskable.png"),
-                "sizes": "512x512",
-                "type": "image/png",
-                "purpose": "maskable",
-            },
-        ],
-    }
+    # La PWA comparte el scope /dashboard/, pero la identidad instalada cambia
+    # según el perfil. Administración y trabajadores conservan JVAQUA; los
+    # clientes/suscriptores (y la pantalla pública de acceso) usan AQUO 360.
+    es_equipo_jvaqua = request.user.is_authenticated and (
+        es_admin(request.user) or es_trabajador(request.user)
+    )
+
+    if es_equipo_jvaqua:
+        data = {
+            "name": "JVAQUA",
+            "short_name": "JVAQUA",
+            "description": "Gestión de mantenimientos, operativo y finanzas.",
+            "id": "/dashboard/",
+            "start_url": "/dashboard/inicio/",
+            "scope": "/dashboard/",
+            "display": "standalone",
+            "background_color": "#ffffff",
+            "theme_color": "#0d6efd",
+            "orientation": "portrait",
+            "icons": [
+                {"src": static("dashboard/icons/icon-192.png"), "sizes": "192x192", "type": "image/png", "purpose": "any"},
+                {"src": static("dashboard/icons/icon-192-maskable.png"), "sizes": "192x192", "type": "image/png", "purpose": "maskable"},
+                {"src": static("dashboard/icons/icon-512.png"), "sizes": "512x512", "type": "image/png", "purpose": "any"},
+                {"src": static("dashboard/icons/icon-512-maskable.png"), "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+            ],
+        }
+    else:
+        data = {
+            "name": "AQUO 360",
+            "short_name": "AQUO 360",
+            "description": "Tu asistente inteligente para el cuidado de piscinas, by JVAQUA.",
+            "id": "/dashboard/",
+            "start_url": "/dashboard/inicio/",
+            "scope": "/dashboard/",
+            "display": "standalone",
+            "background_color": "#ffffff",
+            "theme_color": "#063f83",
+            "orientation": "portrait",
+            "icons": [
+                {"src": static("dashboard/icons/aquo-192.png"), "sizes": "192x192", "type": "image/png", "purpose": "any"},
+                {"src": static("dashboard/icons/aquo-192-maskable.png"), "sizes": "192x192", "type": "image/png", "purpose": "maskable"},
+                {"src": static("dashboard/icons/aquo-512.png"), "sizes": "512x512", "type": "image/png", "purpose": "any"},
+                {"src": static("dashboard/icons/aquo-512-maskable.png"), "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+            ],
+        }
 
     resp = JsonResponse(data)
     resp["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
@@ -1276,6 +1297,53 @@ def _crear_notificacion(user, titulo, mensaje, url="/dashboard/notificaciones/",
     return notif
 
 
+def _actualizar_alertas_inventario_contratos(user):
+    """Genera como máximo una alerta diaria por inventario en sitio próximo al mínimo."""
+    if Notificacion is None or not getattr(user, "is_authenticated", False):
+        return 0
+    try:
+        qs = InventarioContrato.objects.filter(
+            contrato__activo=True,
+            contrato__quimicos_proveedor="jvaqua",
+            contrato__quimicos_almacenamiento="contrato",
+        ).select_related("contrato__cliente", "contrato__tecnico_designado__user", "contrato__responsable_reposicion__user", "insumo")
+        if es_trabajador(user):
+            trabajador = getattr(user, "trabajador", None)
+            if not trabajador:
+                return 0
+            qs = qs.filter(Q(contrato__responsable_reposicion=trabajador) | Q(contrato__responsable_reposicion__isnull=True, contrato__tecnico_designado=trabajador))
+        elif not es_admin(user):
+            return 0
+
+        hoy = timezone.localdate()
+        creadas = 0
+        for inv in qs:
+            dias = inv.dias_hasta_minimo
+            estimado = inv.stock_estimado
+            requiere = estimado <= Decimal(inv.stock_minimo or 0) or (dias is not None and dias <= 3)
+            if not requiere:
+                continue
+            referencia = min(hoy.toordinal() * 1000 + (inv.pk % 1000), 2147483647)
+            titulo = f"⚠ Reposición · {inv.contrato.cliente}"
+            if estimado <= Decimal(inv.stock_minimo or 0):
+                mensaje = f"{inv.insumo.nombre} está en mínimo: {estimado:.3f} {inv.insumo.unidad_corta}."
+            else:
+                mensaje = f"{inv.insumo.nombre} llegará al mínimo en aproximadamente {dias} días."
+            url_alerta = (
+                f"/dashboard/mi-inventario/contrato/{inv.contrato_id}/"
+                if es_trabajador(user) else f"/dashboard/contratos/{inv.contrato_id}/#inventario-sitio"
+            )
+            _, creado = Notificacion.objects.get_or_create(
+                user=user, tipo="general", referencia_id=referencia,
+                defaults={"titulo": titulo, "mensaje": mensaje, "url": url_alerta, "leida": False},
+            )
+            creadas += int(creado)
+        return creadas
+    except Exception:
+        logger.exception("No se pudieron actualizar las alertas de inventario por contrato.")
+        return 0
+
+
 def _actualizar_seguimientos_asistente(user):
     """Genera recordatorios de seguimiento vencidos del Asistente Técnico."""
     try:
@@ -1332,6 +1400,33 @@ def _notificar_admins(titulo, mensaje, url="/dashboard/notificaciones/", enviar_
             url=url,
             enviar_push=enviar_push,
         )
+
+def _detalle_novedad_mantenimiento(mantenimiento, checklist):
+    partes = []
+    if checklist.bomba_estado == "novedad":
+        partes.append(f"Bomba: {checklist.bomba_novedad.strip() or 'Presenta novedad'}")
+    if checklist.filtro_estado == "novedad":
+        partes.append(f"Filtro: {checklist.filtro_novedad.strip() or 'Presenta novedad'}")
+    observacion = (mantenimiento.observaciones or "").strip()
+    if observacion:
+        partes.append(f"Observación general: {observacion}")
+    return " · ".join(partes)
+
+
+def _registrar_novedad_mantenimiento(mantenimiento, checklist, usuario):
+    detalle = _detalle_novedad_mantenimiento(mantenimiento, checklist)
+    if not detalle:
+        return None
+    novedad, creada = NovedadMantenimiento.objects.get_or_create(
+        mantenimiento=mantenimiento,
+        defaults={"detalle": detalle, "reportada_por": usuario, "estado": "pendiente"},
+    )
+    if not creada and novedad.estado != "resuelta":
+        novedad.detalle = detalle
+        if not novedad.reportada_por_id:
+            novedad.reportada_por = usuario
+        novedad.save(update_fields=["detalle", "reportada_por", "actualizada_en"])
+    return novedad
 
 
 # ==========================================================
@@ -1437,6 +1532,493 @@ def _clasificar_estado_trabajador(carga_hoy, atrasados, proximos):
 # ==========================================================
 # PUSH
 # ==========================================================
+
+def _metas_empresa_contexto():
+    hoy = timezone.localdate()
+    contratos_actuales = Contrato.objects.filter(activo=True, fecha_inicio__lte=hoy).count()
+    metas = (
+        list(MetaEmpresa.objects.filter(estado__in=["activa", "cumplida"]).order_by("orden", "fecha_fin"))
+        if MetaEmpresa is not None else []
+    )
+
+    resultado = []
+    objetivo_anterior = 0
+    for meta in metas:
+        actual = contratos_actuales if meta.metrica == "contratos_activos" else 0
+        faltan = max(meta.objetivo - actual, 0)
+        dias_restantes = max((meta.fecha_fin - hoy).days, 0)
+        semanas_restantes = max(dias_restantes / 7, 0)
+        meses_restantes = max(dias_restantes / 30.4375, 0)
+
+        # Para metas futuras, el esfuerzo incremental parte del objetivo anterior,
+        # no del valor actual de hoy. Así cada cierre anual parte de la meta anterior.
+        if hoy < meta.fecha_inicio:
+            base_calculo = objetivo_anterior
+            faltan_plan = max(meta.objetivo - base_calculo, 0)
+            duracion_dias = max((meta.fecha_fin - meta.fecha_inicio).days + 1, 1)
+            semanas_plan = duracion_dias / 7
+            meses_plan = duracion_dias / 30.4375
+        else:
+            faltan_plan = faltan
+            semanas_plan = semanas_restantes
+            meses_plan = meses_restantes
+
+        por_semana = (faltan_plan / semanas_plan) if semanas_plan > 0 else 0
+        por_mes = (faltan_plan / meses_plan) if meses_plan > 0 else 0
+        progreso = min((actual / meta.objetivo * 100) if meta.objetivo else 0, 100)
+
+        if actual >= meta.objetivo:
+            semaforo = "cumplida"
+        elif hoy > meta.fecha_fin:
+            semaforo = "atrasada"
+        else:
+            semaforo = "en_curso"
+
+        resultado.append({
+            "obj": meta,
+            "actual": actual,
+            "faltan": faltan,
+            "progreso": progreso,
+            "dias_restantes": dias_restantes,
+            "por_semana": por_semana,
+            "por_mes": por_mes,
+            "semaforo": semaforo,
+            "futura": hoy < meta.fecha_inicio,
+        })
+        objetivo_anterior = meta.objetivo
+
+    return {
+        "metas_empresa": resultado,
+        "contratos_activos_meta": contratos_actuales,
+    }
+
+
+
+def _serie_evolutiva_contratos_metas(metas, hoy=None):
+    """
+    Reconstruye la evolución mensual de contratos desde el primer contrato
+    registrado hasta la última meta empresarial.
+
+    Azul  = contratos activos reales.
+    Rojo  = contratos iniciados que se encontraban perdidos/inactivos en ese corte.
+    Verde = trayectoria necesaria desde hoy para alcanzar cada meta futura.
+
+    La reconstrucción histórica contempla fecha de inicio, bajas y reactivaciones.
+    """
+    hoy = hoy or timezone.localdate()
+
+    contratos = list(
+        Contrato.objects.all()
+        .only(
+            "id", "fecha_inicio", "fecha_inicio_original",
+            "fecha_baja", "activo",
+        )
+        .order_by("id")
+    )
+    if not contratos:
+        return {
+            "labels": [],
+            "activos": [],
+            "perdidos": [],
+            "proyectados": [],
+            "inicio": None,
+            "fin": None,
+        }
+
+    reactivaciones_por_contrato = defaultdict(list)
+    for r in (
+        ReactivacionContrato.objects
+        .filter(contrato_id__in=[c.pk for c in contratos])
+        .only(
+            "contrato_id", "fecha_reactivacion",
+            "fecha_baja_anterior", "fecha_inicio_anterior", "fecha_inicio",
+        )
+        .order_by("contrato_id", "fecha_reactivacion", "id")
+    ):
+        reactivaciones_por_contrato[r.contrato_id].append(r)
+
+    vidas = []
+    primera_fecha = None
+
+    for contrato in contratos:
+        reactivaciones = reactivaciones_por_contrato.get(contrato.pk, [])
+
+        candidatos_inicio = [
+            contrato.fecha_inicio_original,
+            contrato.fecha_inicio,
+        ]
+        for r in reactivaciones:
+            candidatos_inicio.extend([
+                r.fecha_inicio_anterior,
+                r.fecha_inicio,
+                r.fecha_reactivacion,
+            ])
+        candidatos_inicio = [f for f in candidatos_inicio if f]
+        if not candidatos_inicio:
+            continue
+
+        inicio_original = min(candidatos_inicio)
+        primera_fecha = (
+            inicio_original
+            if primera_fecha is None
+            else min(primera_fecha, inicio_original)
+        )
+
+        intervalos = []
+        inicio_tramo = inicio_original
+
+        for r in reactivaciones:
+            baja = r.fecha_baja_anterior
+            if baja and baja > inicio_tramo:
+                intervalos.append((inicio_tramo, baja))
+            # La reactivación abre un nuevo tramo activo.
+            if r.fecha_reactivacion:
+                inicio_tramo = r.fecha_reactivacion
+            elif r.fecha_inicio:
+                inicio_tramo = r.fecha_inicio
+
+        fin_actual = None
+        if not contrato.activo:
+            fin_actual = contrato.fecha_baja
+
+        # Evitar tramos imposibles por registros históricos incompletos.
+        if fin_actual and fin_actual <= inicio_tramo:
+            fin_actual = None
+        intervalos.append((inicio_tramo, fin_actual))
+
+        vidas.append({
+            "inicio": inicio_original,
+            "intervalos": intervalos,
+        })
+
+    if not vidas or primera_fecha is None:
+        return {
+            "labels": [],
+            "activos": [],
+            "perdidos": [],
+            "proyectados": [],
+            "inicio": None,
+            "fin": None,
+        }
+
+    metas_ordenadas = sorted(
+        [m for m in metas if m.metrica == "contratos_activos"],
+        key=lambda m: (m.fecha_fin, m.pk),
+    )
+    ultima_fecha = max(
+        [m.fecha_fin for m in metas_ordenadas] or [hoy]
+    )
+    if ultima_fecha < hoy:
+        ultima_fecha = hoy
+
+    # Generar un punto por mes. El mes actual usa "hoy" para que el valor azul
+    # coincida exactamente con el Dashboard, no con una fecha futura del mes.
+    puntos = []
+    cursor = date(primera_fecha.year, primera_fecha.month, 1)
+    ultimo_mes = date(ultima_fecha.year, ultima_fecha.month, 1)
+    while cursor <= ultimo_mes:
+        fin_mes = date(cursor.year, cursor.month, monthrange(cursor.year, cursor.month)[1])
+        if cursor.year == hoy.year and cursor.month == hoy.month:
+            corte = hoy
+        else:
+            corte = min(fin_mes, ultima_fecha)
+        puntos.append((cursor, corte))
+        if cursor.month == 12:
+            cursor = date(cursor.year + 1, 1, 1)
+        else:
+            cursor = date(cursor.year, cursor.month + 1, 1)
+
+    def esta_activo_en(vida, corte):
+        for ini, fin in vida["intervalos"]:
+            if ini <= corte and (fin is None or corte < fin):
+                return True
+        return False
+
+    activos = []
+    perdidos = []
+    for _, corte in puntos:
+        if corte > hoy:
+            activos.append(None)
+            perdidos.append(None)
+            continue
+
+        if corte == hoy:
+            # Corte actual = fuente de verdad del sistema.
+            activos.append(
+                Contrato.objects.filter(activo=True, fecha_inicio__lte=hoy).count()
+            )
+            perdidos.append(
+                Contrato.objects.filter(activo=False, fecha_inicio__lte=hoy).count()
+            )
+            continue
+
+        iniciados = [v for v in vidas if v["inicio"] <= corte]
+        activos_corte = sum(1 for v in iniciados if esta_activo_en(v, corte))
+        perdidos_corte = max(len(iniciados) - activos_corte, 0)
+        activos.append(activos_corte)
+        perdidos.append(perdidos_corte)
+
+    # El dato de HOY debe salir del estado real del contrato en la base,
+    # no de una reconstrucción histórica. Además, un contrato futuro marcado
+    # activo todavía no cuenta como contrato activo operativo.
+    actual_hoy = Contrato.objects.filter(
+        activo=True,
+        fecha_inicio__lte=hoy,
+    ).count()
+
+    perdidos_hoy = Contrato.objects.filter(
+        activo=False,
+        fecha_inicio__lte=hoy,
+    ).count()
+
+    # Trayectoria verde: parte del dato real de hoy y llega de forma lineal
+    # a cada objetivo en su fecha exacta.
+    anclas = [(hoy, actual_hoy)]
+    for meta in metas_ordenadas:
+        if meta.fecha_fin > hoy:
+            anclas.append((meta.fecha_fin, meta.objetivo))
+
+    proyectados = []
+    for _, corte in puntos:
+        if corte < hoy or not anclas:
+            proyectados.append(None)
+            continue
+        if corte == hoy:
+            proyectados.append(actual_hoy)
+            continue
+
+        valor = None
+        for i in range(len(anclas) - 1):
+            fecha_a, valor_a = anclas[i]
+            fecha_b, valor_b = anclas[i + 1]
+            if fecha_a <= corte <= fecha_b:
+                total_dias = max((fecha_b - fecha_a).days, 1)
+                transcurridos = max((corte - fecha_a).days, 0)
+                proporcion = transcurridos / total_dias
+                valor = valor_a + ((valor_b - valor_a) * proporcion)
+                break
+        if valor is None and corte > anclas[-1][0]:
+            valor = anclas[-1][1]
+        proyectados.append(round(valor, 1) if valor is not None else None)
+
+    MESES_CORTOS = [
+        "", "Ene", "Feb", "Mar", "Abr", "May", "Jun",
+        "Jul", "Ago", "Sep", "Oct", "Nov", "Dic",
+    ]
+    labels = [
+        f"{MESES_CORTOS[mes.month]} {mes.year}"
+        for mes, _ in puntos
+    ]
+
+    return {
+        "labels": labels,
+        "activos": activos,
+        "perdidos": perdidos,
+        "proyectados": proyectados,
+        "inicio": primera_fecha,
+        "fin": ultima_fecha,
+        "actual": actual_hoy,
+        "perdidos_actual": perdidos_hoy,
+        "objetivo_final": anclas[-1][1] if anclas else actual_hoy,
+    }
+
+
+def _analitica_proyeccion_metas(metas, serie, hoy=None):
+    """Proyección ejecutiva basada en crecimiento contractual real y economía actual.
+
+    No escribe datos ni modifica contratos/cartera. Las cifras futuras son estimaciones:
+    contratos = tendencia neta histórica reciente; ingresos = ticket mensual vigente;
+    utilidad = margen observado de movimientos pagados recientes.
+    """
+    hoy = hoy or timezone.localdate()
+    activos_qs = Contrato.objects.filter(activo=True, fecha_inicio__lte=hoy)
+    contratos_actuales = activos_qs.count()
+    mrr = activos_qs.aggregate(total=Sum("precio_mensual"))["total"] or Decimal("0.00")
+    ticket = (Decimal(mrr) / Decimal(contratos_actuales)) if contratos_actuales else Decimal("0.00")
+
+    # Tendencia neta: diferencias mensuales de contratos activos de los últimos 6 cortes
+    # disponibles. Promedio ponderado, dando mayor importancia a los meses recientes.
+    activos_hist = [x for x in (serie.get("activos") or []) if x is not None]
+    cambios = [activos_hist[i] - activos_hist[i-1] for i in range(1, len(activos_hist))]
+    cambios = cambios[-6:]
+    if cambios:
+        pesos = list(range(1, len(cambios) + 1))
+        crecimiento_mensual = sum(c*p for c, p in zip(cambios, pesos)) / sum(pesos)
+        promedio_simple = sum(cambios) / len(cambios)
+    else:
+        crecimiento_mensual = 0.0
+        promedio_simple = 0.0
+
+    # Altas/bajas de los últimos 90 días explican la velocidad actual.
+    desde_90 = hoy - timedelta(days=90)
+    altas_90 = Contrato.objects.filter(fecha_inicio__range=(desde_90, hoy)).count()
+    bajas_90 = Contrato.objects.filter(fecha_baja__range=(desde_90, hoy)).count()
+    recuperados_90 = ReactivacionContrato.objects.filter(fecha_reactivacion__range=(desde_90, hoy)).count()
+    crecimiento_neto_90 = altas_90 + recuperados_90 - bajas_90
+    ritmo_90 = crecimiento_neto_90 / 3.0
+
+    # Combina historia mensual (60%) con pulso de 90 días (40%). Evita que un único
+    # mes extraordinario domine la proyección. Nunca fuerza crecimiento positivo.
+    ritmo_base = (crecimiento_mensual * 0.60) + (ritmo_90 * 0.40)
+    if abs(ritmo_base) < 0.05:
+        ritmo_base = 0.0
+    ritmo_conservador = ritmo_base * 0.65 if ritmo_base >= 0 else ritmo_base * 1.15
+    ritmo_acelerado = ritmo_base * 1.35 if ritmo_base >= 0 else ritmo_base * 0.65
+
+    # Economía observada: usamos montos efectivamente marcados como pagados, no IVA
+    # contractual futuro. Ventana de 6 meses para estabilizar meses atípicos.
+    inicio_6m = hoy - timedelta(days=183)
+    ingresos_pagados = Ingreso.objects.filter(
+        fecha__range=(inicio_6m, hoy),
+    ).exclude(estado=Ingreso.ESTADO_ANULADO).aggregate(total=Sum("monto_pagado"))["total"] or Decimal("0.00")
+    egresos_pagados = Egreso.objects.filter(
+        fecha__range=(inicio_6m, hoy), aprobado=True,
+    ).exclude(estado=Egreso.ESTADO_ANULADO).aggregate(total=Sum("monto_pagado"))["total"] or Decimal("0.00")
+    margen_hist = None
+    if ingresos_pagados > 0:
+        margen_hist = float((Decimal(ingresos_pagados) - Decimal(egresos_pagados)) / Decimal(ingresos_pagados))
+        margen_hist = max(-1.0, min(margen_hist, 0.95))
+
+    def add_months(d, n):
+        idx = d.year * 12 + (d.month - 1) + n
+        y, m0 = divmod(idx, 12)
+        return date(y, m0 + 1, 1)
+
+    # Horizonte dinámico: todas las proyecciones llegan hasta el cierre de la última
+    # meta empresarial vigente (actualmente diciembre de 2031). No se limita a 24 meses.
+    metas_contratos = [m for m in metas if m.metrica == "contratos_activos"]
+    fecha_horizonte = max([m.fecha_fin for m in metas_contratos] or [hoy])
+    meses = max((fecha_horizonte.year - hoy.year) * 12 + (fecha_horizonte.month - hoy.month), 0)
+    labels, actual_line, conservador, tendencia, acelerado = [], [], [], [], []
+    ingresos_tendencia, utilidad_tendencia = [], []
+    for n in range(0, meses + 1):
+        f = add_months(date(hoy.year, hoy.month, 1), n)
+        labels.append(f"{['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][f.month-1]} {f.year}")
+        actual_line.append(contratos_actuales if n == 0 else None)
+        c = max(0, round(contratos_actuales + ritmo_conservador * n, 1))
+        t = max(0, round(contratos_actuales + ritmo_base * n, 1))
+        a = max(0, round(contratos_actuales + ritmo_acelerado * n, 1))
+        conservador.append(c); tendencia.append(t); acelerado.append(a)
+        ingreso = Decimal(str(t)) * Decimal(ticket)
+        ingresos_tendencia.append(round(float(ingreso), 2))
+        utilidad_tendencia.append(round(float(ingreso) * margen_hist, 2) if margen_hist is not None else None)
+
+    meta_referencia = None
+    metas_futuras = sorted(
+        [m for m in metas if m.metrica == "contratos_activos" and m.fecha_fin >= hoy],
+        key=lambda m: (m.fecha_fin, m.pk),
+    )
+    if metas_futuras:
+        meta_referencia = metas_futuras[0]
+        meses_meta = max(((meta_referencia.fecha_fin.year-hoy.year)*12 + meta_referencia.fecha_fin.month-hoy.month), 1)
+        ritmo_necesario = max((meta_referencia.objetivo - contratos_actuales) / meses_meta, 0)
+        proyectado_meta = max(0, contratos_actuales + ritmo_base * meses_meta)
+        brecha_meta = proyectado_meta - meta_referencia.objetivo
+    else:
+        ritmo_necesario = 0.0; proyectado_meta = contratos_actuales; brecha_meta = 0.0
+
+    contratos_12 = tendencia[min(12, len(tendencia)-1)]
+    ingreso_12 = ingresos_tendencia[min(12, len(ingresos_tendencia)-1)]
+    utilidad_12 = utilidad_tendencia[min(12, len(utilidad_tendencia)-1)]
+
+    # Valor económico de cada meta: responde cuánto facturaría y cuánto podría
+    # quedar como utilidad al ALCANZAR cada objetivo, independientemente de si la
+    # tendencia actual llega a él. Usa el ticket vigente y el margen observado;
+    # es solo analítica y no crea/modifica movimientos financieros.
+    metas_financieras = []
+    for meta in sorted(metas_contratos, key=lambda m: (m.fecha_fin, m.pk)):
+        ingreso_meta = Decimal(meta.objetivo) * Decimal(ticket)
+        utilidad_meta = (Decimal(str(margen_hist)) * ingreso_meta) if margen_hist is not None else None
+        metas_financieras.append({
+            "anio": meta.fecha_fin.year,
+            "contratos": meta.objetivo,
+            "ingreso_mensual": round(float(ingreso_meta), 2),
+            "utilidad_mensual": round(float(utilidad_meta), 2) if utilidad_meta is not None else None,
+            "ingreso_anual": round(float(ingreso_meta * Decimal("12")), 2),
+            "utilidad_anual": round(float(utilidad_meta * Decimal("12")), 2) if utilidad_meta is not None else None,
+        })
+    meta_financiera_final = metas_financieras[-1] if metas_financieras else None
+
+    contratos_horizonte = tendencia[-1] if tendencia else contratos_actuales
+    ingreso_horizonte = ingresos_tendencia[-1] if ingresos_tendencia else float(mrr)
+    utilidad_horizonte = utilidad_tendencia[-1] if utilidad_tendencia else None
+
+    return {
+        "mrr_actual": float(mrr),
+        "ticket_promedio": float(ticket),
+        "crecimiento_mensual": round(ritmo_base, 2),
+        "crecimiento_simple": round(promedio_simple, 2),
+        "altas_90": altas_90,
+        "bajas_90": bajas_90,
+        "recuperados_90": recuperados_90,
+        "neto_90": crecimiento_neto_90,
+        "margen_hist": round(margen_hist * 100, 1) if margen_hist is not None else None,
+        "ingresos_pagados_6m": float(ingresos_pagados),
+        "egresos_pagados_6m": float(egresos_pagados),
+        "contratos_12": contratos_12,
+        "ingreso_12": ingreso_12,
+        "utilidad_12": utilidad_12,
+        "fecha_horizonte": fecha_horizonte,
+        "meses_horizonte": meses,
+        "contratos_horizonte": contratos_horizonte,
+        "ingreso_horizonte": ingreso_horizonte,
+        "utilidad_horizonte": utilidad_horizonte,
+        "meta_referencia": meta_referencia,
+        "ritmo_necesario": round(ritmo_necesario, 2),
+        "proyectado_meta": round(proyectado_meta, 1),
+        "brecha_meta": round(brecha_meta, 1),
+        "grafico_escenarios": json.dumps({
+            "labels": labels,
+            "conservador": conservador,
+            "tendencia": tendencia,
+            "acelerado": acelerado,
+        }),
+        "grafico_financiero": json.dumps({
+            "labels": labels,
+            "ingresos": ingresos_tendencia,
+            "utilidad": utilidad_tendencia,
+        }),
+        "metas_financieras": metas_financieras,
+        "meta_financiera_final": meta_financiera_final,
+        "grafico_metas_financieras": json.dumps({
+            "labels": [f"{x['contratos']} · {x['anio']}" for x in metas_financieras],
+            "ingresos": [x["ingreso_mensual"] for x in metas_financieras],
+            "utilidad": [x["utilidad_mensual"] for x in metas_financieras],
+        }),
+        "hay_base_financiera": margen_hist is not None,
+    }
+
+@login_required
+def metas_empresa_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    hoy = timezone.localdate()
+    contexto = _metas_empresa_contexto()
+    metas_modelo = (
+        list(MetaEmpresa.objects.filter(estado__in=["activa", "cumplida"]).order_by("orden", "fecha_fin"))
+        if MetaEmpresa is not None else []
+    )
+    serie = _serie_evolutiva_contratos_metas(metas_modelo, hoy=hoy)
+    proyeccion = _analitica_proyeccion_metas(metas_modelo, serie, hoy=hoy)
+
+    contexto.update(proyeccion)
+    contexto.update({
+        "hoy": hoy,
+        "grafico_evolucion_contratos": json.dumps({
+            "labels": serie["labels"],
+            "activos": serie["activos"],
+            "perdidos": serie["perdidos"],
+            "proyectados": serie["proyectados"],
+        }),
+        "evolucion_inicio": serie.get("inicio"),
+        "evolucion_fin": serie.get("fin"),
+        "evolucion_activos_actual": serie.get("actual", 0),
+        "evolucion_perdidos_actual": serie.get("perdidos_actual", 0),
+        "evolucion_objetivo_final": serie.get("objetivo_final", 0),
+    })
+    return render(request, "dashboard/metas_empresa.html", contexto)
+
 @login_required
 @require_http_methods(["GET"])
 def vapid_public_key_view(request):
@@ -1561,6 +2143,51 @@ def push_test_view(request):
             {"ok": True, "msg": "push_test_view OK. Usa POST para enviar push."}
         )
 
+    # Prueba dirigida al dispositivo actual: nunca enviar a todas las suscripciones
+    # antiguas cuando el navegador proporciona su endpoint.
+    endpoint = ""
+    try:
+        data = json.loads(request.body.decode("utf-8") or "{}")
+        if isinstance(data, dict):
+            endpoint = _clean_str(data.get("endpoint"))
+    except (ValueError, UnicodeDecodeError):
+        return JsonResponse({"ok": False, "error": "JSON inválido"}, status=400)
+
+    if endpoint:
+        if PushSubscription is None:
+            return JsonResponse({"ok": False, "error": "Suscripciones no disponibles"}, status=500)
+        sub = PushSubscription.objects.filter(user=request.user, endpoint=endpoint).first()
+        if sub is None:
+            return JsonResponse({"ok": False, "error": "Este dispositivo no está registrado. Activa las notificaciones primero."}, status=400)
+        private_key = (getattr(settings, "VAPID_PRIVATE_KEY", "") or "").strip()
+        if not private_key:
+            return JsonResponse({"ok": False, "error": "Falta configurar VAPID_PRIVATE_KEY"}, status=400)
+        payload = json.dumps({
+            "title": "AQUO 360 · Notificación de prueba",
+            "body": "Este dispositivo está recibiendo notificaciones correctamente.",
+            "url": "/dashboard/notificaciones/",
+            "tag": f"aquo-test-{request.user.pk}",
+        })
+        try:
+            webpush(
+                subscription_info={"endpoint": sub.endpoint, "keys": {"p256dh": sub.p256dh, "auth": sub.auth}},
+                data=payload,
+                vapid_private_key=private_key,
+                vapid_claims={"sub": (getattr(settings, "VAPID_SUBJECT", "") or "mailto:admin@piscinas-app.local").strip()},
+                content_encoding="aes128gcm",
+                ttl=60,
+            )
+            return JsonResponse({"ok": True, "sent": 1, "failed": 0, "device_only": True})
+        except WebPushException as ex:
+            status = _push_status_code_from_exception(ex)
+            if status in (404, 410):
+                sub.delete()
+            logger.warning("Prueba push fallida usuario=%s status=%s", request.user.pk, status)
+            return JsonResponse({"ok": False, "error": "El servicio push rechazó la suscripción. Vuelve a activarla.", "status": status}, status=400)
+        except Exception:
+            logger.exception("Error en prueba push para usuario=%s", request.user.pk)
+            return JsonResponse({"ok": False, "error": "No se pudo enviar la prueba. Revisa la configuración VAPID y los logs."}, status=400)
+
     result = _send_push_to_user(
         user=request.user,
         title="✅ Prueba Piscinas App",
@@ -1612,20 +2239,27 @@ def _centro_acciones_contexto():
         and hoy < f.fecha_cobro_desde <= proximos_tres_dias
     ]
 
-    facturas_por_emitir = [
-        f for f in facturas_base
-        if f.requiere_factura
-        and not f.factura_enviada
-        and f.fecha_facturacion_programada
-        and f.fecha_facturacion_programada <= hoy
-    ]
+    # Facturación tributaria es una tarea independiente de Cartera.
+    # No depende de que exista una cuenta por cobrar materializada.
+    try:
+        from finanzas.facturacion_externa import avisos_que_deben_alertar
+        facturas_por_emitir = avisos_que_deben_alertar(hoy=hoy)
+    except Exception:
+        facturas_por_emitir = []
 
+    # Inicio debe resumir exactamente la misma nómina del período que Finanzas > Nómina.
+    # Antes se tomaban todas las obligaciones históricas vencidas (<= hoy), lo que podía
+    # mostrar trabajadores de meses anteriores y, al mismo tiempo, omitir obligaciones
+    # del mes actual cuya fecha de pago todavía no había llegado.
     obligaciones = list(
         ObligacionTrabajador.objects
         .exclude(estado=ObligacionTrabajador.ESTADO_ANULADO)
         .select_related("trabajador", "trabajador__user", "contrato", "contrato__cliente")
         .prefetch_related("pagos")
-        .filter(fecha_pago_programada__lte=hoy)
+        .filter(
+            fecha_pago_programada__year=hoy.year,
+            fecha_pago_programada__month=hoy.month,
+        )
         .order_by("fecha_pago_programada", "trabajador_id", "id")
     )
     obligaciones_pendientes = [o for o in obligaciones if o.saldo > 0]
@@ -1687,6 +2321,23 @@ def _centro_acciones_contexto():
             ActividadSistema.objects.select_related("user").all()[:8]
         )
 
+    digital_registros_pendientes = 0
+    digital_ultimos_registros = []
+    digital_pagos_pendientes = 0
+    try:
+        from asistente_tecnico.models import PerfilSuscriptor, SolicitudSuscripcionDigital
+        digital_qs = (
+            PerfilSuscriptor.objects
+            .filter(estado="pendiente")
+            .select_related("user")
+            .order_by("-creado_en")
+        )
+        digital_registros_pendientes = digital_qs.count()
+        digital_ultimos_registros = list(digital_qs[:4])
+        digital_pagos_pendientes = SolicitudSuscripcionDigital.objects.filter(estado="pendiente").count()
+    except Exception:
+        pass
+
     total_acciones = (
         len(cobros_vencidos)
         + len(cobros_hoy)
@@ -1695,6 +2346,7 @@ def _centro_acciones_contexto():
         + len(mantenimientos_atrasados)
         + len(mantenimientos_sin_asignar)
         + len(contratos_programacion)
+        + digital_registros_pendientes
     )
 
     return {
@@ -1720,6 +2372,9 @@ def _centro_acciones_contexto():
         "contratos_programacion": contratos_programacion,
         "cantidad_contratos_programacion": len(contratos_programacion),
         "actividad_reciente": actividad_reciente,
+        "digital_registros_pendientes": digital_registros_pendientes,
+        "digital_ultimos_registros": digital_ultimos_registros,
+        "digital_pagos_pendientes": digital_pagos_pendientes,
         "total_acciones": total_acciones,
     }
 
@@ -1741,21 +2396,633 @@ def inicio_view(request):
         except Exception:
             logger.exception("No se pudieron actualizar las alertas financieras al abrir el Centro de Acciones.")
         ctx.update(_centro_acciones_contexto())
+        if MetaEmpresa is not None:
+            ctx.update(_metas_empresa_contexto())
         return render(request, "dashboard/home_admin.html", ctx)
 
     if es_trabajador(request.user):
         ctx["es_admin"] = False
         notificar_trabajadores_mantenimientos_hoy()
         _actualizar_seguimientos_asistente(request.user)
+        _actualizar_alertas_inventario_contratos(request.user)
+        ctx.update(_inicio_trabajador_contexto(request.user))
         return render(request, "dashboard/home_trabajador.html", ctx)
 
+    try:
+        if request.user.perfil_suscriptor.tiene_acceso:
+            return redirect("/dashboard/asistente/digital/")
+    except Exception:
+        pass
     return render(request, "dashboard/no_autorizado.html", status=403)
 
+
+
+def _nombre_usuario(user):
+    nombre = (user.get_full_name() or "").strip()
+    return nombre or user.username
+
+
+def _inicio_trabajador_contexto(user):
+    hoy = timezone.localdate()
+    trabajador = getattr(user, "trabajador", None)
+    if not trabajador:
+        # Un usuario del grupo Trabajadores sin ficha vinculada no debe romper
+        # el portal ni dejar indicadores en blanco. No se inventa una ficha: la
+        # vinculación debe corregirse desde administración para preservar el
+        # historial y las responsabilidades del trabajador correcto.
+        return {
+            "hoy": hoy,
+            "nombre_trabajador": _nombre_usuario(user),
+            "mantenimientos_pendientes_hoy": 0,
+            "mantenimientos_realizados_hoy": 0,
+            "mantenimientos_atrasados": 0,
+            "ordenes_hoy": 0,
+            "ordenes_pendientes": 0,
+            "seguimientos_pendientes": 0,
+            "proximo_pago": None,
+            "inventario_productos": 0,
+            "inventarios_sitio": [],
+            "inventarios_sitio_total": 0,
+            "inventarios_sitio_criticos": 0,
+            "acciones_trabajador": [{
+                "tipo": "warning",
+                "icono": "bi-person-exclamation",
+                "titulo": "Perfil laboral pendiente de vinculación",
+                "texto": "Tu usuario existe, pero todavía no está vinculado a tu ficha de trabajador. Administración debe vincularlo para mostrar asignaciones, inventarios y pagos.",
+            }],
+            "consejo_jvaqua": None,
+            "perfil_trabajador_vinculado": False,
+        }
+
+    mantenimientos = Mantenimiento.objects.filter(trabajadores=trabajador)
+    ordenes = OrdenTrabajo.objects.filter(trabajador=trabajador)
+    pendientes_hoy = mantenimientos.filter(fecha=hoy, estado="pendiente").count()
+    realizados_hoy = mantenimientos.filter(fecha=hoy, estado="realizado").count()
+    atrasados = mantenimientos.filter(fecha__lt=hoy, estado="pendiente").count()
+    ordenes_hoy = ordenes.filter(fecha=hoy).exclude(estado__in=["completada", "cancelada"]).count()
+    ordenes_pendientes = ordenes.exclude(estado__in=["completada", "cancelada"]).count()
+
+    seguimientos = 0
+    if CasoAsistenteTecnico is not None:
+        seguimientos = CasoAsistenteTecnico.objects.filter(
+            user=user,
+            resultado="pendiente",
+            seguimiento_programado_para__isnull=False,
+            seguimiento_programado_para__lte=timezone.now(),
+        ).count()
+
+    proximo_pago = (
+        ObligacionTrabajador.objects.filter(
+            trabajador=trabajador,
+            estado__in=[ObligacionTrabajador.ESTADO_PENDIENTE, ObligacionTrabajador.ESTADO_PARCIAL],
+            fecha_pago_programada__gte=hoy,
+        ).order_by("fecha_pago_programada", "id").first()
+    )
+    if proximo_pago is None:
+        proximo_pago = (
+            ObligacionTrabajador.objects.filter(
+                trabajador=trabajador,
+                estado__in=[ObligacionTrabajador.ESTADO_PENDIENTE, ObligacionTrabajador.ESTADO_PARCIAL],
+            ).order_by("fecha_pago_programada", "id").first()
+        )
+
+    inventario_productos = InventarioTrabajador.objects.filter(trabajador=trabajador, stock__gt=0).count()
+
+    # Responsabilidades de inventario en sitio son independientes de los
+    # mantenimientos. El responsable explícito manda; el técnico designado solo
+    # actúa como respaldo cuando no existe responsable específico.
+    contratos_reposicion = list(
+        Contrato.objects.filter(
+            activo=True,
+            quimicos_proveedor="jvaqua",
+            quimicos_almacenamiento="contrato",
+        )
+        .filter(
+            Q(responsable_reposicion=trabajador)
+            | Q(responsable_reposicion__isnull=True, tecnico_designado=trabajador)
+        )
+        .select_related("cliente")
+        .order_by("cliente__nombre", "id")
+    )
+    ids_reposicion = [c.pk for c in contratos_reposicion]
+    stocks_sitio = list(
+        InventarioContrato.objects.filter(contrato_id__in=ids_reposicion)
+        .select_related("contrato__cliente", "insumo")
+        .order_by("contrato__cliente__nombre", "insumo__nombre")
+    )
+    stocks_por_contrato = defaultdict(list)
+    for stock in stocks_sitio:
+        stocks_por_contrato[stock.contrato_id].append(stock)
+
+    inventarios_sitio = []
+    inventarios_sitio_criticos = 0
+    for contrato in contratos_reposicion:
+        stocks = stocks_por_contrato.get(contrato.pk, [])
+        criticos = sum(1 for stock in stocks if stock.estado_stock in {"critico", "agotado"})
+        inventarios_sitio_criticos += criticos
+        inventarios_sitio.append({"contrato": contrato, "stocks": stocks, "criticos": criticos})
+
+    consejo = None
+    try:
+        from asistente_tecnico.models import ConsejoJVAQUA
+        consejo = ConsejoJVAQUA.objects.filter(activo=True).order_by("orden", "id").first()
+    except Exception:
+        consejo = None
+
+    acciones = []
+    if atrasados:
+        acciones.append({"tipo":"danger","icono":"bi-exclamation-triangle-fill","titulo":f"{atrasados} mantenimiento(s) atrasado(s)","texto":"Revísalos antes de continuar con la agenda de hoy."})
+    if pendientes_hoy:
+        acciones.append({"tipo":"primary","icono":"bi-calendar-check-fill","titulo":f"{pendientes_hoy} mantenimiento(s) pendiente(s) hoy","texto":"Consulta tu ruta y completa los registros asignados."})
+    if ordenes_pendientes:
+        acciones.append({"tipo":"warning","icono":"bi-tools","titulo":f"{ordenes_pendientes} orden(es) de trabajo pendiente(s)","texto":"Las órdenes extraordinarias están dentro de tu agenda de mantenimientos."})
+    if seguimientos:
+        acciones.append({"tipo":"info","icono":"bi-cpu-fill","titulo":f"{seguimientos} seguimiento(s) del Asistente","texto":"Cuéntanos cómo terminó el tratamiento para mejorar las recomendaciones."})
+    if inventarios_sitio_criticos:
+        acciones.append({"tipo":"warning","icono":"bi-box-seam-fill","titulo":f"{inventarios_sitio_criticos} producto(s) de inventario en sitio requieren atención","texto":"Revisa los contratos donde eres responsable de reposición."})
+
+    return {
+        "hoy": hoy,
+        "nombre_trabajador": _nombre_usuario(user),
+        "mantenimientos_pendientes_hoy": pendientes_hoy,
+        "mantenimientos_realizados_hoy": realizados_hoy,
+        "mantenimientos_atrasados": atrasados,
+        "ordenes_hoy": ordenes_hoy,
+        "ordenes_pendientes": ordenes_pendientes,
+        "seguimientos_pendientes": seguimientos,
+        "proximo_pago": proximo_pago,
+        "inventario_productos": inventario_productos,
+        "inventarios_sitio": inventarios_sitio,
+        "inventarios_sitio_total": len(inventarios_sitio),
+        "inventarios_sitio_criticos": inventarios_sitio_criticos,
+        "acciones_trabajador": acciones[:4],
+        "consejo_jvaqua": consejo,
+        "perfil_trabajador_vinculado": True,
+    }
+
+
+@login_required
+def trabajadores_list_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    hoy = timezone.localdate()
+    inicio_mes = hoy.replace(day=1)
+    ciudad_id = (request.GET.get("ciudad") or "").strip()
+    trabajadores_qs = Trabajador.objects.select_related("user", "ciudad_principal").prefetch_related("ciudades_habilitadas").order_by("-activo", "user__first_name", "user__username")
+    if ciudad_id.isdigit():
+        trabajadores_qs = trabajadores_qs.filter(Q(ciudad_principal_id=ciudad_id) | Q(ciudades_habilitadas__id=ciudad_id)).distinct()
+    trabajadores = list(trabajadores_qs)
+    for t in trabajadores:
+        t.mantenimientos_mes = Mantenimiento.objects.filter(trabajadores=t, fecha__gte=inicio_mes, fecha__lte=hoy, estado="realizado").count()
+        t.ordenes_mes = OrdenTrabajo.objects.filter(trabajador=t, fecha__gte=inicio_mes, fecha__lte=hoy, estado="completada").count()
+        t.inventario_productos_count = InventarioTrabajador.objects.filter(trabajador=t, stock__gt=0).count()
+        t.contratos_activos_count = Contrato.objects.filter(tecnico_designado=t, activo=True).count()
+        t.pagos_mes = PagoTrabajador.objects.filter(obligacion__trabajador=t, activo=True, fecha__gte=inicio_mes, fecha__lte=hoy).aggregate(total=Sum("monto"))["total"] or Decimal("0.00")
+    return render(request, "dashboard/trabajadores_list.html", {"trabajadores": trabajadores, "hoy": hoy, "ciudades": Ciudad.objects.filter(activa=True), "ciudad_id": ciudad_id})
+
+
+def _rango_trabajador_request(request):
+    desde = parse_date(request.GET.get("desde") or "")
+    hasta = parse_date(request.GET.get("hasta") or "")
+    if desde and hasta and desde > hasta:
+        desde, hasta = hasta, desde
+    return desde, hasta
+
+
+def _trabajador_expediente_contexto(trabajador, desde=None, hasta=None):
+    m_qs = Mantenimiento.objects.filter(trabajadores=trabajador).select_related("cliente", "contrato").order_by("-fecha", "-id")
+    o_qs = OrdenTrabajo.objects.filter(trabajador=trabajador).select_related("contrato", "cliente", "tipo").order_by("-fecha", "-id")
+    ob_qs = ObligacionTrabajador.objects.filter(trabajador=trabajador).select_related("contrato", "contrato__cliente").order_by("-fecha_pago_programada", "-id")
+    pag_qs = PagoTrabajador.objects.filter(obligacion__trabajador=trabajador, activo=True).select_related("obligacion", "obligacion__contrato", "obligacion__contrato__cliente").order_by("-fecha", "-id")
+    usos_qs = UsoInsumo.objects.filter(trabajador=trabajador).select_related("insumo", "mantenimiento", "mantenimiento__cliente").order_by("-mantenimiento__fecha", "-id")
+    if desde:
+        m_qs=m_qs.filter(fecha__gte=desde); o_qs=o_qs.filter(fecha__gte=desde); ob_qs=ob_qs.filter(fecha_pago_programada__gte=desde); pag_qs=pag_qs.filter(fecha__gte=desde); usos_qs=usos_qs.filter(mantenimiento__fecha__gte=desde)
+    if hasta:
+        m_qs=m_qs.filter(fecha__lte=hasta); o_qs=o_qs.filter(fecha__lte=hasta); ob_qs=ob_qs.filter(fecha_pago_programada__lte=hasta); pag_qs=pag_qs.filter(fecha__lte=hasta); usos_qs=usos_qs.filter(mantenimiento__fecha__lte=hasta)
+
+    inventario = InventarioTrabajador.objects.filter(trabajador=trabajador).select_related("insumo").filter(stock__gt=0).order_by("insumo__nombre")
+    contratos_asignados = Contrato.objects.filter(tecnico_designado=trabajador).select_related("cliente").order_by("-activo", "cliente__nombre")
+    contratos_activos_total = contratos_asignados.filter(activo=True).count()
+    anticipos = AnticipoTrabajador.objects.filter(trabajador=trabajador).order_by("-fecha", "-id")
+    if desde:
+        anticipos = anticipos.filter(fecha__gte=desde)
+    if hasta:
+        anticipos = anticipos.filter(fecha__lte=hasta)
+    pagos_total = pag_qs.aggregate(total=Sum("monto"))["total"] or Decimal("0.00")
+    anticipos_total = anticipos.aggregate(total=Sum("monto"))["total"] or Decimal("0.00")
+    pago_ordenes_total = o_qs.filter(pago_trabajador__isnull=False).aggregate(total=Sum("pago_trabajador"))["total"] or Decimal("0.00")
+    obligaciones_total = ob_qs.exclude(estado=ObligacionTrabajador.ESTADO_ANULADO).aggregate(total=Sum("valor_acordado"))["total"] or Decimal("0.00")
+    casos=[]; total_lecciones=0; completadas=0
+    try:
+        from asistente_tecnico.models import ProgresoLeccion, LeccionAcademia
+        casos_qs = CasoAsistenteTecnico.objects.filter(trabajador=trabajador).order_by("-creado_en") if CasoAsistenteTecnico else []
+        if CasoAsistenteTecnico:
+            if desde:
+                casos_qs = casos_qs.filter(creado_en__date__gte=desde)
+            if hasta:
+                casos_qs = casos_qs.filter(creado_en__date__lte=hasta)
+            casos = list(casos_qs[:30])
+        total_lecciones = LeccionAcademia.objects.filter(publicada=True, categoria__activa=True).count()
+        completadas = ProgresoLeccion.objects.filter(user=trabajador.user, completada=True, leccion__publicada=True, leccion__categoria__activa=True).count()
+    except Exception:
+        pass
+    academia_pct = round((completadas / total_lecciones * 100), 0) if total_lecciones else 0
+    realizados = m_qs.filter(estado="realizado").count()
+    total_m = m_qs.count()
+    ordenes_comp = o_qs.filter(estado="completada").count()
+    return {
+        "trabajador": trabajador, "desde": desde, "hasta": hasta,
+        "mantenimientos": m_qs[:100], "ordenes": o_qs[:100], "obligaciones": ob_qs[:100], "pagos": pag_qs[:100],
+        "inventario": inventario, "usos": usos_qs[:100], "casos_asistente": casos,
+        "contratos_asignados": contratos_asignados, "anticipos": anticipos[:100],
+        "mantenimientos_total": total_m, "mantenimientos_realizados": realizados,
+        "cumplimiento_pct": round(realizados/total_m*100, 1) if total_m else 0,
+        "ordenes_total": o_qs.count(), "ordenes_completadas": ordenes_comp,
+        "pagos_total": pagos_total, "anticipos_total": anticipos_total, "pago_ordenes_total": pago_ordenes_total, "obligaciones_total": obligaciones_total,
+        "contratos_asignados_total": contratos_asignados.count(), "contratos_activos_total": contratos_activos_total, "inventario_productos": inventario.count(), "academia_completadas": completadas,
+        "academia_total": total_lecciones, "academia_pct": academia_pct,
+    }
+
+
+@login_required
+def trabajador_detalle_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    trabajador = get_object_or_404(Trabajador.objects.select_related("user", "ciudad_principal"), pk=pk)
+
+    if request.method == "POST":
+        accion = (request.POST.get("accion") or "").strip()
+        if accion == "guardar_foto_perfil":
+            foto = request.FILES.get("foto_perfil")
+            if not foto:
+                messages.error(request, "Selecciona una imagen para el perfil del trabajador.")
+            elif getattr(foto, "size", 0) > 5 * 1024 * 1024:
+                messages.error(request, "La fotografía no puede superar los 5 MB.")
+            elif getattr(foto, "content_type", "") and not foto.content_type.startswith("image/"):
+                messages.error(request, "El archivo seleccionado debe ser una imagen.")
+            else:
+                if trabajador.foto_perfil:
+                    try:
+                        trabajador.foto_perfil.delete(save=False)
+                    except Exception:
+                        pass
+                trabajador.foto_perfil = foto
+                trabajador.save(update_fields=["foto_perfil"])
+                messages.success(request, "Fotografía de perfil actualizada correctamente.")
+            return redirect("trabajador_detalle", pk=trabajador.pk)
+
+        if accion == "eliminar_foto_perfil":
+            if trabajador.foto_perfil:
+                try:
+                    trabajador.foto_perfil.delete(save=False)
+                except Exception:
+                    pass
+                trabajador.foto_perfil = None
+                trabajador.save(update_fields=["foto_perfil"])
+                messages.success(request, "Fotografía de perfil eliminada.")
+            return redirect("trabajador_detalle", pk=trabajador.pk)
+
+    desde, hasta = _rango_trabajador_request(request)
+    ctx = _trabajador_expediente_contexto(trabajador, desde, hasta)
+    return render(request, "dashboard/trabajador_detalle.html", ctx)
+
+
+@login_required
+def trabajador_expediente_pdf_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    trabajador = get_object_or_404(Trabajador.objects.select_related("user"), pk=pk)
+    desde, hasta = _rango_trabajador_request(request)
+    seccion = (request.GET.get("seccion") or "completo").strip().lower()
+    ctx = _trabajador_expediente_contexto(trabajador, desde, hasta)
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_CENTER
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+    from io import BytesIO
+    buffer=BytesIO()
+    nombre=_nombre_usuario(trabajador.user)
+    doc=SimpleDocTemplate(buffer,pagesize=A4,rightMargin=14*mm,leftMargin=14*mm,topMargin=24*mm,bottomMargin=14*mm)
+    styles=getSampleStyleSheet(); styles.add(ParagraphStyle(name='CenterSmall', parent=styles['Normal'], alignment=TA_CENTER, textColor=colors.HexColor('#60748c')))
+    story=[Paragraph('JVAQUA ERP', styles['Title']), Paragraph('Expediente del trabajador', styles['Heading2']), Paragraph(nombre, styles['Heading1'])]
+    periodo = f"Período: {desde.strftime('%d/%m/%Y') if desde else 'Inicio'} - {hasta.strftime('%d/%m/%Y') if hasta else 'Actualidad'}"
+    story += [Paragraph(periodo, styles['CenterSmall']), Spacer(1,8)]
+    info=[["Usuario", trabajador.user.username],["Teléfono", trabajador.telefono or "—"],["Correo", trabajador.user.email or "—"],["Fecha de ingreso", trabajador.fecha_ingreso.strftime('%d/%m/%Y') if trabajador.fecha_ingreso else "—"],["Estado", "Activo" if trabajador.activo else "Inactivo"],["Último acceso", timezone.localtime(trabajador.user.last_login).strftime('%d/%m/%Y %H:%M') if trabajador.user.last_login else "—"]]
+    t=Table(info,colWidths=[45*mm,120*mm]); t.setStyle(TableStyle([('BACKGROUND',(0,0),(0,-1),colors.HexColor('#eef5ff')),('FONTNAME',(0,0),(0,-1),'Helvetica-Bold'),('GRID',(0,0),(-1,-1),.25,colors.HexColor('#d8e2ef')),('PADDING',(0,0),(-1,-1),6)])); story += [t,Spacer(1,10)]
+    resumen=[["Mantenimientos",ctx['mantenimientos_total']],["Realizados",ctx['mantenimientos_realizados']],["Órdenes",ctx['ordenes_total']],["Órdenes completadas",ctx['ordenes_completadas']],["Pagos registrados",f"${ctx['pagos_total']:.2f}"],["Productos asignados",ctx['inventario_productos']],["Academia",f"{ctx['academia_pct']:.0f}%"]]
+    rt=Table(resumen,colWidths=[55*mm,35*mm]); rt.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,0),colors.HexColor('#0b5ed7')),('TEXTCOLOR',(0,0),(-1,0),colors.white),('GRID',(0,0),(-1,-1),.25,colors.HexColor('#d8e2ef')),('PADDING',(0,0),(-1,-1),5)])); story += [Paragraph('Resumen',styles['Heading2']),rt,Spacer(1,10)]
+    def section(title, headers, rows, widths=None):
+        nonlocal story
+        story += [Paragraph(title,styles['Heading2'])]
+        if not rows:
+            story += [Paragraph('Sin registros para el período seleccionado.',styles['Normal']),Spacer(1,8)]; return
+        data=[headers]+rows
+        tb=Table(data,repeatRows=1,colWidths=widths)
+        tb.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,0),colors.HexColor('#10233f')),('TEXTCOLOR',(0,0),(-1,0),colors.white),('FONTNAME',(0,0),(-1,0),'Helvetica-Bold'),('FONTSIZE',(0,0),(-1,-1),7.5),('GRID',(0,0),(-1,-1),.25,colors.HexColor('#d8e2ef')),('VALIGN',(0,0),(-1,-1),'TOP'),('PADDING',(0,0),(-1,-1),4)]))
+        story += [tb,Spacer(1,10)]
+    if seccion in ('completo','operativo'):
+        section('Mantenimientos',['Fecha','Cliente','Estado'],[[m.fecha.strftime('%d/%m/%Y'),str(m.cliente),m.get_estado_display()] for m in ctx['mantenimientos']], [28*mm,105*mm,30*mm])
+        section('Órdenes de trabajo',['Fecha','Trabajo','Estado'],[[o.fecha.strftime('%d/%m/%Y'),o.descripcion_corta,o.get_estado_display()] for o in ctx['ordenes']], [28*mm,105*mm,30*mm])
+    if seccion in ('completo','nomina','finanzas'):
+        section('Pagos',['Fecha','Origen / período','Monto'],[[p.fecha.strftime('%d/%m/%Y'),f"{p.obligacion.concepto_origen} · {p.obligacion.periodo_label}",f"${p.monto:.2f}"] for p in ctx['pagos']], [28*mm,105*mm,30*mm])
+    if seccion in ('completo','inventario'):
+        section('Inventario asignado',['Producto','Cantidad','Unidad'],[[x.insumo.nombre,f"{x.stock:.3f}",x.insumo.unidad_corta] for x in ctx['inventario']], [105*mm,30*mm,28*mm])
+        section('Consumos registrados',['Fecha','Producto','Cantidad'],[[u.mantenimiento.fecha.strftime('%d/%m/%Y'),u.insumo.nombre,f"{u.cantidad_mostrada} {u.unidad_mostrada}"] for u in ctx['usos']], [28*mm,105*mm,30*mm])
+    if seccion in ('completo','conocimiento'):
+        section('Asistente Técnico',['Fecha','Diagnóstico','Resultado'],[[timezone.localtime(c.creado_en).strftime('%d/%m/%Y'),c.diagnostico,c.get_resultado_display()] for c in ctx['casos_asistente']], [28*mm,105*mm,30*mm])
+    story += [Spacer(1,8),Paragraph(f"Generado por JVAQUA ERP · {timezone.localtime().strftime('%d/%m/%Y %H:%M')}",styles['CenterSmall'])]
+    doc.build(story, onFirstPage=draw_jvaqua_pdf_page, onLaterPages=draw_jvaqua_pdf_page)
+    response=HttpResponse(buffer.getvalue(),content_type='application/pdf')
+    response['Content-Disposition']=f'attachment; filename="expediente_trabajador_{trabajador.pk}.pdf"'
+    return response
 
 # -------------------
 # /dashboard/home/ = pantalla REAL por rol
 # -------------------
+
+
+def _extraer_coordenadas_maps(url):
+    """Extrae coordenadas de enlaces de Google Maps, incluyendo enlaces redirigidos."""
+    if not url:
+        return None
+    candidatos = [str(url).strip()]
+    # Los enlaces maps.app.goo.gl suelen ocultar las coordenadas tras una redirección.
+    if "goo.gl" in candidatos[0] or "maps.app" in candidatos[0]:
+        try:
+            req = urllib.request.Request(candidatos[0], method="HEAD", headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=6) as response:
+                candidatos.append(response.geturl())
+        except Exception:
+            try:
+                req = urllib.request.Request(candidatos[0], headers={"User-Agent": "Mozilla/5.0"})
+                with urllib.request.urlopen(req, timeout=6) as response:
+                    candidatos.append(response.geturl())
+            except Exception:
+                pass
+    patrones = [
+        re.compile(r"@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)"),
+        re.compile(r"[?&](?:q|query|destination)=(-?\d+(?:\.\d+)?)(?:%2C|,)(-?\d+(?:\.\d+)?)", re.I),
+        re.compile(r"!3d(-?\d+(?:\.\d+)?).*?!4d(-?\d+(?:\.\d+)?)", re.I),
+    ]
+    for candidato in candidatos:
+        texto = unquote(candidato)
+        for patron in patrones:
+            m = patron.search(texto)
+            if m:
+                lat, lng = float(m.group(1)), float(m.group(2))
+                if -90 <= lat <= 90 and -180 <= lng <= 180:
+                    return lat, lng
+    return None
+
+
+def _extraer_coordenadas_texto(*valores):
+    """Acepta coordenadas escritas manualmente como -2.12345,-79.98765."""
+    patron = re.compile(r"(?<!\d)(-?\d{1,2}(?:\.\d+)?)\s*[,;\s]\s*(-?\d{1,3}(?:\.\d+)?)(?!\d)")
+    for valor in valores:
+        texto = unquote(str(valor or "").strip())
+        if not texto:
+            continue
+        m = patron.search(texto)
+        if not m:
+            continue
+        try:
+            lat, lng = float(m.group(1)), float(m.group(2))
+        except (TypeError, ValueError):
+            continue
+        if -90 <= lat <= 90 and -180 <= lng <= 180:
+            return lat, lng
+    return None
+
+
+def _es_plus_code(texto):
+    texto = str(texto or "").strip().upper()
+    # Soporta códigos cortos como Q4C4+H7G Guayaquil y códigos globales.
+    return bool(re.search(r"\b[23456789CFGHJMPQRVWX]{4,8}\+[23456789CFGHJMPQRVWX]{2,3}\b", texto))
+
+
+def _geocodificar_cliente_google(cliente, api_key, forzar=False):
+    """Obtiene y persiste GPS con prioridad: manual > Maps > Plus Code/dirección."""
+    if not forzar and cliente.latitud is not None and cliente.longitud is not None:
+        return {"lat": float(cliente.latitud), "lng": float(cliente.longitud), "fuente": "guardada"}
+
+    # 1) Coordenadas pegadas directamente en dirección/sector/enlace.
+    coords = _extraer_coordenadas_texto(
+        cliente.enlace_google_maps, cliente.direccion, cliente.sector_urbanizacion
+    )
+    fuente = "coordenadas"
+
+    # 2) Coordenadas contenidas dentro de una URL de Google Maps.
+    if not coords:
+        coords = _extraer_coordenadas_maps(cliente.enlace_google_maps)
+        fuente = "enlace"
+
+    # 3) Google Geocoding. Los Plus Codes se consultan primero sin mezclar la
+    # dirección postal para evitar que Google intente interpretar el '+' como texto.
+    if not coords and api_key:
+        consultas = []
+        campos = [cliente.direccion, cliente.sector_urbanizacion, cliente.enlace_google_maps]
+        for campo in campos:
+            if _es_plus_code(campo):
+                plus = str(campo).strip()
+                if cliente.ciudad and cliente.ciudad.lower() not in plus.lower():
+                    plus = f"{plus}, {cliente.ciudad}"
+                consultas.append((plus, "plus_code"))
+        partes = [cliente.direccion, cliente.sector_urbanizacion, cliente.ciudad, "Ecuador"]
+        address = ", ".join(str(x).strip() for x in partes if str(x or "").strip())
+        if address:
+            consultas.append((address, "geocoding"))
+
+        vistos = set()
+        for consulta, tipo in consultas:
+            if consulta in vistos:
+                continue
+            vistos.add(consulta)
+            url = "https://maps.googleapis.com/maps/api/geocode/json?" + urlencode({
+                "address": consulta,
+                "key": api_key,
+                "region": "ec",
+            })
+            try:
+                req = urllib.request.Request(url, headers={"User-Agent": "JVAQUA-ERP/1.0"})
+                with urllib.request.urlopen(req, timeout=8) as response:
+                    data = json.loads(response.read().decode("utf-8") or "{}")
+                results = data.get("results") or []
+                if data.get("status") == "OK" and results:
+                    loc = results[0].get("geometry", {}).get("location", {})
+                    lat, lng = float(loc["lat"]), float(loc["lng"])
+                    coords = (lat, lng)
+                    fuente = tipo
+                    break
+                logger.info("Geocoding cliente %s (%s): %s", cliente.pk, tipo, data.get("status"))
+            except Exception as exc:
+                logger.warning("No se pudo geocodificar cliente %s (%s): %s", cliente.pk, tipo, exc)
+
+    if coords:
+        cliente.latitud, cliente.longitud = coords
+        cliente.save(update_fields=["latitud", "longitud"])
+        return {"lat": coords[0], "lng": coords[1], "fuente": fuente}
+    return None
+
+
+def _geocodificar_contrato_google(contrato, api_key, forzar=False):
+    """Resuelve GPS de la piscina/contrato sin alterar la ubicación personal del cliente."""
+    if not forzar and contrato.latitud is not None and contrato.longitud is not None:
+        return {"lat": float(contrato.latitud), "lng": float(contrato.longitud), "fuente": "guardada"}
+    class Ubicacion:
+        pass
+    u=Ubicacion()
+    for campo in ("latitud","longitud","enlace_google_maps","direccion","sector_urbanizacion","ciudad"):
+        valor=getattr(contrato,campo,None)
+        if valor in (None, ""):
+            valor=getattr(contrato.cliente,campo,None)
+        setattr(u,campo,valor)
+    u.pk=f"contrato-{contrato.pk}"
+    # Misma lógica, sin guardar en Cliente.
+    coords=_extraer_coordenadas_texto(u.enlace_google_maps,u.direccion,u.sector_urbanizacion) or _extraer_coordenadas_maps(u.enlace_google_maps)
+    fuente="coordenadas"
+    if not coords and api_key:
+        consultas=[]
+        for campo in (u.direccion,u.sector_urbanizacion,u.enlace_google_maps):
+            if _es_plus_code(campo):
+                plus=str(campo).strip()
+                if u.ciudad and u.ciudad.lower() not in plus.lower(): plus=f"{plus}, {u.ciudad}"
+                consultas.append((plus,"plus_code"))
+        address=", ".join(str(x).strip() for x in (u.direccion,u.sector_urbanizacion,u.ciudad,"Ecuador") if str(x or "").strip())
+        if address: consultas.append((address,"geocoding"))
+        for consulta,tipo in consultas:
+            url="https://maps.googleapis.com/maps/api/geocode/json?"+urlencode({"address":consulta,"key":api_key,"region":"ec"})
+            try:
+                req=urllib.request.Request(url,headers={"User-Agent":"JVAQUA-ERP/1.0"})
+                with urllib.request.urlopen(req,timeout=8) as response: data=json.loads(response.read().decode("utf-8") or "{}")
+                results=data.get("results") or []
+                if data.get("status")=="OK" and results:
+                    loc=results[0].get("geometry",{}).get("location",{}); coords=(float(loc["lat"]),float(loc["lng"])); fuente=tipo; break
+            except Exception as exc:
+                logger.warning("No se pudo geocodificar contrato %s: %s",contrato.pk,exc)
+    if coords:
+        contrato.latitud,contrato.longitud=coords; contrato.save(update_fields=["latitud","longitud"])
+        return {"lat":coords[0],"lng":coords[1],"fuente":fuente}
+    return None
+
+
 @login_required
+@require_http_methods(["POST"])
+def ruta_resolver_coordenadas_view(request):
+    """Resuelve GPS faltantes de clientes de la jornada y los guarda permanentemente."""
+    if not (es_trabajador(request.user) or es_admin(request.user)):
+        return JsonResponse({"ok": False, "error": "No autorizado."}, status=403)
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+        ids = [int(x) for x in (payload.get("cliente_ids") or [])][:30]
+        contrato_ids = [int(x) for x in (payload.get("contrato_ids") or [])][:30]
+    except Exception:
+        return JsonResponse({"ok": False, "error": "Solicitud inválida."}, status=400)
+
+    api_key = os.environ.get("GOOGLE_MAPS_API_KEY", "").strip()
+    contratos_ruta = Contrato.objects.filter(pk__in=contrato_ids).select_related("cliente")
+    resultados = {}
+    for contrato in contratos_ruta:
+        resolved = _geocodificar_contrato_google(contrato, api_key)
+        if resolved:
+            resultados[f"contrato:{contrato.pk}"] = resolved
+    clientes = Cliente.objects.filter(pk__in=ids)
+    for cliente in clientes:
+        if cliente.latitud is not None and cliente.longitud is not None:
+            resultados[str(cliente.pk)] = {"lat": float(cliente.latitud), "lng": float(cliente.longitud), "fuente": "guardada"}
+            continue
+        resolved = _geocodificar_cliente_google(cliente, api_key)
+        if resolved:
+            resultados[str(cliente.pk)] = resolved
+
+    return JsonResponse({
+        "ok": True,
+        "coords": resultados,
+        "resueltos": len(resultados),
+        "solicitados": len(ids) + len(contrato_ids),
+        "geocoding_habilitado": bool(api_key),
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def ruta_matriz_google_view(request):
+    """Devuelve tiempos/distancias reales por carretera para la ruta diaria.
+
+    Usa Google Routes API (computeRouteMatrix). La clave se mantiene solo en
+    servidor mediante GOOGLE_MAPS_API_KEY. Si no está configurada, el cliente
+    conserva su optimización local como fallback.
+    """
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+    except Exception:
+        return JsonResponse({"ok": False, "error": "Solicitud inválida."}, status=400)
+
+    points = payload.get("points") or []
+    if not isinstance(points, list) or len(points) < 2 or len(points) > 25:
+        return JsonResponse({"ok": False, "error": "Se requieren entre 2 y 25 puntos."}, status=400)
+
+    clean = []
+    try:
+        for point in points:
+            lat = float(point["lat"]); lng = float(point["lng"])
+            if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+                raise ValueError
+            clean.append((lat, lng))
+    except Exception:
+        return JsonResponse({"ok": False, "error": "Coordenadas inválidas."}, status=400)
+
+    api_key = os.environ.get("GOOGLE_MAPS_API_KEY", "").strip()
+    if not api_key:
+        return JsonResponse({"ok": False, "error": "GOOGLE_MAPS_API_KEY no configurada.", "fallback": True}, status=503)
+
+    waypoints = [{"waypoint": {"location": {"latLng": {"latitude": lat, "longitude": lng}}}} for lat, lng in clean]
+    body = json.dumps({
+        "origins": waypoints,
+        "destinations": waypoints,
+        "travelMode": "DRIVE",
+        "routingPreference": "TRAFFIC_AWARE",
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        "https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix",
+        data=body,
+        method="POST",
+        headers={
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": api_key,
+            "X-Goog-FieldMask": "originIndex,destinationIndex,duration,distanceMeters,status,condition",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=12) as response:
+            rows = json.loads(response.read().decode("utf-8") or "[]")
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="ignore")[:500]
+        logger.warning("Google Routes API HTTP %s: %s", exc.code, detail)
+        return JsonResponse({"ok": False, "error": "Google Routes no pudo calcular la matriz.", "fallback": True}, status=502)
+    except Exception as exc:
+        logger.warning("Google Routes API error: %s", exc)
+        return JsonResponse({"ok": False, "error": "No fue posible consultar Google Routes.", "fallback": True}, status=502)
+
+    matrix = {}
+    for row in rows:
+        oi = row.get("originIndex"); di = row.get("destinationIndex")
+        if oi is None or di is None:
+            continue
+        duration = row.get("duration", "0s")
+        try:
+            seconds = float(str(duration).rstrip("s"))
+        except Exception:
+            seconds = 0
+        matrix[f"{oi}:{di}"] = {
+            "minutes": round(seconds / 60, 2),
+            "meters": int(row.get("distanceMeters") or 0),
+            "condition": row.get("condition") or "",
+        }
+    return JsonResponse({"ok": True, "matrix": matrix})
+
+
 def home_view(request):
     return dashboard_view(request)
 
@@ -1766,6 +3033,10 @@ def home_view(request):
 @login_required
 def dashboard_view(request):
     base_ctx = {"VAPID_PUBLIC_KEY": getattr(settings, "VAPID_PUBLIC_KEY", "")}
+
+    # La programación automática se mantiene al modificar contratos y mediante
+    # los procesos programados. No se regenera en cada GET del dashboard: hacerlo
+    # aquí convertía una simple carga de página en escrituras y consultas masivas.
 
     if es_admin(request.user):
         hoy = date.today()
@@ -1805,14 +3076,26 @@ def dashboard_view(request):
         recurrentes_proximos_3_dias = list(
             MovimientoRecurrente.objects.filter(
                 activo=True,
+                tipo="egreso",
+                es_gasto_manual_recurrente=True,
                 proxima_fecha__gte=hoy,
                 proxima_fecha__lte=hoy + timedelta(days=3)
             ).order_by("proxima_fecha", "id")[:10]
         )
 
         actualizar_facturas_vencidas()
-        total_facturas_pendientes = Factura.objects.filter(estado=Factura.ESTADO_PENDIENTE).count()
-        total_facturas_vencidas = Factura.objects.filter(estado=Factura.ESTADO_VENCIDA).count()
+        # El dashboard no debe contar como deuda las cuentas que solo están
+        # materializadas para meses futuros.
+        total_facturas_pendientes = Factura.objects.filter(
+            estado__in=[Factura.ESTADO_PENDIENTE, Factura.ESTADO_PARCIAL],
+        ).filter(
+            models.Q(fecha_cobro_desde__lte=hoy)
+            | models.Q(fecha_cobro_desde__isnull=True, fecha_vencimiento__lte=hoy)
+        ).count()
+        total_facturas_vencidas = Factura.objects.filter(
+            estado__in=[Factura.ESTADO_PENDIENTE, Factura.ESTADO_PARCIAL, Factura.ESTADO_VENCIDA],
+            fecha_vencimiento__lt=hoy,
+        ).count()
         total_facturas_pagadas = Factura.objects.filter(estado=Factura.ESTADO_PAGADA).count()
 
         mantenimientos_hoy_qs = (
@@ -2053,8 +3336,10 @@ def dashboard_view(request):
             ],
         }
 
-        # ================= Dashboard Ejecutivo v2.1 =================
+        # ================= Dashboard Ejecutivo 2.0 =================
         acciones = _centro_acciones_contexto()
+        salud_erp = diagnosticar_salud_erp(hoy=hoy)
+        metas_ejecutivas = _metas_empresa_contexto() if MetaEmpresa is not None else {}
 
         productos_criticos_qs = (
             Insumo.objects
@@ -2080,25 +3365,86 @@ def dashboard_view(request):
             fecha_registro__date__gte=primer_dia_mes_actual,
             fecha_registro__date__lte=ultimo_dia_mes_actual,
         ).count()
+        contratos_recuperados_mes = ReactivacionContrato.objects.filter(
+            fecha_reactivacion__gte=primer_dia_mes_actual,
+            fecha_reactivacion__lte=ultimo_dia_mes_actual,
+        ).count()
+        contratos_recuperados_anio = ReactivacionContrato.objects.filter(
+            fecha_reactivacion__year=hoy.year,
+        ).count()
 
         total_trabajadores_activos = Trabajador.objects.filter(activo=True).count()
 
-        # Rentabilidad operativa base por contrato: ingreso mensual - técnico - químicos del mes.
-        consumos_contrato = {
-            fila["mantenimiento__contrato_id"]: (fila["total"] or Decimal("0.00"))
-            for fila in UsoInsumo.objects.filter(
-                mantenimiento__contrato_id__isnull=False,
-                mantenimiento__fecha__gte=primer_dia_mes_actual,
-                mantenimiento__fecha__lte=ultimo_dia_mes_actual,
-            ).values("mantenimiento__contrato_id").annotate(total=Sum("costo_total"))
-        }
+        # Rentabilidad operativa base por contrato:
+        # ingreso mensual - técnico - consumo químico REAL/ESTIMADO del mes.
+        #
+        # Antes se tomaba únicamente UsoInsumo ligado a mantenimientos, por lo
+        # que el consumo diario automático del inventario almacenado en sitio
+        # quedaba fuera del costo del contrato.
+        materializar_consumos_contratos(hoy=hoy, usuario=request.user)
+
+        consumos_contrato = defaultdict(lambda: Decimal("0.00"))
+        movimientos_consumo = (
+            MovimientoInventario.objects
+            .filter(
+                tipo__in=["mantenimiento", "consumo_contrato"],
+                fecha__gte=primer_dia_mes_actual,
+                fecha__lte=ultimo_dia_mes_actual,
+            )
+            .select_related("mantenimiento")
+        )
+        for mov in movimientos_consumo:
+            contrato_id = mov.contrato_id or (
+                mov.mantenimiento.contrato_id
+                if mov.mantenimiento_id and mov.mantenimiento
+                else None
+            )
+            if contrato_id:
+                consumos_contrato[contrato_id] += Decimal(mov.total_costo or 0)
         rentabilidad_contratos = []
         ingreso_contratos_proyectado = Decimal("0.00")
         nomina_contratos_proyectada = Decimal("0.00")
         quimicos_mes_total = Decimal("0.00")
+
+        # Trabajadores con sueldo fijo: su costo mensual no debe sumarse una vez
+        # por contrato. Para analizar rentabilidad por contrato se reparte entre
+        # sus contratos activos; si no tienen contratos, queda como costo fijo
+        # no asignado y aun así se descuenta del margen global.
+        contratos_por_trabajador_fijo = defaultdict(int)
+        sueldos_fijos = {}
+        for contrato in contratos_activos_qs:
+            trabajador = contrato.tecnico_designado
+            if trabajador and trabajador.tipo_remuneracion == "mensual_fija":
+                contratos_por_trabajador_fijo[trabajador.pk] += 1
+                sueldos_fijos[trabajador.pk] = Decimal(trabajador.sueldo_mensual_fijo or 0)
+
+        trabajadores_fijos_activos = Trabajador.objects.filter(
+            activo=True,
+            tipo_remuneracion="mensual_fija",
+            sueldo_mensual_fijo__gt=0,
+        )
+        costo_fijo_total = sum(
+            (Decimal(t.sueldo_mensual_fijo or 0) for t in trabajadores_fijos_activos),
+            Decimal("0.00"),
+        )
+        costo_fijo_asignado = Decimal("0.00")
+
         for contrato in contratos_activos_qs:
             ingreso = Decimal(contrato.precio_mensual or 0)
-            tecnico = Decimal(contrato.valor_tecnico_mensual or 0)
+            trabajador = contrato.tecnico_designado
+
+            if trabajador and trabajador.tipo_remuneracion == "mensual_fija":
+                cantidad = contratos_por_trabajador_fijo.get(trabajador.pk, 0)
+                tecnico = (
+                    Decimal(trabajador.sueldo_mensual_fijo or 0) / Decimal(cantidad)
+                    if cantidad
+                    else Decimal("0.00")
+                )
+                tecnico = tecnico.quantize(Decimal("0.01"))
+                costo_fijo_asignado += tecnico
+            else:
+                tecnico = Decimal(contrato.valor_tecnico_mensual or 0)
+
             quimicos = Decimal(consumos_contrato.get(contrato.id, Decimal("0.00")) or 0)
             margen = ingreso - tecnico - quimicos
             ingreso_contratos_proyectado += ingreso
@@ -2112,6 +3458,12 @@ def dashboard_view(request):
                 "margen": margen,
                 "margen_pct": round((margen / ingreso) * 100, 1) if ingreso else 0,
             })
+
+        # Sueldos fijos de trabajadores sin contratos activos no desaparecen:
+        # siguen siendo un costo operativo real de la empresa.
+        costo_fijo_no_asignado = max(costo_fijo_total - costo_fijo_asignado, Decimal("0.00"))
+        nomina_contratos_proyectada += costo_fijo_no_asignado
+
         rentabilidad_contratos.sort(key=lambda x: x["margen"], reverse=True)
         top_rentabilidad_contratos = rentabilidad_contratos[:5]
         margen_operativo_base = ingreso_contratos_proyectado - nomina_contratos_proyectada - quimicos_mes_total
@@ -2134,6 +3486,137 @@ def dashboard_view(request):
             respondidos = casos_mes.exclude(resultado="pendiente").count()
             if respondidos:
                 asistente_tasa_exito = round((asistente_exitosos_mes / respondidos) * 100, 1)
+
+        # Inteligencia empresarial territorial v3.7
+        ciudad_dashboard = (request.GET.get("ciudad") or "").strip()
+        ciudades_dashboard = list(Ciudad.objects.filter(activa=True).order_by("orden", "nombre"))
+        ciudad_obj = Ciudad.objects.filter(pk=ciudad_dashboard).first() if ciudad_dashboard.isdigit() else None
+        contratos_bi = Contrato.objects.select_related("cliente", "cliente__ciudad_ref")
+        ingresos_bi = Ingreso.objects.all()
+        egresos_bi = Egreso.objects.all()
+        if ciudad_obj:
+            contratos_bi = contratos_bi.filter(models.Q(ciudad_ref=ciudad_obj) | models.Q(ciudad_ref__isnull=True, cliente__ciudad_ref=ciudad_obj))
+            ingresos_bi = ingresos_bi.filter(Q(cliente__ciudad_ref=ciudad_obj) | Q(contrato__cliente__ciudad_ref=ciudad_obj) | Q(ciudad__iexact=ciudad_obj.nombre)).distinct()
+            egresos_bi = egresos_bi.filter(Q(mantenimiento__cliente__ciudad_ref=ciudad_obj) | Q(ciudad_proyecto__iexact=ciudad_obj.nombre)).distinct()
+        meses_bi=[]
+        base_mes=hoy.replace(day=1)
+        for offset in range(11,-1,-1):
+            idx=base_mes.year*12+(base_mes.month-1)-offset; yy=idx//12; mm=idx%12+1
+            ini=date(yy,mm,1); fin=date(yy,mm,monthrange(yy,mm)[1])
+            ing=ingresos_bi.filter(fecha__range=(ini,fin)).aggregate(v=Sum("total"))["v"] or Decimal("0")
+            egr=egresos_bi.filter(fecha__range=(ini,fin),aprobado=True).aggregate(v=Sum("total"))["v"] or Decimal("0")
+            activos=contratos_bi.filter(fecha_inicio_original__lte=fin).filter(Q(activo=True)|Q(fecha_baja__isnull=False)).filter(Q(fecha_baja__isnull=True)|Q(fecha_baja__gt=fin)).count()
+            altas=contratos_bi.filter(fecha_inicio_original__range=(ini,fin)).count()
+            bajas=contratos_bi.filter(fecha_baja__range=(ini,fin)).count()
+            meses_bi.append({"label":ini.strftime("%b %y"),"ingresos":float(ing),"egresos":float(egr),"utilidad":float(ing-egr),"activos":activos,"altas":altas,"bajas":bajas})
+        inicio_actual=base_mes; fin_actual=date(hoy.year,hoy.month,monthrange(hoy.year,hoy.month)[1])
+        bajas_mes_qs=contratos_bi.filter(fecha_baja__range=(inicio_actual,fin_actual))
+        contratos_perdidos_mes=bajas_mes_qs.count()
+        facturacion_perdida_mes=bajas_mes_qs.aggregate(v=Sum("precio_mensual"))["v"] or Decimal("0")
+        altas_mes_bi=contratos_bi.filter(fecha_inicio_original__range=(inicio_actual,fin_actual)).count()
+        crecimiento_neto_bi=altas_mes_bi-contratos_perdidos_mes
+        ranking_ciudades=[]
+        for ciudad in ciudades_dashboard:
+            cqs=Contrato.objects.filter(models.Q(ciudad_ref=ciudad) | models.Q(ciudad_ref__isnull=True, cliente__ciudad_ref=ciudad),activo=True)
+            ingreso_mensual=cqs.aggregate(v=Sum("precio_mensual"))["v"] or Decimal("0")
+            tecnico = Decimal("0.00")
+            contratos_ciudad = list(cqs.select_related("tecnico_designado"))
+            # El sueldo fijo se distribuye entre TODOS los contratos activos
+            # asignados al trabajador, no solo entre los contratos de esta ciudad.
+            # Así la suma de ciudades nunca duplica el costo mensual del técnico.
+            ids_fijos_ciudad = {
+                c.tecnico_designado_id
+                for c in contratos_ciudad
+                if c.tecnico_designado and c.tecnico_designado.tipo_remuneracion == "mensual_fija"
+            }
+            conteo_fijos_global = {
+                trabajador_id: Contrato.objects.filter(
+                    activo=True,
+                    tecnico_designado_id=trabajador_id,
+                ).count()
+                for trabajador_id in ids_fijos_ciudad
+            }
+            for c in contratos_ciudad:
+                trabajador = c.tecnico_designado
+                if trabajador and trabajador.tipo_remuneracion == "mensual_fija":
+                    cantidad = conteo_fijos_global.get(trabajador.pk, 0)
+                    if cantidad:
+                        tecnico += (Decimal(trabajador.sueldo_mensual_fijo or 0) / Decimal(cantidad))
+                else:
+                    tecnico += Decimal(c.valor_tecnico_mensual or 0)
+            tecnico = tecnico.quantize(Decimal("0.01"))
+            utilidad_base=ingreso_mensual-tecnico
+            ranking_ciudades.append({"id":ciudad.id,"nombre":ciudad.nombre,"contratos":cqs.count(),"ingreso":float(ingreso_mensual),"utilidad":float(utilidad_base),"margen":round(float(utilidad_base/ingreso_mensual*100),1) if ingreso_mensual else 0,"ticket":round(float(ingreso_mensual/cqs.count()),2) if cqs.count() else 0})
+        ranking_ciudades.sort(key=lambda x:x["utilidad"],reverse=True)
+        mejor_ciudad = ranking_ciudades[0] if ranking_ciudades else None
+        motivos_baja_bi=list(bajas_mes_qs.values("motivo_baja").annotate(total=Count("id")).order_by("-total"))
+        grafico_bi_finanzas=json.dumps({"labels":[x["label"] for x in meses_bi],"ingresos":[x["ingresos"] for x in meses_bi],"egresos":[x["egresos"] for x in meses_bi],"utilidad":[x["utilidad"] for x in meses_bi]})
+        grafico_bi_contratos=json.dumps({"labels":[x["label"] for x in meses_bi],"activos":[x["activos"] for x in meses_bi],"altas":[x["altas"] for x in meses_bi],"bajas":[x["bajas"] for x in meses_bi]})
+        grafico_bi_ciudades=json.dumps({"labels":[x["nombre"] for x in ranking_ciudades],"utilidad":[x["utilidad"] for x in ranking_ciudades],"margen":[x["margen"] for x in ranking_ciudades]})
+
+        # Crecimiento JVAQUA Digital · registros nuevos por mes.
+        digital_serie = []
+        if PerfilSuscriptor is not None:
+            digital_serie = []
+            for offset in range(11, -1, -1):
+                idx = base_mes.year * 12 + (base_mes.month - 1) - offset
+                yy = idx // 12
+                mm = idx % 12 + 1
+                ini = date(yy, mm, 1)
+                fin = date(yy, mm, monthrange(yy, mm)[1])
+                nuevos = PerfilSuscriptor.objects.filter(
+                    creado_en__date__range=(ini, fin)
+                ).count()
+                activos_digital = PerfilSuscriptor.objects.filter(
+                    estado="activo",
+                    creado_en__date__lte=fin,
+                ).filter(
+                    Q(acceso_hasta__isnull=True) | Q(acceso_hasta__gte=fin)
+                ).count()
+                digital_serie.append({
+                    "label": ini.strftime("%b %y"),
+                    "nuevos": nuevos,
+                    "activos": activos_digital,
+                })
+        grafico_bi_digital = json.dumps({
+            "labels": [x["label"] for x in digital_serie],
+            "nuevos": [x["nuevos"] for x in digital_serie],
+            "activos": [x["activos"] for x in digital_serie],
+        })
+        digital_nuevos_mes = digital_serie[-1]["nuevos"] if digital_serie else 0
+        digital_activos_actuales = (
+            PerfilSuscriptor.objects.filter(estado="activo")
+            .filter(Q(acceso_hasta__isnull=True) | Q(acceso_hasta__gte=hoy))
+            .count()
+            if PerfilSuscriptor is not None else 0
+        )
+
+        # Cuando se selecciona una ciudad, los KPI ejecutivos principales también se sectorizan.
+        if ciudad_obj:
+            m_hoy = Mantenimiento.objects.filter(models.Q(contrato__ciudad_ref=ciudad_obj) | models.Q(contrato__ciudad_ref__isnull=True, cliente__ciudad_ref=ciudad_obj), fecha=hoy)
+            total_mantenimientos_hoy = m_hoy.count()
+            realizados_hoy = m_hoy.filter(estado="realizado").count()
+            pendientes_hoy = m_hoy.filter(estado="pendiente").count()
+            cumplimiento_hoy = round((realizados_hoy / total_mantenimientos_hoy) * 100, 1) if total_mantenimientos_hoy else 0
+            total_contratos_activos = contratos_bi.filter(activo=True).count()
+            clientes_nuevos_mes = Cliente.objects.filter(ciudad_ref=ciudad_obj, fecha_registro__date__range=(primer_dia_mes_actual, ultimo_dia_mes_actual)).count()
+            contratos_recuperados_mes = ReactivacionContrato.objects.filter(
+                fecha_reactivacion__range=(primer_dia_mes_actual, ultimo_dia_mes_actual)
+            ).filter(
+                models.Q(contrato__ciudad_ref=ciudad_obj) | models.Q(contrato__ciudad_ref__isnull=True, contrato__cliente__ciudad_ref=ciudad_obj)
+            ).count()
+            ingreso_contratos_proyectado = contratos_bi.filter(activo=True).aggregate(v=Sum("precio_mensual"))["v"] or Decimal("0")
+            nomina_contratos_proyectada = contratos_bi.filter(activo=True).aggregate(v=Sum("valor_tecnico_mensual"))["v"] or Decimal("0")
+            margen_operativo_base = ingreso_contratos_proyectado - nomina_contratos_proyectada
+            ing_actual = ingresos_bi.filter(fecha__range=(primer_dia_mes_actual, ultimo_dia_mes_actual)).aggregate(v=Sum("total"))["v"] or Decimal("0")
+            egr_actual = egresos_bi.filter(fecha__range=(primer_dia_mes_actual, ultimo_dia_mes_actual), aprobado=True).aggregate(v=Sum("total"))["v"] or Decimal("0")
+            ing_ant = ingresos_bi.filter(fecha__range=(primer_dia_mes_anterior, ultimo_dia_mes_anterior)).aggregate(v=Sum("total"))["v"] or Decimal("0")
+            egr_ant = egresos_bi.filter(fecha__range=(primer_dia_mes_anterior, ultimo_dia_mes_anterior), aprobado=True).aggregate(v=Sum("total"))["v"] or Decimal("0")
+            resumen_mes_actual = {"ingresos": ing_actual, "egresos": egr_actual, "balance": ing_actual-egr_actual}
+            resumen_mes_anterior = {"ingresos": ing_ant, "egresos": egr_ant, "balance": ing_ant-egr_ant}
+            variacion_ingresos_mes = _variacion_porcentual(ing_actual, ing_ant)
+            variacion_egresos_mes = _variacion_porcentual(egr_actual, egr_ant)
+            variacion_balance_mes = _variacion_porcentual(ing_actual-egr_actual, ing_ant-egr_ant)
 
         # Salud general: un resumen accionable, no un sustituto de los datos.
         senales_criticas = 0
@@ -2246,6 +3729,8 @@ def dashboard_view(request):
             "contratos_por_revisar": contratos_por_revisar,
             "total_contratos_por_revisar": total_contratos_por_revisar,
             "clientes_nuevos_mes": clientes_nuevos_mes,
+            "contratos_recuperados_mes": contratos_recuperados_mes,
+            "contratos_recuperados_anio": contratos_recuperados_anio,
             "total_trabajadores_activos": total_trabajadores_activos,
             "ingreso_contratos_proyectado": ingreso_contratos_proyectado,
             "nomina_contratos_proyectada": nomina_contratos_proyectada,
@@ -2258,6 +3743,14 @@ def dashboard_view(request):
             "asistente_pendientes": asistente_pendientes,
             "asistente_tasa_exito": asistente_tasa_exito,
             "salud_empresa": salud_empresa,
+            "salud_erp": salud_erp,
+            "metas_ejecutivas": metas_ejecutivas,
+            "ciudades_dashboard": ciudades_dashboard, "ciudad_dashboard": ciudad_dashboard, "ciudad_obj": ciudad_obj,
+            "grafico_bi_finanzas": grafico_bi_finanzas, "grafico_bi_contratos": grafico_bi_contratos, "grafico_bi_ciudades": grafico_bi_ciudades,
+            "grafico_bi_digital": grafico_bi_digital, "digital_nuevos_mes": digital_nuevos_mes, "digital_activos_actuales": digital_activos_actuales,
+            "contratos_perdidos_mes": contratos_perdidos_mes, "facturacion_perdida_mes": facturacion_perdida_mes,
+            "altas_mes_bi": altas_mes_bi, "crecimiento_neto_bi": crecimiento_neto_bi, "ranking_ciudades": ranking_ciudades,
+            "mejor_ciudad": mejor_ciudad, "motivos_baja_bi": motivos_baja_bi,
             "es_admin": True,
         }
         return render(request, "dashboard/dashboard.html", ctx)
@@ -2269,7 +3762,8 @@ def dashboard_view(request):
         try:
             trabajador = request.user.trabajador
         except Exception:
-            return render(request, "dashboard/no_autorizado.html", status=403)
+            messages.warning(request, "Tu usuario todavía no está vinculado a una ficha de trabajador. Administración debe completar esa vinculación para mostrar tus asignaciones.")
+            return redirect("inicio")
 
         anio_cal = int(request.GET.get("anio_cal", hoy.year))
         mes_cal = int(request.GET.get("mes_cal", hoy.month))
@@ -2280,7 +3774,9 @@ def dashboard_view(request):
         fecha_seleccionada = parse_date(fecha_seleccionada_str) if fecha_seleccionada_str else None
 
         vista_actual = (request.GET.get("vista", "calendario") or "calendario").strip().lower()
-        ver_mas_proximos = request.GET.get("ver_mas_proximos") == "1"
+        # “Ver más” se despliega en la misma página; se mantiene la variable
+        # únicamente por compatibilidad con plantillas/enlaces históricos.
+        ver_mas_proximos = False
 
         calendario_trabajador = _build_calendario_mantenimientos(
             anio_cal,
@@ -2317,11 +3813,7 @@ def dashboard_view(request):
             )
             total_proximos_reales = qs_mantenimientos_proximos.count()
 
-            if ver_mas_proximos:
-                mantenimientos_proximos = qs_mantenimientos_proximos
-            else:
-                mantenimientos_proximos = qs_mantenimientos_proximos[:10]
-
+            mantenimientos_proximos = qs_mantenimientos_proximos
             mostrar_boton_ver_mas_proximos = total_proximos_reales > 10
 
             mantenimientos_atrasados = (
@@ -2359,6 +3851,81 @@ def dashboard_view(request):
         semana_anterior = inicio_agenda - timedelta(days=7)
         semana_siguiente = inicio_agenda + timedelta(days=7)
 
+        # Resumen del día visible para el trabajador. Estas variables deben
+        # calcularse también en esta rama: el contexto las utiliza más abajo y
+        # su ausencia provocaba un NameError/HTTP 500 al abrir Mis mantenimientos.
+        fecha_resumen = fecha_seleccionada or hoy
+        resumen_dia_qs = Mantenimiento.objects.filter(
+            fecha=fecha_resumen,
+            trabajadores=trabajador,
+        ).distinct()
+        total_resumen_dia = resumen_dia_qs.count()
+        realizados_resumen_dia = resumen_dia_qs.filter(estado="realizado").count()
+        pendientes_resumen_dia = resumen_dia_qs.filter(estado="pendiente").count()
+        # En la vista de un trabajador todos los mantenimientos están, por
+        # definición, asignados a ese trabajador. Se conserva la variable para
+        # mantener un contexto homogéneo con las plantillas existentes.
+        sin_asignar_resumen_dia = 0
+        cumplimiento_resumen_dia = (
+            round((realizados_resumen_dia / total_resumen_dia) * 100, 2)
+            if total_resumen_dia
+            else 0
+        )
+
+        ordenes_hoy = list(
+            OrdenTrabajo.objects.filter(
+                fecha=fecha_seleccionada or hoy,
+                trabajador=trabajador,
+            )
+            .exclude(estado="cancelada")
+            .select_related("tipo", "cliente", "contrato")
+            .order_by("hora", "id")
+        )
+        ordenes_atrasadas = list(
+            OrdenTrabajo.objects.filter(
+                fecha__lt=hoy,
+                trabajador=trabajador,
+                estado__in=["pendiente", "en_proceso"],
+            )
+            .select_related("tipo", "cliente", "contrato")
+            .order_by("fecha", "hora", "id")[:12]
+        )
+        ordenes_proximas = list(
+            OrdenTrabajo.objects.filter(
+                fecha__gt=hoy,
+                trabajador=trabajador,
+                estado__in=["pendiente", "en_proceso"],
+            )
+            .select_related("tipo", "cliente", "contrato")
+            .order_by("fecha", "hora", "id")[:12]
+        )
+
+        # Ruta sugerida: se limita al día visible y es siempre opcional.
+        ruta_fecha = fecha_seleccionada or hoy
+        ruta_mantenimientos = []
+        for m in mantenimientos_hoy:
+            c = m.contrato
+            cliente = m.cliente
+            ruta_mantenimientos.append({
+                "id": m.id,
+                "cliente": str(cliente),
+                "direccion": ((c.direccion if c else "") or cliente.direccion or ""),
+                "maps": ((c.enlace_google_maps if c else "") or cliente.enlace_google_maps or ""),
+                "cliente_id": m.cliente_id,
+                "contrato_id": c.id if c else None,
+                "lat": float(c.latitud) if c and c.latitud is not None else (float(cliente.latitud) if cliente.latitud is not None else None),
+                "lng": float(c.longitud) if c and c.longitud is not None else (float(cliente.longitud) if cliente.longitud is not None else None),
+                "estado": m.estado,
+                "tipo_horario": (c.tipo_horario_visita if c else "") or "libre",
+                "hora_fija": c.hora_visita_fija.strftime("%H:%M") if c and c.hora_visita_fija else "",
+                "ventana_desde": c.ventana_visita_desde.strftime("%H:%M") if c and c.ventana_visita_desde else "",
+                "ventana_hasta": c.ventana_visita_hasta.strftime("%H:%M") if c and c.ventana_visita_hasta else "",
+                "duracion": (c.duracion_estimada_minutos if c else None) or 30,
+                "prioridad": (c.prioridad_visita if c else "") or "normal",
+                "telefono": cliente.telefono or "",
+            })
+        ruta_total_minutos = sum(x["duracion"] for x in ruta_mantenimientos if x["estado"] != "realizado")
+
         ctx = {
             **base_ctx,
             "modo": "trabajador",
@@ -2379,9 +3946,24 @@ def dashboard_view(request):
             "calendario_trabajador": calendario_trabajador,
             "fecha_seleccionada": fecha_seleccionada,
             "fecha_seleccionada_str": fecha_seleccionada_str,
+            "fecha_resumen": fecha_resumen,
+            "total_resumen_dia": total_resumen_dia,
+            "realizados_resumen_dia": realizados_resumen_dia,
+            "pendientes_resumen_dia": pendientes_resumen_dia,
+            "sin_asignar_resumen_dia": sin_asignar_resumen_dia,
+            "cumplimiento_resumen_dia": cumplimiento_resumen_dia,
             "agenda_semanal": agenda_semanal,
             "agenda_semana_anterior": semana_anterior,
             "agenda_semana_siguiente": semana_siguiente,
+            "ordenes_hoy": ordenes_hoy,
+            "ordenes_atrasadas": ordenes_atrasadas,
+            "ordenes_proximas": ordenes_proximas,
+            "ruta_fecha": ruta_fecha,
+            "ruta_mantenimientos_json": json.dumps(ruta_mantenimientos, ensure_ascii=False),
+            "ruta_total_minutos": ruta_total_minutos,
+            "ruta_total_visitas": len(ruta_mantenimientos),
+            "ruta_pendientes": len([x for x in ruta_mantenimientos if x["estado"] != "realizado"]),
+            "ruta_completadas": len([x for x in ruta_mantenimientos if x["estado"] == "realizado"]),
             "es_admin": False,
         }
         return render(request, "dashboard/dashboard_trabajador.html", ctx)
@@ -2427,12 +4009,21 @@ def notificaciones_view(request):
     else:
         no_modelo_notificaciones = True
 
+    novedades_abiertas = []
+    if es_admin(request.user):
+        novedades_abiertas = list(
+            NovedadMantenimiento.objects.exclude(estado="resuelta")
+            .select_related("mantenimiento__cliente", "reportada_por")
+            .order_by("-creada_en")[:20]
+        )
+
     return render(
         request,
         "dashboard/notificaciones.html",
         {
             "subs_count": subs_count,
             "push_enabled": push_enabled,
+            "novedades_abiertas": novedades_abiertas,
             "notificaciones": notificaciones,
             "no_modelo_notificaciones": no_modelo_notificaciones,
             "es_admin": es_admin(request.user),
@@ -2446,7 +4037,9 @@ def notificaciones_view(request):
 def notificaciones_json_view(request):
     if es_trabajador(request.user):
         _actualizar_seguimientos_asistente(request.user)
+        _actualizar_alertas_inventario_contratos(request.user)
     if es_admin(request.user):
+        _actualizar_alertas_inventario_contratos(request.user)
         try:
             from finanzas.alertas_financieras import generar_alertas_financieras
             generar_alertas_financieras(enviar_push=True)
@@ -2470,7 +4063,7 @@ def notificaciones_json_view(request):
             "mensaje": n.mensaje,
             "url": n.url or "/dashboard/notificaciones/",
             "leida": n.leida,
-            "creada_en": n.creada_en.strftime("%d/%m/%Y %H:%M"),
+            "creada_en": timezone.localtime(n.creada_en).strftime("%d/%m/%Y %H:%M"),
         })
 
     unread_count = Notificacion.objects.filter(
@@ -2563,6 +4156,210 @@ def marcar_todas_leidas_view(request):
     return JsonResponse({"ok": True})
 
 
+
+
+
+
+
+
+
+
+
+
+@login_required
+def centro_inteligencias_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    modulos = [
+        {
+            "icono": "💧",
+            "titulo": "AQUO Ejecutivo",
+            "descripcion": "Pregunta a los datos del ERP y cruza información empresarial.",
+            "url": "aquo_ejecutivo",
+            "grupo": "Dirección",
+            "destacado": True,
+        },
+        {
+            "icono": "🎯",
+            "titulo": "Centro de Decisiones",
+            "descripcion": "Ordena riesgos, impacto y acciones que requieren atención.",
+            "url": "centro_decisiones",
+            "grupo": "Dirección",
+            "destacado": True,
+        },
+        {
+            "icono": "💰",
+            "titulo": "Rentabilidad",
+            "descripcion": "Margen por contrato, ciudad y trabajador, con señales de pérdida.",
+            "url": "inteligencia_rentabilidad",
+            "grupo": "Finanzas",
+        },
+        {
+            "icono": "📈",
+            "titulo": "Crecimiento y Retención",
+            "descripcion": "Altas, bajas, recuperaciones, retención y crecimiento neto.",
+            "url": "inteligencia_crecimiento",
+            "grupo": "Comercial",
+        },
+        {
+            "icono": "💳",
+            "titulo": "Cartera y Cobranza",
+            "descripcion": "Antigüedad, morosidad y clientes que conviene cobrar primero.",
+            "url": "inteligencia_cartera",
+            "grupo": "Finanzas",
+        },
+        {
+            "icono": "⚙️",
+            "titulo": "Operación",
+            "descripcion": "Cumplimiento, atrasos, carga de trabajo e incidencias de servicio.",
+            "url": "inteligencia_operativa",
+            "grupo": "Operación",
+        },
+        {
+            "icono": "📦",
+            "titulo": "Inventario y Consumo",
+            "descripcion": "Stock, autonomía, consumo químico y desviaciones por contrato.",
+            "url": "inteligencia_inventario",
+            "grupo": "Operación",
+        },
+    ]
+    return render(request, "dashboard/centro_inteligencias.html", {
+        "modulos": modulos,
+        "es_admin": True,
+    })
+
+
+@login_required
+def inteligencia_inventario_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    ciudad_id = (request.GET.get("ciudad") or "").strip()
+    ciudad_obj = Ciudad.objects.filter(pk=ciudad_id, activa=True).first() if ciudad_id.isdigit() else None
+    analisis = analizar_inventario_inteligente(
+        hoy=timezone.localdate(),
+        ciudad=ciudad_obj,
+    )
+    return render(request, "dashboard/inteligencia_inventario.html", {
+        "analisis": analisis,
+        "ciudad_obj": ciudad_obj,
+        "ciudades": Ciudad.objects.filter(activa=True).order_by("orden", "nombre"),
+        "es_admin": True,
+    })
+
+
+@login_required
+def inteligencia_operativa_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    ciudad_id = (request.GET.get("ciudad") or "").strip()
+    ciudad_obj = Ciudad.objects.filter(pk=ciudad_id, activa=True).first() if ciudad_id.isdigit() else None
+    analisis = analizar_operacion(hoy=timezone.localdate(), ciudad=ciudad_obj)
+    return render(request, "dashboard/inteligencia_operativa.html", {
+        "analisis": analisis,
+        "ciudad_obj": ciudad_obj,
+        "ciudades": Ciudad.objects.filter(activa=True).order_by("orden", "nombre"),
+        "es_admin": True,
+    })
+
+
+@login_required
+def inteligencia_cartera_view(request):
+    if not es_admin(request.user): return render(request, "dashboard/no_autorizado.html", status=403)
+    ciudad_id=(request.GET.get("ciudad") or "").strip()
+    ciudad_obj=Ciudad.objects.filter(pk=ciudad_id,activa=True).first() if ciudad_id.isdigit() else None
+    return render(request,"dashboard/inteligencia_cartera.html",{"analisis":analizar_cartera_inteligente(hoy=timezone.localdate(),ciudad=ciudad_obj),"ciudad_obj":ciudad_obj,"ciudades":Ciudad.objects.filter(activa=True).order_by("orden","nombre"),"es_admin":True})
+
+@login_required
+def centro_decisiones_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    ciudad_id = (request.GET.get("ciudad") or "").strip()
+    ciudad_obj = Ciudad.objects.filter(pk=ciudad_id, activa=True).first() if ciudad_id.isdigit() else None
+    centro = construir_centro_decisiones(
+        hoy=timezone.localdate(),
+        ciudad=ciudad_obj,
+    )
+    return render(request, "dashboard/centro_decisiones.html", {
+        "centro": centro,
+        "ciudad_obj": ciudad_obj,
+        "ciudades": Ciudad.objects.filter(activa=True).order_by("orden", "nombre"),
+        "es_admin": True,
+    })
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def aquo_ejecutivo_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    ciudad_id = (request.POST.get("ciudad") if request.method == "POST" else request.GET.get("ciudad") or "").strip()
+    ciudad_obj = Ciudad.objects.filter(pk=ciudad_id, activa=True).first() if ciudad_id.isdigit() else None
+    pregunta = (request.POST.get("pregunta") or "").strip() if request.method == "POST" else ""
+    resultado = None
+    if pregunta:
+        resultado = responder_aquo_ejecutivo(
+            pregunta,
+            hoy=timezone.localdate(),
+            ciudad=ciudad_obj,
+        )
+    return render(request, "dashboard/aquo_ejecutivo.html", {
+        "pregunta": pregunta,
+        "resultado": resultado,
+        "ciudad_obj": ciudad_obj,
+        "ciudades": Ciudad.objects.filter(activa=True).order_by("orden", "nombre"),
+        "es_admin": True,
+    })
+
+
+@login_required
+def inteligencia_crecimiento_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    hoy = timezone.localdate()
+    ciudad_id = (request.GET.get("ciudad") or "").strip()
+    ciudad_obj = Ciudad.objects.filter(pk=ciudad_id, activa=True).first() if ciudad_id.isdigit() else None
+    analisis = analizar_crecimiento_retencion(hoy=hoy, ciudad=ciudad_obj)
+    return render(request, "dashboard/inteligencia_crecimiento.html", {
+        "analisis": analisis,
+        "hoy": hoy,
+        "ciudad_obj": ciudad_obj,
+        "ciudades": Ciudad.objects.filter(activa=True).order_by("orden", "nombre"),
+        "es_admin": True,
+    })
+
+
+@login_required
+def inteligencia_rentabilidad_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    hoy = timezone.localdate()
+    ciudad_id = (request.GET.get("ciudad") or "").strip()
+    ciudad_obj = Ciudad.objects.filter(pk=ciudad_id, activa=True).first() if ciudad_id.isdigit() else None
+    analisis = analizar_rentabilidad(hoy=hoy, ciudad=ciudad_obj)
+    return render(request, "dashboard/inteligencia_rentabilidad.html", {
+        "analisis": analisis, "hoy": hoy, "ciudad_obj": ciudad_obj,
+        "ciudades": Ciudad.objects.filter(activa=True).order_by("orden", "nombre"),
+        "es_admin": True,
+    })
+
+@login_required
+def salud_erp_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    diagnostico = diagnosticar_salud_erp(hoy=timezone.localdate())
+    return render(
+        request,
+        "dashboard/salud_erp.html",
+        {
+            "diagnostico": diagnostico,
+            "es_admin": True,
+        },
+    )
+
 @login_required
 def actividad_historial_view(request):
     if not es_admin(request.user):
@@ -2627,7 +4424,7 @@ def mantenimiento_historial_view(request):
     elif filtro == "sin_asignar":
         qs = qs.filter(trabajadores__isnull=True).distinct()
 
-    if estado in ["pendiente", "realizado"]:
+    if estado in ["pendiente", "realizado", "cancelado"]:
         qs = qs.filter(estado=estado)
 
     if cliente_id.isdigit():
@@ -2651,6 +4448,7 @@ def mantenimiento_historial_view(request):
     total_historial = len(items)
     total_realizados_historial = len([m for m in items if getattr(m, "estado", "") == "realizado"])
     total_pendientes_historial = len([m for m in items if getattr(m, "estado", "") == "pendiente"])
+    total_cancelados_historial = len([m for m in items if getattr(m, "estado", "") == "cancelado"])
     total_atrasados_historial = len([
         m for m in items
         if getattr(m, "estado", "") == "pendiente" and getattr(m, "fecha", hoy) < hoy
@@ -2701,6 +4499,7 @@ def mantenimiento_historial_view(request):
             "total_historial": total_historial,
             "total_realizados_historial": total_realizados_historial,
             "total_pendientes_historial": total_pendientes_historial,
+            "total_cancelados_historial": total_cancelados_historial,
             "total_atrasados_historial": total_atrasados_historial,
             "total_sin_asignar_historial": total_sin_asignar_historial,
             "querystring": querystring,
@@ -2720,11 +4519,36 @@ def admin_operativo_view(request):
     hoy = date.today()
     filtro = (request.GET.get("filtro", "") or "").strip().lower()
     q = (request.GET.get("q", "") or "").strip()
-    ver_mas_proximos = (request.GET.get("ver_mas_proximos", "") or "").strip() == "1"
+    ciudad = (request.GET.get("ciudad", "") or "").strip()
+    trabajador_id = (request.GET.get("trabajador", "") or "").strip()
+    # Las listas “Ver más” se despliegan en cliente sin recargar la página.
+    # Se conservan estos nombres de contexto por compatibilidad con enlaces antiguos.
+    ver_mas_atrasados = False
+    ver_mas_dia = False
+    ver_mas_proximos = False
     vista_actual = (request.GET.get("vista", "calendario") or "calendario").strip().lower()
 
     fecha_seleccionada_str = (request.GET.get("fecha_seleccionada", "") or "").strip()
     fecha_seleccionada = parse_date(fecha_seleccionada_str) if fecha_seleccionada_str else None
+
+    # Selector operativo unificado: día, semana, mes o rango personalizado.
+    periodo_tipo = (request.GET.get("periodo", "") or "").strip().lower()
+    periodo_fecha_str = (request.GET.get("periodo_fecha", "") or "").strip()
+    periodo_desde_str = (request.GET.get("desde", "") or "").strip()
+    periodo_hasta_str = (request.GET.get("hasta", "") or "").strip()
+    periodo_fecha = parse_date(periodo_fecha_str) if periodo_fecha_str else None
+    periodo_desde = parse_date(periodo_desde_str) if periodo_desde_str else None
+    periodo_hasta = parse_date(periodo_hasta_str) if periodo_hasta_str else None
+    seleccion_inicio = seleccion_fin = None
+    if periodo_tipo == "dia" and periodo_fecha:
+        seleccion_inicio = seleccion_fin = periodo_fecha
+    elif periodo_tipo == "semana" and periodo_fecha:
+        seleccion_inicio = periodo_fecha - timedelta(days=periodo_fecha.weekday())
+        seleccion_fin = seleccion_inicio + timedelta(days=6)
+    elif periodo_tipo == "mes" and periodo_fecha:
+        seleccion_inicio, seleccion_fin = _inicio_fin_mes(periodo_fecha.year, periodo_fecha.month)
+    elif periodo_tipo == "rango" and periodo_desde and periodo_hasta:
+        seleccion_inicio, seleccion_fin = sorted((periodo_desde, periodo_hasta))
 
     anio_cal = int(request.GET.get("anio_cal", hoy.year))
     mes_cal = int(request.GET.get("mes_cal", hoy.month))
@@ -2737,6 +4561,11 @@ def admin_operativo_view(request):
         .prefetch_related("trabajadores")
         .order_by("fecha", "estado", "id")
     )
+
+    if ciudad:
+        base_qs = base_qs.filter(cliente__ciudad__iexact=ciudad)
+    if trabajador_id.isdigit():
+        base_qs = base_qs.filter(trabajadores__id=int(trabajador_id)).distinct()
 
     if fecha_seleccionada:
         dia_list = list(
@@ -2814,22 +4643,58 @@ def admin_operativo_view(request):
             )
         )
 
-        limite_proximos = None if ver_mas_proximos else 10
+        # Cargamos la colección completa una sola vez. La plantilla muestra los
+        # primeros 10 y despliega el resto localmente, preservando filtros/fecha.
         qs_proximos = base_qs.filter(
             fecha__gt=hoy,
             estado="pendiente"
         )
-
-        if limite_proximos is not None:
-            qs_proximos = qs_proximos[:limite_proximos]
-
         proximos = list(qs_proximos)
         etiqueta_periodo = "Operativo de hoy"
+
+    # Cuando existe una selección temporal explícita, la pantalla muestra SOLO ese período.
+    if seleccion_inicio and seleccion_fin:
+        dia_list = list(base_qs.filter(fecha__range=(seleccion_inicio, seleccion_fin)))
+        atrasados = []
+        proximos = []
+        if seleccion_inicio == seleccion_fin:
+            etiqueta_periodo = f"Día {seleccion_inicio.strftime('%d/%m/%Y')}"
+        elif periodo_tipo == "semana":
+            etiqueta_periodo = f"Semana {seleccion_inicio.strftime('%d/%m/%Y')} al {seleccion_fin.strftime('%d/%m/%Y')}"
+        elif periodo_tipo == "mes":
+            etiqueta_periodo = seleccion_inicio.strftime("Mes %m/%Y")
+        else:
+            etiqueta_periodo = f"Rango {seleccion_inicio.strftime('%d/%m/%Y')} al {seleccion_fin.strftime('%d/%m/%Y')}"
 
     if q:
         dia_list = _filtrar_mantenimientos_por_busqueda(dia_list, q)
         atrasados = _filtrar_mantenimientos_por_busqueda(atrasados, q)
         proximos = _filtrar_mantenimientos_por_busqueda(proximos, q)
+
+    # Resumen principal: siempre describe exclusivamente el día que el
+    # administrador está consultando (hoy o la fecha elegida en calendario).
+    fecha_resumen = fecha_seleccionada or hoy
+    qs_resumen_dia = base_qs.filter(fecha=fecha_resumen)
+    total_resumen_dia = qs_resumen_dia.exclude(estado="cancelado").count()
+    realizados_resumen_dia = qs_resumen_dia.filter(estado="realizado").count()
+    pendientes_resumen_dia = qs_resumen_dia.filter(estado="pendiente").count()
+    cancelados_resumen_dia = qs_resumen_dia.filter(estado="cancelado").count()
+    sin_asignar_resumen_dia = qs_resumen_dia.filter(
+        estado="pendiente", trabajadores__isnull=True
+    ).distinct().count()
+    cumplimiento_resumen_dia = round(
+        (realizados_resumen_dia / total_resumen_dia) * 100, 1
+    ) if total_resumen_dia else 0
+
+    total_dia_reales = len(dia_list)
+    total_atrasados_reales = len(atrasados)
+    for m in atrasados:
+        m.dias_atraso = max((hoy - m.fecha).days, 0)
+
+    # No recortamos estas listas en backend: “Ver más” ahora funciona en la
+    # misma página y la plantilla oculta inicialmente los elementos excedentes.
+    mostrar_ver_mas_dia = total_dia_reales > 20
+    mostrar_ver_mas_atrasados = total_atrasados_reales > 20
 
     resumen_trabajadores = _resumen_trabajadores_desde_listas(dia_list, atrasados, proximos)
 
@@ -2847,7 +4712,7 @@ def admin_operativo_view(request):
 
     total_proximos_reales = base_qs.filter(fecha__gt=hoy, estado="pendiente").count()
     mostrar_boton_ver_mas_proximos = (
-        not filtro and not ver_mas_proximos and not fecha_seleccionada and total_proximos_reales > 10
+        not filtro and not fecha_seleccionada and total_proximos_reales > 10
     )
 
     # ==========================================
@@ -2872,12 +4737,59 @@ def admin_operativo_view(request):
     semana_anterior = inicio_agenda - timedelta(days=7)
     semana_siguiente = inicio_agenda + timedelta(days=7)
 
+    # KPIs operativos coherentes en tres horizontes. Respetan los filtros de
+    # ciudad/trabajador y no dependen de las listas truncadas de la interfaz.
+    def _kpis_periodo(qs):
+        qs = qs.exclude(estado="cancelado")
+        datos = qs.aggregate(
+            total=Count("id", distinct=True),
+            realizados=Count("id", filter=Q(estado="realizado"), distinct=True),
+            pendientes=Count("id", filter=Q(estado="pendiente"), distinct=True),
+        )
+        total = int(datos.get("total") or 0)
+        realizados = int(datos.get("realizados") or 0)
+        pendientes = int(datos.get("pendientes") or 0)
+        return {
+            "total": total,
+            "realizados": realizados,
+            "pendientes": pendientes,
+            "cumplimiento": round((realizados / total) * 100, 1) if total else 0,
+        }
+
+    primer_dia_mes, ultimo_dia_mes = _inicio_fin_mes(anio_cal, mes_cal)
+    kpi_dia = _kpis_periodo(base_qs.filter(fecha=fecha_resumen))
+    kpi_semana = _kpis_periodo(base_qs.filter(fecha__range=(inicio_agenda, fin_agenda)))
+    kpi_mes = _kpis_periodo(base_qs.filter(fecha__range=(primer_dia_mes, ultimo_dia_mes)))
+
+    # Análisis exacto del período seleccionado, sin usar listas truncadas de interfaz.
+    seleccion_qs = base_qs.exclude(estado="cancelado").filter(fecha__range=(seleccion_inicio, seleccion_fin)) if seleccion_inicio and seleccion_fin else base_qs.exclude(estado="cancelado").filter(fecha=fecha_resumen)
+    kpi_seleccion = _kpis_periodo(seleccion_qs)
+    trabajadores_periodo = []
+    for t in Trabajador.objects.select_related("user").filter(activo=True).order_by("user__first_name", "user__username"):
+        tq = seleccion_qs.filter(trabajadores=t).distinct()
+        total_t = tq.count()
+        if not total_t:
+            continue
+        realizados_t = tq.filter(estado="realizado").count()
+        trabajadores_periodo.append({
+            "id": t.id,
+            "nombre": t.user.get_full_name() or t.user.username,
+            "total": total_t,
+            "realizados": realizados_t,
+            "pendientes": tq.filter(estado="pendiente").count(),
+            "cumplimiento": round((realizados_t / total_t) * 100, 1) if total_t else 0,
+        })
+
     return render(
         request,
         "dashboard/admin_operativo.html",
         {
             "hoy": hoy,
             "q": q,
+            "ciudad": ciudad,
+            "ciudades": Ciudad.objects.filter(activa=True).order_by("orden", "nombre"),
+            "trabajador_id": trabajador_id,
+            "trabajadores_filtro": Trabajador.objects.select_related("user").filter(activo=True).order_by("user__first_name", "user__username"),
             "modo_actual": filtro,
             "vista_actual": vista_actual,
             "etiqueta_periodo": etiqueta_periodo,
@@ -2899,21 +4811,97 @@ def admin_operativo_view(request):
             "ver_mas_proximos": ver_mas_proximos,
             "mostrar_boton_ver_mas_proximos": mostrar_boton_ver_mas_proximos,
             "total_proximos_reales": total_proximos_reales,
+            "total_dia_reales": total_dia_reales,
+            "total_atrasados_reales": total_atrasados_reales,
+            "mostrar_ver_mas_dia": mostrar_ver_mas_dia,
+            "mostrar_ver_mas_atrasados": mostrar_ver_mas_atrasados,
+            "ver_mas_dia": ver_mas_dia,
+            "ver_mas_atrasados": ver_mas_atrasados,
             "fecha_seleccionada": fecha_seleccionada,
             "fecha_seleccionada_str": fecha_seleccionada_str,
             "agenda_semanal": agenda_semanal,
             "agenda_fecha_base": fecha_base_agenda,
             "agenda_semana_anterior": semana_anterior,
             "agenda_semana_siguiente": semana_siguiente,
+            "fecha_resumen": fecha_resumen,
+            "total_resumen_dia": total_resumen_dia,
+            "realizados_resumen_dia": realizados_resumen_dia,
+            "pendientes_resumen_dia": pendientes_resumen_dia,
+            "cancelados_resumen_dia": cancelados_resumen_dia,
+            "sin_asignar_resumen_dia": sin_asignar_resumen_dia,
+            "cumplimiento_resumen_dia": cumplimiento_resumen_dia,
+            "kpi_dia": kpi_dia,
+            "kpi_semana": kpi_semana,
+            "kpi_mes": kpi_mes,
+            "periodo_tipo": periodo_tipo,
+            "periodo_fecha_str": periodo_fecha_str,
+            "periodo_desde_str": periodo_desde_str,
+            "periodo_hasta_str": periodo_hasta_str,
+            "seleccion_inicio": seleccion_inicio,
+            "seleccion_fin": seleccion_fin,
+            "kpi_seleccion": kpi_seleccion,
+            "trabajadores_periodo": trabajadores_periodo,
             "es_admin": True,
         },
     )
 
 
+
+@login_required
+@require_http_methods(["POST"])
+def mantenimiento_cancelar_view(request, pk):
+    """Cancela una visita pendiente sin contabilizarla como incumplimiento del trabajador."""
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    mantenimiento = get_object_or_404(Mantenimiento, pk=pk)
+    motivo = (request.POST.get("motivo_cancelacion", "") or "").strip()
+    siguiente = request.POST.get("next", "") or request.META.get("HTTP_REFERER", "/dashboard/operativo/")
+    if not url_has_allowed_host_and_scheme(siguiente, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
+        siguiente = "/dashboard/operativo/"
+
+    if mantenimiento.estado == "realizado":
+        messages.error(request, "Un mantenimiento realizado no puede cancelarse.")
+        return redirect(siguiente)
+    if mantenimiento.estado == "cancelado":
+        messages.info(request, "Esta visita ya estaba cancelada.")
+        return redirect(siguiente)
+    if not motivo:
+        messages.error(request, "Debes indicar el motivo de la cancelación.")
+        return redirect(siguiente)
+
+    mantenimiento.estado = "cancelado"
+    mantenimiento.motivo_cancelacion = motivo
+    mantenimiento.cancelado_en = timezone.now()
+    mantenimiento.cancelado_por = request.user
+    mantenimiento.save(update_fields=["estado", "motivo_cancelacion", "cancelado_en", "cancelado_por"])
+    messages.success(request, "Visita cancelada. No contará como atraso ni incumplimiento del trabajador.")
+    return redirect(siguiente)
+
 # -------------------
 # Detalle mantenimiento
 # -------------------
 @login_required
+@login_required
+def foto_mantenimiento_archivo_view(request, pk):
+    """Abre una evidencia persistente o muestra un aviso si el archivo histórico se perdió."""
+    foto = get_object_or_404(FotoMantenimiento, pk=pk)
+    archivo = foto.imagen
+    disponible = False
+    if archivo and archivo.name:
+        try:
+            disponible = archivo.storage.exists(archivo.name)
+        except Exception:
+            disponible = bool(settings.CLOUDINARY_URL)
+    if disponible:
+        try:
+            return redirect(archivo.url)
+        except Exception:
+            pass
+    svg = """<svg xmlns='http://www.w3.org/2000/svg' width='1200' height='700' viewBox='0 0 1200 700'><rect width='1200' height='700' fill='#f3f6f9'/><rect x='80' y='80' width='1040' height='540' rx='28' fill='#fff' stroke='#d8e1ea' stroke-width='4'/><text x='600' y='320' text-anchor='middle' font-family='Arial,sans-serif' font-size='42' font-weight='700' fill='#334155'>Archivo histórico no disponible</text><text x='600' y='385' text-anchor='middle' font-family='Arial,sans-serif' font-size='28' fill='#64748b'>El registro se conserva, pero el archivo físico ya no existe.</text></svg>"""
+    return HttpResponse(svg, content_type='image/svg+xml')
+
+
 def mantenimiento_detalle_view(request, pk):
     """Detalle unificado del mantenimiento.
 
@@ -2945,8 +4933,55 @@ def mantenimiento_detalle_view(request, pk):
         except Exception:
             trabajador_actual = None
 
-    if trabajador_actual:
-        inventario_mantenimiento = list(
+    contrato_quimicos = mantenimiento.contrato
+    modalidad_quimicos = "cliente" if contrato_quimicos.quimicos_proveedor == "cliente" else (
+        "contrato" if contrato_quimicos.quimicos_almacenamiento == "contrato" else "trabajador"
+    )
+
+    # Inventarios disponibles para registrar consumos. Un contrato con inventario
+    # en sitio puede mezclar, línea por línea, stock del contrato y stock personal
+    # del técnico. Los demás contratos conservan su modalidad normal.
+    inventario_contrato_mantenimiento = []
+    inventario_trabajador_mantenimiento = []
+    inventario_trabajadores_admin = []
+
+    if modalidad_quimicos == "contrato":
+        inventario_contrato_mantenimiento = list(
+            InventarioContrato.objects.filter(
+                contrato=contrato_quimicos,
+                stock__gt=0,
+                insumo__activo=True,
+                insumo__puede_mantenimiento=True,
+            ).select_related("insumo").order_by("insumo__nombre")
+        )
+        if trabajador_actual:
+            inventario_trabajador_mantenimiento = list(
+                InventarioTrabajador.objects.filter(
+                    trabajador=trabajador_actual,
+                    stock__gt=0,
+                    insumo__activo=True,
+                    insumo__puede_mantenimiento=True,
+                ).select_related("insumo").order_by("insumo__nombre")
+            )
+        elif es_usuario_admin:
+            inventario_trabajadores_admin = list(
+                InventarioTrabajador.objects.filter(
+                    trabajador__in=mantenimiento.trabajadores.filter(activo=True),
+                    stock__gt=0,
+                    insumo__activo=True,
+                    insumo__puede_mantenimiento=True,
+                ).select_related("insumo", "trabajador", "trabajador__user")
+                .order_by("trabajador__user__username", "insumo__nombre")
+            )
+        inventario_mantenimiento = inventario_contrato_mantenimiento
+        insumos = [x.insumo for x in inventario_contrato_mantenimiento]
+    elif modalidad_quimicos == "cliente":
+        # Los químicos pertenecen al cliente. No se ofrece catálogo ni inventario
+        # JVAQUA para evitar consumos accidentales y cualquier impacto en costos.
+        inventario_mantenimiento = []
+        insumos = []
+    elif trabajador_actual:
+        inventario_trabajador_mantenimiento = list(
             InventarioTrabajador.objects.filter(
                 trabajador=trabajador_actual,
                 stock__gt=0,
@@ -2954,12 +4989,21 @@ def mantenimiento_detalle_view(request, pk):
                 insumo__puede_mantenimiento=True,
             ).select_related("insumo").order_by("insumo__nombre")
         )
-        insumos = [x.insumo for x in inventario_mantenimiento]
+        inventario_mantenimiento = inventario_trabajador_mantenimiento
+        insumos = [x.insumo for x in inventario_trabajador_mantenimiento]
     else:
         inventario_mantenimiento = []
-        insumos = list(
-            Insumo.objects.filter(activo=True, puede_mantenimiento=True).order_by("nombre")
-        )
+        if es_usuario_admin:
+            inventario_trabajadores_admin = list(
+                InventarioTrabajador.objects.filter(
+                    trabajador__in=mantenimiento.trabajadores.filter(activo=True),
+                    stock__gt=0,
+                    insumo__activo=True,
+                    insumo__puede_mantenimiento=True,
+                ).select_related("insumo", "trabajador", "trabajador__user")
+                .order_by("trabajador__user__username", "insumo__nombre")
+            )
+        insumos = list(Insumo.objects.filter(activo=True, puede_mantenimiento=True).order_by("nombre"))
 
     trabajadores_mantenimiento = list(
         mantenimiento.trabajadores.filter(activo=True)
@@ -2967,6 +5011,7 @@ def mantenimiento_detalle_view(request, pk):
         .order_by("user__username")
     )
     esta_realizado = mantenimiento.estado == "realizado"
+    esta_cancelado = mantenimiento.estado == "cancelado"
     checklist, _ = ChecklistMantenimiento.objects.get_or_create(mantenimiento=mantenimiento)
 
     cliente_operativo = mantenimiento.cliente
@@ -2974,10 +5019,13 @@ def mantenimiento_detalle_view(request, pk):
     maps_url = (cliente_operativo.enlace_google_maps or "").strip()
     if not maps_url and direccion_operativa:
         maps_url = "https://www.google.com/maps/search/?api=1&query=" + quote(direccion_operativa)
-    whatsapp_disponible = bool(
-        trabajador_actual
-        and _telefono_whatsapp_ecuador(cliente_operativo.telefono)
-    )
+    # El acceso a WhatsApp es compartido por administración y técnicos autorizados.
+    # La vista de destino mantiene la validación de permisos según el rol.
+    whatsapp_disponible = bool(_telefono_whatsapp_ecuador(cliente_operativo.telefono))
+
+    if request.method == "POST" and esta_cancelado:
+        messages.error(request, "Esta visita fue cancelada por administración y no puede registrarse como realizada.")
+        return redirect("mantenimiento_detalle", pk=mantenimiento.pk)
 
     if request.method == "POST":
         accion = (request.POST.get("accion") or "").strip()
@@ -2992,10 +5040,57 @@ def mantenimiento_detalle_view(request, pk):
                 return next_url
             return f"/dashboard/mantenimientos/{mantenimiento.pk}/"
 
+        if accion == "actualizar_novedad":
+            if not es_usuario_admin:
+                messages.error(request, "Solo administración puede gestionar las novedades.")
+                return redirect(safe_return_url())
+            novedad = get_object_or_404(NovedadMantenimiento, mantenimiento=mantenimiento)
+            nuevo_estado = (request.POST.get("estado_novedad") or "").strip()
+            if nuevo_estado not in {"pendiente", "revision", "resuelta"}:
+                messages.error(request, "Estado de novedad no válido.")
+                return redirect(safe_return_url())
+            novedad.estado = nuevo_estado
+            novedad.nota_gestion = (request.POST.get("nota_gestion") or "").strip()
+            novedad.gestionada_por = request.user
+            novedad.gestionada_en = timezone.now()
+            novedad.save(update_fields=["estado", "nota_gestion", "gestionada_por", "gestionada_en", "actualizada_en"])
+            messages.success(request, f"Novedad actualizada: {novedad.get_estado_display()}.")
+            return redirect(f"/dashboard/mantenimientos/{mantenimiento.pk}/#novedad-administrativa")
+
+        if accion == "clasificar_fuera_fecha":
+            if not es_usuario_admin:
+                messages.error(request, "Solo administración puede clasificar una realización fuera de fecha.")
+                return redirect(safe_return_url())
+            if mantenimiento.estado != "realizado" or not mantenimiento.realizado_fuera_fecha:
+                messages.error(request, "Este mantenimiento no tiene una realización fuera de fecha para clasificar.")
+                return redirect(safe_return_url())
+            motivo = (request.POST.get("motivo_fuera_fecha") or "").strip()
+            motivos_validos = {x[0] for x in Mantenimiento.MOTIVO_FUERA_FECHA_CHOICES}
+            if motivo not in motivos_validos:
+                messages.error(request, "Selecciona un motivo válido.")
+                return redirect(safe_return_url())
+            mantenimiento.motivo_fuera_fecha = motivo
+            mantenimiento.nota_fuera_fecha = (request.POST.get("nota_fuera_fecha") or "").strip()
+            mantenimiento.save(update_fields=["motivo_fuera_fecha", "nota_fuera_fecha"])
+            messages.success(request, "Motivo de realización fuera de fecha actualizado.")
+            return redirect(safe_return_url())
+
         if accion == "marcar_pendiente":
+            if not es_usuario_admin:
+                messages.error(request, "Solo un administrador puede reabrir un mantenimiento realizado.")
+                return redirect(safe_return_url())
             mantenimiento.estado = "pendiente"
             mantenimiento.borrador_guardado = True
-            mantenimiento.save(update_fields=["estado", "borrador_guardado"])
+            mantenimiento.realizado_en = None
+            mantenimiento.motivo_fuera_fecha = ""
+            mantenimiento.nota_fuera_fecha = ""
+            mantenimiento.save(update_fields=["estado", "borrador_guardado", "realizado_en", "motivo_fuera_fecha", "nota_fuera_fecha"])
+            # En contratos Por visita, revertir la ejecución retira únicamente
+            # los movimientos pendientes originados por esa visita.
+            from finanzas.cuentas_por_cobrar import anular_factura_visita_no_realizada
+            from finanzas.sincronizacion import sincronizar_nomina_por_visita
+            anular_factura_visita_no_realizada(mantenimiento)
+            sincronizar_nomina_por_visita(mantenimiento)
 
             actor = request.user.username
             _notificar_admins(
@@ -3115,6 +5210,18 @@ def mantenimiento_detalle_view(request, pk):
                 ids_insumo = request.POST.getlist("producto_insumo_id")
                 cantidades = request.POST.getlist("producto_cantidad")
                 unidades = request.POST.getlist("producto_unidad")
+                origenes = request.POST.getlist("producto_origen")
+
+                # Regla de negocio: cuando el cliente proporciona los químicos,
+                # este mantenimiento no puede registrar nuevos consumos. Además
+                # de ocultarlo en la interfaz, se fuerza aquí en servidor para
+                # que un POST manipulado nunca descuente inventario ni genere
+                # costos/egresos en JVAQUA.
+                if mantenimiento.contrato.quimicos_proveedor == "cliente":
+                    ids_insumo = []
+                    cantidades = []
+                    unidades = []
+                    origenes = []
 
                 if trabajador_actual:
                     trabajador_consumo = trabajador_actual
@@ -3147,13 +5254,46 @@ def mantenimiento_detalle_view(request, pk):
                     )
 
                     cantidad_base = convertir_a_base(insumo, cantidad_ingresada, unidad)
-                    movimiento = consumir_trabajador(
-                        insumo=insumo,
-                        trabajador=trabajador_consumo,
-                        cantidad_base=cantidad_base,
-                        mantenimiento=mantenimiento,
-                        usuario=request.user,
-                    )
+                    contrato_consumo = mantenimiento.contrato
+
+                    if contrato_consumo.quimicos_proveedor == "cliente":
+                        origen_inventario = "cliente"
+                        costo_unitario = Decimal("0.0000")
+                        costo_total = Decimal("0.00")
+                    else:
+                        origen_solicitado = (origenes[index] if index < len(origenes) else "").strip()
+                        if contrato_consumo.quimicos_almacenamiento == "contrato":
+                            if origen_solicitado not in {"contrato", "trabajador"}:
+                                raise ValueError("Selecciona si el producto sale del inventario en sitio o de tu inventario.")
+                            origen_inventario = origen_solicitado
+                        else:
+                            # Los contratos sin inventario en sitio siempre consumen
+                            # del inventario del trabajador, aunque el navegador envíe
+                            # un valor manipulado.
+                            origen_inventario = "trabajador"
+
+                        if origen_inventario == "contrato":
+                            movimiento = consumir_contrato(
+                                contrato=contrato_consumo,
+                                insumo=insumo,
+                                trabajador=trabajador_consumo,
+                                cantidad_base=cantidad_base,
+                                mantenimiento=mantenimiento,
+                                usuario=request.user,
+                            )
+                        else:
+                            if not trabajador_consumo:
+                                raise ValueError("Selecciona el trabajador que utilizó los productos.")
+                            movimiento = consumir_trabajador(
+                                insumo=insumo,
+                                trabajador=trabajador_consumo,
+                                cantidad_base=cantidad_base,
+                                mantenimiento=mantenimiento,
+                                usuario=request.user,
+                            )
+                        costo_unitario = movimiento.costo_unitario
+                        costo_total = movimiento.total_costo
+
                     uso = UsoInsumo.objects.create(
                         mantenimiento=mantenimiento,
                         insumo=insumo,
@@ -3161,10 +5301,22 @@ def mantenimiento_detalle_view(request, pk):
                         cantidad=cantidad_base,
                         cantidad_ingresada=Decimal(str(cantidad_ingresada).replace(",", ".")),
                         unidad_registro=unidad,
-                        costo_unitario=movimiento.costo_unitario,
-                        costo_total=movimiento.total_costo,
+                        costo_unitario=costo_unitario,
+                        costo_total=costo_total,
+                        origen_inventario=origen_inventario,
                     )
                     consumos_creados.append(uso)
+
+                    if origen_inventario == "contrato":
+                        inv_contrato = InventarioContrato.objects.filter(contrato=contrato_consumo, insumo=insumo).first()
+                        if inv_contrato and inv_contrato.stock_estimado <= Decimal(inv_contrato.stock_minimo or 0):
+                            titulo = f"⚠ Reposición requerida · {contrato_consumo.cliente}"
+                            mensaje = f"{insumo.nombre} llegó al mínimo del inventario en sitio ({inv_contrato.stock_estimado:.3f} {insumo.unidad_corta})."
+                            url_alerta = f"/dashboard/contratos/{contrato_consumo.pk}/#inventario-sitio"
+                            _notificar_admins(titulo=titulo, mensaje=mensaje, url=url_alerta, enviar_push=False)
+                            responsable = contrato_consumo.responsable_reposicion or contrato_consumo.tecnico_designado
+                            if responsable and getattr(responsable, "user_id", None):
+                                _crear_notificacion(responsable.user, titulo, mensaje, url=url_alerta, enviar_push=False)
 
                 # ---------------------------------------------------------
                 # 3) Fotografías requeridas. Las nuevas se guardan junto a
@@ -3205,9 +5357,18 @@ def mantenimiento_detalle_view(request, pk):
                         )
                     mantenimiento.estado = "realizado"
                     mantenimiento.borrador_guardado = False
-                    mantenimiento.save(update_fields=["estado", "borrador_guardado"])
+                    mantenimiento.realizado_en = timezone.now()
+                    mantenimiento.save(update_fields=["estado", "borrador_guardado", "realizado_en"])
 
-        except (ValueError, InventarioTrabajador.DoesNotExist) as exc:
+                    # Por visita: el hecho financiero nace aquí, no cuando se
+                    # programa la agenda. La transacción garantiza que no quede
+                    # un cobro/nómina sin mantenimiento realizado.
+                    from finanzas.cuentas_por_cobrar import generar_factura_visita_realizada
+                    from finanzas.sincronizacion import sincronizar_nomina_por_visita
+                    generar_factura_visita_realizada(mantenimiento, usuario=request.user)
+                    sincronizar_nomina_por_visita(mantenimiento)
+
+        except (ValueError, InventarioTrabajador.DoesNotExist, InventarioContrato.DoesNotExist) as exc:
             messages.error(request, str(exc) or "No se pudo guardar el mantenimiento.")
             return redirect(safe_return_url())
         except Exception:
@@ -3220,13 +5381,23 @@ def mantenimiento_detalle_view(request, pk):
 
         actor = request.user.username
         if finalizar:
-            _notificar_admins(
-                titulo="✅ Mantenimiento realizado",
-                mensaje=f"El mantenimiento de {mantenimiento.cliente} fue finalizado por {actor}.",
-                url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
-                enviar_push=True,
-                excluir_user_id=request.user.id if es_usuario_admin else None,
-            )
+            novedad = _registrar_novedad_mantenimiento(mantenimiento, checklist, request.user)
+            if novedad:
+                _notificar_admins(
+                    titulo="⚠️ Mantenimiento realizado CON NOVEDAD",
+                    mensaje=f"{mantenimiento.cliente} · {actor}. {novedad.detalle}",
+                    url=f"/dashboard/mantenimientos/{mantenimiento.pk}/#novedad-administrativa",
+                    enviar_push=True,
+                    excluir_user_id=request.user.id if es_usuario_admin else None,
+                )
+            else:
+                _notificar_admins(
+                    titulo="✅ Mantenimiento realizado",
+                    mensaje=f"El mantenimiento de {mantenimiento.cliente} fue finalizado por {actor}.",
+                    url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
+                    enviar_push=True,
+                    excluir_user_id=request.user.id if es_usuario_admin else None,
+                )
             _registrar_actividad(
                 user=request.user,
                 titulo="Mantenimiento realizado",
@@ -3252,8 +5423,14 @@ def mantenimiento_detalle_view(request, pk):
         return redirect(safe_return_url())
 
     lista_usos = mantenimiento.usos_insumos.select_related("insumo", "trabajador__user").all()
-    lista_egresos = mantenimiento.egresos.all() if hasattr(mantenimiento, "egresos") else []
-    total_egresos = sum((Decimal(u.subtotal()) for u in lista_usos), Decimal("0.00"))
+    # Privacidad financiera: el trabajador solo ve producto, cantidad y unidad.
+    # Costos/valorizaciones pertenecen exclusivamente a Administración.
+    if es_usuario_admin:
+        lista_egresos = mantenimiento.egresos.all() if hasattr(mantenimiento, "egresos") else []
+        total_egresos = sum((Decimal(u.subtotal()) for u in lista_usos), Decimal("0.00"))
+    else:
+        lista_egresos = []
+        total_egresos = Decimal("0.00")
 
     fotos_qs = mantenimiento.fotos.all()
     fotos_por_nombre = {
@@ -3302,6 +5479,7 @@ def mantenimiento_detalle_view(request, pk):
     foto_inicio = fotos_por_nombre.get("Inicio de Mantenimiento")
     foto_fin = fotos_por_nombre.get("Fin de Mantenimiento")
     foto_nivel = fotos_por_nombre.get("Nivel PH y Cl")
+    novedad_administrativa = NovedadMantenimiento.objects.filter(mantenimiento=mantenimiento).select_related("reportada_por", "gestionada_por").first()
 
     return render(
         request,
@@ -3312,6 +5490,11 @@ def mantenimiento_detalle_view(request, pk):
             "lista_usos": lista_usos,
             "lista_egresos": lista_egresos,
             "inventario_mantenimiento": inventario_mantenimiento,
+            "inventario_contrato_mantenimiento": inventario_contrato_mantenimiento,
+            "inventario_trabajador_mantenimiento": inventario_trabajador_mantenimiento,
+            "inventario_trabajadores_admin": inventario_trabajadores_admin,
+            "modalidad_quimicos": modalidad_quimicos,
+            "contrato_quimicos": contrato_quimicos,
             "trabajadores_mantenimiento": trabajadores_mantenimiento,
             "trabajador_actual": trabajador_actual,
             "total_egresos": total_egresos,
@@ -3322,9 +5505,11 @@ def mantenimiento_detalle_view(request, pk):
             "cantidad_usos": cantidad_usos,
             "puede_cerrar": puede_cerrar,
             "esta_realizado": esta_realizado,
+            "esta_cancelado": esta_cancelado,
             "foto_inicio": foto_inicio,
             "foto_fin": foto_fin,
             "foto_nivel": foto_nivel,
+            "novedad_administrativa": novedad_administrativa,
             "historial_cliente_reciente": historial_cliente_reciente,
             "checklist": checklist,
             "checklist_limpieza_completados": checklist_limpieza_completados,
@@ -3348,16 +5533,16 @@ def mantenimiento_whatsapp_cliente_view(request, pk):
         pk=pk,
     )
 
-    if not es_trabajador(request.user):
-        return render(request, "dashboard/no_autorizado.html", status=403)
-
-    try:
-        trabajador = request.user.trabajador
-    except Exception:
-        return render(request, "dashboard/no_autorizado.html", status=403)
-
-    if not mantenimiento.trabajadores.filter(pk=trabajador.pk).exists():
-        return render(request, "dashboard/no_autorizado.html", status=403)
+    es_usuario_admin = es_admin(request.user)
+    if not es_usuario_admin:
+        if not es_trabajador(request.user):
+            return render(request, "dashboard/no_autorizado.html", status=403)
+        try:
+            trabajador = request.user.trabajador
+        except Exception:
+            return render(request, "dashboard/no_autorizado.html", status=403)
+        if not mantenimiento.trabajadores.filter(pk=trabajador.pk).exists():
+            return render(request, "dashboard/no_autorizado.html", status=403)
 
     telefono = _telefono_whatsapp_ecuador(mantenimiento.cliente.telefono)
     if not telefono:
@@ -3365,10 +5550,13 @@ def mantenimiento_whatsapp_cliente_view(request, pk):
         return redirect("mantenimiento_detalle", pk=mantenimiento.pk)
 
     nombre_trabajador = (request.user.get_full_name() or "").strip() or request.user.username
-    mensaje = (
-        f"Hola, buenos días. Soy {nombre_trabajador}, técnico de JVAQUA. "
-        "Me encuentro aquí en su domicilio para realizar el mantenimiento de su piscina."
-    )
+    if es_usuario_admin:
+        mensaje = "Hola, buenos días. Le contactamos de JVAQUA sobre el servicio de mantenimiento de su piscina."
+    else:
+        mensaje = (
+            f"Hola, buenos días. Soy {nombre_trabajador}, técnico de JVAQUA. "
+            "Me encuentro aquí en su domicilio para realizar el mantenimiento de su piscina."
+        )
 
     _registrar_actividad(
         user=request.user,
@@ -3387,7 +5575,10 @@ def mantenimiento_whatsapp_cliente_view(request, pk):
 def mi_cuenta_trabajador_view(request):
     if not es_trabajador(request.user):
         return render(request, "dashboard/no_autorizado.html", status=403)
-    trabajador = get_object_or_404(Trabajador.objects.select_related("user"), user=request.user)
+    trabajador = Trabajador.objects.select_related("user").filter(user=request.user).first()
+    if trabajador is None:
+        messages.warning(request, "Tu usuario todavía no está vinculado a una ficha de trabajador. Administración debe completar esa vinculación para mostrar tu cuenta, asignaciones y pagos.")
+        return redirect("inicio")
     hoy = timezone.localdate()
     try:
         anio = int(request.GET.get("anio") or hoy.year)
@@ -3528,10 +5719,11 @@ def usoinsumo_eliminar_view(request, pk):
         insumo_nombre = getattr(insumo, "nombre", "Insumo")
         cantidad = uso.cantidad
 
-        if uso.trabajador_id:
+        origen_uso = getattr(uso, "origen_inventario", "trabajador") or "trabajador"
+        if origen_uso in {"contrato", "cliente"} or (origen_uso == "trabajador" and uso.trabajador_id):
             revertir_consumo(uso=uso, usuario=request.user)
         elif getattr(uso, "egreso_id", None):
-            # Registro histórico anterior al inventario por trabajador.
+            # Registro histórico anterior al inventario inteligente.
             insumo.stock = Decimal(insumo.stock) + Decimal(uso.cantidad)
             insumo.save(update_fields=["stock"])
 
@@ -3602,25 +5794,33 @@ def usoinsumo_editar_view(request, pk):
             return redirect(f"/dashboard/usos/{uso.pk}/editar/")
 
         anterior = Decimal(uso.cantidad)
-        if uso.trabajador_id:
+        origen = getattr(uso, "origen_inventario", "trabajador") or "trabajador"
+        if origen in {"contrato", "cliente"} or (origen == "trabajador" and uso.trabajador_id):
             try:
                 with transaction.atomic():
                     revertir_consumo(uso=uso, usuario=request.user)
-                    movimiento = consumir_trabajador(
-                        insumo=uso.insumo,
-                        trabajador=uso.trabajador,
-                        cantidad_base=nueva_base,
-                        mantenimiento=mantenimiento,
-                        usuario=request.user,
-                        observacion=f"Edición consumo #{uso.pk}",
-                    )
+                    if origen == "contrato":
+                        movimiento = consumir_contrato(
+                            contrato=mantenimiento.contrato, insumo=uso.insumo, trabajador=uso.trabajador,
+                            cantidad_base=nueva_base, mantenimiento=mantenimiento, usuario=request.user,
+                            observacion=f"Edición consumo #{uso.pk}",
+                        )
+                        costo_unitario, costo_total = movimiento.costo_unitario, movimiento.total_costo
+                    elif origen == "cliente":
+                        costo_unitario, costo_total = Decimal("0.0000"), Decimal("0.00")
+                    else:
+                        movimiento = consumir_trabajador(
+                            insumo=uso.insumo, trabajador=uso.trabajador, cantidad_base=nueva_base,
+                            mantenimiento=mantenimiento, usuario=request.user, observacion=f"Edición consumo #{uso.pk}",
+                        )
+                        costo_unitario, costo_total = movimiento.costo_unitario, movimiento.total_costo
                     uso.cantidad = nueva_base
                     uso.cantidad_ingresada = Decimal(str(nueva_cantidad_str).replace(",", "."))
                     uso.unidad_registro = unidad
-                    uso.costo_unitario = movimiento.costo_unitario
-                    uso.costo_total = movimiento.total_costo
+                    uso.costo_unitario = costo_unitario
+                    uso.costo_total = costo_total
                     uso.save(update_fields=["cantidad", "cantidad_ingresada", "unidad_registro", "costo_unitario", "costo_total"])
-            except (ValueError, InventarioTrabajador.DoesNotExist) as exc:
+            except (ValueError, InventarioTrabajador.DoesNotExist, InventarioContrato.DoesNotExist) as exc:
                 messages.error(request, str(exc) if str(exc) else "Stock insuficiente.")
                 return redirect(f"/dashboard/usos/{uso.pk}/editar/")
         else:
@@ -3875,82 +6075,34 @@ def _dias_vencimiento_factura():
 
 
 def _crear_factura_para_contrato(contrato, anio, mes):
-    cliente = _obtener_cliente_de_contrato(contrato)
-    if not cliente:
-        return None, False, "Contrato sin cliente"
+    """Bloqueado: la creación directa antigua ignoraba el calendario contractual.
 
-    monto = _obtener_monto_contrato(contrato)
-    if monto <= 0:
-        return None, False, "Contrato sin monto válido"
-
-    fecha_emision = date(anio, mes, 1)
-    fecha_vencimiento = fecha_emision + timedelta(days=_dias_vencimiento_factura())
-
-    factura, creada = Factura.objects.get_or_create(
-        contrato=contrato,
-        periodo_anio=anio,
-        periodo_mes=mes,
-        defaults={
-            "cliente": cliente,
-            "fecha_emision": fecha_emision,
-            "fecha_vencimiento": fecha_vencimiento,
-            "subtotal": monto,
-            "impuesto": Decimal("0.00"),
-            "total": monto,
-            "estado": Factura.ESTADO_PENDIENTE,
-            "observaciones": "",
-        }
+    Se conserva el nombre solo para detectar llamadas heredadas. Toda creación de
+    Cartera debe pasar por ``finanzas.cuentas_por_cobrar``.
+    """
+    raise RuntimeError(
+        "Generador financiero obsoleto bloqueado. Usa finanzas.cuentas_por_cobrar."
     )
-
-    if creada:
-        FacturaItem.objects.create(
-            factura=factura,
-            descripcion=_descripcion_factura_contrato(contrato, anio, mes),
-            cantidad=Decimal("1.00"),
-            precio_unitario=monto,
-            subtotal=monto,
-        )
-        factura.actualizar_totales()
-
-    return factura, creada, None
 
 
 def generar_facturas_automaticas(anio=None, mes=None):
+    """Compatibilidad con la antigua capa financiera del dashboard.
+
+    La única fuente autorizada para crear Cartera es ahora
+    ``finanzas.cuentas_por_cobrar``. La implementación histórica creaba cuentas
+    el día 1 y vencimiento +5 días, ignorando por completo el corte real del
+    contrato; mantener esa lógica disponible es un riesgo financiero.
+    """
     hoy = timezone.localdate()
     anio = anio or hoy.year
     mes = mes or hoy.month
+    from finanzas.cuentas_por_cobrar import generar_facturas_periodo
 
-    creadas = 0
-    existentes = 0
-    errores = []
-
-    from contratos.models import Contrato
-
-    contratos = Contrato.objects.select_related("cliente").all().order_by("id")
-
-    for contrato in contratos:
-        if not _contrato_activo_para_facturacion(contrato):
-            continue
-
-        try:
-            _, creada, error = _crear_factura_para_contrato(contrato, anio, mes)
-
-            if error:
-                errores.append(f"Contrato #{contrato.pk}: {error}")
-                continue
-
-            if creada:
-                creadas += 1
-            else:
-                existentes += 1
-
-        except Exception as ex:
-            errores.append(f"Contrato #{contrato.pk}: {ex}")
-
+    resultado = generar_facturas_periodo(anio, mes)
     return {
-        "creadas": creadas,
-        "existentes": existentes,
-        "errores": errores,
+        "creadas": int(resultado.get("creadas", 0) or 0),
+        "existentes": int(resultado.get("existentes", 0) or 0),
+        "errores": resultado.get("errores", []),
         "anio": anio,
         "mes": mes,
     }
@@ -3978,55 +6130,11 @@ def actualizar_facturas_vencidas():
 @login_required
 @require_GET
 def factura_list_view(request):
+    """Compatibilidad: usa la lista financiera canónica."""
     if not es_admin(request.user):
         return render(request, "dashboard/no_autorizado.html", status=403)
-
-    actualizar_facturas_vencidas()
-
-    estado = (request.GET.get("estado", "") or "").strip().lower()
-    periodo = (request.GET.get("periodo", "") or "").strip()
-
-    facturas = Factura.objects.all().order_by("-periodo_anio", "-periodo_mes", "-id")
-
-    if estado in [
-        Factura.ESTADO_PENDIENTE,
-        Factura.ESTADO_PAGADA,
-        Factura.ESTADO_VENCIDA,
-        Factura.ESTADO_ANULADA,
-    ]:
-        facturas = facturas.filter(estado=estado)
-
-    if periodo:
-        try:
-            anio_txt, mes_txt = periodo.split("-")
-            facturas = facturas.filter(
-                periodo_anio=int(anio_txt),
-                periodo_mes=int(mes_txt),
-            )
-        except Exception:
-            pass
-
-    total_facturado = facturas.aggregate(total=Sum("total"))["total"] or Decimal("0.00")
-    total_pagado = facturas.filter(estado=Factura.ESTADO_PAGADA).aggregate(total=Sum("total"))["total"] or Decimal("0.00")
-    total_pendiente = facturas.filter(
-        estado__in=[Factura.ESTADO_PENDIENTE, Factura.ESTADO_VENCIDA]
-    ).aggregate(total=Sum("total"))["total"] or Decimal("0.00")
-
-    return render(
-        request,
-        "dashboard/factura_list.html",
-        {
-            "facturas": facturas,
-            "estado_actual": estado,
-            "periodo_actual": periodo,
-            "total_facturado": total_facturado,
-            "total_pagado": total_pagado,
-            "total_pendiente": total_pendiente,
-            "mantenimientos_futuros": mantenimientos_futuros,
-            "proximo_mantenimiento": proximo_mantenimiento,
-            "es_admin": True,
-        },
-    )
+    from finanzas.views import facturas_lista
+    return facturas_lista(request)
 
 
 @login_required
@@ -4164,197 +6272,11 @@ def factura_anular_view(request, pk):
 
 @login_required
 def flujo_mensual_view(request):
+    """Compatibilidad: delega al panel financiero canónico."""
     if not es_admin(request.user):
         return render(request, "dashboard/no_autorizado.html", status=403)
-
-    hoy = timezone.localdate()
-
-    try:
-        anio = int(request.GET.get("anio", hoy.year))
-        mes = int(request.GET.get("mes", hoy.month))
-    except ValueError:
-        anio, mes = hoy.year, hoy.month
-
-    primer_dia = date(anio, mes, 1)
-    ultimo_dia = date(anio, mes, monthrange(anio, mes)[1])
-
-    ingresos_qs = Ingreso.objects.filter(fecha__range=(primer_dia, ultimo_dia)).order_by("-fecha", "-id")
-    egresos_qs = Egreso.objects.filter(fecha__range=(primer_dia, ultimo_dia)).order_by("-fecha", "-id")
-
-    ingresos_manuales_qs = ingresos_qs.filter(cliente__isnull=True, contrato__isnull=True)
-    egresos_manuales_qs = egresos_qs.filter(mantenimiento__isnull=True, insumo__isnull=True)
-
-    total_ingresos = ingresos_qs.aggregate(total=Sum("total"))["total"] or Decimal("0")
-    total_egresos = egresos_qs.aggregate(total=Sum("total"))["total"] or Decimal("0")
-
-    total_ingresos_manuales = ingresos_manuales_qs.aggregate(total=Sum("total"))["total"] or Decimal("0")
-    total_egresos_manuales = egresos_manuales_qs.aggregate(total=Sum("total"))["total"] or Decimal("0")
-
-    total_ingresos_automaticos = total_ingresos - total_ingresos_manuales
-    total_egresos_automaticos = total_egresos - total_egresos_manuales
-
-    balance = total_ingresos - total_egresos
-
-    # Resumen del día (movido desde dashboard)
-    ingresos_hoy_qs = Ingreso.objects.filter(fecha=hoy).order_by("-id")
-    egresos_hoy_qs = Egreso.objects.filter(fecha=hoy).order_by("-id")
-
-    total_ingresos_hoy = ingresos_hoy_qs.aggregate(total=Sum("total"))["total"] or Decimal("0")
-    total_egresos_hoy = egresos_hoy_qs.aggregate(total=Sum("total"))["total"] or Decimal("0")
-    balance_hoy = total_ingresos_hoy - total_egresos_hoy
-
-    total_ingresos_hoy_manuales = ingresos_hoy_qs.filter(cliente__isnull=True, contrato__isnull=True).aggregate(total=Sum("total"))["total"] or Decimal("0")
-    total_egresos_hoy_manuales = egresos_hoy_qs.filter(mantenimiento__isnull=True, insumo__isnull=True).aggregate(total=Sum("total"))["total"] or Decimal("0")
-
-    total_ingresos_hoy_automaticos = total_ingresos_hoy - total_ingresos_hoy_manuales
-    total_egresos_hoy_automaticos = total_egresos_hoy - total_egresos_hoy_manuales
-
-    actualizar_facturas_vencidas()
-    facturas_mes = Factura.objects.filter(
-        periodo_anio=anio,
-        periodo_mes=mes,
-    ).select_related("cliente", "contrato", "ingreso_generado").order_by("-id")
-
-    total_facturas_mes = facturas_mes.aggregate(total=Sum("total"))["total"] or Decimal("0")
-    total_facturas_pagadas_mes = facturas_mes.filter(
-        estado=Factura.ESTADO_PAGADA
-    ).aggregate(total=Sum("total"))["total"] or Decimal("0")
-    total_facturas_pendientes_mes = facturas_mes.filter(
-        estado__in=[Factura.ESTADO_PENDIENTE, Factura.ESTADO_VENCIDA]
-    ).aggregate(total=Sum("total"))["total"] or Decimal("0")
-    total_facturas_vencidas = facturas_mes.filter(estado=Factura.ESTADO_VENCIDA).count()
-    total_facturas_pagadas_count = facturas_mes.filter(estado=Factura.ESTADO_PAGADA).count()
-    total_facturas_pendientes_count = facturas_mes.filter(
-        estado__in=[Factura.ESTADO_PENDIENTE, Factura.ESTADO_VENCIDA]
-    ).count()
-
-    # Recurrentes próximos (movidos desde dashboard)
-    recurrentes_proximos_3_dias = list(
-        MovimientoRecurrente.objects.filter(
-            activo=True,
-            proxima_fecha__gte=hoy,
-            proxima_fecha__lte=hoy + timedelta(days=3)
-        ).order_by("proxima_fecha", "id")[:10]
-    )
-
-    # Mes anterior
-    mes_anterior = mes - 1 or 12
-    anio_anterior = anio - 1 if mes == 1 else anio
-
-    primer_dia_ant = date(anio_anterior, mes_anterior, 1)
-    ultimo_dia_ant = date(anio_anterior, mes_anterior, monthrange(anio_anterior, mes_anterior)[1])
-
-    ingresos_ant = Ingreso.objects.filter(fecha__range=(primer_dia_ant, ultimo_dia_ant))
-    egresos_ant = Egreso.objects.filter(fecha__range=(primer_dia_ant, ultimo_dia_ant))
-
-    total_ingresos_ant = ingresos_ant.aggregate(total=Sum("total"))["total"] or Decimal("0")
-    total_egresos_ant = egresos_ant.aggregate(total=Sum("total"))["total"] or Decimal("0")
-    balance_ant = total_ingresos_ant - total_egresos_ant
-
-    def variacion(actual, anterior):
-        if anterior == 0:
-            return 100 if actual > 0 else 0
-        return ((actual - anterior) / anterior) * 100
-
-    variacion_ingresos_mes = variacion(total_ingresos, total_ingresos_ant)
-    variacion_egresos_mes = variacion(total_egresos, total_egresos_ant)
-    variacion_balance_mes = variacion(balance, balance_ant)
-
-    # Resumen diario
-    resumen_diario = []
-    balance_acumulado = Decimal("0")
-
-    dias = monthrange(anio, mes)[1]
-    for dia in range(1, dias + 1):
-        fecha = date(anio, mes, dia)
-
-        ingresos_dia = ingresos_qs.filter(fecha=fecha).aggregate(total=Sum("total"))["total"] or Decimal("0")
-        egresos_dia = egresos_qs.filter(fecha=fecha).aggregate(total=Sum("total"))["total"] or Decimal("0")
-
-        balance_dia = ingresos_dia - egresos_dia
-        balance_acumulado += balance_dia
-
-        resumen_diario.append({
-            "dia": dia,
-            "ingresos": ingresos_dia,
-            "egresos": egresos_dia,
-            "balance_acumulado": balance_acumulado,
-        })
-
-    top_ingresos = ingresos_qs.order_by("-total")[:5]
-    top_egresos = egresos_qs.order_by("-total")[:5]
-
-    fecha_inicio_reporte = primer_dia.strftime("%Y-%m-%d")
-    fecha_fin_reporte = ultimo_dia.strftime("%Y-%m-%d")
-
-    return render(request, "dashboard/flujo_mensual.html", {
-        "anio": anio,
-        "mes": mes,
-        "hoy": hoy,
-        "primer_dia": primer_dia,
-        "ultimo_dia": ultimo_dia,
-
-        "ingresos_qs": ingresos_qs,
-        "egresos_qs": egresos_qs,
-        "ingresos_hoy_qs": ingresos_hoy_qs[:8],
-        "egresos_hoy_qs": egresos_hoy_qs[:8],
-
-        "ingresos_manuales_qs": ingresos_manuales_qs,
-        "egresos_manuales_qs": egresos_manuales_qs,
-
-        "total_ingresos": total_ingresos,
-        "total_egresos": total_egresos,
-        "total_ingresos_hoy": total_ingresos_hoy,
-        "total_egresos_hoy": total_egresos_hoy,
-
-        "total_ingresos_manuales": total_ingresos_manuales,
-        "total_egresos_manuales": total_egresos_manuales,
-        "total_ingresos_hoy_manuales": total_ingresos_hoy_manuales,
-        "total_egresos_hoy_manuales": total_egresos_hoy_manuales,
-
-        "total_ingresos_automaticos": total_ingresos_automaticos,
-        "total_egresos_automaticos": total_egresos_automaticos,
-        "total_ingresos_hoy_automaticos": total_ingresos_hoy_automaticos,
-        "total_egresos_hoy_automaticos": total_egresos_hoy_automaticos,
-
-        "balance": balance,
-        "balance_hoy": balance_hoy,
-
-        "facturas_mes": facturas_mes,
-        "total_facturas_mes": total_facturas_mes,
-        "total_facturas_pagadas_mes": total_facturas_pagadas_mes,
-        "total_facturas_pendientes_mes": total_facturas_pendientes_mes,
-        "total_facturas_vencidas": total_facturas_vencidas,
-        "total_facturas_pagadas_count": total_facturas_pagadas_count,
-        "total_facturas_pendientes_count": total_facturas_pendientes_count,
-
-        "recurrentes_proximos_3_dias": recurrentes_proximos_3_dias,
-
-        "resumen_mes_actual": {
-            "ingresos": total_ingresos,
-            "egresos": total_egresos,
-            "balance": balance,
-        },
-        "resumen_mes_anterior": {
-            "ingresos": total_ingresos_ant,
-            "egresos": total_egresos_ant,
-            "balance": balance_ant,
-        },
-
-        "variacion_ingresos_mes": variacion_ingresos_mes,
-        "variacion_egresos_mes": variacion_egresos_mes,
-        "variacion_balance_mes": variacion_balance_mes,
-
-        "resumen_diario": resumen_diario,
-
-        "top_ingresos": top_ingresos,
-        "top_egresos": top_egresos,
-
-        "fecha_inicio_reporte": fecha_inicio_reporte,
-        "fecha_fin_reporte": fecha_fin_reporte,
-        "es_admin": True,
-    })
-
+    from finanzas.views import panel_financiero
+    return panel_financiero(request)
 
 @login_required
 def egreso_manual_crear_view(request):
@@ -4656,18 +6578,17 @@ def movimientos_recurrentes_view(request):
         return render(request, "dashboard/no_autorizado.html", status=403)
 
     notificar_movimientos_recurrentes_proximos()
+    # Solo procesa los gastos creados expresamente en esta nueva sección.
+    # Los recurrentes históricos quedan aislados y jamás generan movimientos.
+    procesar_movimientos_recurrentes()
 
     if request.method == "POST":
-        tipo = (request.POST.get("tipo", "") or "").strip()
+        tipo = "egreso"
         concepto = (request.POST.get("concepto", "") or "").strip()
         monto_str = (request.POST.get("monto", "") or "").strip()
         frecuencia = (request.POST.get("frecuencia", "") or "").strip()
         proxima_fecha_str = (request.POST.get("proxima_fecha", "") or "").strip()
         activo = request.POST.get("activo") == "on"
-
-        if tipo not in ["ingreso", "egreso"]:
-            messages.error(request, "Tipo de movimiento inválido.")
-            return redirect("/dashboard/finanzas/recurrentes/")
 
         if frecuencia not in ["mensual", "semanal"]:
             messages.error(request, "Frecuencia inválida.")
@@ -4696,23 +6617,24 @@ def movimientos_recurrentes_view(request):
             monto=monto,
             frecuencia=frecuencia,
             proxima_fecha=proxima_fecha,
+            dia_mes=proxima_fecha.day if frecuencia == "mensual" else None,
             activo=activo,
+            es_gasto_manual_recurrente=True,
         )
 
         _registrar_actividad(
             user=request.user,
-            titulo="Movimiento recurrente creado",
+            titulo="Gasto recurrente creado",
             descripcion=f"{request.user.username} creó el movimiento recurrente '{concepto}' por ${monto}.",
             url="/dashboard/finanzas/recurrentes/",
         )
 
-        messages.success(request, "Movimiento recurrente creado correctamente.")
+        messages.success(request, "Gasto recurrente creado correctamente.")
         return redirect("/dashboard/finanzas/recurrentes/")
 
-    movimientos = MovimientoRecurrente.objects.all().order_by("activo", "proxima_fecha", "-id")
+    movimientos = MovimientoRecurrente.objects.filter(tipo="egreso", es_gasto_manual_recurrente=True).order_by("activo", "proxima_fecha", "-id")
     total_activos = movimientos.filter(activo=True).count()
     total_inactivos = movimientos.filter(activo=False).count()
-    total_ingresos = movimientos.filter(tipo="ingreso", activo=True).count()
     total_egresos = movimientos.filter(tipo="egreso", activo=True).count()
     pendientes = movimientos.filter(activo=True, proxima_fecha__lte=date.today()).count()
 
@@ -4723,7 +6645,6 @@ def movimientos_recurrentes_view(request):
             "movimientos": movimientos,
             "total_activos": total_activos,
             "total_inactivos": total_inactivos,
-            "total_ingresos": total_ingresos,
             "total_egresos": total_egresos,
             "pendientes": pendientes,
             "hoy": date.today(),
@@ -4745,8 +6666,7 @@ def movimientos_recurrentes_procesar_view(request):
         titulo="Recurrentes procesados",
         descripcion=(
             f"{request.user.username} ejecutó los movimientos recurrentes: "
-            f"{resultado['total_generados']} generados "
-            f"({resultado['ingresos_generados']} ingresos, {resultado['egresos_generados']} egresos)."
+            f"{resultado['egresos_generados']} obligaciones de gasto generadas."
         ),
         url="/dashboard/finanzas/recurrentes/",
     )
@@ -4754,8 +6674,7 @@ def movimientos_recurrentes_procesar_view(request):
     if resultado["total_generados"] > 0:
         messages.success(
             request,
-            f"Proceso completado: {resultado['total_generados']} movimientos generados "
-            f"({resultado['ingresos_generados']} ingresos y {resultado['egresos_generados']} egresos)."
+            f"Proceso completado: {resultado['egresos_generados']} obligaciones de gasto generadas."
         )
     else:
         messages.info(request, "No había movimientos recurrentes pendientes por procesar.")
@@ -4768,19 +6687,15 @@ def movimiento_recurrente_editar_view(request, pk):
     if not es_admin(request.user):
         return render(request, "dashboard/no_autorizado.html", status=403)
 
-    movimiento = get_object_or_404(MovimientoRecurrente, pk=pk)
+    movimiento = get_object_or_404(MovimientoRecurrente, pk=pk, tipo="egreso", es_gasto_manual_recurrente=True)
 
     if request.method == "POST":
-        tipo = (request.POST.get("tipo", "") or "").strip()
+        tipo = "egreso"
         concepto = (request.POST.get("concepto", "") or "").strip()
         monto_str = (request.POST.get("monto", "") or "").strip()
         frecuencia = (request.POST.get("frecuencia", "") or "").strip()
         proxima_fecha_str = (request.POST.get("proxima_fecha", "") or "").strip()
         activo = request.POST.get("activo") == "on"
-
-        if tipo not in ["ingreso", "egreso"]:
-            messages.error(request, "Tipo inválido.")
-            return redirect(f"/dashboard/finanzas/recurrentes/{pk}/editar/")
 
         if frecuencia not in ["mensual", "semanal"]:
             messages.error(request, "Frecuencia inválida.")
@@ -4808,6 +6723,7 @@ def movimiento_recurrente_editar_view(request, pk):
         movimiento.monto = monto
         movimiento.frecuencia = frecuencia
         movimiento.proxima_fecha = proxima_fecha
+        movimiento.dia_mes = proxima_fecha.day if frecuencia == "mensual" else None
         movimiento.activo = activo
         movimiento.save()
 
@@ -4838,7 +6754,7 @@ def movimiento_recurrente_toggle_view(request, pk):
     if not es_admin(request.user):
         return render(request, "dashboard/no_autorizado.html", status=403)
 
-    movimiento = get_object_or_404(MovimientoRecurrente, pk=pk)
+    movimiento = get_object_or_404(MovimientoRecurrente, pk=pk, tipo="egreso", es_gasto_manual_recurrente=True)
 
     movimiento.activo = not movimiento.activo
     movimiento.save(update_fields=["activo"])
@@ -4861,7 +6777,7 @@ def movimiento_recurrente_eliminar_view(request, pk):
     if not es_admin(request.user):
         return render(request, "dashboard/no_autorizado.html", status=403)
 
-    movimiento = get_object_or_404(MovimientoRecurrente, pk=pk)
+    movimiento = get_object_or_404(MovimientoRecurrente, pk=pk, tipo="egreso", es_gasto_manual_recurrente=True)
 
     if request.method == "POST":
         concepto = movimiento.concepto
@@ -4920,19 +6836,47 @@ def unread_count_view(request):
 
 from inventario.models import (
     Insumo, VentaInsumo, EntradaStock, MovimientoInventario,
-    InventarioTrabajador, CompraInsumo, PresentacionInsumo, SolicitudReposicion,
+    InventarioTrabajador, InventarioContrato, CompraInsumo, PresentacionInsumo, SolicitudReposicion,
 )
 from inventario.services import (
     convertir_a_base, entregar_a_trabajador, devolver_de_trabajador,
-    consumir_trabajador, revertir_consumo, decimal_positivo,
+    consumir_trabajador, consumir_contrato, reponer_contrato, ajustar_inventario_contrato, revertir_consumo, decimal_positivo, materializar_consumos_contratos,
 )
 
 
 def _inventario_valorizado():
-    total = Decimal("0.00")
-    for insumo in Insumo.objects.filter(activo=True):
-        total += Decimal(insumo.stock or 0) * Decimal(insumo.costo or 0)
-    return total
+    """
+    Valor total de inventario propiedad de JVAQUA:
+    bodega + asignado a trabajadores + almacenado en contratos.
+    """
+    bodega = sum(
+        (Decimal(i.stock or 0) * Decimal(i.costo or 0) for i in Insumo.objects.filter(activo=True)),
+        Decimal("0.00"),
+    )
+    trabajadores = sum(
+        (
+            Decimal(inv.stock or 0) * Decimal(inv.insumo.costo or 0)
+            for inv in InventarioTrabajador.objects.filter(stock__gt=0).select_related("insumo")
+        ),
+        Decimal("0.00"),
+    )
+    contratos = sum(
+        (
+            Decimal(inv.stock_estimado or 0) * Decimal(inv.insumo.costo or 0)
+            for inv in InventarioContrato.objects.filter(
+                contrato__activo=True,
+                contrato__quimicos_proveedor="jvaqua",
+                contrato__quimicos_almacenamiento="contrato",
+            ).select_related("insumo")
+        ),
+        Decimal("0.00"),
+    )
+    return {
+        "total": bodega + trabajadores + contratos,
+        "bodega": bodega,
+        "trabajadores": trabajadores,
+        "contratos": contratos,
+    }
 
 
 def _cantidad_texto(insumo, cantidad):
@@ -4941,10 +6885,59 @@ def _cantidad_texto(insumo, cantidad):
     return f"{cantidad:.3f} {unidad}"
 
 
+
+def _resumen_inventario_contratos_en_sitio():
+    """
+    Devuelve todos los contratos activos configurados para inventario en sitio,
+    incluso cuando aún no tengan filas InventarioContrato creadas.
+    """
+    contratos_en_sitio = list(
+        Contrato.objects.filter(
+            activo=True,
+            quimicos_proveedor="jvaqua",
+            quimicos_almacenamiento="contrato",
+        )
+        .select_related("cliente", "responsable_reposicion__user", "tecnico_designado__user")
+        .order_by("cliente__nombre", "id")
+    )
+    ids_contratos = [c.pk for c in contratos_en_sitio]
+
+    inventarios = list(
+        InventarioContrato.objects.filter(contrato_id__in=ids_contratos)
+        .select_related("contrato__cliente", "contrato__responsable_reposicion__user", "insumo")
+        .order_by("contrato__cliente__nombre", "insumo__nombre")
+    )
+
+    por_contrato = {
+        contrato.pk: {
+            "contrato": contrato,
+            "stocks": [],
+            "criticos": 0,
+            "valor": Decimal("0.00"),
+            "configurado": False,
+        }
+        for contrato in contratos_en_sitio
+    }
+    for fila in inventarios:
+        item = por_contrato.get(fila.contrato_id)
+        if item is None:
+            continue
+        item["stocks"].append(fila)
+        item["configurado"] = True
+        if fila.estado_stock in {"critico", "agotado"}:
+            item["criticos"] += 1
+        item["valor"] += Decimal(fila.stock_estimado or 0) * Decimal(fila.insumo.costo or 0)
+
+    return list(por_contrato.values())
+
+
 @login_required
 def inventario_view(request):
     if not es_admin(request.user):
         return render(request, "dashboard/no_autorizado.html", status=403)
+
+    # Mantiene sincronizado el inventario en sitio y registra su costo automático.
+    materializar_consumos_contratos(hoy=timezone.localdate(), usuario=request.user)
 
     insumos = list(Insumo.objects.filter(activo=True).prefetch_related("presentaciones").order_by("nombre"))
     trabajadores = list(Trabajador.objects.filter(activo=True).select_related("user").order_by("user__username"))
@@ -4965,10 +6958,12 @@ def inventario_view(request):
     total_ventas_mes = ventas_mes.aggregate(total=Sum("total")).get("total") or Decimal("0")
     ganancia_mes = ventas_mes.aggregate(total=Sum("ganancia")).get("total") or Decimal("0")
     total_compras_mes = CompraInsumo.objects.filter(fecha__gte=primer_dia_mes).aggregate(total=Sum("total")).get("total") or Decimal("0")
-    consumo_mes = MovimientoInventario.objects.filter(tipo="mantenimiento", fecha__gte=primer_dia_mes)
+    consumo_mes = MovimientoInventario.objects.filter(tipo__in=["mantenimiento", "consumo_contrato"], fecha__gte=primer_dia_mes)
     costo_consumo_mes = consumo_mes.aggregate(total=Sum("total_costo")).get("total") or Decimal("0")
     cantidad_consumo_mes = consumo_mes.aggregate(total=Sum("cantidad")).get("total") or Decimal("0")
     solicitudes_pendientes = SolicitudReposicion.objects.filter(estado="pendiente").select_related("trabajador__user", "insumo").order_by("-creada_en")
+    # Incluye también contratos en sitio que todavía no tienen productos configurados.
+    resumen_contratos_inventario = _resumen_inventario_contratos_en_sitio()
 
     movimientos_recientes = list(
         MovimientoInventario.objects.select_related("insumo", "trabajador__user", "mantenimiento__cliente")
@@ -4987,6 +6982,8 @@ def inventario_view(request):
         productos_asignados += len(stocks)
         resumen_trabajadores.append({"trabajador": trabajador, "stocks": stocks, "valor": valorizado})
 
+    valorizado_inventario = _inventario_valorizado()
+
     return render(request, "dashboard/inventario.html", {
         "insumos": insumos,
         "trabajadores": trabajadores,
@@ -4996,9 +6993,15 @@ def inventario_view(request):
         "bajo_stock": bajo_stock,
         "sin_stock": sin_stock,
         "stock_total_kg": stock_total_kg,
-        "valor_inventario": _inventario_valorizado(),
+        "valor_inventario": valorizado_inventario["total"],
+        "valor_inventario_bodega": valorizado_inventario["bodega"],
+        "valor_inventario_trabajadores": valorizado_inventario["trabajadores"],
+        "valor_inventario_contratos": valorizado_inventario["contratos"],
         "valor_asignado": valor_asignado,
         "productos_asignados": productos_asignados,
+        "resumen_contratos_inventario": resumen_contratos_inventario,
+        "contratos_inventario_count": len(resumen_contratos_inventario),
+        "contratos_inventario_critico": sum(1 for x in resumen_contratos_inventario if x["criticos"]),
         "total_ventas_mes": total_ventas_mes,
         "ganancia_mes": ganancia_mes,
         "total_compras_mes": total_compras_mes,
@@ -5532,7 +7535,10 @@ def inventario_presentacion_eliminar_view(request, pk):
 def mi_inventario_trabajador_view(request):
     if not es_trabajador(request.user):
         return render(request, "dashboard/no_autorizado.html", status=403)
-    trabajador = get_object_or_404(Trabajador.objects.select_related("user"), user=request.user)
+    trabajador = Trabajador.objects.select_related("user").filter(user=request.user).first()
+    if trabajador is None:
+        messages.warning(request, "Tu usuario todavía no está vinculado a una ficha de trabajador. Administración debe completar esa vinculación para mostrar tu inventario.")
+        return redirect("inicio")
     stocks = list(InventarioTrabajador.objects.filter(trabajador=trabajador, stock__gt=0).select_related("insumo").order_by("insumo__nombre"))
     movimientos = list(MovimientoInventario.objects.filter(trabajador=trabajador).select_related("insumo", "mantenimiento__cliente").order_by("-creado_en")[:100])
     hoy = timezone.localdate(); inicio = hoy.replace(day=1)
@@ -5543,9 +7549,10 @@ def mi_inventario_trabajador_view(request):
     items = []
     for stock in stocks:
         items.append({"stock": stock, "consumo_mes": consumos.get(stock.insumo_id, Decimal("0")), "ultima_entrega": ultimas_entregas.get(stock.insumo_id)})
+    stock_bajo = sum(1 for x in stocks if x.stock <= x.insumo.stock_minimo)
     return render(request, "dashboard/mi_inventario_trabajador.html", {
         "trabajador": trabajador, "items": items, "movimientos": movimientos,
-        "valor_estimado": sum((Decimal(x.stock) * Decimal(x.insumo.costo or 0) for x in stocks), Decimal("0")),
+        "stock_bajo": stock_bajo,
         "es_admin": False,
     })
 
@@ -5667,19 +7674,63 @@ def inventario_trabajador_detalle_view(request, trabajador_id):
 
 def _pdf_inventario_response(titulo, filas, nombre_archivo, resumen=None):
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=1.1*cm, leftMargin=1.1*cm, topMargin=1.1*cm, bottomMargin=1.1*cm)
-    styles = getSampleStyleSheet(); story = [Paragraph(titulo, styles["Title"]), Spacer(1, 8)]
-    story.append(Paragraph(f"Generado: {timezone.localdate().strftime('%d/%m/%Y')}", styles["Normal"]))
+    columnas = len(filas[0]) if filas else 0
+    pagina = landscape(A4) if columnas >= 6 else A4
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=pagina,
+        rightMargin=1.1*cm,
+        leftMargin=1.1*cm,
+        topMargin=2.4*cm,
+        bottomMargin=1.5*cm,
+        title=titulo,
+        author="JVAQUA",
+    )
+    styles = getSampleStyleSheet()
+    celda = ParagraphStyle(
+        "InvCelda",
+        parent=styles["BodyText"],
+        fontSize=7.4 if columnas >= 6 else 8.2,
+        leading=9,
+    )
+    titulo_style = ParagraphStyle(
+        "InvTitulo",
+        parent=styles["Title"],
+        fontSize=16,
+        leading=19,
+        textColor=colors.HexColor("#123B66"),
+        spaceAfter=3,
+    )
+    story = [
+        Paragraph(titulo, titulo_style),
+        Paragraph(f"Generado: {timezone.localdate().strftime('%d/%m/%Y')}", styles["Normal"]),
+    ]
     if resumen:
-        story.append(Spacer(1, 6)); story.append(Paragraph(resumen, styles["Normal"]))
-    story.append(Spacer(1, 10))
-    tabla = Table(filas, repeatRows=1)
+        story += [Spacer(1, 4), Paragraph(resumen, styles["Normal"])]
+    story.append(Spacer(1, 8))
+
+    filas_pdf = []
+    for indice, fila in enumerate(filas):
+        estilo = styles["BodyText"] if indice == 0 else celda
+        filas_pdf.append([Paragraph(str(valor), estilo) for valor in fila])
+
+    tabla = Table(filas_pdf, repeatRows=1, hAlign="LEFT")
     tabla.setStyle(TableStyle([
-        ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#D9EAF7")), ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
-        ("GRID", (0,0), (-1,-1), .45, colors.lightgrey), ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
-        ("FONTSIZE", (0,0), (-1,-1), 8.5), ("PADDING", (0,0), (-1,-1), 4),
+        ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#123B66")),
+        ("TEXTCOLOR", (0,0), (-1,0), colors.white),
+        ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+        ("GRID", (0,0), (-1,-1), .35, colors.HexColor("#CBD5E1")),
+        ("VALIGN", (0,0), (-1,-1), "TOP"),
+        ("FONTSIZE", (0,0), (-1,-1), 7.5 if columnas >= 6 else 8.2),
+        ("LEFTPADDING", (0,0), (-1,-1), 4),
+        ("RIGHTPADDING", (0,0), (-1,-1), 4),
+        ("TOPPADDING", (0,0), (-1,-1), 4),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+        ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white, colors.HexColor("#F8FAFC")]),
     ]))
-    story.append(tabla); doc.build(story); buffer.seek(0)
+    story.append(tabla)
+    doc.build(story, onFirstPage=draw_jvaqua_pdf_page, onLaterPages=draw_jvaqua_pdf_page)
+    buffer.seek(0)
     response = HttpResponse(buffer.getvalue(), content_type="application/pdf")
     response["Content-Disposition"] = f'attachment; filename="{nombre_archivo}"'
     return response
@@ -5691,7 +7742,13 @@ def inventario_general_pdf_view(request):
     filas = [["Producto", "Categoría", "Stock", "Mínimo", "Costo/base", "Valor"]]
     for i in Insumo.objects.filter(activo=True).order_by("nombre"):
         filas.append([i.nombre, i.get_categoria_display(), _cantidad_texto(i, i.stock), _cantidad_texto(i, i.stock_minimo), f"${i.costo:,.4f}", f"${(Decimal(i.stock)*Decimal(i.costo or 0)):,.2f}"])
-    return _pdf_inventario_response("Inventario General JVAQUA", filas, "inventario_general.pdf", f"Valor estimado del inventario: ${_inventario_valorizado():,.2f}")
+    valorizado = _inventario_valorizado()
+    return _pdf_inventario_response(
+        "Inventario General JVAQUA",
+        filas,
+        "inventario_general.pdf",
+        f"Valor total: ${valorizado['total']:,.2f} · Bodega: ${valorizado['bodega']:,.2f} · Trabajadores: ${valorizado['trabajadores']:,.2f} · Contratos: ${valorizado['contratos']:,.2f}",
+    )
 
 
 @login_required
@@ -5756,7 +7813,7 @@ import io
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import cm
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
@@ -5819,13 +7876,15 @@ def _obtener_serie_mensual_ganancias(fecha_inicio=None, fecha_fin=None):
 
         ingresos_mes = (
             Ingreso.objects.filter(fecha__range=(primer_dia, ultimo_dia))
-            .aggregate(total=Sum("total"))
+            .exclude(estado=Ingreso.ESTADO_ANULADO)
+            .aggregate(total=Sum("monto_pagado"))
             .get("total")
             or Decimal("0")
         )
         egresos_mes = (
-            Egreso.objects.filter(fecha__range=(primer_dia, ultimo_dia))
-            .aggregate(total=Sum("total"))
+            Egreso.objects.filter(fecha__range=(primer_dia, ultimo_dia), aprobado=True)
+            .exclude(estado=Egreso.ESTADO_ANULADO)
+            .aggregate(total=Sum("monto_pagado"))
             .get("total")
             or Decimal("0")
         )
@@ -5845,9 +7904,13 @@ def _obtener_serie_mensual_ganancias(fecha_inicio=None, fecha_fin=None):
 
 
 def _obtener_datos_reporte_ganancias(fecha_inicio=None, fecha_fin=None):
-    ingresos = Ingreso.objects.all().order_by("-fecha", "-id")
+    ingresos = (
+        Ingreso.objects.exclude(estado=Ingreso.ESTADO_ANULADO)
+        .order_by("-fecha", "-id")
+    )
     egresos = (
-        Egreso.objects.all()
+        Egreso.objects.filter(aprobado=True)
+        .exclude(estado=Egreso.ESTADO_ANULADO)
         .select_related("insumo", "mantenimiento", "mantenimiento__cliente")
         .order_by("-fecha", "-id")
     )
@@ -5860,8 +7923,8 @@ def _obtener_datos_reporte_ganancias(fecha_inicio=None, fecha_fin=None):
         ingresos = ingresos.filter(fecha__lte=fecha_fin)
         egresos = egresos.filter(fecha__lte=fecha_fin)
 
-    total_ingresos = ingresos.aggregate(total=Sum("total"))["total"] or Decimal("0")
-    total_egresos = egresos.aggregate(total=Sum("total"))["total"] or Decimal("0")
+    total_ingresos = ingresos.aggregate(total=Sum("monto_pagado"))["total"] or Decimal("0")
+    total_egresos = egresos.aggregate(total=Sum("monto_pagado"))["total"] or Decimal("0")
     ganancia = total_ingresos - total_egresos
 
     movimientos = []
@@ -5870,7 +7933,7 @@ def _obtener_datos_reporte_ganancias(fecha_inicio=None, fecha_fin=None):
         movimientos.append({
             "tipo": "Ingreso",
             "concepto": getattr(i, "concepto", "") or "-",
-            "monto": i.total or Decimal("0"),
+            "monto": i.monto_pagado or Decimal("0"),
             "fecha": i.fecha,
         })
 
@@ -5883,7 +7946,7 @@ def _obtener_datos_reporte_ganancias(fecha_inicio=None, fecha_fin=None):
         movimientos.append({
             "tipo": "Egreso",
             "concepto": concepto,
-            "monto": e.total or Decimal("0"),
+            "monto": e.monto_pagado or Decimal("0"),
             "fecha": e.fecha,
         })
 
@@ -6044,7 +8107,7 @@ def exportar_ganancias_pdf(request):
         pagesize=A4,
         rightMargin=1.2 * cm,
         leftMargin=1.2 * cm,
-        topMargin=1.2 * cm,
+        topMargin=2.4 * cm,
         bottomMargin=1.2 * cm,
     )
 
@@ -6110,7 +8173,7 @@ def exportar_ganancias_pdf(request):
 
     story.append(tabla_detalle)
 
-    doc.build(story)
+    doc.build(story, onFirstPage=draw_jvaqua_pdf_page, onLaterPages=draw_jvaqua_pdf_page)
     pdf = buffer.getvalue()
     buffer.close()
 
@@ -6136,6 +8199,28 @@ FRECUENCIAS_CONTRATO_VALIDAS = {"1_semanal", "2_semanales", "3_semanales", "quin
 FORMAS_PAGO_CONTRATO_VALIDAS = {valor for valor, _ in Contrato.FORMA_PAGO_CHOICES}
 PROGRAMACIONES_COBRO_VALIDAS = {valor for valor, _ in Contrato.PROGRAMACION_COBRO_CHOICES}
 MOMENTOS_FACTURACION_VALIDOS = {valor for valor, _ in Contrato.MOMENTO_FACTURACION_CHOICES}
+QUIMICOS_PROVEEDORES_VALIDOS = {valor for valor, _ in Contrato.QUIMICOS_PROVEEDOR_CHOICES}
+QUIMICOS_ALMACENAMIENTOS_VALIDOS = {valor for valor, _ in Contrato.QUIMICOS_ALMACENAMIENTO_CHOICES}
+
+
+def _errores_coherencia_cobro(forma_pago, programacion_cobro):
+    """Evita combinaciones comerciales que producen fechas de cartera contradictorias."""
+    compatibles = {
+        "adelantado": {"inicio_periodo"},
+        "servicio_cumplido": {"cierre_periodo", "despues_cierre"},
+        "50_50": {"dos_pagos"},
+        "quincenal": {"dos_pagos"},
+        "por_visita": {"por_visita"},
+        "fin_mensualidad": {"cierre_periodo", "despues_cierre"},
+        "semestral_adelantado": {"semestral_adelantado"},
+    }
+    permitidas = compatibles.get(forma_pago)
+    if permitidas and programacion_cobro not in permitidas:
+        etiqueta_forma = dict(Contrato.FORMA_PAGO_CHOICES).get(forma_pago, forma_pago)
+        etiquetas_prog = dict(Contrato.PROGRAMACION_COBRO_CHOICES)
+        opciones = ", ".join(etiquetas_prog.get(x, x) for x in sorted(permitidas))
+        return [f"La forma de pago ‘{etiqueta_forma}’ no coincide con la programación de cobro. Usa: {opciones}."]
+    return []
 
 
 def _entero_post(request, nombre, minimo=0, maximo=None, obligatorio=False):
@@ -6161,13 +8246,55 @@ def _validar_datos_contrato(request):
     precio_mensual_str = (request.POST.get("precio_mensual") or "").strip()
     valor_tecnico_str = (request.POST.get("valor_tecnico_mensual") or "0").strip()
     fecha_inicio_str = (request.POST.get("fecha_inicio") or "").strip()
+    vigencia_raw = (request.POST.get("vigencia_meses") or "").strip()
     activo = request.POST.get("activo") == "on"
     generacion_automatica = request.POST.get("generacion_automatica") == "on"
     tecnico_id = (request.POST.get("tecnico_designado") or "").strip()
     dias_visita = normalizar_dias(request.POST.getlist("dias_visita"))
     requiere_factura = request.POST.get("requiere_factura") == "on"
-    notificar_facturacion = request.POST.get("notificar_facturacion") == "on"
+    # Si requiere factura, el aviso interno siempre queda activo.
+    notificar_facturacion = requiere_factura
+    aplica_iva = request.POST.get("aplica_iva") == "on"
     momento_facturacion = (request.POST.get("momento_facturacion") or "").strip()
+    facturacion_tipo_identificacion = (request.POST.get("facturacion_tipo_identificacion") or "").strip()
+    facturacion_identificacion = (request.POST.get("facturacion_identificacion") or "").strip()
+    facturacion_razon_social = (request.POST.get("facturacion_razon_social") or "").strip()
+    facturacion_direccion = (request.POST.get("facturacion_direccion") or "").strip()
+    facturacion_telefono = (request.POST.get("facturacion_telefono") or "").strip()
+    facturacion_correo = (request.POST.get("facturacion_correo") or "").strip()
+
+    # La identidad fiscal pertenece al cliente, no al contrato. Los campos
+    # heredados se mantienen como instantáneas compatibles para PDFs/reportes.
+    cliente_fiscal_id = request.POST.get("cliente")
+    cliente_fiscal = Cliente.objects.filter(pk=cliente_fiscal_id).first() if str(cliente_fiscal_id or "").isdigit() else None
+    if cliente_fiscal and not cliente_fiscal.facturacion_revision_pendiente:
+        facturacion_tipo_identificacion = cliente_fiscal.facturacion_tipo_identificacion
+        facturacion_identificacion = cliente_fiscal.facturacion_identificacion
+        facturacion_razon_social = cliente_fiscal.facturacion_razon_social
+        facturacion_direccion = cliente_fiscal.facturacion_direccion
+        facturacion_telefono = cliente_fiscal.facturacion_telefono
+        facturacion_correo = cliente_fiscal.facturacion_correo
+
+    # Coherencia obligatoria: "Por visita" gobierna Cartera y, si aplica,
+    # Facturación Externa. No aceptamos una fecha mensual contradictoria.
+    if forma_pago == "por_visita":
+        programacion_cobro = "por_visita"
+        programacion_personalizada = ""
+        if requiere_factura:
+            momento_facturacion = "por_visita"
+
+    quimicos_proveedor = (request.POST.get("quimicos_proveedor") or "jvaqua").strip()
+    quimicos_almacenamiento = (request.POST.get("quimicos_almacenamiento") or "trabajador").strip()
+    responsable_reposicion_id = (request.POST.get("responsable_reposicion") or "").strip()
+    tipo_horario_visita = (request.POST.get("tipo_horario_visita") or "libre").strip()
+    hora_visita_fija = (request.POST.get("hora_visita_fija") or "").strip()
+    ventana_visita_desde = (request.POST.get("ventana_visita_desde") or "").strip()
+    ventana_visita_hasta = (request.POST.get("ventana_visita_hasta") or "").strip()
+    prioridad_visita = (request.POST.get("prioridad_visita") or "normal").strip()
+    try:
+        duracion_estimada_minutos = int(request.POST.get("duracion_estimada_minutos") or 30)
+    except (TypeError, ValueError):
+        duracion_estimada_minutos = 30
     errores = []
 
     cliente = Cliente.objects.filter(pk=int(cliente_id)).first() if cliente_id.isdigit() else None
@@ -6178,11 +8305,12 @@ def _validar_datos_contrato(request):
     if forma_pago == "personalizado" and not forma_pago_personalizada: errores.append("Debes escribir la forma de pago personalizada.")
     if programacion_cobro not in PROGRAMACIONES_COBRO_VALIDAS: errores.append("Debes seleccionar una programación de cobro válida.")
     if programacion_cobro == "personalizado" and not programacion_personalizada: errores.append("Describe la programación de cobro personalizada.")
+    errores.extend(_errores_coherencia_cobro(forma_pago, programacion_cobro))
 
     campos_enteros = {}
     configuracion = [
-        ("periodo_dia_inicio", 1, 31, True), ("cobro_mes_desfase", 0, 2, True),
-        ("cobro_dia_1", 1, 31, programacion_cobro in {"dia_fijo", "dos_pagos"}),
+        ("periodo_dia_inicio", 1, 31, False), ("cobro_mes_desfase", 0, 2, False),
+        ("cobro_dia_1", 1, 31, programacion_cobro in {"dia_fijo", "dos_pagos", "personalizado"}),
         ("cobro_dia_2", 1, 31, programacion_cobro == "dos_pagos"),
         ("cobro_rango_desde", 1, 31, programacion_cobro == "rango_dias"),
         ("cobro_rango_hasta", 1, 31, programacion_cobro == "rango_dias"),
@@ -6190,6 +8318,7 @@ def _validar_datos_contrato(request):
         ("facturacion_dia", 1, 31, requiere_factura and momento_facturacion in {"dia_fijo", "personalizado"}),
         ("facturacion_dias_antes", 0, 365, False),
         ("notificacion_factura_dias_antes", 0, 365, False),
+        ("aviso_vencimiento_dias", 0, 365, False),
     ]
     for nombre, minimo, maximo, obligatorio in configuracion:
         try: campos_enteros[nombre] = _entero_post(request, nombre, minimo, maximo, obligatorio)
@@ -6205,6 +8334,32 @@ def _validar_datos_contrato(request):
 
     if requiere_factura and momento_facturacion not in MOMENTOS_FACTURACION_VALIDOS:
         errores.append("Selecciona cuándo debe emitirse la factura.")
+    if requiere_factura and not (cliente_fiscal and cliente_fiscal.facturacion_revision_pendiente):
+        # En los datos administrativos de facturación únicamente la identificación
+        # es obligatoria. El resto de campos puede completarse cuando el cliente
+        # facilite la información, sin impedir guardar el contrato.
+        if not facturacion_identificacion:
+            errores.append("Ingresa la identificación para facturación.")
+        elif not facturacion_identificacion.isdigit():
+            errores.append("La identificación de facturación debe contener solo números.")
+        elif facturacion_tipo_identificacion == "ruc" and len(facturacion_identificacion) != 13:
+            errores.append("El RUC debe tener 13 dígitos.")
+        elif facturacion_tipo_identificacion == "cedula" and len(facturacion_identificacion) != 10:
+            errores.append("La cédula debe tener 10 dígitos.")
+    # No borrar datos fiscales históricos cuando el contrato no requiere factura.
+
+    if quimicos_proveedor not in QUIMICOS_PROVEEDORES_VALIDOS:
+        errores.append("Selecciona quién proporciona los químicos.")
+    if quimicos_proveedor == "jvaqua" and quimicos_almacenamiento not in QUIMICOS_ALMACENAMIENTOS_VALIDOS:
+        errores.append("Selecciona dónde se almacenan los químicos de JVAQUA.")
+    if quimicos_proveedor == "cliente":
+        quimicos_almacenamiento = ""
+
+    responsable_reposicion = None
+    if responsable_reposicion_id and quimicos_proveedor == "jvaqua" and quimicos_almacenamiento == "contrato":
+        responsable_reposicion = Trabajador.objects.filter(pk=int(responsable_reposicion_id), activo=True).select_related("user").first() if responsable_reposicion_id.isdigit() else None
+        if responsable_reposicion is None:
+            errores.append("El responsable de reposición seleccionado no existe o está inactivo.")
 
     tecnico_designado = None
     if tecnico_id:
@@ -6223,19 +8378,75 @@ def _validar_datos_contrato(request):
         valor_tecnico_mensual = Decimal("0.00"); errores.append("El valor mensual del técnico debe ser cero o mayor.")
     if valor_tecnico_mensual and not tecnico_designado: errores.append("Debes seleccionar un técnico para asignarle un valor mensual.")
     fecha_inicio = parse_date(fecha_inicio_str)
-    if not fecha_inicio: errores.append("Debes seleccionar una fecha de inicio válida.")
+    if not fecha_inicio:
+        errores.append("Debes seleccionar una fecha de inicio válida.")
+    else:
+        # Una sola fuente para el ciclo comercial: la fecha de inicio.
+        campos_enteros["periodo_dia_inicio"] = fecha_inicio.day
+
+    vigencia_meses = None
+    if vigencia_raw:
+        try:
+            vigencia_meses = int(vigencia_raw)
+            if not 1 <= vigencia_meses <= 120:
+                raise ValueError
+        except (TypeError, ValueError):
+            vigencia_meses = None
+            errores.append("La vigencia debe estar entre 1 y 120 meses.")
+    if programacion_cobro == "semestral_adelantado" and not vigencia_meses:
+        vigencia_meses = 12
+
+    if programacion_cobro in {"inicio_periodo", "cierre_periodo", "despues_cierre", "por_visita"}:
+        campos_enteros["cobro_mes_desfase"] = 0
+
+    hora_visita_fija_obj = parse_time(hora_visita_fija) if hora_visita_fija else None
+    ventana_visita_desde_obj = parse_time(ventana_visita_desde) if ventana_visita_desde else None
+    ventana_visita_hasta_obj = parse_time(ventana_visita_hasta) if ventana_visita_hasta else None
+    if tipo_horario_visita not in {"libre", "fijo", "ventana"}:
+        errores.append("Selecciona un tipo de horario de visita válido.")
+    if prioridad_visita not in {"normal", "alta"}:
+        errores.append("Selecciona una prioridad de visita válida.")
+    if not 10 <= duracion_estimada_minutos <= 480:
+        errores.append("La duración estimada debe estar entre 10 y 480 minutos.")
+    if tipo_horario_visita == "fijo" and not hora_visita_fija_obj:
+        errores.append("Indica una hora fija de visita válida.")
+    if tipo_horario_visita == "ventana":
+        if not ventana_visita_desde_obj or not ventana_visita_hasta_obj:
+            errores.append("Indica el inicio y fin válidos de la ventana horaria.")
+        elif ventana_visita_desde_obj >= ventana_visita_hasta_obj:
+            errores.append("La hora final de la ventana debe ser posterior a la inicial.")
 
     return {
         "errores": errores, "cliente": cliente, "frecuencia": frecuencia,
         "frecuencia_personalizada": frecuencia_personalizada, "forma_pago": forma_pago,
         "forma_pago_personalizada": forma_pago_personalizada, "precio_mensual": precio_mensual,
-        "valor_tecnico_mensual": valor_tecnico_mensual, "fecha_inicio": fecha_inicio, "activo": activo,
+        "valor_tecnico_mensual": valor_tecnico_mensual, "fecha_inicio": fecha_inicio,
+        "vigencia_meses": vigencia_meses,
+        "aviso_vencimiento_dias": campos_enteros.get("aviso_vencimiento_dias") or 30,
+        "activo": activo,
         "generacion_automatica": generacion_automatica, "tecnico_designado": tecnico_designado,
         "tecnico_id": tecnico_id, "dias_visita": dias_visita, "programacion_cobro": programacion_cobro,
         "programacion_cobro_personalizada": programacion_personalizada, "porcentaje_primer_pago": porcentaje_primer_pago,
         "requiere_factura": requiere_factura, "momento_facturacion": momento_facturacion if requiere_factura else "",
-        "notificar_facturacion": notificar_facturacion if requiere_factura else False,
+        "notificar_facturacion": notificar_facturacion,
+        "aplica_iva": aplica_iva,
         "observaciones_facturacion": (request.POST.get("observaciones_facturacion") or "").strip(),
+        "facturacion_tipo_identificacion": facturacion_tipo_identificacion,
+        "facturacion_identificacion": facturacion_identificacion,
+        "facturacion_razon_social": facturacion_razon_social,
+        "facturacion_direccion": facturacion_direccion,
+        "facturacion_telefono": facturacion_telefono,
+        "facturacion_correo": facturacion_correo,
+        "quimicos_proveedor": quimicos_proveedor,
+        "quimicos_almacenamiento": quimicos_almacenamiento,
+        "responsable_reposicion": responsable_reposicion,
+        "responsable_reposicion_id": responsable_reposicion_id,
+        "tipo_horario_visita": tipo_horario_visita,
+        "hora_visita_fija": hora_visita_fija_obj if tipo_horario_visita == "fijo" else None,
+        "ventana_visita_desde": ventana_visita_desde_obj if tipo_horario_visita == "ventana" else None,
+        "ventana_visita_hasta": ventana_visita_hasta_obj if tipo_horario_visita == "ventana" else None,
+        "duracion_estimada_minutos": duracion_estimada_minutos,
+        "prioridad_visita": prioridad_visita,
         **campos_enteros,
     }
 
@@ -6245,15 +8456,26 @@ def _normalizar_telefono_cliente(valor):
     return "".join(caracter for caracter in (valor or "") if caracter.isdigit())
 
 
-def _datos_cliente_desde_request(request):
+CAMPOS_FISCALES_CLIENTE = ('facturacion_tipo_identificacion', 'facturacion_identificacion', 'facturacion_razon_social', 'facturacion_direccion', 'facturacion_telefono', 'facturacion_correo')
+
+
+def _datos_cliente_desde_request(request, cliente_actual=None):
+    # La ubicación pertenece al contrato. Preservar los valores heredados del
+    # cliente para compatibilidad con consultas históricas y rutas antiguas.
+    # Nunca tomar ubicación del POST de la ficha del cliente.
+    ubicacion = {
+        campo: getattr(cliente_actual, campo, defecto) if cliente_actual else defecto
+        for campo, defecto in (
+            ("ciudad", ""), ("sector_urbanizacion", ""), ("direccion", ""),
+            ("enlace_google_maps", ""), ("latitud", None), ("longitud", None),
+        )
+    }
     return {
+        **{campo: (request.POST.get(campo) or "").strip() for campo in CAMPOS_FISCALES_CLIENTE},
         "nombre": (request.POST.get("nombre") or "").strip(),
         "telefono": (request.POST.get("telefono") or "").strip(),
         "email": (request.POST.get("email") or "").strip(),
-        "ciudad": (request.POST.get("ciudad") or "").strip(),
-        "sector_urbanizacion": (request.POST.get("sector_urbanizacion") or "").strip(),
-        "direccion": (request.POST.get("direccion") or "").strip(),
-        "enlace_google_maps": (request.POST.get("enlace_google_maps") or "").strip(),
+        **ubicacion,
     }
 
 
@@ -6262,12 +8484,22 @@ def _validar_cliente(datos, cliente_actual=None):
     for campo, etiqueta in (
         ("nombre", "El nombre"),
         ("telefono", "El teléfono principal"),
-        ("ciudad", "La ciudad"),
-        ("sector_urbanizacion", "El sector o urbanización"),
-        ("direccion", "La dirección"),
     ):
         if not datos.get(campo):
             errores.append(f"{etiqueta} es obligatorio.")
+
+    for campo, etiqueta, minimo, maximo in (
+        ("latitud", "latitud", -90, 90),
+        ("longitud", "longitud", -180, 180),
+    ):
+        valor = datos.get(campo)
+        if valor not in (None, ""):
+            try:
+                numero = float(str(valor).replace(",", "."))
+                if not minimo <= numero <= maximo:
+                    errores.append(f"La {etiqueta} está fuera del rango válido.")
+            except ValueError:
+                errores.append(f"La {etiqueta} debe ser un número válido.")
 
     telefono_normalizado = _normalizar_telefono_cliente(datos.get("telefono"))
     if datos.get("telefono") and len(telefono_normalizado) < 7:
@@ -6299,14 +8531,15 @@ def cliente_list_view(request):
 
     q = (request.GET.get("q") or "").strip()
     estado = (request.GET.get("estado") or "").strip().lower()
-    clientes = Cliente.objects.annotate(
+    ciudad_id = (request.GET.get("ciudad") or "").strip()
+    clientes = Cliente.objects.select_related("ciudad_ref").annotate(
         total_contratos=Count("contratos", distinct=True),
         contratos_activos=Count(
             "contratos",
             filter=models.Q(contratos__activo=True),
             distinct=True,
         ),
-    ).order_by("nombre", "id")
+    ).order_by("-contratos_activos", "nombre", "id")
 
     if q:
         clientes = clientes.filter(
@@ -6317,15 +8550,17 @@ def cliente_list_view(request):
             | models.Q(sector_urbanizacion__icontains=q)
             | models.Q(direccion__icontains=q)
         )
+    if ciudad_id.isdigit():
+        clientes = clientes.filter(models.Q(contratos__ciudad_ref_id=ciudad_id) | models.Q(contratos__ciudad_ref__isnull=True, ciudad_ref_id=ciudad_id)).distinct()
     if estado == "activo":
-        clientes = clientes.filter(activo=True)
+        clientes = clientes.filter(contratos_activos__gt=0)
     elif estado == "inactivo":
-        clientes = clientes.filter(activo=False)
+        clientes = clientes.filter(contratos_activos=0)
 
     total_clientes = clientes.count()
-    total_activos = clientes.filter(activo=True).count()
     con_contrato = clientes.filter(contratos_activos__gt=0).count()
-    sin_contrato = clientes.filter(total_contratos=0).count()
+    sin_contrato = clientes.filter(contratos_activos=0).count()
+    total_activos = con_contrato  # compatibilidad de plantilla antigua
 
     paginator = Paginator(clientes, 20)
     page_obj = paginator.get_page(request.GET.get("page"))
@@ -6336,6 +8571,8 @@ def cliente_list_view(request):
         "page_obj": page_obj,
         "q": q,
         "estado": estado,
+        "ciudad_id": ciudad_id,
+        "ciudades": Ciudad.objects.filter(activa=True),
         "total_clientes": total_clientes,
         "total_activos": total_activos,
         "con_contrato": con_contrato,
@@ -6343,6 +8580,309 @@ def cliente_list_view(request):
         "querystring": query_params.urlencode(),
         "es_admin": True,
     })
+
+
+
+def _pdf_texto(valor, vacio="No registrado"):
+    from xml.sax.saxutils import escape
+    if valor is None or valor == "":
+        return escape(str(vacio))
+    return escape(str(valor))
+
+
+def _generar_pdf_clientes_contratos(clientes, titulo, nombre_archivo, subtitulo=""):
+    """Genera el expediente maestro de clientes y contratos, sin movimientos operativos/financieros."""
+    from io import BytesIO
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, KeepTogether
+
+    clientes = list(clientes)
+    total_contratos = sum(len(getattr(c, "contratos_pdf", [])) for c in clientes)
+    activos = sum(1 for c in clientes for ct in getattr(c, "contratos_pdf", []) if ct.activo)
+    inactivos = total_contratos - activos
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer, pagesize=A4, rightMargin=14*mm, leftMargin=14*mm,
+        topMargin=24*mm, bottomMargin=16*mm,
+        title=titulo, author="JVAQUA",
+    )
+    styles = getSampleStyleSheet()
+    navy = colors.HexColor("#0F172A")
+    aqua = colors.HexColor("#0F766E")
+    muted = colors.HexColor("#64748B")
+    line = colors.HexColor("#E2E8F0")
+    soft = colors.HexColor("#F8FAFC")
+    title_style = ParagraphStyle("jv_title", parent=styles["Title"], fontName="Helvetica-Bold", fontSize=20, leading=24, textColor=navy, alignment=TA_CENTER, spaceAfter=5)
+    subtitle_style = ParagraphStyle("jv_sub", parent=styles["Normal"], fontSize=9, leading=12, textColor=muted, alignment=TA_CENTER)
+    section_style = ParagraphStyle("jv_section", parent=styles["Heading2"], fontName="Helvetica-Bold", fontSize=13, leading=16, textColor=navy, spaceBefore=4, spaceAfter=7)
+    contract_style = ParagraphStyle("jv_contract", parent=styles["Heading3"], fontName="Helvetica-Bold", fontSize=10.5, leading=13, textColor=aqua, spaceBefore=6, spaceAfter=5)
+    body = ParagraphStyle("jv_body", parent=styles["BodyText"], fontSize=8.3, leading=10.5, textColor=navy)
+    label = ParagraphStyle("jv_label", parent=body, fontName="Helvetica-Bold", textColor=muted)
+    small = ParagraphStyle("jv_small", parent=body, fontSize=7.5, leading=9.5, textColor=muted)
+
+    def P(v, style=body):
+        return Paragraph(_pdf_texto(v), style)
+
+    def row_table(rows, widths=(42*mm, 132*mm)):
+        data=[]
+        for k,v in rows:
+            data.append([Paragraph(_pdf_texto(k), label), Paragraph(_pdf_texto(v), body)])
+        t=Table(data, colWidths=list(widths), hAlign="LEFT")
+        t.setStyle(TableStyle([
+            ("VALIGN",(0,0),(-1,-1),"TOP"),
+            ("BACKGROUND",(0,0),(0,-1),soft),
+            ("GRID",(0,0),(-1,-1),0.35,line),
+            ("LEFTPADDING",(0,0),(-1,-1),6),("RIGHTPADDING",(0,0),(-1,-1),6),
+            ("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4),
+        ]))
+        return t
+
+    def footer(canvas, doc_obj):
+        canvas.saveState()
+        canvas.setStrokeColor(line); canvas.setLineWidth(0.5)
+        canvas.line(14*mm, 11*mm, 196*mm, 11*mm)
+        canvas.setFont("Helvetica", 7.5); canvas.setFillColor(muted)
+        canvas.drawString(14*mm, 7*mm, "JVAQUA - Registro administrativo confidencial")
+        canvas.drawRightString(196*mm, 7*mm, f"Pagina {doc_obj.page}")
+        canvas.restoreState()
+
+    story=[]
+    story.append(Paragraph("JVAQUA", ParagraphStyle("brand", parent=title_style, fontSize=11, leading=14, textColor=aqua)))
+    story.append(Paragraph(_pdf_texto(titulo), title_style))
+    if subtitulo:
+        story.append(Paragraph(_pdf_texto(subtitulo), subtitle_style))
+    story.append(Spacer(1, 5*mm))
+    resumen = Table([
+        [P("Clientes", label), P("Contratos", label), P("Activos", label), P("Inactivos", label)],
+        [P(len(clientes)), P(total_contratos), P(activos), P(inactivos)],
+    ], colWidths=[45*mm]*4)
+    resumen.setStyle(TableStyle([
+        ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#E6FFFB")),
+        ("GRID",(0,0),(-1,-1),0.5,line),("ALIGN",(0,0),(-1,-1),"CENTER"),
+        ("VALIGN",(0,0),(-1,-1),"MIDDLE"),("TOPPADDING",(0,0),(-1,-1),7),("BOTTOMPADDING",(0,0),(-1,-1),7),
+    ]))
+    story.append(resumen)
+    story.append(Spacer(1, 4*mm))
+    story.append(Paragraph(f"Generado: {timezone.localtime().strftime('%d/%m/%Y %H:%M')}", subtitle_style))
+    story.append(PageBreak())
+
+    for idx, cliente in enumerate(clientes, start=1):
+        contratos = getattr(cliente, "contratos_pdf", [])
+        encabezado = [
+            Paragraph(f"{idx:03d}. {_pdf_texto(cliente.nombre)}", section_style),
+            row_table([
+                ("Telefono", cliente.telefono), ("Correo", cliente.email or "No registrado"),
+                ("Ubicaciones", "Ver ubicación específica en cada contrato/piscina"),
+                ("Estado cliente", "Activo" if cliente.activo else "Inactivo"),
+            ]),
+            Spacer(1, 3*mm),
+        ]
+        story.extend(encabezado)
+        if not contratos:
+            story.append(Paragraph("Sin contratos registrados.", small))
+        for n, contrato in enumerate(contratos, start=1):
+            story.append(Paragraph(f"Contrato {n} - {'ACTIVO' if contrato.activo else 'INACTIVO'}", contract_style))
+            tecnico = "No asignado"
+            if contrato.tecnico_designado:
+                tecnico = str(contrato.tecnico_designado)
+            story.append(row_table([
+                ("Fecha de inicio", contrato.fecha_inicio.strftime("%d/%m/%Y") if contrato.fecha_inicio else "No registrada"),
+                ("Frecuencia", contrato.frecuencia_completa()),
+                ("Dias de visita", contrato.dias_visita_completos()),
+                ("Forma de pago", contrato.forma_pago_completa()),
+                ("Valor mensual", f"${contrato.precio_mensual:,.2f}"),
+                ("Tecnico designado", tecnico),
+                ("Valor tecnico mensual", f"${contrato.valor_tecnico_mensual:,.2f}"),
+                ("Ciudad / piscina", contrato.ciudad or contrato.cliente.ciudad or "No registrada"),
+                ("Sector", contrato.sector_urbanizacion or contrato.cliente.sector_urbanizacion or "No registrado"),
+                ("Direccion", contrato.direccion or contrato.cliente.direccion or "No registrada"),
+                ("Google Maps", contrato.enlace_google_maps or contrato.cliente.enlace_google_maps or "No registrado"),
+                ("Coordenadas GPS", f"{contrato.latitud}, {contrato.longitud}" if contrato.latitud is not None and contrato.longitud is not None else "No registradas"),
+                ("Quimicos", contrato.get_quimicos_proveedor_display()),
+                ("Almacenamiento quimicos", contrato.get_quimicos_almacenamiento_display() if contrato.quimicos_proveedor == "jvaqua" and contrato.quimicos_almacenamiento else "No aplica"),
+                ("Horario de visita", contrato.get_tipo_horario_visita_display()),
+                ("Duracion estimada", f"{contrato.duracion_estimada_minutos} min"),
+                ("Prioridad", contrato.get_prioridad_visita_display()),
+                ("Fecha de baja", contrato.fecha_baja.strftime("%d/%m/%Y") if contrato.fecha_baja else "No aplica"),
+                ("Motivo de baja", contrato.get_motivo_baja_display() if contrato.motivo_baja else "No aplica"),
+            ]))
+            ficha = [
+                ("Largo", f"{contrato.piscina_largo_m} m" if contrato.piscina_largo_m is not None else "No registrado"),
+                ("Ancho", f"{contrato.piscina_ancho_m} m" if contrato.piscina_ancho_m is not None else "No registrado"),
+                ("Profundidad min.", f"{contrato.piscina_profundidad_min_m} m" if contrato.piscina_profundidad_min_m is not None else "No registrada"),
+                ("Profundidad max.", f"{contrato.piscina_profundidad_max_m} m" if contrato.piscina_profundidad_max_m is not None else "No registrada"),
+                ("Volumen", f"{contrato.piscina_volumen_m3} m3" if contrato.piscina_volumen_m3 is not None else "No registrado"),
+                ("Tipo de piscina", contrato.piscina_tipo or "No registrado"),
+                ("Uso", contrato.piscina_uso or "No registrado"),
+                ("Filtracion", contrato.piscina_filtracion or "No registrada"),
+                ("Desinfeccion", contrato.piscina_desinfeccion or "No registrada"),
+                ("Observaciones tecnicas", contrato.piscina_observaciones or "Sin observaciones"),
+            ]
+            story.append(Spacer(1, 2*mm)); story.append(Paragraph("Ficha tecnica de la piscina", contract_style)); story.append(row_table(ficha))
+            equipos = list(contrato.equipamientos.all())
+            if equipos:
+                story.append(Spacer(1, 2*mm)); story.append(Paragraph("Equipamiento proporcionado por JVAQUA", contract_style))
+                eq_data=[[P("Equipo",label),P("Adicional mensual",label),P("Entrega",label),P("Estado",label),P("Devolucion",label)]]
+                for e in equipos:
+                    eq_data.append([P(e.nombre),P(f"${e.valor_mensual_adicional:,.2f}"),P(e.fecha_entrega.strftime("%d/%m/%Y") if e.fecha_entrega else "-"),P(e.estado or ("Activo" if e.activo else "Inactivo")),P("Si" if e.debe_devolverse else "No")])
+                et=Table(eq_data,colWidths=[55*mm,30*mm,28*mm,35*mm,27*mm],repeatRows=1)
+                et.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#E6FFFB")),("GRID",(0,0),(-1,-1),0.35,line),("VALIGN",(0,0),(-1,-1),"TOP"),("LEFTPADDING",(0,0),(-1,-1),4),("RIGHTPADDING",(0,0),(-1,-1),4),("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4)]))
+                story.append(et)
+            story.append(Spacer(1, 4*mm))
+        if idx < len(clientes):
+            story.append(PageBreak())
+
+    if not clientes:
+        story.append(Paragraph("No existen clientes para los filtros seleccionados.", body))
+    doc.build(story, onFirstPage=draw_jvaqua_pdf_page, onLaterPages=draw_jvaqua_pdf_page)
+    response = HttpResponse(buffer.getvalue(), content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename="{nombre_archivo}"'
+    return response
+
+
+
+@login_required
+def contratos_datos_facturacion_pdf_view(request):
+    """PDF operativo para emitir facturas externamente; no altera cartera."""
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    from reportlab.lib.enums import TA_CENTER
+    from reportlab.lib.pagesizes import landscape, A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+
+    hoy = timezone.localdate()
+    contratos = list(
+        Contrato.objects.filter(requiere_factura=True, activo=True)
+        .select_related("cliente", "ciudad_ref")
+        .order_by("facturacion_razon_social", "cliente__nombre", "id")
+    )
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer, pagesize=landscape(A4), rightMargin=10*mm, leftMargin=10*mm,
+        topMargin=23*mm, bottomMargin=15*mm,
+        title="Datos de facturación de contratos", author="JVAQUA",
+    )
+    styles = getSampleStyleSheet()
+    navy = colors.HexColor("#0F172A")
+    aqua = colors.HexColor("#0F766E")
+    muted = colors.HexColor("#64748B")
+    line = colors.HexColor("#CBD5E1")
+    head = colors.HexColor("#E6FFFB")
+    title_style = ParagraphStyle("df_title", parent=styles["Title"], fontName="Helvetica-Bold", fontSize=18, leading=22, textColor=navy, alignment=TA_CENTER)
+    sub_style = ParagraphStyle("df_sub", parent=styles["Normal"], fontSize=8, leading=10, textColor=muted, alignment=TA_CENTER)
+    cell = ParagraphStyle("df_cell", parent=styles["Normal"], fontSize=6.8, leading=8.2, textColor=navy)
+    cell_bold = ParagraphStyle("df_bold", parent=cell, fontName="Helvetica-Bold")
+
+    def P(valor, style=cell):
+        return Paragraph(_pdf_texto(valor or "—"), style)
+
+    data = [[P(x, cell_bold) for x in [
+        "Cliente / ubicación", "Fecha facturación", "Tipo", "Identificación",
+        "Razón social / nombre", "Dirección", "Teléfono", "Correo electrónico"
+    ]]]
+    for contrato in contratos:
+        fecha_facturacion = contrato.fecha_programada_facturacion(hoy.year, hoy.month)
+        ubicacion = " · ".join(filter(None, [
+            contrato.ciudad or getattr(contrato.cliente, "ciudad", ""),
+            contrato.sector_urbanizacion or getattr(contrato.cliente, "sector_urbanizacion", ""),
+        ])) or "No registrada"
+        fiscal = contrato if contrato.cliente.facturacion_revision_pendiente else contrato.cliente
+        if not fiscal.facturacion_identificacion:
+            fiscal = contrato  # compatibilidad con expedientes incompletos
+        if not fiscal.facturacion_identificacion:
+            continue
+        data.append([
+            P(f"{contrato.cliente.nombre} · {ubicacion}"),
+            P(fecha_facturacion.strftime("%d/%m/%Y") if fecha_facturacion else "No programada"),
+            P(fiscal.get_facturacion_tipo_identificacion_display()),
+            P(fiscal.facturacion_identificacion),
+            P(fiscal.facturacion_razon_social),
+            P(fiscal.facturacion_direccion),
+            P(fiscal.facturacion_telefono),
+            P(fiscal.facturacion_correo),
+        ])
+
+    story = [
+        Paragraph("JVAQUA · Datos de facturación", title_style),
+        Paragraph(
+            f"Contratos activos que requieren factura · {hoy.strftime('%m/%Y')} · {len(contratos)} registro(s) · Documento informativo para facturación externa",
+            sub_style,
+        ),
+        Spacer(1, 5*mm),
+    ]
+    if contratos:
+        tabla = Table(data, colWidths=[42*mm, 25*mm, 16*mm, 27*mm, 45*mm, 48*mm, 27*mm, 48*mm], repeatRows=1, hAlign="CENTER")
+        tabla.setStyle(TableStyle([
+            ("BACKGROUND", (0,0), (-1,0), head),
+            ("TEXTCOLOR", (0,0), (-1,0), navy),
+            ("GRID", (0,0), (-1,-1), 0.35, line),
+            ("VALIGN", (0,0), (-1,-1), "TOP"),
+            ("LEFTPADDING", (0,0), (-1,-1), 4), ("RIGHTPADDING", (0,0), (-1,-1), 4),
+            ("TOPPADDING", (0,0), (-1,-1), 4), ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+            ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white, colors.HexColor("#F8FAFC")]),
+        ]))
+        story.append(tabla)
+    else:
+        story.append(Paragraph("No existen contratos activos configurados para facturación externa.", styles["BodyText"]))
+
+    doc.build(story, onFirstPage=draw_jvaqua_pdf_page, onLaterPages=draw_jvaqua_pdf_page)
+    response = HttpResponse(buffer.getvalue(), content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename="datos_facturacion_contratos_{hoy.strftime("%Y_%m")}.pdf"'
+    return response
+
+
+@login_required
+def clientes_contratos_pdf_view(request):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    ciudad_id = (request.GET.get("ciudad") or "").strip()
+    estado_pdf = (request.GET.get("estado") or "activos").strip().lower()
+    contratos_pdf_qs = Contrato.objects.select_related("tecnico_designado__user", "ciudad_ref").prefetch_related("equipamientos").order_by("-activo", "fecha_inicio", "id")
+    if estado_pdf == "activos":
+        contratos_pdf_qs = contratos_pdf_qs.filter(activo=True)
+    elif estado_pdf == "inactivos":
+        contratos_pdf_qs = contratos_pdf_qs.filter(activo=False)
+    qs = Cliente.objects.select_related("ciudad_ref").prefetch_related(
+        models.Prefetch("contratos", queryset=contratos_pdf_qs, to_attr="contratos_pdf")
+    ).order_by("ciudad", "nombre", "id")
+    if estado_pdf == "activos":
+        qs = qs.filter(contratos__activo=True).distinct()
+    elif estado_pdf == "inactivos":
+        qs = qs.exclude(contratos__activo=True)
+    titulo = "Registro General de Clientes y Contratos"
+    subtitulo = {"activos":"Solo clientes con contratos activos","inactivos":"Solo clientes sin contratos activos / contratos inactivos","todos":"Todos los clientes y contratos registrados"}.get(estado_pdf,"Todos los clientes y contratos registrados")
+    nombre = "registro_general_clientes_contratos.pdf"
+    if ciudad_id.isdigit():
+        ciudad = get_object_or_404(Ciudad, pk=int(ciudad_id))
+        qs = qs.filter(models.Q(contratos__ciudad_ref=ciudad) | models.Q(contratos__ciudad_ref__isnull=True, ciudad_ref=ciudad)).distinct()
+        titulo = f"Registro de Clientes y Contratos - {ciudad.nombre}"
+        subtitulo = f"Expediente administrativo consolidado de {ciudad.nombre}"
+        nombre = f"clientes_contratos_{re.sub(r'[^a-zA-Z0-9_-]+', '_', ciudad.nombre.lower())}.pdf"
+    return _generar_pdf_clientes_contratos(qs, titulo, nombre, subtitulo)
+
+
+@login_required
+def cliente_contratos_pdf_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    qs = Cliente.objects.filter(pk=pk).select_related("ciudad_ref").prefetch_related(
+        models.Prefetch(
+            "contratos",
+            queryset=Contrato.objects.select_related("tecnico_designado__user").prefetch_related("equipamientos").order_by("-activo", "fecha_inicio", "id"),
+            to_attr="contratos_pdf",
+        )
+    )
+    cliente = get_object_or_404(Cliente, pk=pk)
+    safe = re.sub(r"[^a-zA-Z0-9_-]+", "_", cliente.nombre.lower()).strip("_") or f"cliente_{pk}"
+    return _generar_pdf_clientes_contratos(qs, f"Ficha de Cliente y Contratos - {cliente.nombre}", f"{safe}_contratos.pdf", "Expediente administrativo individual")
 
 
 @login_required
@@ -6353,6 +8893,8 @@ def cliente_crear_view(request):
     datos = {
         "nombre": "", "telefono": "", "email": "", "ciudad": "",
         "sector_urbanizacion": "", "direccion": "", "enlace_google_maps": "",
+        "latitud": "", "longitud": "",
+        **{campo: "" for campo in CAMPOS_FISCALES_CLIENTE},
     }
     if request.method == "POST":
         datos = _datos_cliente_desde_request(request)
@@ -6391,9 +8933,12 @@ def cliente_editar_view(request, pk):
         "sector_urbanizacion": cliente.sector_urbanizacion,
         "direccion": cliente.direccion,
         "enlace_google_maps": cliente.enlace_google_maps,
+        "latitud": cliente.latitud if cliente.latitud is not None else "",
+        "longitud": cliente.longitud if cliente.longitud is not None else "",
+        **{campo: getattr(cliente, campo, "") for campo in CAMPOS_FISCALES_CLIENTE},
     }
     if request.method == "POST":
-        datos = _datos_cliente_desde_request(request)
+        datos = _datos_cliente_desde_request(request, cliente_actual=cliente)
         errores = _validar_cliente(datos, cliente_actual=cliente)
         if errores:
             for error in errores:
@@ -6414,6 +8959,26 @@ def cliente_editar_view(request, pk):
     return render(request, "dashboard/cliente_form.html", {
         "modo": "editar", "cliente": cliente, "datos": datos, "es_admin": True,
     })
+
+
+@login_required
+@require_http_methods(["POST"])
+def cliente_resolver_gps_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    cliente = get_object_or_404(Cliente, pk=pk)
+    # Si existen coordenadas manuales válidas, se respetan. Para recalcular,
+    # el administrador puede borrarlas en Editar cliente y luego usar este botón.
+    api_key = os.environ.get("GOOGLE_MAPS_API_KEY", "").strip()
+    if cliente.latitud is not None and cliente.longitud is not None:
+        messages.success(request, f"GPS ya verificado: {cliente.latitud}, {cliente.longitud}.")
+        return redirect(f"/dashboard/clientes/{cliente.pk}/")
+    resultado = _geocodificar_cliente_google(cliente, api_key, forzar=True)
+    if resultado:
+        messages.success(request, f"GPS verificado: {resultado['lat']:.6f}, {resultado['lng']:.6f} ({resultado['fuente']}).")
+    else:
+        messages.error(request, "No fue posible resolver el GPS. Puedes pegar latitud y longitud manualmente en Editar cliente.")
+    return redirect(f"/dashboard/clientes/{cliente.pk}/")
 
 
 @login_required
@@ -6474,26 +9039,29 @@ def contrato_list_view(request):
     frecuencia = (
         request.GET.get("frecuencia") or ""
     ).strip()
+    ciudad_id = (request.GET.get("ciudad") or "").strip()
+    orden_valor = (request.GET.get("orden_valor") or "").strip().lower()
 
-    contratos = (
-        Contrato.objects
-        .select_related("cliente")
-        .annotate(
-            total_mantenimientos=Count(
-                "mantenimiento",
-                distinct=True,
-            )
-        )
-        .order_by("-activo", "cliente__nombre", "id")
-    )
+    # Primero filtramos sobre un queryset simple. La versión anterior aplicaba
+    # Count() antes de los filtros; al combinar búsquedas/relaciones en PostgreSQL
+    # podía producir una consulta agregada innecesariamente compleja y terminar en
+    # error 500. La anotación de mantenimientos se agrega solo al final.
+    contratos = Contrato.objects.select_related("cliente", "ciudad_ref", "cliente__ciudad_ref")
 
     if q:
+        filtro_busqueda = (
+            Q(cliente__nombre__icontains=q)
+            | Q(cliente__telefono__icontains=q)
+            | Q(cliente__email__icontains=q)
+            | Q(frecuencia_personalizada__icontains=q)
+            | Q(forma_pago_personalizada__icontains=q)
+        )
+        contratos = contratos.filter(filtro_busqueda)
+
+    if ciudad_id.isdigit():
         contratos = contratos.filter(
-            models.Q(cliente__nombre__icontains=q)
-            | models.Q(cliente__telefono__icontains=q)
-            | models.Q(cliente__email__icontains=q)
-            | models.Q(frecuencia_personalizada__icontains=q)
-            | models.Q(forma_pago_personalizada__icontains=q)
+            Q(ciudad_ref_id=int(ciudad_id))
+            | Q(ciudad_ref__isnull=True, cliente__ciudad_ref_id=int(ciudad_id))
         )
 
     if estado == "activo":
@@ -6504,16 +9072,45 @@ def contrato_list_view(request):
     if frecuencia in FRECUENCIAS_CONTRATO_VALIDAS:
         contratos = contratos.filter(frecuencia=frecuencia)
 
+    if orden_valor == "mayor":
+        contratos = contratos.order_by("-precio_mensual", "cliente__nombre", "id")
+    elif orden_valor == "menor":
+        contratos = contratos.order_by("precio_mensual", "cliente__nombre", "id")
+    else:
+        contratos = contratos.order_by("-activo", "cliente__nombre", "id")
+
     total_contratos = contratos.count()
     total_activos = contratos.filter(activo=True).count()
     total_inactivos = contratos.filter(activo=False).count()
 
-    ingreso_mensual_estimado = (
-        contratos
-        .filter(activo=True)
+    contratos_activos_resumen = contratos.filter(activo=True)
+    ingreso_mensual_sin_iva = (
+        contratos_activos_resumen
         .aggregate(total=Sum("precio_mensual"))
         .get("total")
         or Decimal("0.00")
+    )
+    # El total con IVA se calcula contrato por contrato: solo suma el 15 %
+    # a los contratos que tienen aplica_iva=True. No modifica ningún contrato.
+    # Evitamos .only() sobre este queryset porque ya usa select_related("cliente");
+    # combinar ambos puede provocar FieldError al diferir la FK que select_related recorre.
+    # values_list() obtiene solo los dos datos necesarios sin alterar el queryset principal.
+    ingreso_mensual_con_iva = sum(
+        (
+            (
+                (Decimal(precio or 0) * Decimal("1.15")).quantize(Decimal("0.01"))
+                if aplica_iva
+                else Decimal(precio or 0).quantize(Decimal("0.01"))
+            )
+            for precio, aplica_iva in contratos_activos_resumen.values_list("precio_mensual", "aplica_iva")
+        ),
+        Decimal("0.00"),
+    ).quantize(Decimal("0.01"))
+
+    # La cuenta de mantenimientos se necesita únicamente para mostrar cada fila.
+    # Se anota después de calcular los KPI para mantener búsqueda/filtros estables.
+    contratos = contratos.annotate(
+        total_mantenimientos=Count("mantenimiento", distinct=True)
     )
 
     paginator = Paginator(contratos, 20)
@@ -6533,15 +9130,69 @@ def contrato_list_view(request):
             "q": q,
             "estado": estado,
             "frecuencia": frecuencia,
+            "ciudad_id": ciudad_id,
+            "orden_valor": orden_valor,
+            "ciudades": Ciudad.objects.filter(activa=True),
             "frecuencias": Contrato.FRECUENCIA_CHOICES,
             "total_contratos": total_contratos,
             "total_activos": total_activos,
             "total_inactivos": total_inactivos,
-            "ingreso_mensual_estimado": ingreso_mensual_estimado,
+            "ingreso_mensual_sin_iva": ingreso_mensual_sin_iva,
+            "ingreso_mensual_con_iva": ingreso_mensual_con_iva,
             "querystring": querystring,
             "es_admin": True,
         },
     )
+
+
+def _aplicar_ubicacion_contrato(contrato, request, cliente=None):
+    """Guarda ubicación por piscina. En contratos nuevos precarga el legado del cliente."""
+    ciudad_id = (request.POST.get("ciudad_ref") or "").strip()
+    ciudad_obj = Ciudad.objects.filter(pk=int(ciudad_id)).first() if ciudad_id.isdigit() else None
+    contrato.ciudad_ref = ciudad_obj
+    contrato.ciudad = ciudad_obj.nombre if ciudad_obj else (request.POST.get("ciudad") or "").strip()
+    contrato.sector_urbanizacion = (request.POST.get("sector_urbanizacion") or "").strip()
+    contrato.direccion = (request.POST.get("direccion") or "").strip()
+    contrato.enlace_google_maps = (request.POST.get("enlace_google_maps") or "").strip()
+    for campo, minimo, maximo in (("latitud",-90,90),("longitud",-180,180)):
+        raw=(request.POST.get(campo) or "").strip().replace(",", ".")
+        try:
+            val=Decimal(raw) if raw else None
+            if val is not None and not Decimal(str(minimo)) <= val <= Decimal(str(maximo)):
+                val=None
+        except Exception:
+            val=None
+        setattr(contrato,campo,val)
+
+
+def _datos_ubicacion_contrato(contrato=None, cliente=None):
+    fuente=contrato or cliente
+    return {
+        "ciudad_ref_id": str(getattr(fuente,"ciudad_ref_id","") or ""),
+        "ciudad": getattr(fuente,"ciudad","") or "",
+        "sector_urbanizacion": getattr(fuente,"sector_urbanizacion","") or "",
+        "direccion": getattr(fuente,"direccion","") or "",
+        "enlace_google_maps": getattr(fuente,"enlace_google_maps","") or "",
+        "latitud": getattr(fuente,"latitud","") if getattr(fuente,"latitud",None) is not None else "",
+        "longitud": getattr(fuente,"longitud","") if getattr(fuente,"longitud",None) is not None else "",
+    }
+
+
+def _aplicar_ficha_tecnica_contrato(contrato, request):
+    decimales = ("piscina_largo_m", "piscina_ancho_m", "piscina_profundidad_min_m", "piscina_profundidad_max_m", "piscina_volumen_m3")
+    for campo in decimales:
+        valor = (request.POST.get(campo) or "").strip().replace(",", ".")
+        try:
+            setattr(contrato, campo, Decimal(valor) if valor else None)
+        except Exception:
+            setattr(contrato, campo, None)
+    for campo in ("piscina_tipo", "piscina_uso", "piscina_filtracion", "piscina_desinfeccion", "piscina_observaciones"):
+        setattr(contrato, campo, (request.POST.get(campo) or "").strip())
+    if not contrato.piscina_volumen_m3 and contrato.piscina_largo_m and contrato.piscina_ancho_m:
+        profundidades = [x for x in (contrato.piscina_profundidad_min_m, contrato.piscina_profundidad_max_m) if x]
+        if profundidades:
+            prom = sum(profundidades, Decimal("0")) / len(profundidades)
+            contrato.piscina_volumen_m3 = (contrato.piscina_largo_m * contrato.piscina_ancho_m * prom).quantize(Decimal("0.01"))
 
 
 @login_required
@@ -6580,15 +9231,30 @@ def contrato_crear_view(request):
         "programacion_cobro_personalizada": "",
         "requiere_factura": False, "momento_facturacion": "", "facturacion_dia": "",
         "facturacion_dias_antes": 0, "notificar_facturacion": False,
+        "aplica_iva": False,
         "notificacion_factura_dias_antes": 1, "observaciones_facturacion": "",
+        "facturacion_tipo_identificacion": "", "facturacion_identificacion": "", "facturacion_razon_social": "", "facturacion_direccion": "", "facturacion_telefono": "", "facturacion_correo": "",
         "precio_mensual": "",
         "valor_tecnico_mensual": "",
         "fecha_inicio": timezone.localdate().isoformat(),
+        "vigencia_meses": "",
+        "aviso_vencimiento_dias": 30,
         "activo": True,
         "generacion_automatica": True,
         "tecnico_id": "",
         "dias_visita": [],
+        "quimicos_proveedor": "jvaqua",
+        "quimicos_almacenamiento": "trabajador",
+        "responsable_reposicion_id": "",
+        "tipo_horario_visita": "libre",
+        "hora_visita_fija": "",
+        "ventana_visita_desde": "",
+        "ventana_visita_hasta": "",
+        "duracion_estimada_minutos": 30,
+        "prioridad_visita": "normal",
     }
+    cliente_precarga = Cliente.objects.filter(pk=datos_formulario["cliente_id"]).first() if str(datos_formulario["cliente_id"]).isdigit() else None
+    datos_formulario.update(_datos_ubicacion_contrato(cliente=cliente_precarga))
 
     if request.method == "POST":
         validacion = _validar_datos_contrato(request)
@@ -6608,18 +9274,35 @@ def contrato_crear_view(request):
                 "cobro_rango_desde", "cobro_rango_hasta", "cobro_dias_despues_cierre", "porcentaje_primer_pago",
                 "programacion_cobro_personalizada", "momento_facturacion", "facturacion_dia", "facturacion_dias_antes",
                 "notificacion_factura_dias_antes", "observaciones_facturacion")},
+            **{campo: validacion.get(campo) or "" for campo in (
+                "facturacion_tipo_identificacion", "facturacion_identificacion", "facturacion_razon_social",
+                "facturacion_direccion", "facturacion_telefono", "facturacion_correo")},
             "requiere_factura": validacion["requiere_factura"],
             "notificar_facturacion": validacion["notificar_facturacion"],
+            "aplica_iva": validacion["aplica_iva"],
             "precio_mensual": request.POST.get("precio_mensual", ""),
             "valor_tecnico_mensual": request.POST.get("valor_tecnico_mensual", ""),
             "fecha_inicio": request.POST.get(
                 "fecha_inicio",
                 "",
             ),
+            "vigencia_meses": request.POST.get("vigencia_meses", ""),
+            "aviso_vencimiento_dias": request.POST.get("aviso_vencimiento_dias", "30"),
             "activo": validacion["activo"],
             "generacion_automatica": validacion["generacion_automatica"],
             "tecnico_id": validacion["tecnico_id"],
             "dias_visita": validacion["dias_visita"],
+            "quimicos_proveedor": validacion["quimicos_proveedor"],
+            "quimicos_almacenamiento": validacion["quimicos_almacenamiento"],
+            "responsable_reposicion_id": validacion["responsable_reposicion_id"],
+            "tipo_horario_visita": validacion["tipo_horario_visita"],
+            "hora_visita_fija": validacion["hora_visita_fija"] or "",
+            "ventana_visita_desde": validacion["ventana_visita_desde"] or "",
+            "ventana_visita_hasta": validacion["ventana_visita_hasta"] or "",
+            "duracion_estimada_minutos": validacion["duracion_estimada_minutos"],
+            "prioridad_visita": validacion["prioridad_visita"],
+            **{campo: request.POST.get(campo, "") for campo in ("ciudad_ref","ciudad","sector_urbanizacion","direccion","enlace_google_maps","latitud","longitud")},
+            **{campo: request.POST.get(campo, "") for campo in ("piscina_largo_m","piscina_ancho_m","piscina_profundidad_min_m","piscina_profundidad_max_m","piscina_volumen_m3","piscina_tipo","piscina_uso","piscina_filtracion","piscina_desinfeccion","piscina_observaciones")},
         }
 
         if validacion["errores"]:
@@ -6648,16 +9331,40 @@ def contrato_crear_view(request):
                 requiere_factura=validacion["requiere_factura"], momento_facturacion=validacion["momento_facturacion"],
                 facturacion_dia=validacion["facturacion_dia"], facturacion_dias_antes=validacion["facturacion_dias_antes"] or 0,
                 notificar_facturacion=validacion["notificar_facturacion"],
-                notificacion_factura_dias_antes=validacion["notificacion_factura_dias_antes"] or 1,
+                notificacion_factura_dias_antes=(
+                    validacion["notificacion_factura_dias_antes"]
+                    if validacion["notificacion_factura_dias_antes"] is not None else 1
+                ),
                 observaciones_facturacion=validacion["observaciones_facturacion"],
+                facturacion_tipo_identificacion=validacion["facturacion_tipo_identificacion"],
+                facturacion_identificacion=validacion["facturacion_identificacion"],
+                facturacion_razon_social=validacion["facturacion_razon_social"],
+                facturacion_direccion=validacion["facturacion_direccion"],
+                facturacion_telefono=validacion["facturacion_telefono"],
+                facturacion_correo=validacion["facturacion_correo"],
                 precio_mensual=validacion["precio_mensual"],
+                aplica_iva=validacion["aplica_iva"],
                 valor_tecnico_mensual=validacion["valor_tecnico_mensual"],
                 fecha_inicio=validacion["fecha_inicio"],
+                vigencia_meses=validacion["vigencia_meses"],
+                aviso_vencimiento_dias=validacion["aviso_vencimiento_dias"],
                 activo=validacion["activo"],
                 tecnico_designado=validacion["tecnico_designado"],
                 dias_visita=validacion["dias_visita"],
                 generacion_automatica=validacion["generacion_automatica"],
+                quimicos_proveedor=validacion["quimicos_proveedor"],
+                quimicos_almacenamiento=validacion["quimicos_almacenamiento"],
+                responsable_reposicion=validacion["responsable_reposicion"],
+                tipo_horario_visita=validacion["tipo_horario_visita"],
+                hora_visita_fija=validacion["hora_visita_fija"],
+                ventana_visita_desde=validacion["ventana_visita_desde"],
+                ventana_visita_hasta=validacion["ventana_visita_hasta"],
+                duracion_estimada_minutos=validacion["duracion_estimada_minutos"],
+                prioridad_visita=validacion["prioridad_visita"],
             )
+            _aplicar_ubicacion_contrato(contrato, request, validacion["cliente"])
+            _aplicar_ficha_tecnica_contrato(contrato, request)
+            contrato.save()
 
             resultado_programacion = generar_mantenimientos_contrato(contrato)
 
@@ -6692,6 +9399,11 @@ def contrato_crear_view(request):
             "formas_pago": Contrato.FORMA_PAGO_CHOICES,
             "programaciones_cobro": Contrato.PROGRAMACION_COBRO_CHOICES,
             "momentos_facturacion": Contrato.MOMENTO_FACTURACION_CHOICES,
+            "quimicos_proveedores": Contrato.QUIMICOS_PROVEEDOR_CHOICES,
+            "quimicos_almacenamientos": Contrato.QUIMICOS_ALMACENAMIENTO_CHOICES,
+            "horarios_visita": Contrato.HORARIO_VISITA_CHOICES,
+            "prioridades_visita": Contrato.PRIORIDAD_VISITA_CHOICES,
+            "ciudades": Ciudad.objects.filter(activa=True),
             "trabajadores": trabajadores,
             "dias_semana": DIAS_SEMANA.items(),
             "dias_mes": range(1, 32),
@@ -6749,17 +9461,74 @@ def contrato_editar_view(request, pk):
         "notificar_facturacion": contrato.notificar_facturacion,
         "notificacion_factura_dias_antes": contrato.notificacion_factura_dias_antes,
         "observaciones_facturacion": contrato.observaciones_facturacion,
+        "facturacion_tipo_identificacion": contrato.facturacion_tipo_identificacion,
+        "facturacion_identificacion": contrato.facturacion_identificacion,
+        "facturacion_razon_social": contrato.facturacion_razon_social,
+        "facturacion_direccion": contrato.facturacion_direccion,
+        "facturacion_telefono": contrato.facturacion_telefono,
+        "facturacion_correo": contrato.facturacion_correo,
+        "aplica_iva": contrato.aplica_iva,
         "precio_mensual": contrato.precio_mensual,
         "valor_tecnico_mensual": contrato.valor_tecnico_mensual,
         "fecha_inicio": contrato.fecha_inicio.isoformat(),
+        "vigencia_meses": contrato.vigencia_meses or "",
+        "aviso_vencimiento_dias": contrato.aviso_vencimiento_dias,
         "activo": contrato.activo,
         "generacion_automatica": contrato.generacion_automatica,
         "tecnico_id": str(contrato.tecnico_designado_id or ""),
         "dias_visita": normalizar_dias(contrato.dias_visita),
+        "quimicos_proveedor": contrato.quimicos_proveedor,
+        "quimicos_almacenamiento": contrato.quimicos_almacenamiento,
+        "responsable_reposicion_id": str(contrato.responsable_reposicion_id or ""),
+        "tipo_horario_visita": contrato.tipo_horario_visita,
+        "hora_visita_fija": contrato.hora_visita_fija.strftime("%H:%M") if contrato.hora_visita_fija else "",
+        "ventana_visita_desde": contrato.ventana_visita_desde.strftime("%H:%M") if contrato.ventana_visita_desde else "",
+        "ventana_visita_hasta": contrato.ventana_visita_hasta.strftime("%H:%M") if contrato.ventana_visita_hasta else "",
+        "duracion_estimada_minutos": contrato.duracion_estimada_minutos,
+        "prioridad_visita": contrato.prioridad_visita,
+        **_datos_ubicacion_contrato(contrato=contrato),
+        "piscina_largo_m": contrato.piscina_largo_m or "",
+        "piscina_ancho_m": contrato.piscina_ancho_m or "",
+        "piscina_profundidad_min_m": contrato.piscina_profundidad_min_m or "",
+        "piscina_profundidad_max_m": contrato.piscina_profundidad_max_m or "",
+        "piscina_volumen_m3": contrato.piscina_volumen_m3 or "",
+        "piscina_tipo": contrato.piscina_tipo, "piscina_uso": contrato.piscina_uso,
+        "piscina_filtracion": contrato.piscina_filtracion, "piscina_desinfeccion": contrato.piscina_desinfeccion,
+        "piscina_observaciones": contrato.piscina_observaciones,
     }
 
     if request.method == "POST":
         validacion = _validar_datos_contrato(request)
+
+        # Edición conservadora: una edición parcial nunca debe borrar la
+        # configuración económica/comercial que ya estaba guardada. Los
+        # valores solo cambian cuando el formulario envía un valor explícito.
+        campos_financieros_conservables = (
+            "forma_pago", "forma_pago_personalizada", "periodo_dia_inicio",
+            "programacion_cobro", "cobro_mes_desfase", "cobro_dia_1",
+            "cobro_dia_2", "cobro_rango_desde", "cobro_rango_hasta",
+            "cobro_dias_despues_cierre", "porcentaje_primer_pago",
+            "programacion_cobro_personalizada", "precio_mensual",
+            "valor_tecnico_mensual",
+        )
+        for campo in campos_financieros_conservables:
+            enviado = request.POST.get(campo)
+            if enviado is None or (isinstance(enviado, str) and not enviado.strip()):
+                valor_actual = getattr(contrato, campo, None)
+                if valor_actual not in (None, ""):
+                    validacion[campo] = valor_actual
+
+        # No destruir instantáneas fiscales históricas en contratos con datos
+        # aún pendientes de consolidación o sin ficha fiscal completada.
+        if contrato.cliente.facturacion_revision_pendiente or not contrato.cliente.facturacion_identificacion:
+            for campo in CAMPOS_FISCALES_CLIENTE:
+                validacion[campo] = getattr(contrato, campo)
+
+        # El técnico asignado también se conserva si una edición parcial no
+        # incluye ese control. Esto evita perder la base de nómina existente.
+        if "tecnico_designado" not in request.POST:
+            validacion["tecnico_designado"] = contrato.tecnico_designado
+            validacion["tecnico_id"] = str(contrato.tecnico_designado_id or "")
 
         datos_formulario = {
             "cliente_id": request.POST.get("cliente", ""),
@@ -6778,16 +9547,30 @@ def contrato_editar_view(request, pk):
                 "notificacion_factura_dias_antes", "observaciones_facturacion")},
             "requiere_factura": validacion["requiere_factura"],
             "notificar_facturacion": validacion["notificar_facturacion"],
+            "aplica_iva": validacion["aplica_iva"],
             "precio_mensual": request.POST.get("precio_mensual", ""),
             "valor_tecnico_mensual": request.POST.get("valor_tecnico_mensual", ""),
             "fecha_inicio": request.POST.get(
                 "fecha_inicio",
                 "",
             ),
+            "vigencia_meses": request.POST.get("vigencia_meses", ""),
+            "aviso_vencimiento_dias": request.POST.get("aviso_vencimiento_dias", "30"),
             "activo": validacion["activo"],
             "generacion_automatica": validacion["generacion_automatica"],
             "tecnico_id": validacion["tecnico_id"],
             "dias_visita": validacion["dias_visita"],
+            "quimicos_proveedor": validacion["quimicos_proveedor"],
+            "quimicos_almacenamiento": validacion["quimicos_almacenamiento"],
+            "responsable_reposicion_id": validacion["responsable_reposicion_id"],
+            "tipo_horario_visita": validacion["tipo_horario_visita"],
+            "hora_visita_fija": validacion["hora_visita_fija"] or "",
+            "ventana_visita_desde": validacion["ventana_visita_desde"] or "",
+            "ventana_visita_hasta": validacion["ventana_visita_hasta"] or "",
+            "duracion_estimada_minutos": validacion["duracion_estimada_minutos"],
+            "prioridad_visita": validacion["prioridad_visita"],
+            **{campo: request.POST.get(campo, "") for campo in ("ciudad_ref","ciudad","sector_urbanizacion","direccion","enlace_google_maps","latitud","longitud")},
+            **{campo: request.POST.get(campo, "") for campo in ("piscina_largo_m","piscina_ancho_m","piscina_profundidad_min_m","piscina_profundidad_max_m","piscina_volumen_m3","piscina_tipo","piscina_uso","piscina_filtracion","piscina_desinfeccion","piscina_observaciones")},
         }
 
         if validacion["errores"]:
@@ -6808,15 +9591,35 @@ def contrato_editar_view(request, pk):
                 "cobro_rango_desde", "cobro_rango_hasta", "cobro_dias_despues_cierre", "porcentaje_primer_pago",
                 "programacion_cobro_personalizada", "requiere_factura", "momento_facturacion", "facturacion_dia",
                 "facturacion_dias_antes", "notificar_facturacion", "notificacion_factura_dias_antes",
-                "observaciones_facturacion"):
+                "observaciones_facturacion", "facturacion_tipo_identificacion", "facturacion_identificacion",
+                "facturacion_razon_social", "facturacion_direccion", "facturacion_telefono", "facturacion_correo"):
                 setattr(contrato, campo, validacion[campo])
             contrato.precio_mensual = validacion["precio_mensual"]
+            contrato.aplica_iva = validacion["aplica_iva"]
             contrato.valor_tecnico_mensual = validacion["valor_tecnico_mensual"]
             contrato.fecha_inicio = validacion["fecha_inicio"]
+            contrato.vigencia_meses = validacion["vigencia_meses"]
+            contrato.aviso_vencimiento_dias = validacion["aviso_vencimiento_dias"]
             contrato.activo = validacion["activo"]
             contrato.tecnico_designado = validacion["tecnico_designado"]
             contrato.dias_visita = validacion["dias_visita"]
             contrato.generacion_automatica = validacion["generacion_automatica"]
+            contrato.quimicos_proveedor = validacion["quimicos_proveedor"]
+            contrato.quimicos_almacenamiento = validacion["quimicos_almacenamiento"]
+            contrato.responsable_reposicion = validacion["responsable_reposicion"]
+            contrato.tipo_horario_visita = validacion["tipo_horario_visita"]
+            contrato.hora_visita_fija = validacion["hora_visita_fija"]
+            contrato.ventana_visita_desde = validacion["ventana_visita_desde"]
+            contrato.ventana_visita_hasta = validacion["ventana_visita_hasta"]
+            contrato.duracion_estimada_minutos = validacion["duracion_estimada_minutos"]
+            contrato.prioridad_visita = validacion["prioridad_visita"]
+            _aplicar_ubicacion_contrato(contrato, request, validacion["cliente"])
+            _aplicar_ficha_tecnica_contrato(contrato, request)
+            # Una edición administrativa se registra como una actualización del
+            # contrato. Los procesos automáticos que guarden el contrato no
+            # modifican estos campos de trazabilidad.
+            contrato.ultima_actualizacion = timezone.now()
+            contrato.actualizado_por = request.user
             contrato.save()
 
             if contrato.activo and contrato.generacion_automatica:
@@ -6857,6 +9660,11 @@ def contrato_editar_view(request, pk):
             "formas_pago": Contrato.FORMA_PAGO_CHOICES,
             "programaciones_cobro": Contrato.PROGRAMACION_COBRO_CHOICES,
             "momentos_facturacion": Contrato.MOMENTO_FACTURACION_CHOICES,
+            "quimicos_proveedores": Contrato.QUIMICOS_PROVEEDOR_CHOICES,
+            "quimicos_almacenamientos": Contrato.QUIMICOS_ALMACENAMIENTO_CHOICES,
+            "horarios_visita": Contrato.HORARIO_VISITA_CHOICES,
+            "prioridades_visita": Contrato.PRIORIDAD_VISITA_CHOICES,
+            "ciudades": Ciudad.objects.filter(activa=True),
             "trabajadores": trabajadores,
             "dias_semana": DIAS_SEMANA.items(),
             "dias_mes": range(1, 32),
@@ -6908,37 +9716,21 @@ def contrato_detalle_view(request, pk):
         .order_by("-periodo_anio", "-periodo_mes", "-id")[:10]
     )
 
-    total_facturado = (
-        Factura.objects
-        .filter(contrato=contrato)
-        .aggregate(total=Sum("total"))
-        .get("total")
-        or Decimal("0.00")
+    hoy_finanzas = timezone.localdate()
+    facturas_contrato = list(
+        Factura.objects.filter(contrato=contrato)
+        .exclude(estado=Factura.ESTADO_ANULADA)
+        .prefetch_related("pagos")
     )
-
-    total_pagado = (
-        Factura.objects
-        .filter(
-            contrato=contrato,
-            estado=Factura.ESTADO_PAGADA,
-        )
-        .aggregate(total=Sum("total"))
-        .get("total")
-        or Decimal("0.00")
-    )
-
-    total_pendiente = (
-        Factura.objects
-        .filter(
-            contrato=contrato,
-            estado__in=[
-                Factura.ESTADO_PENDIENTE,
-                Factura.ESTADO_VENCIDA,
-            ],
-        )
-        .aggregate(total=Sum("total"))
-        .get("total")
-        or Decimal("0.00")
+    facturas_exigibles = [
+        f for f in facturas_contrato
+        if f.fecha_real_cobro and f.fecha_real_cobro <= hoy_finanzas
+    ]
+    total_facturado = sum((f.total_cobro for f in facturas_exigibles), Decimal("0.00"))
+    total_pagado = sum((f.monto_pagado for f in facturas_contrato), Decimal("0.00"))
+    total_pendiente = sum(
+        (f.saldo for f in facturas_exigibles if f.saldo > 0),
+        Decimal("0.00"),
     )
 
     mantenimientos_futuros = mantenimientos.filter(
@@ -6955,6 +9747,28 @@ def contrato_detalle_view(request, pk):
     periodo_inicio, periodo_fin = contrato.periodo_servicio(hoy.year, hoy.month)
     fecha_facturacion_programada = contrato.fecha_programada_facturacion(hoy.year, hoy.month)
 
+    inventario_contrato = list(
+        InventarioContrato.objects.filter(contrato=contrato)
+        .select_related("insumo")
+        .order_by("insumo__nombre")
+    )
+    for fila in inventario_contrato:
+        fila.valor_estimado = (Decimal(fila.stock_estimado or 0) * Decimal(fila.insumo.costo or 0)).quantize(Decimal("0.01"))
+    movimientos_inventario_contrato = list(
+        MovimientoInventario.objects.filter(contrato=contrato)
+        .select_related("insumo", "trabajador__user")
+        .order_by("-creado_en", "-id")[:30]
+    )
+    valor_inventario_contrato = sum((x.valor_estimado for x in inventario_contrato), Decimal("0.00"))
+    inventario_critico_contrato = sum(1 for x in inventario_contrato if x.estado_stock in {"critico", "agotado"})
+    proxima_reposicion_dias = min((x.dias_hasta_minimo for x in inventario_contrato if x.dias_hasta_minimo is not None), default=None)
+    insumos_inventario = Insumo.objects.filter(activo=True, puede_mantenimiento=True).order_by("nombre")
+    trabajadores_reposicion = (
+        Trabajador.objects.filter(activo=True)
+        .select_related("user")
+        .order_by("user__first_name", "user__last_name", "user__username")
+    )
+
     return render(
         request,
         "dashboard/contrato_detalle.html",
@@ -6969,16 +9783,288 @@ def contrato_detalle_view(request, pk):
             "total_facturado": total_facturado,
             "total_pagado": total_pagado,
             "total_pendiente": total_pendiente,
+            "margen_bruto_contrato": (Decimal(contrato.precio_mensual or 0) - Decimal(contrato.valor_tecnico_mensual or 0)),
             "mantenimientos_futuros": mantenimientos_futuros,
             "proximo_mantenimiento": proximo_mantenimiento,
             "periodo_inicio_actual": periodo_inicio,
             "periodo_fin_actual": periodo_fin,
             "calendario_cobros": calendario_cobros,
             "fecha_facturacion_programada": fecha_facturacion_programada,
+            "inventario_contrato": inventario_contrato,
+            "movimientos_inventario_contrato": movimientos_inventario_contrato,
+            "valor_inventario_contrato": valor_inventario_contrato,
+            "inventario_critico_contrato": inventario_critico_contrato,
+            "proxima_reposicion_dias": proxima_reposicion_dias,
+            "insumos_inventario": insumos_inventario,
+            "trabajadores_reposicion": trabajadores_reposicion,
+            "promociones_contrato": contrato.promociones.all()[:12],
+            "renovaciones_contrato": contrato.renovaciones.select_related("registrada_por").all()[:12],
             "es_admin": True,
         },
     )
 
+
+
+@login_required
+def contrato_responsable_reposicion_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    if request.method != "POST":
+        return redirect("contrato_detalle", pk=pk)
+
+    contrato = get_object_or_404(Contrato, pk=pk)
+    trabajador_id = (request.POST.get("responsable_reposicion") or "").strip()
+    responsable = None
+    if trabajador_id:
+        responsable = Trabajador.objects.filter(pk=trabajador_id, activo=True).select_related("user").first()
+        if responsable is None:
+            messages.error(request, "El trabajador seleccionado no existe o está inactivo.")
+            return redirect("inventario_contrato_trabajador", pk=pk)
+
+    contrato.responsable_reposicion = responsable
+    contrato.save(update_fields=["responsable_reposicion"])
+    if responsable:
+        messages.success(request, f"Responsable de reposición actualizado a {responsable}.")
+    else:
+        messages.success(request, "Responsable específico retirado. Se utilizará el técnico designado como respaldo.")
+    return redirect("inventario_contrato_trabajador", pk=pk)
+
+
+@login_required
+def contrato_promocion_nueva_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    contrato = get_object_or_404(Contrato.objects.select_related("cliente"), pk=pk)
+    hoy = timezone.localdate()
+    datos = {
+        "nombre": "", "motivo": "", "tipo": "porcentaje", "valor": "",
+        "anio_inicio": hoy.year, "mes_inicio": hoy.month, "anio_fin": hoy.year, "mes_fin": hoy.month,
+    }
+    if request.method == "POST":
+        datos = {k: (request.POST.get(k) or "").strip() for k in datos}
+        errores = []
+        try:
+            ai, mi, af, mf = int(datos["anio_inicio"]), int(datos["mes_inicio"]), int(datos["anio_fin"]), int(datos["mes_fin"])
+            if not (1 <= mi <= 12 and 1 <= mf <= 12 and ai * 100 + mi <= af * 100 + mf): raise ValueError
+        except (TypeError, ValueError):
+            errores.append("El periodo de vigencia no es válido."); ai=af=hoy.year; mi=mf=hoy.month
+        tipo = datos["tipo"]
+        if tipo not in dict(PromocionContrato.TIPO_CHOICES): errores.append("Selecciona un tipo de promoción válido.")
+        try: valor = Decimal((datos["valor"] or "0").replace(",", "."))
+        except Exception: valor = Decimal("0"); errores.append("El valor de la promoción no es válido.")
+        if tipo == "porcentaje" and not (Decimal("0") < valor <= Decimal("100")): errores.append("El porcentaje debe ser mayor que 0 y máximo 100%.")
+        if tipo in {"valor_fijo", "valor_especial"} and valor < 0: errores.append("El valor no puede ser negativo.")
+        if not datos["nombre"]: errores.append("Escribe un nombre para identificar la promoción.")
+        if not datos["motivo"]: errores.append("El motivo es obligatorio para conservar el historial.")
+        if not errores:
+            with transaction.atomic():
+                promo = PromocionContrato.objects.create(contrato=contrato, nombre=datos["nombre"], motivo=datos["motivo"], tipo=tipo, valor=valor, anio_inicio=ai, mes_inicio=mi, anio_fin=af, mes_fin=mf, creado_por=request.user)
+                # Ajustar cuentas ya generadas dentro de la vigencia solo si todavía no tienen pagos.
+                facturas = Factura.objects.filter(contrato=contrato).prefetch_related("items", "pagos")
+                actualizadas = 0
+                for factura in facturas:
+                    clave = factura.periodo_anio * 100 + factura.periodo_mes
+                    if not (promo.periodo_inicio_clave <= clave <= promo.periodo_fin_clave) or factura.estado == Factura.ESTADO_ANULADA:
+                        continue
+                    calc = promo.calcular(contrato.precio_mensual)
+                    # Distribuir por cuota respetando 50/50 u otras configuraciones.
+                    cuotas = contrato.calendario_cobros(factura.periodo_anio, factura.periodo_mes)
+                    cuota = next((x for x in cuotas if x["cuota_numero"] == factura.cuota_numero), None)
+                    if not cuota: continue
+                    proporcion = cuota["valor"] / Decimal(contrato.precio_mensual or 1)
+                    nuevo_neto = (calc["total"] * proporcion).quantize(Decimal("0.01"))
+                    desglose = contrato.desglose_valor(nuevo_neto)
+                    pagado_actual = factura.monto_pagado
+                    # La comparación debe hacerse contra el total real, IVA incluido.
+                    if pagado_actual > desglose["total"]:
+                        continue
+                    factura.valor_contractual = cuota["valor"]
+                    factura.descuento_promocion = max(cuota["valor"] - nuevo_neto, Decimal("0.00"))
+                    factura.promocion = promo
+                    factura.promocion_nombre = promo.nombre
+                    factura.subtotal = desglose["base"]
+                    factura.impuesto = desglose["impuesto"]
+                    factura.total = desglose["total"]
+                    factura.estado = Factura.ESTADO_PROMOCION if desglose["total"] == 0 else Factura.ESTADO_PENDIENTE
+                    factura.save()
+                    item = factura.items.first()
+                    if item:
+                        item.precio_unitario = desglose["base"]
+                        item.subtotal = desglose["base"]
+                        item.save(update_fields=["precio_unitario", "subtotal"])
+                    factura.sincronizar_estado()
+                    actualizadas += 1
+            messages.success(request, f"Promoción aplicada correctamente. {actualizadas} cuenta(s) ya generada(s) fueron actualizadas.")
+            return redirect("contrato_detalle", pk=contrato.pk)
+        for error in errores: messages.error(request, error)
+    return render(request, "dashboard/contrato_promocion_form.html", {"contrato": contrato, "datos": datos, "tipos": PromocionContrato.TIPO_CHOICES, "es_admin": True})
+
+
+@login_required
+def inventario_contrato_trabajador_view(request, pk):
+    contrato = get_object_or_404(
+        Contrato.objects.select_related("cliente", "tecnico_designado__user", "responsable_reposicion__user"),
+        pk=pk,
+    )
+    usuario_admin = es_admin(request.user)
+    trabajador = getattr(request.user, "trabajador", None) if es_trabajador(request.user) else None
+    if not usuario_admin:
+        permitido = bool(
+            trabajador and (
+                contrato.responsable_reposicion_id == trabajador.id
+                or (contrato.responsable_reposicion_id is None and contrato.tecnico_designado_id == trabajador.id)
+                or Mantenimiento.objects.filter(contrato=contrato, trabajadores=trabajador).exists()
+            )
+        )
+        if not permitido:
+            return render(request, "dashboard/no_autorizado.html", status=403)
+    if contrato.quimicos_proveedor != "jvaqua" or contrato.quimicos_almacenamiento != "contrato":
+        messages.info(request, "Este contrato no utiliza inventario en sitio.")
+        return redirect("inicio" if usuario_admin else "home")
+
+    stocks = list(InventarioContrato.objects.filter(contrato=contrato).select_related("insumo").order_by("insumo__nombre"))
+    movimientos = MovimientoInventario.objects.filter(contrato=contrato).select_related("insumo", "trabajador__user", "usuario").order_by("-creado_en")[:40]
+    contexto = {
+        "contrato": contrato,
+        "stocks": stocks,
+        "movimientos": movimientos,
+        "es_admin": usuario_admin,
+        "base_template": "dashboard/base_admin.html" if usuario_admin else "dashboard/base_trabajador.html",
+    }
+    if usuario_admin:
+        contexto["insumos_disponibles"] = Insumo.objects.filter(activo=True).order_by("nombre")
+        contexto["trabajadores_reposicion"] = Trabajador.objects.filter(activo=True).select_related("user").order_by("user__first_name", "user__last_name", "user__username")
+    return render(request, "dashboard/inventario_contrato_trabajador.html", contexto)
+
+
+@login_required
+@require_http_methods(["POST"])
+def contrato_inventario_configurar_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    contrato = get_object_or_404(Contrato, pk=pk)
+    if contrato.quimicos_proveedor != "jvaqua" or contrato.quimicos_almacenamiento != "contrato":
+        messages.error(request, "Este contrato no utiliza inventario en sitio.")
+        return redirect(f"/dashboard/contratos/{contrato.pk}/")
+    insumo = get_object_or_404(Insumo, pk=request.POST.get("insumo_id"), activo=True)
+    try:
+        minimo = Decimal((request.POST.get("stock_minimo") or "0").replace(",", "."))
+        consumo = Decimal((request.POST.get("consumo_diario_estimado") or "0").replace(",", "."))
+        if minimo < 0 or consumo < 0:
+            raise ValueError
+    except Exception:
+        messages.error(request, "Revisa el stock mínimo y el consumo diario estimado.")
+        return redirect("inventario_contrato_trabajador", pk=contrato.pk)
+    inv, creado = InventarioContrato.objects.get_or_create(contrato=contrato, insumo=insumo)
+    if not creado:
+        # Cierra el período anterior con la tasa antigua para no recalcular
+        # retroactivamente días pasados usando el nuevo consumo diario.
+        from inventario.services import _materializar_estimado_contrato
+        _materializar_estimado_contrato(inv, hoy=timezone.localdate(), usuario=request.user)
+        inv.refresh_from_db()
+    inv.stock_minimo = minimo
+    inv.consumo_diario_estimado = consumo
+    inv.save(update_fields=["stock_minimo", "consumo_diario_estimado", "actualizado_en"])
+    _registrar_actividad(
+        user=request.user,
+        titulo="Inventario de contrato configurado",
+        descripcion=f"{request.user.username} configuró {insumo.nombre} para {contrato.cliente}.",
+        url=f"/dashboard/contratos/{contrato.pk}/#inventario-sitio",
+    )
+    messages.success(request, "Producto configurado en el inventario del contrato.")
+    return redirect("inventario_contrato_trabajador", pk=contrato.pk)
+
+
+@login_required
+@require_http_methods(["POST"])
+def contrato_inventario_eliminar_view(request, pk, inventario_id):
+    """Retira un producto de la configuración activa del inventario en sitio sin borrar su historial."""
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    contrato = get_object_or_404(Contrato.objects.select_related("cliente"), pk=pk)
+    inv = get_object_or_404(InventarioContrato.objects.select_related("insumo"), pk=inventario_id, contrato=contrato)
+
+    # Cierra la estimación pendiente con la tasa vigente antes de retirar la configuración.
+    from inventario.services import _materializar_estimado_contrato
+    _materializar_estimado_contrato(inv, hoy=timezone.localdate(), usuario=request.user)
+    inv.refresh_from_db()
+    nombre_insumo = inv.insumo.nombre
+    existencia_final = inv.stock_estimado
+    unidad = inv.insumo.unidad_corta
+    inv.delete()
+
+    _registrar_actividad(
+        user=request.user,
+        titulo="Producto retirado del inventario en sitio",
+        descripcion=(
+            f"{request.user.username} retiró {nombre_insumo} del inventario activo de {contrato.cliente}. "
+            f"Existencia estimada al retirar: {existencia_final:.3f} {unidad}. El historial logístico se conserva."
+        ),
+        url=f"/dashboard/mi-inventario/contrato/{contrato.pk}/",
+    )
+    messages.success(
+        request,
+        f"{nombre_insumo} fue retirado del inventario en sitio. Ya no generará alertas de stock ni reposición; el historial anterior se conserva.",
+    )
+    return redirect("inventario_contrato_trabajador", pk=contrato.pk)
+
+
+@login_required
+@require_http_methods(["POST"])
+def contrato_inventario_reponer_view(request, pk):
+    if not es_admin(request.user) and not es_trabajador(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    contrato = get_object_or_404(Contrato.objects.select_related("tecnico_designado__user", "responsable_reposicion__user"), pk=pk)
+    trabajador = None
+    if es_trabajador(request.user):
+        trabajador = getattr(request.user, "trabajador", None)
+        responsable = contrato.responsable_reposicion or contrato.tecnico_designado
+        if responsable and trabajador and responsable.pk != trabajador.pk and not Mantenimiento.objects.filter(contrato=contrato, trabajadores=trabajador).exists():
+            return render(request, "dashboard/no_autorizado.html", status=403)
+    insumo = get_object_or_404(Insumo, pk=request.POST.get("insumo_id"), activo=True)
+    unidad = request.POST.get("unidad") or "base"
+    try:
+        cantidad = convertir_a_base(insumo, request.POST.get("cantidad"), unidad)
+        movimiento = reponer_contrato(
+            contrato=contrato, insumo=insumo, cantidad_base=cantidad,
+            usuario=request.user, trabajador=trabajador,
+            observacion=(request.POST.get("observacion") or "").strip(),
+        )
+    except (ValueError, InventarioContrato.DoesNotExist) as exc:
+        messages.error(request, str(exc))
+        return redirect("inventario_contrato_trabajador", pk=contrato.pk)
+    _registrar_actividad(
+        user=request.user, titulo="Reposición en sitio",
+        descripcion=f"{request.user.username} llevó {cantidad} {insumo.unidad_corta} de {insumo.nombre} a {contrato.cliente}.",
+        url=f"/dashboard/contratos/{contrato.pk}/#inventario-sitio",
+    )
+    messages.success(request, "Reposición registrada. Se descontó automáticamente de la bodega general.")
+    return redirect("inventario_contrato_trabajador", pk=contrato.pk)
+
+
+@login_required
+@require_http_methods(["POST"])
+def contrato_inventario_ajustar_view(request, pk, inventario_id):
+    contrato = get_object_or_404(Contrato, pk=pk)
+    inv = get_object_or_404(InventarioContrato.objects.select_related("insumo"), pk=inventario_id, contrato=contrato)
+    trabajador = getattr(request.user, "trabajador", None) if es_trabajador(request.user) else None
+    if not es_admin(request.user):
+        responsable = contrato.responsable_reposicion or contrato.tecnico_designado
+        permitido = bool(trabajador and (not responsable or responsable.pk == trabajador.pk or Mantenimiento.objects.filter(contrato=contrato, trabajadores=trabajador).exists()))
+        if not permitido:
+            return render(request, "dashboard/no_autorizado.html", status=403)
+    try:
+        ajustar_inventario_contrato(
+            contrato=contrato, insumo=inv.insumo,
+            nueva_existencia=request.POST.get("nueva_existencia"),
+            usuario=request.user, trabajador=trabajador,
+            observacion=(request.POST.get("observacion") or "Verificación física").strip(),
+        )
+    except ValueError as exc:
+        messages.error(request, str(exc))
+        return redirect("inventario_contrato_trabajador", pk=contrato.pk)
+    messages.success(request, "Existencia física del contrato actualizada y registrada en Kardex.")
+    return redirect("inventario_contrato_trabajador", pk=contrato.pk)
 
 @login_required
 @require_http_methods(["POST"])
@@ -7004,6 +10090,291 @@ def contrato_regenerar_programacion_view(request, pk):
 
 
 @login_required
+@require_http_methods(["GET", "POST"])
+def contrato_reactivar_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    contrato = get_object_or_404(
+        Contrato.objects.select_related("cliente", "tecnico_designado__user"),
+        pk=pk,
+    )
+    if contrato.activo:
+        messages.info(request, "Este contrato ya se encuentra activo.")
+        return redirect(f"/dashboard/contratos/{contrato.pk}/")
+
+    trabajadores = (
+        Trabajador.objects.filter(activo=True)
+        .select_related("user")
+        .order_by("user__username")
+    )
+
+    def decimal_web(valor):
+        if valor in (None, ""):
+            return ""
+        return format(Decimal(valor), "f")
+
+    datos = {
+        "fecha_inicio": timezone.localdate().isoformat(),
+        "frecuencia": contrato.frecuencia,
+        "frecuencia_personalizada": contrato.frecuencia_personalizada,
+        "dias_visita": list(contrato.dias_visita or []),
+        "tecnico_id": str(contrato.tecnico_designado_id or ""),
+        "forma_pago": contrato.forma_pago,
+        "forma_pago_personalizada": contrato.forma_pago_personalizada,
+        "periodo_dia_inicio": contrato.periodo_dia_inicio or timezone.localdate().day,
+        "programacion_cobro": contrato.programacion_cobro,
+        "cobro_mes_desfase": contrato.cobro_mes_desfase or 0,
+        "cobro_dia_1": contrato.cobro_dia_1 or "",
+        "cobro_dia_2": contrato.cobro_dia_2 or "",
+        "cobro_rango_desde": contrato.cobro_rango_desde or "",
+        "cobro_rango_hasta": contrato.cobro_rango_hasta or "",
+        "cobro_dias_despues_cierre": contrato.cobro_dias_despues_cierre or 0,
+        "porcentaje_primer_pago": decimal_web(contrato.porcentaje_primer_pago),
+        "programacion_cobro_personalizada": contrato.programacion_cobro_personalizada,
+        "precio_mensual": decimal_web(contrato.precio_mensual),
+        "valor_tecnico_mensual": decimal_web(contrato.valor_tecnico_mensual),
+    }
+    siguiente = (request.POST.get("next") if request.method == "POST" else request.GET.get("next")) or f"/dashboard/contratos/{contrato.pk}/"
+
+    if request.method == "POST":
+        errores = []
+        fecha_inicio = parse_date((request.POST.get("fecha_inicio") or "").strip())
+        frecuencia = (request.POST.get("frecuencia") or "").strip()
+        frecuencia_personalizada = (request.POST.get("frecuencia_personalizada") or "").strip()
+        dias_visita = normalizar_dias(request.POST.getlist("dias_visita"))
+        tecnico_id = (request.POST.get("tecnico_designado") or "").strip()
+        forma_pago = (request.POST.get("forma_pago") or "").strip()
+        forma_pago_personalizada = (request.POST.get("forma_pago_personalizada") or "").strip()
+        programacion_cobro = (request.POST.get("programacion_cobro") or "").strip()
+        programacion_cobro_personalizada = (request.POST.get("programacion_cobro_personalizada") or "").strip()
+
+        tecnico = Trabajador.objects.filter(pk=int(tecnico_id), activo=True).select_related("user").first() if tecnico_id.isdigit() else None
+        if not fecha_inicio:
+            errores.append("Selecciona una fecha válida para el nuevo inicio del contrato.")
+        if frecuencia not in FRECUENCIAS_CONTRATO_VALIDAS:
+            errores.append("Selecciona una frecuencia válida.")
+        if frecuencia == "personalizado" and not frecuencia_personalizada:
+            errores.append("Describe la frecuencia personalizada.")
+        if forma_pago not in FORMAS_PAGO_CONTRATO_VALIDAS:
+            errores.append("Selecciona una forma de pago válida.")
+        if forma_pago == "personalizado" and not forma_pago_personalizada:
+            errores.append("Describe la forma de pago personalizada.")
+        if programacion_cobro not in PROGRAMACIONES_COBRO_VALIDAS:
+            errores.append("Selecciona una programación de cobro válida.")
+        if programacion_cobro == "personalizado" and not programacion_cobro_personalizada:
+            errores.append("Describe la programación de cobro personalizada.")
+        errores.extend(_errores_coherencia_cobro(forma_pago, programacion_cobro))
+        errores.extend(validar_programacion(frecuencia, dias_visita, tecnico, automatica=contrato.generacion_automatica))
+
+        enteros = {}
+        config = [
+            ("periodo_dia_inicio", 1, 31, True), ("cobro_mes_desfase", 0, 2, True),
+            ("cobro_dia_1", 1, 31, programacion_cobro in {"dia_fijo", "dos_pagos"}),
+            ("cobro_dia_2", 1, 31, programacion_cobro == "dos_pagos"),
+            ("cobro_rango_desde", 1, 31, programacion_cobro == "rango_dias"),
+            ("cobro_rango_hasta", 1, 31, programacion_cobro == "rango_dias"),
+            ("cobro_dias_despues_cierre", 0, 365, programacion_cobro == "despues_cierre"),
+        ]
+        for nombre, minimo, maximo, obligatorio in config:
+            try:
+                enteros[nombre] = _entero_post(request, nombre, minimo, maximo, obligatorio)
+            except (TypeError, ValueError):
+                errores.append(f"Revisa el valor de {nombre.replace('_', ' ')}.")
+        if enteros.get("cobro_rango_desde") and enteros.get("cobro_rango_hasta") and enteros["cobro_rango_hasta"] < enteros["cobro_rango_desde"]:
+            errores.append("El último día del rango de cobro no puede ser anterior al primero.")
+
+        try:
+            porcentaje_primer_pago = Decimal((request.POST.get("porcentaje_primer_pago") or "50").replace(",", "."))
+            if not Decimal("0.01") <= porcentaje_primer_pago <= Decimal("99.99"):
+                raise ValueError
+        except Exception:
+            porcentaje_primer_pago = Decimal("50.00")
+            errores.append("El porcentaje del primer pago debe estar entre 0.01 y 99.99.")
+        try:
+            precio_mensual = Decimal((request.POST.get("precio_mensual") or "").replace(",", "."))
+            if precio_mensual <= 0:
+                raise ValueError
+        except Exception:
+            precio_mensual = None
+            errores.append("El cobro mensual debe ser mayor que cero.")
+        try:
+            valor_tecnico_mensual = Decimal((request.POST.get("valor_tecnico_mensual") or "0").replace(",", "."))
+            if valor_tecnico_mensual < 0:
+                raise ValueError
+        except Exception:
+            valor_tecnico_mensual = Decimal("0.00")
+            errores.append("El pago mensual al técnico debe ser cero o mayor.")
+        if valor_tecnico_mensual and not tecnico:
+            errores.append("Selecciona un técnico para asignarle un pago mensual.")
+
+        datos = {
+            "fecha_inicio": request.POST.get("fecha_inicio", ""),
+            "frecuencia": frecuencia, "frecuencia_personalizada": frecuencia_personalizada,
+            "dias_visita": dias_visita, "tecnico_id": tecnico_id,
+            "forma_pago": forma_pago, "forma_pago_personalizada": forma_pago_personalizada,
+            "periodo_dia_inicio": request.POST.get("periodo_dia_inicio", ""),
+            "programacion_cobro": programacion_cobro, "cobro_mes_desfase": request.POST.get("cobro_mes_desfase", "0"),
+            "cobro_dia_1": request.POST.get("cobro_dia_1", ""), "cobro_dia_2": request.POST.get("cobro_dia_2", ""),
+            "cobro_rango_desde": request.POST.get("cobro_rango_desde", ""), "cobro_rango_hasta": request.POST.get("cobro_rango_hasta", ""),
+            "cobro_dias_despues_cierre": request.POST.get("cobro_dias_despues_cierre", "0"),
+            "porcentaje_primer_pago": request.POST.get("porcentaje_primer_pago", "50.00"),
+            "programacion_cobro_personalizada": programacion_cobro_personalizada,
+            "precio_mensual": request.POST.get("precio_mensual", ""),
+            "valor_tecnico_mensual": request.POST.get("valor_tecnico_mensual", ""),
+        }
+
+        if errores:
+            for error in errores:
+                messages.error(request, error)
+        else:
+            fecha_baja_anterior = contrato.fecha_baja
+            motivo_baja_anterior = contrato.motivo_baja
+            fecha_inicio_anterior = contrato.fecha_inicio
+            with transaction.atomic():
+                contrato.fecha_inicio = fecha_inicio
+                contrato.frecuencia = frecuencia
+                contrato.frecuencia_personalizada = frecuencia_personalizada
+                contrato.dias_visita = dias_visita
+                contrato.tecnico_designado = tecnico
+                contrato.forma_pago = forma_pago
+                contrato.forma_pago_personalizada = forma_pago_personalizada
+                contrato.periodo_dia_inicio = enteros["periodo_dia_inicio"]
+                contrato.programacion_cobro = programacion_cobro
+                contrato.cobro_mes_desfase = enteros["cobro_mes_desfase"] or 0
+                contrato.cobro_dia_1 = enteros["cobro_dia_1"]
+                contrato.cobro_dia_2 = enteros["cobro_dia_2"]
+                contrato.cobro_rango_desde = enteros["cobro_rango_desde"]
+                contrato.cobro_rango_hasta = enteros["cobro_rango_hasta"]
+                contrato.cobro_dias_despues_cierre = enteros["cobro_dias_despues_cierre"] or 0
+                contrato.porcentaje_primer_pago = porcentaje_primer_pago
+                contrato.programacion_cobro_personalizada = programacion_cobro_personalizada
+                contrato.precio_mensual = precio_mensual
+                contrato.valor_tecnico_mensual = valor_tecnico_mensual
+                contrato.activo = True
+                contrato.fecha_baja = None
+                contrato.motivo_baja = ""
+                contrato.motivo_baja_detalle = ""
+                contrato.programado_hasta = None
+                contrato.save()
+
+                ReactivacionContrato.objects.create(
+                    contrato=contrato, fecha_reactivacion=timezone.localdate(), registrada_por=request.user,
+                    fecha_baja_anterior=fecha_baja_anterior, motivo_baja_anterior=motivo_baja_anterior,
+                    fecha_inicio_anterior=fecha_inicio_anterior, fecha_inicio=fecha_inicio, frecuencia=frecuencia, frecuencia_personalizada=frecuencia_personalizada,
+                    dias_visita=dias_visita, tecnico_designado=tecnico, forma_pago=forma_pago,
+                    forma_pago_personalizada=forma_pago_personalizada, periodo_dia_inicio=enteros["periodo_dia_inicio"],
+                    programacion_cobro=programacion_cobro, cobro_mes_desfase=enteros["cobro_mes_desfase"] or 0,
+                    cobro_dia_1=enteros["cobro_dia_1"], cobro_dia_2=enteros["cobro_dia_2"],
+                    cobro_rango_desde=enteros["cobro_rango_desde"], cobro_rango_hasta=enteros["cobro_rango_hasta"],
+                    cobro_dias_despues_cierre=enteros["cobro_dias_despues_cierre"] or 0,
+                    porcentaje_primer_pago=porcentaje_primer_pago,
+                    programacion_cobro_personalizada=programacion_cobro_personalizada,
+                    precio_mensual=precio_mensual, valor_tecnico_mensual=valor_tecnico_mensual,
+                )
+
+                resultado = generar_mantenimientos_contrato(contrato, desde=fecha_inicio, reconciliar=True) if contrato.generacion_automatica else {"creados": 0, "errores": []}
+
+            errores_programacion = resultado.get("errores") or []
+            if errores_programacion:
+                for error in errores_programacion:
+                    messages.warning(request, error)
+            _registrar_actividad(
+                user=request.user, titulo="Contrato recuperado",
+                descripcion=f"{request.user.username} reactivó el contrato de {contrato.cliente} desde {fecha_inicio:%d/%m/%Y}.",
+                url=f"/dashboard/contratos/{contrato.pk}/",
+            )
+            messages.success(request, f"Contrato reactivado correctamente. Se generaron {resultado.get('creados', 0)} mantenimientos futuros.")
+            if not url_has_allowed_host_and_scheme(siguiente, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
+                siguiente = f"/dashboard/contratos/{contrato.pk}/"
+            return redirect(siguiente)
+
+    return render(request, "dashboard/contrato_reactivar.html", {
+        "contrato": contrato, "trabajadores": trabajadores, "frecuencias": Contrato.FRECUENCIA_CHOICES,
+        "formas_pago": Contrato.FORMA_PAGO_CHOICES, "programaciones_cobro": Contrato.PROGRAMACION_COBRO_CHOICES,
+        "dias_semana": DIAS_SEMANA.items(), "datos": datos, "next": siguiente, "es_admin": True,
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def contrato_renovar_view(request, pk):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
+    contrato = get_object_or_404(
+        Contrato.objects.select_related("cliente", "tecnico_designado"),
+        pk=pk,
+    )
+    try:
+        meses = int(request.POST.get("vigencia_meses") or contrato.vigencia_meses or 12)
+        if not 1 <= meses <= 120:
+            raise ValueError
+    except (TypeError, ValueError):
+        messages.error(request, "Selecciona una vigencia válida para la renovación.")
+        return redirect("contrato_detalle", pk=contrato.pk)
+
+    hoy = timezone.localdate()
+    inicio_anterior = contrato.fecha_inicio
+    fin_anterior = contrato.fecha_fin_contrato
+
+    # Si existe un ciclo vigente/vencido, el siguiente inicia al día siguiente.
+    # Si el contrato era indefinido, inicia hoy manteniendo el historial original.
+    nuevo_inicio = (
+        fin_anterior + timedelta(days=1)
+        if fin_anterior
+        else max(hoy, contrato.fecha_inicio)
+    )
+
+    with transaction.atomic():
+        contrato.fecha_inicio = nuevo_inicio
+        contrato.vigencia_meses = meses
+        contrato.activo = True
+        contrato.fecha_baja = None
+        contrato.motivo_baja = ""
+        contrato.motivo_baja_detalle = ""
+        contrato.programado_hasta = None
+        contrato.save()
+
+        RenovacionContrato.objects.create(
+            contrato=contrato,
+            registrada_por=request.user,
+            fecha_renovacion=hoy,
+            inicio_anterior=inicio_anterior,
+            fin_anterior=fin_anterior,
+            nuevo_inicio=contrato.fecha_inicio,
+            nuevo_fin=contrato.fecha_fin_contrato,
+            vigencia_meses=meses,
+            observaciones=(request.POST.get("observaciones") or "").strip()[:250],
+        )
+
+        if contrato.generacion_automatica:
+            resultado = generar_mantenimientos_contrato(
+                contrato,
+                desde=contrato.fecha_inicio,
+                reconciliar=True,
+            )
+        else:
+            resultado = {"creados": 0, "errores": []}
+
+    _registrar_actividad(
+        user=request.user,
+        titulo="Contrato renovado",
+        descripcion=(
+            f"{request.user.username} renovó el contrato de {contrato.cliente} "
+            f"por {meses} mes(es), desde {contrato.fecha_inicio:%d/%m/%Y}."
+        ),
+        url=f"/dashboard/contratos/{contrato.pk}/",
+    )
+    messages.success(
+        request,
+        f"Contrato renovado hasta {contrato.fecha_fin_contrato:%d/%m/%Y}. "
+        f"Se programaron {resultado.get('creados', 0)} mantenimientos.",
+    )
+    return redirect("contrato_detalle", pk=contrato.pk)
+
+
+@login_required
 @require_http_methods(["POST"])
 def contrato_toggle_view(request, pk):
     if not es_admin(request.user):
@@ -7015,8 +10386,24 @@ def contrato_toggle_view(request, pk):
 
     contrato = get_object_or_404(Contrato, pk=pk)
 
+    if not contrato.activo:
+        siguiente = request.POST.get("next", f"/dashboard/contratos/{contrato.pk}/")
+        return redirect(f"/dashboard/contratos/{contrato.pk}/reactivar/?{urlencode({'next': siguiente})}")
+
+    if contrato.activo and request.POST.get("confirmar_baja") != "1":
+        return render(request, "dashboard/contrato_confirmar_baja.html", {"contrato": contrato, "motivos": Contrato.MOTIVO_BAJA_CHOICES, "next": request.POST.get("next", "")})
+
     contrato.activo = not contrato.activo
-    contrato.save(update_fields=["activo"])
+    if not contrato.activo:
+        contrato.fecha_baja = timezone.localdate()
+        contrato.motivo_baja = (request.POST.get("motivo_baja") or "no_especificado").strip()
+        contrato.motivo_baja_detalle = (request.POST.get("motivo_baja_detalle") or "").strip()[:250]
+        contrato.save(update_fields=["activo", "fecha_baja", "motivo_baja", "motivo_baja_detalle"])
+    else:
+        contrato.fecha_baja = None
+        contrato.motivo_baja = ""
+        contrato.motivo_baja_detalle = ""
+        contrato.save(update_fields=["activo", "fecha_baja", "motivo_baja", "motivo_baja_detalle"])
 
     if contrato.activo and contrato.generacion_automatica:
         generar_mantenimientos_contrato(contrato, reconciliar=True)
@@ -7050,3 +10437,149 @@ def contrato_toggle_view(request, pk):
             f"/dashboard/contratos/{contrato.pk}/",
         )
     )
+
+def _dec_cotizador(valor, defecto="0"):
+    try:
+        return Decimal(str(valor or defecto).replace(",", "."))
+    except Exception:
+        return Decimal(defecto)
+
+
+def _redondear_comercial_5(valor):
+    """Redondea siempre hacia arriba al siguiente múltiplo de USD 5."""
+    valor = Decimal(valor or 0)
+    if valor <= 0:
+        return Decimal("0.00")
+    return ((valor / Decimal("5")).to_integral_value(rounding=ROUND_CEILING) * Decimal("5")).quantize(Decimal("0.00"))
+
+
+def _filtro_tipo_piscina(tipo):
+    """Usa la clasificación ya guardada en la ficha técnica de contratos."""
+    terminos = {
+        "residencial": ("residencial", "casa", "vivienda"),
+        "urbanizacion": ("urbanizacion", "urbanización", "condominio", "comunal"),
+        "hotel": ("hotel", "hospedaje", "hosteria", "hostería", "resort"),
+        "comercial": ("comercial", "institucional", "club", "colegio", "empresa"),
+        "otro": ("otro",),
+    }.get(tipo, ())
+    q = Q()
+    for termino in terminos:
+        q |= Q(piscina_uso__icontains=termino) | Q(piscina_tipo__icontains=termino)
+    return q
+
+
+def _texto_frecuencia_cotizacion(frecuencia):
+    return {
+        "1_semanal": "1 visita semanal",
+        "2_semanales": "2 visitas semanales",
+        "3_semanales": "3 visitas semanales",
+        "quincenal": "1 visita cada 15 días",
+        "personalizado": "la frecuencia personalizada acordada",
+    }.get(frecuencia, "la frecuencia acordada")
+
+
+def _calcular_cotizacion_mantenimiento(datos):
+    ciudad = datos.get("ciudad")
+    frecuencia = datos.get("frecuencia") or "1_semanal"
+    tipo_piscina = datos.get("tipo_piscina") or "residencial"
+    volumen = datos.get("volumen") or Decimal("0")
+
+    # Base histórica: contratos reales con la misma frecuencia y, cuando se indicó,
+    # la misma ciudad. El tipo de piscina se usa como una capa adicional de similitud.
+    base_similares = Contrato.objects.filter(activo=True, frecuencia=frecuencia)
+    if ciudad:
+        base_similares = base_similares.filter(cliente__ciudad_ref=ciudad)
+
+    filtro_tipo = _filtro_tipo_piscina(tipo_piscina)
+    similares_tipo = base_similares.filter(filtro_tipo) if filtro_tipo else base_similares.none()
+    # Si todavía no hay suficientes contratos clasificados de ese tipo, no inventamos
+    # datos: conservamos la base histórica general y mostramos cuántos sí coincidieron.
+    similares = similares_tipo if similares_tipo.exists() else base_similares
+    vals = list(similares.values_list("precio_mensual", "valor_tecnico_mensual"))
+    n = len(vals)
+    n_tipo = similares_tipo.count() if filtro_tipo else 0
+
+    if vals:
+        prom_precio = sum((x[0] or Decimal("0") for x in vals), Decimal("0")) / n
+        prom_tecnico = sum((x[1] or Decimal("0") for x in vals), Decimal("0")) / n
+    else:
+        bases={"quincenal":Decimal("45"),"1_semanal":Decimal("55"),"2_semanales":Decimal("80"),"3_semanales":Decimal("120"),"personalizado":Decimal("80")}
+        prom_precio=bases.get(frecuencia,Decimal("55")); prom_tecnico=prom_precio*Decimal("0.35")
+
+    # Cuando existen contratos clasificados, el propio histórico determina el efecto
+    # del tipo de piscina respecto del promedio general de esa frecuencia/ciudad.
+    factor_tipo = Decimal("1")
+    vals_base = list(base_similares.values_list("precio_mensual", flat=True))
+    if n_tipo and vals_base:
+        prom_general = sum((x or Decimal("0") for x in vals_base), Decimal("0")) / len(vals_base)
+        if prom_general > 0:
+            prom_tipo = sum((x or Decimal("0") for x in similares_tipo.values_list("precio_mensual", flat=True)), Decimal("0")) / n_tipo
+            factor_tipo = max(Decimal("0.80"), min(Decimal("1.50"), prom_tipo / prom_general))
+
+    # Ajuste moderado por volumen respecto de una piscina residencial de referencia.
+    factor_volumen=Decimal("1")
+    if volumen>0:
+        factor_volumen=max(Decimal("0.85"),min(Decimal("1.65"),Decimal("0.75")+(volumen/Decimal("100"))))
+    factor = factor_volumen * factor_tipo
+    base=(prom_precio*factor).quantize(Decimal("0.01"))
+    tecnico_rec=(prom_tecnico*factor).quantize(Decimal("0.01"))
+    tecnico_min=(tecnico_rec*Decimal("0.90")).quantize(Decimal("0.01"))
+    tecnico_max=(tecnico_rec*Decimal("1.15")).quantize(Decimal("0.01"))
+
+    desde=timezone.localdate()-timedelta(days=90)
+    usos=UsoInsumo.objects.filter(mantenimiento__contrato__in=similares,mantenimiento__fecha__gte=desde)
+    total_q=usos.aggregate(t=Sum("costo_total"))["t"] or Decimal("0")
+    costo_q=(total_q/Decimal(max(n,1))/Decimal("3")).quantize(Decimal("0.01")) if datos.get("quimicos_incluidos") else Decimal("0")
+    if datos.get("quimicos_incluidos") and costo_q<=0:
+        costo_q=(base*Decimal("0.16")).quantize(Decimal("0.01"))
+    equipo=datos.get("equipamiento") or Decimal("0"); ajuste=datos.get("ajuste") or Decimal("0")
+    costo_directo=tecnico_rec+costo_q+equipo
+    minimo_exact=max(base+equipo+ajuste,(costo_directo/Decimal("0.75"))+ajuste).quantize(Decimal("0.01"))
+    recomendado_exact=max(base+equipo+ajuste,(costo_directo/Decimal("0.65"))+ajuste).quantize(Decimal("0.01"))
+    objetivo_exact=max(recomendado_exact,(costo_directo/Decimal("0.60"))+ajuste).quantize(Decimal("0.01"))
+
+    # Precio mostrado/comercial: siempre hacia arriba en múltiplos de USD 5.
+    minimo=_redondear_comercial_5(minimo_exact)
+    recomendado=_redondear_comercial_5(recomendado_exact)
+    objetivo=_redondear_comercial_5(objetivo_exact)
+    utilidad=(recomendado-costo_directo).quantize(Decimal("0.01"))
+    margen=((utilidad/recomendado)*100).quantize(Decimal("0.01")) if recomendado else Decimal("0")
+    frecuencia_texto=_texto_frecuencia_cotizacion(frecuencia)
+    if datos.get("quimicos_incluidos"):
+        quimicos_texto="Aplicación del tratamiento químico necesario para mantener el agua limpia y en óptimas condiciones."
+    else:
+        quimicos_texto="Aplicación y control de los productos químicos proporcionados por el cliente."
+    mensaje=(
+        f"Nuestro servicio de mantenimiento de piscina tiene un valor de ${recomendado:.0f} mensuales e incluye {frecuencia_texto}.\n\n"
+        "El servicio comprende:\n"
+        "✅ Limpieza general de la piscina.\n"
+        "✅ Aspirado del fondo.\n"
+        "✅ Cepillado de paredes y piso.\n"
+        "✅ Limpieza de canastillas y sistema de filtración.\n"
+        f"✅ {quimicos_texto}\n"
+        "✅ Control y ajuste de los parámetros del agua.\n\n"
+        "Importante: el cambio de arena del filtro no está incluido dentro de la mensualidad, ya que corresponde a un mantenimiento preventivo que normalmente se realiza una vez al año y se cotiza por separado.\n\n"
+        "JVAQUA Pool Services\nPiscinas en las mejores manos."
+    )
+    return {"contratos_similares":n,"contratos_tipo":n_tipo,"promedio":prom_precio.quantize(Decimal("0.01")),"costo_quimico":costo_q,"tecnico_min":tecnico_min,"tecnico_rec":tecnico_rec,"tecnico_max":tecnico_max,"precio_min":minimo,"precio_rec":recomendado,"precio_obj":objetivo,"precio_rec_exacto":recomendado_exact,"utilidad":utilidad,"margen":margen,"factor_tipo":factor_tipo.quantize(Decimal("0.01")),"mensaje_cliente":mensaje,"frecuencia_texto":frecuencia_texto}
+
+@login_required
+def cotizador_inteligente_admin_view(request):
+    if not es_admin(request.user):
+        return render(request,"dashboard/no_autorizado.html",status=403)
+    ciudades=Ciudad.objects.filter(activa=True).order_by("orden","nombre")
+    tipos_piscina=[("residencial","Residencial"),("urbanizacion","Urbanización / Condominio"),("hotel","Hotel / Hospedaje"),("comercial","Comercial / Institucional"),("otro","Otro")]
+    resultado=None; guardada=None
+    datos={"frecuencia":"1_semanal","quimicos_incluidos":True,"tipo_piscina":"residencial"}
+    if request.method=="POST":
+        ciudad=Ciudad.objects.filter(pk=request.POST.get("ciudad")).first()
+        largo=_dec_cotizador(request.POST.get("largo")); ancho=_dec_cotizador(request.POST.get("ancho")); prof=_dec_cotizador(request.POST.get("profundidad"))
+        volumen=_dec_cotizador(request.POST.get("volumen"))
+        if volumen<=0 and largo>0 and ancho>0 and prof>0: volumen=(largo*ancho*prof).quantize(Decimal("0.01"))
+        datos={"ciudad":ciudad,"nombre":(request.POST.get("nombre_referencia") or "").strip(),"tipo_piscina":request.POST.get("tipo_piscina") or "residencial","largo":largo or None,"ancho":ancho or None,"profundidad":prof or None,"volumen":volumen or None,"frecuencia":request.POST.get("frecuencia") or "1_semanal","quimicos_incluidos":request.POST.get("quimicos_incluidos")=="on","equipamiento":_dec_cotizador(request.POST.get("equipamiento_mensual")),"ajuste":_dec_cotizador(request.POST.get("ajuste_especial_mensual")),"observaciones":(request.POST.get("observaciones") or "").strip()}
+        resultado=_calcular_cotizacion_mantenimiento(datos)
+        if request.POST.get("accion")=="guardar":
+            guardada=CotizacionMantenimiento.objects.create(creada_por=request.user,ciudad=ciudad,nombre_referencia=datos["nombre"],tipo_piscina=datos["tipo_piscina"],largo_m=datos["largo"],ancho_m=datos["ancho"],profundidad_m=datos["profundidad"],volumen_m3=datos["volumen"],frecuencia=datos["frecuencia"],quimicos_incluidos=datos["quimicos_incluidos"],equipamiento_mensual=datos["equipamiento"],ajuste_especial_mensual=datos["ajuste"],observaciones=datos["observaciones"],contratos_similares=resultado["contratos_similares"],promedio_mercado_interno=resultado["promedio"],costo_quimico_estimado=resultado["costo_quimico"],pago_tecnico_minimo=resultado["tecnico_min"],pago_tecnico_recomendado=resultado["tecnico_rec"],pago_tecnico_maximo=resultado["tecnico_max"],precio_minimo=resultado["precio_min"],precio_recomendado=resultado["precio_rec"],precio_objetivo=resultado["precio_obj"],utilidad_estimada=resultado["utilidad"],margen_estimado=resultado["margen"])
+            messages.success(request,f"Cotización #{guardada.pk} guardada correctamente.")
+    recientes=CotizacionMantenimiento.objects.select_related("ciudad").order_by("-creada_en")[:8]
+    return render(request,"dashboard/cotizador_inteligente_admin.html",{"ciudades":ciudades,"frecuencias":Contrato.FRECUENCIA_CHOICES,"tipos_piscina":tipos_piscina,"datos":datos,"resultado":resultado,"guardada":guardada,"recientes":recientes})
