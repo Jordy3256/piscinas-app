@@ -4,7 +4,7 @@
 @media(max-width:767.98px){.wh-hero{padding:.85rem 1rem!important;border-radius:20px!important}.wh-hero .wh-date{font-size:.78rem}.wh-summary{grid-template-columns:repeat(2,minmax(0,1fr));border-radius:16px}.wh-summary-item{padding:.62rem .7rem}.wh-summary-item:nth-child(3){border-left:0;border-top:1px solid #e8eef5}.wh-summary-item:nth-child(4){border-top:1px solid #e8eef5}.wh-summary-value{font-size:1.05rem}.wh-summary-note{font-size:.64rem}.wh-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:.55rem}.wh-card{min-height:118px;padding:.75rem}.wh-card h3{font-size:.82rem}.wh-card p{font-size:.68rem}.wh-card-icon{width:38px!important;height:38px!important;margin-bottom:.45rem}.wh-action{padding:.65rem .72rem}}
 </style>
 <div class="d-grid gap-3">
-<section class="wh-hero"><div class="small text-uppercase fw-bold opacity-75 mb-1">Tu jornada</div><h2 class="fw-bold mb-1">Hola, {{ nombre_trabajador }}</h2><div class="opacity-75 wh-date">{{ hoy|date:"d/m/Y" }} · Aquí tienes lo importante para hoy.</div></section>
+<section class="wh-hero aquo-welcome"><div class="small text-uppercase fw-bold opacity-75 mb-1">Tu jornada</div><h2 class="fw-bold mb-1">👋 Hola, {{ nombre_trabajador }}</h2><div class="opacity-75 wh-date">{{ hoy|date:"d/m/Y" }} · Aquí tienes lo importante para hoy.</div></section>
 
 <section class="wh-summary" aria-label="Resumen de hoy">
   <div class="wh-summary-item"><div class="wh-summary-label">Mantenimientos hoy</div><div class="wh-summary-main"><span class="wh-summary-value">{{ mantenimientos_pendientes_hoy|default:0 }}</span></div><div class="wh-summary-note ok">{{ mantenimientos_realizados_hoy|default:0 }} realizados</div></div>
