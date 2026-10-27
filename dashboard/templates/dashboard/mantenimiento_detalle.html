@@ -42,7 +42,27 @@
   .client-address-line{display:flex;gap:.55rem;align-items:flex-start;margin-top:1rem;padding-top:.8rem;border-top:1px solid rgba(255,255,255,.2);font-size:.84rem;color:rgba(255,255,255,.9)}
   .client-address-line i{flex-shrink:0}
   .client-contact-hint{display:flex;gap:.8rem;flex-wrap:wrap;margin-top:.65rem;font-size:.74rem;color:rgba(255,255,255,.72)}
-  @media(max-width:640px){.client-identity-hero{padding:1.1rem}.client-identity-layout{flex-direction:column}.client-identity-side{width:100%;flex-direction:row;justify-content:space-between;align-items:center;flex-wrap:wrap}.client-primary-actions{justify-content:flex-start}.client-primary-actions .btn{min-width:115px}.client-identity-hero .detail-client-name{font-size:1.65rem}}
+  /* Ficha compacta y de acceso rápido en móvil y escritorio. */
+  .client-identity-hero{padding:1rem 1.2rem;margin-bottom:.8rem;border-radius:20px}
+  .client-identity-layout{gap:.7rem}
+  .client-identity-kicker{margin-bottom:.35rem}
+  .client-identity-hero .detail-client-name{font-size:clamp(1.3rem,3vw,1.8rem);line-height:1.16}
+  .client-location-tags{margin-top:.55rem;gap:.4rem}
+  .client-location-tag{padding:.33rem .58rem;font-size:.75rem}
+  .client-visit-meta{margin-top:.55rem}
+  .client-identity-side{gap:.55rem}
+  .client-primary-actions .btn{min-height:40px;padding:.43rem .75rem}
+  .client-address-line{margin-top:.65rem;padding-top:.55rem;font-size:.78rem}
+  @media(max-width:640px){
+    .client-identity-hero{padding:.95rem}
+    .client-identity-layout{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.55rem}
+    .client-identity-main{grid-column:1/-1}
+    .client-identity-side{grid-column:1/-1;width:100%;flex-direction:row;justify-content:space-between;align-items:center;gap:.4rem;flex-wrap:wrap}
+    .client-identity-hero .detail-client-name{font-size:1.45rem}
+    .client-location-tag{max-width:100%;overflow-wrap:anywhere}
+    .client-primary-actions{justify-content:flex-start;gap:.4rem}
+    .client-primary-actions .btn{min-width:0;min-height:40px;padding:.42rem .7rem;font-size:.85rem}
+  }
 </style>
 
 <section class="detail-hero client-identity-hero" aria-label="Identificación del cliente">

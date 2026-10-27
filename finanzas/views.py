@@ -190,19 +190,19 @@ def panel_financiero(request):
     for factura in resumen["cobros_vencidos"][:6]:
         prioridades.append({
             "nivel": "critica", "icono": "🔴", "titulo": "Cobro vencido",
-            "detalle": f"{factura.cliente} · ${factura.saldo:.2f}",
+            "detalle": f"${factura.saldo:.2f}", "cliente": factura.cliente, "contrato": factura.contrato,
             "url": reverse("finanzas_factura_detalle", args=[factura.pk]),
         })
     for factura in resumen["cobros_hoy"][:6]:
         prioridades.append({
             "nivel": "importante", "icono": "🟠", "titulo": "Cobrar hoy",
-            "detalle": f"{factura.cliente} · ${factura.saldo:.2f}",
+            "detalle": f"${factura.saldo:.2f}", "cliente": factura.cliente, "contrato": factura.contrato,
             "url": reverse("finanzas_factura_detalle", args=[factura.pk]),
         })
     for factura in resumen["facturas_por_emitir"][:4]:
         prioridades.append({
             "nivel": "aviso", "icono": "📄", "titulo": "Emitir o enviar factura",
-            "detalle": f"{factura.cliente} · {factura.periodo_label}",
+            "detalle": factura.periodo_label, "cliente": factura.cliente, "contrato": factura.contrato,
             "url": reverse("finanzas_factura_detalle", args=[factura.pk]),
         })
     for obligacion in resumen["nomina_hoy"][:4]:

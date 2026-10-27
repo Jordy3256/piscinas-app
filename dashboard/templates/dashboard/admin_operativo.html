@@ -573,6 +573,11 @@
   .op-kpi-strip span{font-size:.78rem;color:#718096;font-weight:700}.op-kpi-strip strong{font-size:1.35rem}
   .op-quick-links .btn{border-radius:10px}
   @media(max-width:767px){.op-compact-head{padding:14px}.op-kpi-strip{grid-template-columns:repeat(2,1fr)}.op-kpi-strip>div{padding:9px 11px}.op-compact-title{font-size:1.4rem}}
+  .op-client-name{font-size:1.06rem;line-height:1.3;overflow-wrap:anywhere}
+  .op-client-name a{color:#152b48!important}
+  .op-visit-date{display:block;margin-top:.55rem;color:#697b92;font-size:.81rem}
+  .operativo-page .aquo-ubicacion-etiquetas{margin-top:.55rem}
+  @media(max-width:650px){.operativo-page .js-expand-item .card-body{padding:1rem}.operativo-page .mobile-op-actions{gap:.5rem!important}.operativo-page .mobile-op-actions .btn{min-height:42px}}
 </style>
 
 
@@ -1007,13 +1012,9 @@
             <div class="card-body">
               <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
                 <div class="flex-grow-1">
-                  <div class="fw-bold">
-                    <a class="text-decoration-none" href="/dashboard/mantenimientos/{{ m.id }}/">
-                      {{ m.cliente }}
-                    </a>
-                  </div>
+                  <div class="fw-bold op-client-name"><a class="text-decoration-none" href="/dashboard/mantenimientos/{{ m.id }}/">{{ m.cliente.nombre }}</a></div>
                   <div class="text-muted small mt-1">
-                    📍 {{ m.cliente.ciudad|default:"Sin ciudad" }}{% if m.cliente.sector_urbanizacion %} · {{ m.cliente.sector_urbanizacion }}{% endif %}<br>📅 {{ m.fecha }} · {{ m.contrato }}{% if m.estado == "realizado" and m.realizado_en %}<br>✅ Fecha real: {{ m.realizado_en|date:"d/m/Y H:i" }}{% endif %}
+                    {% include "dashboard/includes/ubicacion_contrato.html" with contrato=m.contrato %}<span class="op-visit-date"><i class="bi bi-calendar3"></i> {{ m.fecha|date:"d/m/Y" }} · {{ m.contrato.get_frecuencia_display|default:"Visita programada" }}</span>{% if m.estado == "realizado" and m.realizado_en %}<br>✅ Fecha real: {{ m.realizado_en|date:"d/m/Y H:i" }}{% endif %}
                   </div>
                 </div>
 
@@ -1084,13 +1085,9 @@
             <div class="card-body">
               <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
                 <div class="flex-grow-1">
-                  <div class="fw-bold">
-                    <a class="text-decoration-none" href="/dashboard/mantenimientos/{{ m.id }}/">
-                      {{ m.cliente }}
-                    </a>
-                  </div>
+                  <div class="fw-bold op-client-name"><a class="text-decoration-none" href="/dashboard/mantenimientos/{{ m.id }}/">{{ m.cliente.nombre }}</a></div>
                   <div class="text-muted small mt-1">
-                    📍 {{ m.cliente.ciudad|default:"Sin ciudad" }}{% if m.cliente.sector_urbanizacion %} · {{ m.cliente.sector_urbanizacion }}{% endif %}<br>📅 {{ m.fecha }} · {{ m.contrato }}{% if m.estado == "realizado" and m.realizado_en %}<br>✅ Fecha real: {{ m.realizado_en|date:"d/m/Y H:i" }}{% endif %}
+                    {% include "dashboard/includes/ubicacion_contrato.html" with contrato=m.contrato %}<span class="op-visit-date"><i class="bi bi-calendar3"></i> {{ m.fecha|date:"d/m/Y" }} · {{ m.contrato.get_frecuencia_display|default:"Visita programada" }}</span>{% if m.estado == "realizado" and m.realizado_en %}<br>✅ Fecha real: {{ m.realizado_en|date:"d/m/Y H:i" }}{% endif %}
                   </div>
                 </div>
 
@@ -1180,13 +1177,9 @@
             <div class="card-body">
               <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
                 <div class="flex-grow-1">
-                  <div class="fw-bold">
-                    <a class="text-decoration-none" href="/dashboard/mantenimientos/{{ m.id }}/">
-                      {{ m.cliente }}
-                    </a>
-                  </div>
+                  <div class="fw-bold op-client-name"><a class="text-decoration-none" href="/dashboard/mantenimientos/{{ m.id }}/">{{ m.cliente.nombre }}</a></div>
                   <div class="text-muted small mt-1">
-                    📍 {{ m.cliente.ciudad|default:"Sin ciudad" }}{% if m.cliente.sector_urbanizacion %} · {{ m.cliente.sector_urbanizacion }}{% endif %}<br>📅 {{ m.fecha }} · {{ m.contrato }}{% if m.estado == "realizado" and m.realizado_en %}<br>✅ Fecha real: {{ m.realizado_en|date:"d/m/Y H:i" }}{% endif %}
+                    {% include "dashboard/includes/ubicacion_contrato.html" with contrato=m.contrato %}<span class="op-visit-date"><i class="bi bi-calendar3"></i> {{ m.fecha|date:"d/m/Y" }} · {{ m.contrato.get_frecuencia_display|default:"Visita programada" }}</span>{% if m.estado == "realizado" and m.realizado_en %}<br>✅ Fecha real: {{ m.realizado_en|date:"d/m/Y H:i" }}{% endif %}
                   </div>
                 </div>
 

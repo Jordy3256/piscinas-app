@@ -49,6 +49,10 @@
     .fh-field input,.fh-field select{font-size:.84rem!important}
   }
   @media(max-width:390px){.fh-buttons{grid-template-columns:1fr}.fh-title-row h1{font-size:1.3rem}}
+  .fin-priority-client{font-size:.91rem;font-weight:900;color:#152b48;margin:.25rem 0 .4rem;overflow-wrap:anywhere}
+  .priority-item .aquo-ubicacion-etiquetas{margin-bottom:.45rem}
+  .priority-item .fin-item-sub{font-size:.8rem;font-weight:750}
+  @media(max-width:600px){.priority-item{align-items:flex-start}.priority-item .priority-icon{padding-top:.2rem}}
 </style>
 <div class="fin-shell">
   <section class="fin-hero fh-hero">
@@ -146,7 +150,7 @@
         {% for item in prioridades %}
           <a class="fin-item priority-item text-decoration-none text-reset" href="{{ item.url }}">
             <div class="priority-icon">{{ item.icono }}</div>
-            <div class="fin-item-main"><div class="fin-item-title">{{ item.titulo }}</div><div class="fin-item-sub">{{ item.detalle }}</div></div>
+            <div class="fin-item-main"><div class="fin-item-title">{{ item.titulo }}</div>{% if item.cliente %}<div class="fin-priority-client">{{ item.cliente.nombre }}</div>{% include "dashboard/includes/ubicacion_contrato.html" with contrato=item.contrato %}{% endif %}<div class="fin-item-sub">{{ item.detalle }}</div></div>
             <div>›</div>
           </a>
         {% empty %}<div class="fin-empty">✅ No hay acciones financieras urgentes para este momento.</div>{% endfor %}
