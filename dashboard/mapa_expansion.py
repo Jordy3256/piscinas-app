@@ -82,7 +82,7 @@ def mapa_expansion_view(request):
             'tecnico_designado': str(c.tecnico_designado) if c.tecnico_designado_id else 'Sin asignar',
         })
     return render(request, 'dashboard/mapa_expansion.html', {
-        'mapa_tiles_url': os.environ.get('AQUO_MAP_TILE_URL', 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}'),
+        'maptiler_api_key': os.environ.get('MAPTILER_API_KEY', '').strip(),
         'puntos': puntos, 'pendientes': pendientes, 'modo': modo,
         'ciudades': ciudades, 'ciudad_seleccionada': ciudad,
         'resueltos': resueltos, 'geocoding_habilitado': bool(api_key),
