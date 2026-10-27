@@ -1,0 +1,75 @@
+{% extends "dashboard/base_admin.html" %}
+{% block content %}
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+>
+<style>
+.map-shell{max-width:1550px;margin:10px auto;padding:0 12px;color:#172b4d}
+.map-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:9px}
+.map-title{font-size:20px;font-weight:850;line-height:1.2}.map-lead{color:#66758b;font-size:12px;margin:2px 0 0}
+.map-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:7px;margin:8px 0 10px}
+.map-stats{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:0}
+.map-stat{display:flex;align-items:center;gap:7px;background:#fff;border:1px solid #e0eaf4;border-radius:11px;padding:7px 10px;font-size:12px;color:#60718a;white-space:nowrap}
+.map-stat strong{font-size:17px;color:#0969c9;line-height:1}.map-controls{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin:0 0 0 auto}
+.map-controls a,.map-controls select{background:white;border:1px solid #dce7f4;border-radius:10px;padding:8px 10px;color:#24436b;text-decoration:none;font-size:12px;line-height:1.25;min-height:36px}
+.map-controls a.selected{background:#0869d4;color:white;border-color:#0869d4}.map-controls form{margin:0}.map-controls select{max-width:185px}
+.map-frame{height:clamp(480px,74vh,880px);border-radius:16px;overflow:hidden;border:1px solid #d9e7f4;background:#edf3f9}
+.map-pending{margin:10px 0;padding:10px 13px;background:white;border:1px solid #e0eaf4;border-radius:12px;font-size:12px}.map-pending summary{cursor:pointer;font-weight:700}.map-pending li{margin:8px 0}
+.map-note{color:#61758b;font-size:11px;margin-top:7px;line-height:1.5}.map-help{margin-top:7px}.map-help summary{cursor:pointer;color:#54708d;font-size:11px}
+@media(max-width:800px){.map-head{margin-bottom:7px}.map-title{font-size:18px}.map-toolbar{align-items:stretch}.map-stats{width:100%;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}.map-stat{min-width:0;white-space:normal;padding:7px;gap:4px;justify-content:center;flex-direction:column;text-align:center;font-size:10px}.map-stat strong{font-size:18px}.map-controls{width:100%;margin-left:0;justify-content:flex-start}.map-controls a,.map-controls select{font-size:12px}.map-frame{height:70vh;min-height:430px}}
+@media(max-width:380px){.map-controls a{padding:8px}.map-controls select{max-width:160px}}
+</style>
+<div class="map-shell">
+  <div class="map-head"><div><div class="map-title">🗺️ Mapa de expansión JVAQUA</div><p class="map-lead">Cobertura de piscinas · datos actualizados al abrir</p></div></div>
+  <div class="map-toolbar">
+    <div class="map-stats" aria-label="Indicadores generales">
+      <div class="map-stat"><span>🟢 Activas</span><strong>{{ total_activos }}</strong></div>
+      <div class="map-stat"><span>🔴 Históricas</span><strong>{{ total_historicos }}</strong></div>
+      <div class="map-stat"><span>📍 Ciudades</span><strong>{{ ciudades_activas }}</strong></div>
+    </div>
+    <nav class="map-controls" aria-label="Filtros del mapa">
+      <a class="{% if modo == 'activos' %}selected{% endif %}" href="?modo=activos{% if ciudad_seleccionada %}&ciudad={{ ciudad_seleccionada|urlencode }}{% endif %}">Activas</a>
+      <a class="{% if modo == 'historial' %}selected{% endif %}" href="?modo=historial{% if ciudad_seleccionada %}&ciudad={{ ciudad_seleccionada|urlencode }}{% endif %}">Historial</a>
+      <a class="{% if modo == 'todos' %}selected{% endif %}" href="?modo=todos{% if ciudad_seleccionada %}&ciudad={{ ciudad_seleccionada|urlencode }}{% endif %}">Todas</a>
+      <form method="get"><input type="hidden" name="modo" value="{{ modo }}"><select name="ciudad" aria-label="Filtrar por ciudad" onchange="this.form.submit()"><option value="">Todas las ciudades</option>{% for c in ciudades %}<option value="{{ c }}" {% if c == ciudad_seleccionada %}selected{% endif %}>{{ c }}</option>{% endfor %}</select></form>
+    </nav>
+  </div>
+  <p id="mapa-tile-aviso" class="map-note" hidden role="status">⚠️ No se pudieron cargar algunas imágenes de MapTiler. Comprueba la clave API, el dominio autorizado y la conexión. Los marcadores siguen disponibles.</p>
+  {% if not maptiler_api_key %}<p class="map-note" role="alert">⚠️ Falta configurar MAPTILER_API_KEY en las variables de entorno del servicio web de Render. Los marcadores se mostrarán sin mapa base.</p>{% endif %}
+  <div id="mapa-piscinas" class="map-frame" aria-label="Mapa interactivo de piscinas"></div>
+  <details class="map-help"><summary>ℹ️ Información sobre ubicaciones y actualización</summary><p class="map-note">Las coordenadas se obtienen mediante el mismo proceso que utilizan las rutas de los trabajadores. Se intentan resolver hasta 8 ubicaciones pendientes por apertura cuando existe información suficiente; los contratos sin GPS pueden revisarse manualmente. Los puntos cercanos se agrupan automáticamente. Los datos de clientes son visibles únicamente para administración.</p></details>
+  {% if resueltos %}<p class="map-note">✅ Se recuperaron y guardaron {{ resueltos }} ubicaciones en esta consulta. Actualiza la página para continuar con las pendientes.</p>{% endif %}{% if pendientes %}<details class="map-pending"><summary>📍 {{ pendientes|length }} contratos aún sin coordenadas resueltas (no aparecen en el mapa)</summary><ul>{% for p in pendientes %}<li>{{ p.cliente }} — {{ p.sector }} · <a href="{% url 'contrato_detalle' p.id %}">Revisar contrato</a></li>{% endfor %}</ul></details>{% endif %}
+</div>
+{{ puntos|json_script:"mapa-puntos" }}
+{{ maptiler_api_key|json_script:"maptiler-api-key" }}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+(function(){
+ const map=L.map('mapa-piscinas').setView([-1.8312,-78.1834],6);
+ // MapTiler: la clave de mapas web es visible en el navegador; restringirla por origen en MapTiler Cloud.
+ const maptilerKey=JSON.parse(document.getElementById('maptiler-api-key').textContent);
+ if(maptilerKey){
+   const tiles=L.tileLayer('https://api.maptiler.com/maps/streets-v2/{z}/{x}/{y}.png?key='+encodeURIComponent(maptilerKey),{
+     maxZoom:19,maxNativeZoom:19,tileSize:512,zoomOffset:-1,updateWhenIdle:true,keepBuffer:4,
+     attribution:'&copy; <a href="https://www.maptiler.com/copyright/" target="_blank" rel="noopener noreferrer">MapTiler</a> &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a>'
+   }).addTo(map);
+   tiles.on('tileerror',()=>{document.getElementById('mapa-tile-aviso').hidden=false;});
+ }
+ setTimeout(()=>map.invalidateSize(),200);
+ window.addEventListener('load',()=>map.invalidateSize());
+ const puntos=JSON.parse(document.getElementById('mapa-puntos').textContent),bounds=[];
+ const grupos={};
+ puntos.forEach(p=>{const key=p.lat.toFixed(5)+','+p.lon.toFixed(5);(grupos[key]||(grupos[key]=[])).push(p)});
+ Object.values(grupos).forEach(grupo=>{
+   const p=grupo[0],count=grupo.length,color=grupo.some(x=>x.activo)?'#16a36a':'#dc4955';
+   const icon=L.divIcon({className:'',html:'<div style="width:34px;height:34px;background:'+color+';border:3px solid white;border-radius:50%;color:white;display:grid;place-items:center;box-shadow:0 2px 12px #0004;font-weight:bold">'+(count>1?count:'🏊')+'</div>',iconSize:[36,36],iconAnchor:[18,18]});
+   const marker=L.marker([p.lat,p.lon],{icon}).addTo(map);bounds.push([p.lat,p.lon]);
+   const box=document.createElement('div');box.style.minWidth='190px';
+   grupo.forEach((x,i)=>{if(i)box.appendChild(document.createElement('hr'));const title=document.createElement('strong');title.textContent=x.cliente;box.appendChild(title);['sector','ciudad','frecuencia','tecnico_designado'].forEach(k=>{if(x[k]){const div=document.createElement('div');div.textContent=x[k];box.appendChild(div)}});const state=document.createElement('div');state.textContent=x.activo?'🟢 Activo':'🔴 Histórico';box.appendChild(state);const link=document.createElement('a');link.href='/dashboard/contratos/'+x.id+'/';link.textContent='Ver contrato';box.appendChild(link)});
+   marker.bindPopup(box);
+ });
+ if(bounds.length)map.fitBounds(bounds,{padding:[35,35],maxZoom:14});
+})();
+</script>
+{% endblock %}
