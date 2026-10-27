@@ -4,6 +4,7 @@ No modifica enlaces, direcciones ni coordenadas previamente almacenadas.
 """
 import logging
 import os
+from datetime import date
 
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.db.models import Q
@@ -30,8 +31,39 @@ def mapa_expansion_view(request):
     if modo not in ('activos', 'historial', 'todos'):
         modo = 'activos'
     ciudad = (request.GET.get('ciudad') or '').strip()[:100]
+    fecha_raw = (request.GET.get('fecha') or '').strip()
+    try:
+        fecha_consulta = date.fromisoformat(fecha_raw) if fecha_raw else None
+    except ValueError:
+        fecha_consulta = None
+    comparar_raw = (request.GET.get('comparar') or '').strip()
+    try:
+        fecha_comparar = date.fromisoformat(comparar_raw) if comparar_raw else None
+    except ValueError:
+        fecha_comparar = None
+    if not fecha_consulta:
+        fecha_comparar = None
+    if fecha_comparar and fecha_comparar < fecha_consulta:
+        fecha_consulta, fecha_comparar = fecha_comparar, fecha_consulta
+    def vigencia_en(fecha):
+        inicio = (Q(fecha_inicio_original__lte=fecha) |
+                  Q(fecha_inicio_original__isnull=True, fecha_inicio__lte=fecha))
+        fin = Q(fecha_fin_contrato__isnull=True) | Q(fecha_fin_contrato__gte=fecha)
+        return inicio & fin
+
     qs = Contrato.objects.select_related('cliente', 'ciudad_ref', 'tecnico_designado').order_by('id')
-    if modo == 'activos':
+    if fecha_consulta:
+        # Vigencia estimada a partir de las fechas conservadas en el contrato.
+        # No reconstruye suspensiones, reactivaciones ni modificaciones sin auditoría histórica.
+        if fecha_comparar:
+            qs = qs.filter(vigencia_en(fecha_consulta) | vigencia_en(fecha_comparar))
+        elif modo == 'activos':
+            qs = qs.filter(vigencia_en(fecha_consulta))
+        elif modo == 'historial':
+            qs = qs.filter(Q(fecha_inicio__lte=fecha_consulta) | Q(fecha_inicio_original__lte=fecha_consulta)).exclude(vigencia_en(fecha_consulta))
+        else:
+            qs = qs.filter(Q(fecha_inicio__lte=fecha_consulta) | Q(fecha_inicio_original__lte=fecha_consulta))
+    elif modo == 'activos':
         qs = qs.filter(activo=True)
     elif modo == 'historial':
         qs = qs.filter(activo=False)
@@ -72,12 +104,20 @@ def mapa_expansion_view(request):
                                'sector': c.sector_urbanizacion or 'Sin sector'})
             continue
         lat, lon = coords
+        inicio_real = c.fecha_inicio_original or c.fecha_inicio
+        def vigente(fecha):
+            return bool(fecha and inicio_real and inicio_real <= fecha and
+                        (not c.fecha_fin_contrato or c.fecha_fin_contrato >= fecha))
+        activo_fecha = vigente(fecha_consulta) if fecha_consulta else c.activo
+        estado_comparacion = ('continua' if vigente(fecha_consulta) and vigente(fecha_comparar)
+                              else 'alta' if vigente(fecha_comparar)
+                              else 'baja') if fecha_comparar else ''
         puntos.append({
             'id': c.pk, 'lat': lat, 'lon': lon,
             'cliente': str(c.cliente),
             'ciudad': c.ciudad or (str(c.ciudad_ref) if c.ciudad_ref_id else ''),
             'sector': c.sector_urbanizacion or '', 'direccion': c.direccion or '',
-            'activo': c.activo,
+            'activo': activo_fecha, 'comparacion': estado_comparacion,
             'frecuencia': c.get_frecuencia_display() if c.frecuencia else '',
             'tecnico_designado': str(c.tecnico_designado) if c.tecnico_designado_id else 'Sin asignar',
         })
@@ -85,6 +125,8 @@ def mapa_expansion_view(request):
         'maptiler_api_key': os.environ.get('MAPTILER_API_KEY', '').strip(),
         'puntos': puntos, 'pendientes': pendientes, 'modo': modo,
         'ciudades': ciudades, 'ciudad_seleccionada': ciudad,
+        'fecha_consulta': fecha_consulta.isoformat() if fecha_consulta else '',
+        'fecha_comparar': fecha_comparar.isoformat() if fecha_comparar else '',
         'resueltos': resueltos, 'geocoding_habilitado': bool(api_key),
         'total_activos': Contrato.objects.filter(activo=True).count(),
         'total_historicos': Contrato.objects.filter(activo=False).count(),
