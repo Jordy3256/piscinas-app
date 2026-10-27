@@ -14,15 +14,15 @@
     <form method="get"><input type="hidden" name="modo" value="{{ modo }}"><select name="ciudad" onchange="this.form.submit()"><option value="">Todas las ciudades</option>{% for c in ciudades %}<option value="{{ c }}" {% if c == ciudad_seleccionada %}selected{% endif %}>{{ c }}</option>{% endfor %}</select></form>
   </div>
   <div id="mapa-piscinas" class="map-frame" aria-label="Mapa interactivo de piscinas"></div>
-  <p class="map-note">Los marcadores se colocan solo cuando el contrato tiene coordenadas válidas. Los puntos cercanos se agrupan automáticamente. Los datos de clientes son visibles únicamente para administración.</p>
-  {% if pendientes %}<details class="map-pending"><summary>📍 {{ pendientes|length }} contratos sin coordenadas válidas (no aparecen en el mapa)</summary><ul>{% for p in pendientes %}<li>{{ p.cliente }} — {{ p.sector }} · <a href="{% url 'contrato_detalle' p.id %}">Revisar contrato</a></li>{% endfor %}</ul></details>{% endif %}
+  <p class="map-note">Las coordenadas se obtienen mediante el mismo proceso que utilizan las rutas de los trabajadores. Se resuelven hasta 8 ubicaciones pendientes por apertura para limitar consultas externas. Los puntos cercanos se agrupan automáticamente. Los datos de clientes son visibles únicamente para administración.</p>
+  {% if resueltos %}<p class="map-note">✅ Se recuperaron y guardaron {{ resueltos }} ubicaciones en esta consulta. Actualiza la página para continuar con las pendientes.</p>{% endif %}{% if pendientes %}<details class="map-pending"><summary>📍 {{ pendientes|length }} contratos aún sin coordenadas resueltas (no aparecen en el mapa)</summary><ul>{% for p in pendientes %}<li>{{ p.cliente }} — {{ p.sector }} · <a href="{% url 'contrato_detalle' p.id %}">Revisar contrato</a></li>{% endfor %}</ul></details>{% endif %}
 </div>
 {{ puntos|json_script:"mapa-puntos" }}
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script>
 (function(){
  const map=L.map('mapa-piscinas').setView([-1.8312,-78.1834],6);
- L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
+ L.tileLayer('https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap contributors &copy; CARTO'}).addTo(map);
  const puntos=JSON.parse(document.getElementById('mapa-puntos').textContent),bounds=[];
  const grupos={};
  puntos.forEach(p=>{const key=p.lat.toFixed(5)+','+p.lon.toFixed(5);(grupos[key]||(grupos[key]=[])).push(p)});
@@ -31,7 +31,7 @@
    const icon=L.divIcon({className:'',html:'<div style="width:34px;height:34px;background:'+color+';border:3px solid white;border-radius:50%;color:white;display:grid;place-items:center;box-shadow:0 2px 12px #0004;font-weight:bold">'+(count>1?count:'🏊')+'</div>',iconSize:[36,36],iconAnchor:[18,18]});
    const marker=L.marker([p.lat,p.lon],{icon}).addTo(map);bounds.push([p.lat,p.lon]);
    const box=document.createElement('div');box.style.minWidth='190px';
-   grupo.forEach((x,i)=>{if(i)box.appendChild(document.createElement('hr'));const title=document.createElement('strong');title.textContent=x.cliente;box.appendChild(title);['sector','ciudad','frecuencia','trabajador'].forEach(k=>{if(x[k]){const div=document.createElement('div');div.textContent=x[k];box.appendChild(div)}});const state=document.createElement('div');state.textContent=x.activo?'🟢 Activo':'🔴 Histórico';box.appendChild(state);const link=document.createElement('a');link.href='/dashboard/contratos/'+x.id+'/';link.textContent='Ver contrato';box.appendChild(link)});
+   grupo.forEach((x,i)=>{if(i)box.appendChild(document.createElement('hr'));const title=document.createElement('strong');title.textContent=x.cliente;box.appendChild(title);['sector','ciudad','frecuencia','tecnico_designado'].forEach(k=>{if(x[k]){const div=document.createElement('div');div.textContent=x[k];box.appendChild(div)}});const state=document.createElement('div');state.textContent=x.activo?'🟢 Activo':'🔴 Histórico';box.appendChild(state);const link=document.createElement('a');link.href='/dashboard/contratos/'+x.id+'/';link.textContent='Ver contrato';box.appendChild(link)});
    marker.bindPopup(box);
  });
  if(bounds.length)map.fitBounds(bounds,{padding:[35,35],maxZoom:14});
