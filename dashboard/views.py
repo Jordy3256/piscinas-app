@@ -2392,7 +2392,7 @@ def inicio_view(request):
         notificar_trabajadores_mantenimientos_hoy()
         try:
             from finanzas.alertas_financieras import generar_alertas_financieras
-            generar_alertas_financieras(enviar_push=True)
+            generar_alertas_financieras(enviar_push=False)
         except Exception:
             logger.exception("No se pudieron actualizar las alertas financieras al abrir el Centro de Acciones.")
         ctx.update(_centro_acciones_contexto())
@@ -3934,9 +3934,6 @@ def dashboard_view(request):
             "mantenimientos_hoy": mantenimientos_hoy,
             "mantenimientos_proximos": mantenimientos_proximos,
             "total_proximos_reales": total_proximos_reales,
-            "mantenimientos_manana_total": Mantenimiento.objects.filter(
-                fecha=hoy + timedelta(days=1), trabajadores=trabajador, estado="pendiente"
-            ).count(),
             "mostrar_boton_ver_mas_proximos": mostrar_boton_ver_mas_proximos,
             "ver_mas_proximos": ver_mas_proximos,
             "mantenimientos_atrasados": mantenimientos_atrasados,
@@ -3988,12 +3985,10 @@ def notificaciones_view(request):
     no_modelo_notificaciones = False
 
     if Notificacion is not None:
-        from .avisos_vigentes import avisos_vigentes
-        # Solo avisos nuevos en la bandeja. El historial conserva los registros.
-        candidatas = list(Notificacion.objects.filter(
-            user=request.user, leida=False
-        ).order_by("-creada_en")[:60])
-        notificaciones = avisos_vigentes(request.user, candidatas)[:20]
+        notificaciones = list(
+            Notificacion.objects.filter(user=request.user)
+            .order_by("-creada_en")[:20]
+        )
 
         ids_no_leidas = [n.id for n in notificaciones if not n.leida]
         if ids_no_leidas:
@@ -4047,7 +4042,7 @@ def notificaciones_json_view(request):
         _actualizar_alertas_inventario_contratos(request.user)
         try:
             from finanzas.alertas_financieras import generar_alertas_financieras
-            generar_alertas_financieras(enviar_push=True)
+            generar_alertas_financieras(enviar_push=False)
         except Exception:
             logger.exception("No se pudieron actualizar las alertas financieras.")
 
@@ -4058,11 +4053,7 @@ def notificaciones_json_view(request):
             "unread_count": 0,
         })
 
-    from .avisos_vigentes import avisos_vigentes
-    qs = avisos_vigentes(request.user, list(
-        Notificacion.objects.filter(user=request.user, leida=False)
-        .order_by("-creada_en")[:40]
-    ))[:10]
+    qs = Notificacion.objects.filter(user=request.user).order_by("-creada_en")[:10]
 
     items = []
     for n in qs:
@@ -4075,9 +4066,10 @@ def notificaciones_json_view(request):
             "creada_en": timezone.localtime(n.creada_en).strftime("%d/%m/%Y %H:%M"),
         })
 
-    unread_count = len(avisos_vigentes(request.user, list(
-        Notificacion.objects.filter(user=request.user, leida=False).order_by("-creada_en")[:200]
-    )))
+    unread_count = Notificacion.objects.filter(
+        user=request.user,
+        leida=False
+    ).count()
 
     return JsonResponse({
         "ok": True,
@@ -5022,25 +5014,13 @@ def mantenimiento_detalle_view(request, pk):
     esta_cancelado = mantenimiento.estado == "cancelado"
     checklist, _ = ChecklistMantenimiento.objects.get_or_create(mantenimiento=mantenimiento)
 
-    # Contacto personal desde Cliente; ubicación de la piscina desde el contrato
-    # específico de esta visita. No modificar ni copiar datos históricos.
     cliente_operativo = mantenimiento.cliente
-    contrato_operativo = mantenimiento.contrato
-    direccion_operativa = (contrato_operativo.direccion or "").strip()
-    maps_url = (contrato_operativo.enlace_google_maps or "").strip()
-    if not maps_url and contrato_operativo.latitud is not None and contrato_operativo.longitud is not None:
-        maps_url = "https://www.google.com/maps/search/?api=1&query=" + quote(
-            f"{contrato_operativo.latitud},{contrato_operativo.longitud}"
-        )
-    if not maps_url:
-        partes_ubicacion = [
-            direccion_operativa,
-            (contrato_operativo.sector_urbanizacion or "").strip(),
-            (contrato_operativo.ciudad or "").strip(),
-        ]
-        consulta_ubicacion = ", ".join(p for p in partes_ubicacion if p)
-        if consulta_ubicacion:
-            maps_url = "https://www.google.com/maps/search/?api=1&query=" + quote(consulta_ubicacion)
+    direccion_operativa = (cliente_operativo.direccion or "").strip()
+    maps_url = (cliente_operativo.enlace_google_maps or "").strip()
+    if not maps_url and direccion_operativa:
+        maps_url = "https://www.google.com/maps/search/?api=1&query=" + quote(direccion_operativa)
+    # El acceso a WhatsApp es compartido por administración y técnicos autorizados.
+    # La vista de destino mantiene la validación de permisos según el rol.
     whatsapp_disponible = bool(_telefono_whatsapp_ecuador(cliente_operativo.telefono))
 
     if request.method == "POST" and esta_cancelado:
@@ -5415,7 +5395,7 @@ def mantenimiento_detalle_view(request, pk):
                     titulo="✅ Mantenimiento realizado",
                     mensaje=f"El mantenimiento de {mantenimiento.cliente} fue finalizado por {actor}.",
                     url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
-                    enviar_push=True,
+                    enviar_push=False,
                     excluir_user_id=request.user.id if es_usuario_admin else None,
                 )
             _registrar_actividad(
@@ -5538,7 +5518,6 @@ def mantenimiento_detalle_view(request, pk):
             "checklist_total": checklist_total,
             "checklist_porcentaje": checklist_porcentaje,
             "cliente_operativo": cliente_operativo,
-            "contrato_operativo": contrato_operativo,
             "maps_url": maps_url,
             "whatsapp_disponible": whatsapp_disponible,
         },
@@ -6837,7 +6816,7 @@ def unread_count_view(request):
     if es_admin(request.user):
         try:
             from finanzas.alertas_financieras import generar_alertas_financieras
-            generar_alertas_financieras(enviar_push=True)
+            generar_alertas_financieras(enviar_push=False)
         except Exception:
             logger.exception("No se pudieron actualizar las alertas financieras.")
 

@@ -1,0 +1,23 @@
+AQUO 360 — NOTIFICACIONES PUSH ESCALABLES
+
+Cambios:
+- Mantenimientos finalizados sin novedad: notificación interna, sin push inmediato.
+- Mantenimientos CON novedad: conservan push urgente.
+- Alertas financieras individuales: internas, sin push al abrir páginas.
+- Nuevo comando para resumen financiero diario a administradores.
+- No se modifica el push de órdenes asignadas ni el resumen operativo existente.
+
+Render Cron Job (crear uno NUEVO, con las mismas variables de entorno y base PostgreSQL que el cron operativo):
+Comando: python manage.py enviar_resumen_financiero_push
+Schedule UTC: 0 15 * * *
+Ecuador continental: 10:00 a. m. (UTC-5).
+NO reemplazar el cron operativo existente.
+
+Pruebas locales (PowerShell):
+python manage.py check
+python manage.py makemigrations --check --dry-run
+python manage.py enviar_resumen_financiero_push --dry-run
+python manage.py collectstatic --noinput
+
+No requiere migraciones. El comando registra un resumen por usuario y fecha para evitar duplicados.
+Nota: Si un proveedor push falla después de registrar el envío, no reintentará automáticamente ese mismo día; evita duplicados por encima de reintentos.

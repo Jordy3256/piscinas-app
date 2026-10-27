@@ -9,8 +9,7 @@ from django.utils import timezone
 
 from dashboard.models import Notificacion
 
-from .models import Factura, ObligacionTrabajador, AvisoFacturacion
-from .facturacion_externa import avisos_que_deben_alertar
+from .models import Factura, ObligacionTrabajador
 
 logger = logging.getLogger(__name__)
 
@@ -18,8 +17,7 @@ TIPOS_FINANCIEROS = {
     "cobro_hoy",
     "cobro_vencido",
     "cobro_proximo",
-    "factura_emitir",  # legado: se limpia automáticamente
-    "factura_realizar",
+    "factura_emitir",
     "nomina_pagar",
 }
 
@@ -37,7 +35,7 @@ def _usuarios_admin():
     )
 
 
-def _crear_para_admins(*, tipo, referencia_id, titulo, mensaje, url, enviar_push=True):
+def _crear_para_admins(*, tipo, referencia_id, titulo, mensaje, url, enviar_push=False):
     creadas = []
     for user in _usuarios_admin():
         notif, creada = Notificacion.objects.update_or_create(
@@ -70,7 +68,7 @@ def _crear_para_admins(*, tipo, referencia_id, titulo, mensaje, url, enviar_push
             logger.exception("No fue posible enviar las alertas financieras push.")
 
 
-def generar_alertas_financieras(*, enviar_push=True):
+def generar_alertas_financieras(*, enviar_push=False):
     """Crea alertas financieras pendientes y elimina las que ya fueron resueltas."""
     hoy = timezone.localdate()
     manana = hoy + timedelta(days=1)
@@ -80,15 +78,8 @@ def generar_alertas_financieras(*, enviar_push=True):
         .select_related("cliente", "contrato")
         .prefetch_related("pagos")
     )
-    # Nómina: la campana debe reflejar exactamente el mismo período que la
-    # pantalla Finanzas > Nómina cuando se abre sin filtros: el mes actual de
-    # la FECHA PROGRAMADA DE PAGO. No arrastramos obligaciones vencidas de
-    # meses anteriores, porque esas obligaciones históricas pueden seguir
-    # existiendo legítimamente en la base pero no forman parte de la nómina
-    # operativa mostrada para el mes actual.
     obligaciones = (
         ObligacionTrabajador.objects.exclude(estado=ObligacionTrabajador.ESTADO_ANULADO)
-        .filter(fecha_pago_programada__year=hoy.year, fecha_pago_programada__month=hoy.month)
         .select_related("trabajador", "contrato", "contrato__cliente")
         .prefetch_related("pagos")
     )
@@ -135,26 +126,22 @@ def generar_alertas_financieras(*, enviar_push=True):
                 enviar_push=enviar_push,
             )
 
-
-    # Facturación tributaria: recordatorio independiente de Cartera.
-    # La factura se emite en un sistema externo y aquí solo se confirma la tarea.
-    for aviso in avisos_que_deben_alertar(hoy=hoy):
-        tipo = "factura_realizar"
-        activas.add((tipo, aviso.pk))
-        dias = (hoy - aviso.fecha_programada).days
-        estado_txt = (
-            f"atrasada {dias} día(s)"
-            if dias > 0
-            else ("para hoy" if dias == 0 else f"programada para {aviso.fecha_programada:%d/%m/%Y}")
-        )
-        _crear_para_admins(
-            tipo=tipo,
-            referencia_id=aviso.pk,
-            titulo="📄 Factura por realizar",
-            mensaje=f"{aviso.cliente}: {aviso.periodo_label} · {estado_txt}.",
-            url="/dashboard/finanzas/facturacion/",
-            enviar_push=enviar_push,
-        )
+        if (
+            factura.requiere_factura
+            and not factura.factura_enviada
+            and factura.fecha_facturacion_programada
+            and factura.fecha_facturacion_programada <= hoy
+        ):
+            tipo = "factura_emitir"
+            activas.add((tipo, factura.pk))
+            _crear_para_admins(
+                tipo=tipo,
+                referencia_id=factura.pk,
+                titulo="📄 Factura pendiente de emitir/enviar",
+                mensaje=f"{factura.cliente}: periodo {factura.periodo_label}.",
+                url=url,
+                enviar_push=enviar_push,
+            )
 
     for obligacion in obligaciones:
         if obligacion.saldo <= 0 or obligacion.fecha_pago_programada > hoy:
@@ -165,7 +152,7 @@ def generar_alertas_financieras(*, enviar_push=True):
             tipo=tipo,
             referencia_id=obligacion.pk,
             titulo="🔵 Pago de nómina pendiente",
-            mensaje=f"{obligacion.trabajador}: ${obligacion.saldo:.2f} · {obligacion.concepto_origen}.",
+            mensaje=f"{obligacion.trabajador}: ${obligacion.saldo:.2f} por {obligacion.contrato.cliente}.",
             url=f"/dashboard/finanzas/nomina/?anio={obligacion.periodo_anio}&mes={obligacion.periodo_mes}",
             enviar_push=enviar_push,
         )
