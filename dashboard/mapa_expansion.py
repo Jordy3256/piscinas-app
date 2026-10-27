@@ -49,7 +49,15 @@ def mapa_expansion_view(request):
     api_key = os.environ.get('GOOGLE_MAPS_API_KEY', '').strip()
     for c in qs:
         coords = _coordenadas_validas(c.latitud, c.longitud)
-        if not coords and limite:
+        # Sin una referencia específica no se intenta geocodificar por ciudad:
+        # ubicar todas las piscinas en el centro de una ciudad sería engañoso.
+        cliente = c.cliente
+        tiene_referencia = any(str(v or '').strip() for v in (
+            c.enlace_google_maps, c.direccion,
+            getattr(cliente, 'enlace_google_maps', ''),
+            getattr(cliente, 'direccion', ''),
+        ))
+        if not coords and limite and tiene_referencia:
             limite -= 1
             try:
                 resultado = _geocodificar_contrato_google(c, api_key)

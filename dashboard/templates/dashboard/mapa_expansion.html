@@ -14,7 +14,7 @@
     <form method="get"><input type="hidden" name="modo" value="{{ modo }}"><select name="ciudad" onchange="this.form.submit()"><option value="">Todas las ciudades</option>{% for c in ciudades %}<option value="{{ c }}" {% if c == ciudad_seleccionada %}selected{% endif %}>{{ c }}</option>{% endfor %}</select></form>
   </div>
   <div id="mapa-piscinas" class="map-frame" aria-label="Mapa interactivo de piscinas"></div>
-  <p class="map-note">Las coordenadas se obtienen mediante el mismo proceso que utilizan las rutas de los trabajadores. Se resuelven hasta 8 ubicaciones pendientes por apertura para limitar consultas externas. Los puntos cercanos se agrupan automáticamente. Los datos de clientes son visibles únicamente para administración.</p>
+  <p class="map-note">Las coordenadas se obtienen mediante el mismo proceso que utilizan las rutas de los trabajadores. Se intentan resolver hasta 8 ubicaciones pendientes por apertura cuando existe información suficiente; los contratos sin GPS pueden revisarse manualmente. Los puntos cercanos se agrupan automáticamente. Los datos de clientes son visibles únicamente para administración.</p>
   {% if resueltos %}<p class="map-note">✅ Se recuperaron y guardaron {{ resueltos }} ubicaciones en esta consulta. Actualiza la página para continuar con las pendientes.</p>{% endif %}{% if pendientes %}<details class="map-pending"><summary>📍 {{ pendientes|length }} contratos aún sin coordenadas resueltas (no aparecen en el mapa)</summary><ul>{% for p in pendientes %}<li>{{ p.cliente }} — {{ p.sector }} · <a href="{% url 'contrato_detalle' p.id %}">Revisar contrato</a></li>{% endfor %}</ul></details>{% endif %}
 </div>
 {{ puntos|json_script:"mapa-puntos" }}
@@ -22,7 +22,7 @@
 <script>
 (function(){
  const map=L.map('mapa-piscinas').setView([-1.8312,-78.1834],6);
- L.tileLayer('https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap contributors &copy; CARTO'}).addTo(map);
+ L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,maxNativeZoom:19,attribution:'Tiles &copy; Esri; data: Esri, HERE, Garmin, OpenStreetMap contributors and the GIS user community'}).addTo(map);
  const puntos=JSON.parse(document.getElementById('mapa-puntos').textContent),bounds=[];
  const grupos={};
  puntos.forEach(p=>{const key=p.lat.toFixed(5)+','+p.lon.toFixed(5);(grupos[key]||(grupos[key]=[])).push(p)});
