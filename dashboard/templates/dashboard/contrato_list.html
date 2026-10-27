@@ -307,71 +307,52 @@
   "use strict";
   const total = {{ page_obj.paginator.num_pages }};
   const current = {{ page_obj.number }};
-  const allNavs = Array.from(document.querySelectorAll('nav'));
-  const pager = allNavs.reverse().find(el => /Anterior|Siguiente|Página\s*\d+\s*de|\d+\s*de\s*\d+/i.test(el.textContent || ''));
-  if (!pager || pager.dataset.jvaquaPagination) return;
-  pager.dataset.jvaquaPagination = '1';
-  const makeLink = (num, label) => {
+  const navs = Array.from(document.querySelectorAll('nav'));
+  const pager = navs.reverse().find(el => el.querySelector('.pagination') && /Anterior|Siguiente|Página\s*\d+\s*de|\d+\s*de\s*\d+|\d+\s*\/\s*\d+/i.test(el.textContent || ''));
+  if (!pager || pager.dataset.aquoUnifiedPager) return;
+  pager.dataset.aquoUnifiedPager = '1';
+  pager.setAttribute('aria-label', 'Paginación');
+  pager.classList.add('d-flex', 'justify-content-center', 'my-4');
+  const old = pager.querySelector('.pagination');
+  if (old) old.remove();
+  const bar = document.createElement('div');
+  bar.className = 'd-flex flex-wrap justify-content-center align-items-center gap-2 px-3 py-2';
+  bar.style.cssText = 'background:#fff;border:1px solid #e2e8f0;border-radius:16px;box-shadow:0 6px 22px rgba(15,23,42,.06);max-width:100%;';
+  function link(n, label, selected) {
     const a = document.createElement('a');
-    a.textContent = label || String(num);
+    a.textContent = label;
     const url = new URL(window.location.href);
-    url.searchParams.set('page', String(num));
+    url.searchParams.set('page', String(n));
     a.href = url.pathname + url.search + url.hash;
-    a.className = 'btn btn-sm ' + (num === current ? 'btn-primary' : 'btn-outline-primary');
-    a.style.cssText = 'min-width:36px; border-radius:9px; text-decoration:none;';
-    if (num === current) a.setAttribute('aria-current', 'page');
+    a.className = 'btn btn-sm ' + (selected ? 'btn-primary' : 'btn-outline-primary');
+    a.style.cssText = 'min-width:38px;border-radius:10px;text-decoration:none;';
+    if (selected) a.setAttribute('aria-current', 'page');
     return a;
-  };
-  const wrap = document.createElement('div');
-  wrap.className = 'd-flex flex-wrap justify-content-center align-items-center gap-2 mt-3 mb-3';
-  wrap.setAttribute('aria-label', 'Navegación directa por páginas');
-  const visible = new Set([1, total]);
-  for (let i = Math.max(1, current - 2); i <= Math.min(total, current + 2); i++) visible.add(i);
-  let previous = 0;
-  Array.from(visible).sort((a,b) => a-b).forEach(num => {
-    if (previous && num - previous > 1) {
+  }
+  function disabled(label) {
+    const span = document.createElement('span');
+    span.textContent = label;
+    span.className = 'btn btn-sm btn-outline-secondary disabled';
+    span.style.cssText = 'border-radius:10px;opacity:.45;';
+    span.setAttribute('aria-disabled', 'true');
+    return span;
+  }
+  bar.appendChild(current > 1 ? link(current - 1, '‹ Anterior') : disabled('‹ Anterior'));
+  const pages = new Set([1, total]);
+  for (let i = Math.max(1, current - 2); i <= Math.min(total, current + 2); i++) pages.add(i);
+  let last = 0;
+  [...pages].sort((a,b) => a-b).forEach(n => {
+    if (last && n - last > 1) {
       const dots = document.createElement('span');
       dots.textContent = '…';
-      dots.className = 'px-1';
-      wrap.appendChild(dots);
+      dots.className = 'px-1 text-muted';
+      bar.appendChild(dots);
     }
-    wrap.appendChild(makeLink(num));
-    previous = num;
+    bar.appendChild(link(n, String(n), n === current));
+    last = n;
   });
-  if (total > 5) {
-    const form = document.createElement('form');
-    form.className = 'd-inline-flex align-items-center gap-2 ms-2';
-    const label = document.createElement('label');
-    label.textContent = 'Ir a página';
-    label.className = 'small mb-0';
-    const input = document.createElement('input');
-    input.type = 'number';
-    input.min = '1';
-    input.max = String(total);
-    input.required = true;
-    input.placeholder = String(current);
-    input.setAttribute('aria-label', 'Número de página');
-    input.className = 'form-control form-control-sm';
-    input.style.width = '80px';
-    const submit = document.createElement('button');
-    submit.type = 'submit';
-    submit.textContent = 'Ir';
-    submit.className = 'btn btn-sm btn-outline-primary';
-    form.append(label, input, submit);
-    form.addEventListener('submit', function (event) {
-      event.preventDefault();
-      const n = Number(input.value);
-      if (!Number.isInteger(n) || n < 1 || n > total) {
-        input.setCustomValidity('Selecciona una página entre 1 y ' + total);
-        input.reportValidity();
-        input.setCustomValidity('');
-        return;
-      }
-      window.location.assign(makeLink(n).href);
-    });
-    wrap.appendChild(form);
-  }
-  pager.insertAdjacentElement('afterend', wrap);
+  bar.appendChild(current < total ? link(current + 1, 'Siguiente ›') : disabled('Siguiente ›'));
+  pager.appendChild(bar);
 })();
 </script>
 {% endif %}
