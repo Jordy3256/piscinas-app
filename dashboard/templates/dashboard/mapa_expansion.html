@@ -1,0 +1,40 @@
+{% extends "dashboard/base_admin.html" %}
+{% block content %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoYx6gX1wM/7Y=" crossorigin="" />
+<style>
+.map-shell{max-width:1450px;margin:24px auto;padding:0 16px;color:#172b4d}.map-title{font-size:26px;font-weight:850}.map-lead{color:#66758b}.map-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:18px 0}.map-stat{background:white;border-radius:18px;padding:18px;box-shadow:0 8px 30px #1d4b8010}.map-stat strong{display:block;font-size:27px;color:#0969c9}.map-controls{display:flex;flex-wrap:wrap;gap:10px;margin:15px 0}.map-controls a,.map-controls select{background:white;border:1px solid #dce7f4;border-radius:12px;padding:10px 14px;color:#24436b;text-decoration:none}.map-controls a.selected{background:#0869d4;color:white}.map-frame{height:min(68vh,720px);min-height:400px;border-radius:20px;overflow:hidden;border:1px solid #d9e7f4}.map-pending{margin:18px 0;padding:16px;background:white;border-radius:16px}.map-pending summary{cursor:pointer;font-weight:700}.map-pending li{margin:8px 0}.map-note{color:#61758b;font-size:13px;margin-top:10px}@media(max-width:600px){.map-stats{grid-template-columns:1fr 1fr}.map-frame{min-height:440px}.map-title{font-size:22px}}
+</style>
+<div class="map-shell">
+  <div class="map-title">🗺️ Mapa de expansión JVAQUA</div><p class="map-lead">Cobertura geográfica de piscinas vinculadas a contratos. Actualización al abrir la página.</p>
+  <div class="map-stats"><div class="map-stat">Piscinas con contrato activo<strong>{{ total_activos }}</strong></div><div class="map-stat">Contratos históricos<strong>{{ total_historicos }}</strong></div><div class="map-stat">Ciudades activas<strong>{{ ciudades_activas }}</strong></div></div>
+  <div class="map-controls" aria-label="Filtros del mapa">
+    <a class="{% if modo == 'activos' %}selected{% endif %}" href="?modo=activos{% if ciudad_seleccionada %}&ciudad={{ ciudad_seleccionada|urlencode }}{% endif %}">🟢 Activas</a>
+    <a class="{% if modo == 'historial' %}selected{% endif %}" href="?modo=historial{% if ciudad_seleccionada %}&ciudad={{ ciudad_seleccionada|urlencode }}{% endif %}">🔴 Historial</a>
+    <a class="{% if modo == 'todos' %}selected{% endif %}" href="?modo=todos{% if ciudad_seleccionada %}&ciudad={{ ciudad_seleccionada|urlencode }}{% endif %}">🌎 Todas</a>
+    <form method="get"><input type="hidden" name="modo" value="{{ modo }}"><select name="ciudad" onchange="this.form.submit()"><option value="">Todas las ciudades</option>{% for c in ciudades %}<option value="{{ c }}" {% if c == ciudad_seleccionada %}selected{% endif %}>{{ c }}</option>{% endfor %}</select></form>
+  </div>
+  <div id="mapa-piscinas" class="map-frame" aria-label="Mapa interactivo de piscinas"></div>
+  <p class="map-note">Los marcadores se colocan solo cuando el contrato tiene coordenadas válidas. Los puntos cercanos se agrupan automáticamente. Los datos de clientes son visibles únicamente para administración.</p>
+  {% if pendientes %}<details class="map-pending"><summary>📍 {{ pendientes|length }} contratos sin coordenadas válidas (no aparecen en el mapa)</summary><ul>{% for p in pendientes %}<li>{{ p.cliente }} — {{ p.sector }} · <a href="{% url 'contrato_detalle' p.id %}">Revisar contrato</a></li>{% endfor %}</ul></details>{% endif %}
+</div>
+{{ puntos|json_script:"mapa-puntos" }}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+(function(){
+ const map=L.map('mapa-piscinas').setView([-1.8312,-78.1834],6);
+ L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
+ const puntos=JSON.parse(document.getElementById('mapa-puntos').textContent),bounds=[];
+ const grupos={};
+ puntos.forEach(p=>{const key=p.lat.toFixed(5)+','+p.lon.toFixed(5);(grupos[key]||(grupos[key]=[])).push(p)});
+ Object.values(grupos).forEach(grupo=>{
+   const p=grupo[0],count=grupo.length,color=grupo.some(x=>x.activo)?'#16a36a':'#dc4955';
+   const icon=L.divIcon({className:'',html:'<div style="width:34px;height:34px;background:'+color+';border:3px solid white;border-radius:50%;color:white;display:grid;place-items:center;box-shadow:0 2px 12px #0004;font-weight:bold">'+(count>1?count:'🏊')+'</div>',iconSize:[36,36],iconAnchor:[18,18]});
+   const marker=L.marker([p.lat,p.lon],{icon}).addTo(map);bounds.push([p.lat,p.lon]);
+   const box=document.createElement('div');box.style.minWidth='190px';
+   grupo.forEach((x,i)=>{if(i)box.appendChild(document.createElement('hr'));const title=document.createElement('strong');title.textContent=x.cliente;box.appendChild(title);['sector','ciudad','frecuencia','trabajador'].forEach(k=>{if(x[k]){const div=document.createElement('div');div.textContent=x[k];box.appendChild(div)}});const state=document.createElement('div');state.textContent=x.activo?'🟢 Activo':'🔴 Histórico';box.appendChild(state);const link=document.createElement('a');link.href='/dashboard/contratos/'+x.id+'/';link.textContent='Ver contrato';box.appendChild(link)});
+   marker.bindPopup(box);
+ });
+ if(bounds.length)map.fitBounds(bounds,{padding:[35,35],maxZoom:14});
+})();
+</script>
+{% endblock %}

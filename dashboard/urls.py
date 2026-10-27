@@ -1,3 +1,4 @@
+from .mapa_expansion import mapa_expansion_view
 from .comunicados import comunicados_view
 from django.urls import path
 
@@ -155,6 +156,7 @@ from .views import (
 
 
 urlpatterns = [
+    path("mapa/", mapa_expansion_view, name="mapa_expansion"),
     path("comunicados/", comunicados_view, name="comunicados"),
     # ======================
     # PWA
