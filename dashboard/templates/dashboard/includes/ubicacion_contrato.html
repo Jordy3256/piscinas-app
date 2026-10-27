@@ -1,0 +1,5 @@
+{# Ubicación operativa: siempre del contrato, no de la ficha del cliente. #}
+{% if contrato %}<div class="aquo-ubicacion-etiquetas" aria-label="Ubicación de la piscina">
+{% if contrato.sector_urbanizacion %}<span class="aquo-sector">🏘️ {{ contrato.sector_urbanizacion }}</span>{% endif %}
+{% if contrato.ciudad %}<span class="aquo-ciudad">📍 {{ contrato.ciudad }}</span>{% elif contrato.ciudad_ref %}<span class="aquo-ciudad">📍 {{ contrato.ciudad_ref.nombre }}</span>{% endif %}
+</div>{% endif %}

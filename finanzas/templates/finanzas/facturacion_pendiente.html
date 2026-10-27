@@ -46,7 +46,7 @@
     {% for aviso in avisos %}
       <article class="fx-row">
         <div>
-          <div class="fx-client">{{ aviso.cliente }}</div>
+          <div class="fx-client">{{ aviso.cliente }}</div>{% include "dashboard/includes/ubicacion_contrato.html" with contrato=aviso.contrato %}
           <div class="fx-meta">{{ aviso.contrato.forma_pago_completa }}</div>
         </div>
         <div>

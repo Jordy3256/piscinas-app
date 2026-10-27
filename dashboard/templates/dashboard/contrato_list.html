@@ -209,7 +209,7 @@
           <tbody>
             {% for contrato in page_obj %}
               <tr>
-                <td><div class="cp-client-name">{{ contrato.cliente.nombre }}</div><div class="small text-muted">{{ contrato.cliente.telefono }}</div></td>
+                <td><div class="cp-client-name">{{ contrato.cliente.nombre }}</div>{% include "dashboard/includes/ubicacion_contrato.html" with contrato=contrato %}<div class="small text-muted">{{ contrato.cliente.telefono }}</div></td>
                 <td>{{ contrato.frecuencia_completa }}</td>
                 <td>{{ contrato.forma_pago_completa }}</td>
                 <td class="cp-price">${{ contrato.precio_mensual_total|floatformat:2 }}</td>
@@ -246,7 +246,7 @@
           {% for contrato in page_obj %}
             <div class="cp-mobile-card">
               <div class="d-flex justify-content-between align-items-start gap-2">
-                <div><div class="cp-client-name">{{ contrato.cliente.nombre }}</div><div class="small text-muted">{{ contrato.cliente.telefono }}</div></div>
+                <div><div class="cp-client-name">{{ contrato.cliente.nombre }}</div>{% include "dashboard/includes/ubicacion_contrato.html" with contrato=contrato %}<div class="small text-muted">{{ contrato.cliente.telefono }}</div></div>
                 {% if contrato.activo %}
                   <span class="cp-badge cp-badge-success">Activo</span>
                 {% else %}
