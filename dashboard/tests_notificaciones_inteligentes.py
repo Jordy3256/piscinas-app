@@ -21,6 +21,22 @@ class NotificacionesInteligentesTests(TestCase):
         self.assertTrue(_notify_once(self.user, 'resumen_trabajador', 2026102408, 'Pendientes', 'Texto', '/dashboard/', dry_run=True))
         self.assertFalse(Notificacion.objects.exists())
 
+    @patch('dashboard.notificaciones_inteligentes._admin_users', return_value=[])
+    @patch('dashboard.notificaciones_inteligentes.Trabajador.objects.filter')
+    @patch('dashboard.notificaciones_inteligentes.Mantenimiento.objects.filter')
+    @patch('dashboard.notificaciones_inteligentes._notify_once', return_value=True)
+    def test_resumen_20h_llega_al_trabajador_con_pendientes(self, notify, mantenimientos_filter, trabajadores_filter, admins):
+        from types import SimpleNamespace
+        trabajador = SimpleNamespace(pk=42, user=self.user, activo=True)
+        visita = SimpleNamespace(fecha=date(2026, 10, 27), trabajadores=SimpleNamespace(all=lambda: [trabajador]))
+        mantenimientos_filter.return_value.prefetch_related.return_value.iterator.return_value = iter([visita])
+        trabajadores_filter.return_value.select_related.return_value = [trabajador]
+        resultado = enviar_resumenes(20, fecha=date(2026, 10, 27))
+        self.assertEqual(resultado['trabajadores'], 1)
+        self.assertEqual(resultado['pendientes'], 1)
+        self.assertEqual(notify.call_args.args[1], 'resumen_trabajador')
+        self.assertIn('20:00', notify.call_args.args[4])
+
     def test_dia_sin_mantenimientos_no_notifica(self):
         result = enviar_resumenes(8, dry_run=False, fecha=date(2026, 10, 24))
         self.assertEqual(result['trabajadores'], 0)

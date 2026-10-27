@@ -60,7 +60,7 @@ def enviar_resumenes(hora, *, dry_run=False, fecha=None):
         'pendientes': sum(sum(v.values()) for v in por_trabajador.values()),
     }
     trabajadores = list(Trabajador.objects.filter(pk__in=por_trabajador.keys()).select_related('user'))
-    if hora in (8, 14):
+    if hora in SLOTS:
         for t in trabajadores:
             cantidades = por_trabajador[t.pk]
             hoy_n, atrasados_n = cantidades['hoy'], cantidades['atrasados']
