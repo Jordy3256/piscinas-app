@@ -74,6 +74,7 @@ def mapa_expansion_view(request):
         qs = qs.filter(Q(ciudad__iexact=ciudad) | Q(ciudad_ref__nombre__iexact=ciudad))
 
     puntos, pendientes = [], []
+    comparacion_resumen = {'a': 0, 'b': 0, 'altas': 0, 'bajas': 0, 'continuan': 0}
     # El geocodificador de rutas persiste coordenadas de contrato, no las del cliente.
     # Limitar las resoluciones por carga evita ráfagas de peticiones externas y costos.
     limite = 8
@@ -109,15 +110,23 @@ def mapa_expansion_view(request):
             return bool(fecha and inicio_real and inicio_real <= fecha and
                         (not c.fecha_fin_contrato or c.fecha_fin_contrato >= fecha))
         activo_fecha = vigente(fecha_consulta) if fecha_consulta else c.activo
-        estado_comparacion = ('continua' if vigente(fecha_consulta) and vigente(fecha_comparar)
-                              else 'alta' if vigente(fecha_comparar)
-                              else 'baja') if fecha_comparar else ''
+        vigente_a = vigente(fecha_consulta) if fecha_consulta else bool(c.activo)
+        vigente_b = vigente(fecha_comparar) if fecha_comparar else False
+        estado_comparacion = ('continua' if vigente_a and vigente_b
+                              else 'alta' if vigente_b else 'baja') if fecha_comparar else ''
+        if fecha_comparar:
+            comparacion_resumen['a'] += int(vigente_a)
+            comparacion_resumen['b'] += int(vigente_b)
+            comparacion_resumen['altas'] += int(not vigente_a and vigente_b)
+            comparacion_resumen['bajas'] += int(vigente_a and not vigente_b)
+            comparacion_resumen['continuan'] += int(vigente_a and vigente_b)
         puntos.append({
             'id': c.pk, 'lat': lat, 'lon': lon,
             'cliente': str(c.cliente),
             'ciudad': c.ciudad or (str(c.ciudad_ref) if c.ciudad_ref_id else ''),
             'sector': c.sector_urbanizacion or '', 'direccion': c.direccion or '',
-            'activo': activo_fecha, 'comparacion': estado_comparacion,
+            'activo': activo_fecha, 'vigente_a': vigente_a, 'vigente_b': vigente_b,
+            'comparacion': estado_comparacion,
             'frecuencia': c.get_frecuencia_display() if c.frecuencia else '',
             'tecnico_designado': str(c.tecnico_designado) if c.tecnico_designado_id else 'Sin asignar',
         })
@@ -128,6 +137,7 @@ def mapa_expansion_view(request):
         'fecha_consulta': fecha_consulta.isoformat() if fecha_consulta else '',
         'fecha_comparar': fecha_comparar.isoformat() if fecha_comparar else '',
         'resueltos': resueltos, 'geocoding_habilitado': bool(api_key),
+        'comparacion_resumen': comparacion_resumen,
         'total_activos': Contrato.objects.filter(activo=True).count(),
         'total_historicos': Contrato.objects.filter(activo=False).count(),
         'ciudades_activas': Contrato.objects.filter(activo=True).exclude(ciudad='').values('ciudad').distinct().count(),
