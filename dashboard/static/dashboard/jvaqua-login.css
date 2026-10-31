@@ -35,3 +35,50 @@
 @media(min-width:901px) and (max-width:1280px){.aquo-ai-hero{right:-3%;width:clamp(190px,24vw,310px);height:min(70vh,630px)}.brand-main h1{max-width:68%;font-size:clamp(2rem,3vw,3.4rem)}.brand-main>p{max-width:67%}.brand-features{max-width:70%;grid-template-columns:repeat(2,minmax(0,1fr))}.brand-feature{min-height:64px}}
 @media(max-width:900px){.aquo-official-logo-mobile{width:min(82vw,330px)}.mobile-aquo-brand{width:100%}.mobile-aquo-hero{padding-top:68px}}
 @media(max-width:430px){.aquo-official-logo-mobile{width:min(83vw,310px)}}
+
+/* V3.2 — ajustes puntuales solicitados, sin alterar el formulario ni su lógica */
+@media (min-width:901px){
+  .login-brand{gap:12px;padding-top:clamp(24px,3vw,44px);padding-bottom:clamp(20px,2.6vw,40px)}
+  .brand-main{padding:0;justify-content:center}
+  .brand-kicker{background:rgba(0,42,104,.38);border-color:rgba(113,244,255,.8);color:#e7fdff;letter-spacing:.015em}
+  .brand-main h1{max-width:min(58%,560px);font-size:clamp(2.45rem,3.35vw,4.15rem);line-height:1.09;text-shadow:0 5px 24px rgba(0,35,88,.18)}
+  .brand-main h1 span{color:#5df4fa}
+  .brand-main>p{max-width:min(56%,520px);color:#f0fbff;line-height:1.57}
+  .brand-features{max-width:min(57%,510px)}
+  .brand-feature{background:rgba(0,63,139,.56);border-color:rgba(112,236,252,.65)}
+  .aquo-ai-hero{right:-7%;bottom:0;width:clamp(275px,29vw,485px);height:min(83vh,770px);z-index:0}
+  .aquo-ai-portrait img{filter:drop-shadow(0 18px 26px rgba(0,31,81,.26))}
+  .brand-footer{position:relative;z-index:2}
+  .login-page{background:linear-gradient(115deg,#034585 0%,#087ac4 46%,#94d5f4 72%,#e9f8ff 100%)}
+}
+@media (min-width:901px) and (max-width:1280px){
+  .brand-main h1{max-width:61%;font-size:clamp(2rem,3vw,3.2rem)}
+  .brand-main>p{max-width:59%}
+  .brand-features{max-width:61%}
+  .aquo-ai-hero{right:-8%;width:clamp(220px,25vw,345px);height:min(75vh,670px)}
+}
+@media (max-width:900px){
+  .login-panel{padding-bottom:45px}
+  .mobile-aquo-hero{padding-top:38px}
+  .aquo-official-logo-mobile{width:min(72vw,285px)}
+  .mobile-aquo-hero h1{margin-top:19px;margin-bottom:6px;font-size:clamp(2.1rem,8vw,3.1rem)}
+  .mobile-aquo-hero>p{margin-bottom:15px;line-height:1.34;font-size:clamp(.88rem,3.3vw,1.08rem)}
+  .login-input .form-control{height:54px}
+  .login-card .mb-3{margin-bottom:11px!important}
+  .login-card .mb-4{margin-bottom:14px!important}
+  .login-submit{height:55px}
+  .login-register{margin-top:8px;padding:11px 3px}
+  .security-row{margin-top:12px}
+  .security-item{gap:4px;padding:3px 5px}
+  .security-item span{font-size:1.5rem}
+  .install-banner{margin-top:16px}
+}
+@media (max-width:430px){
+  .mobile-aquo-hero{padding-top:31px}
+  .aquo-official-logo-mobile{width:min(70vw,265px)}
+  .mobile-aquo-hero h1{margin-top:15px}
+  .mobile-aquo-hero>p{margin-bottom:12px}
+  .login-input .form-control{height:50px}
+  .login-submit{height:53px}
+  .security-item{font-size:.63rem}
+}
