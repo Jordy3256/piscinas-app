@@ -2392,7 +2392,7 @@ def inicio_view(request):
         notificar_trabajadores_mantenimientos_hoy()
         try:
             from finanzas.alertas_financieras import generar_alertas_financieras
-            generar_alertas_financieras(enviar_push=False)
+            generar_alertas_financieras(enviar_push=True)
         except Exception:
             logger.exception("No se pudieron actualizar las alertas financieras al abrir el Centro de Acciones.")
         ctx.update(_centro_acciones_contexto())
@@ -2572,13 +2572,36 @@ def trabajadores_list_view(request):
     if ciudad_id.isdigit():
         trabajadores_qs = trabajadores_qs.filter(Q(ciudad_principal_id=ciudad_id) | Q(ciudades_habilitadas__id=ciudad_id)).distinct()
     trabajadores = list(trabajadores_qs)
+    # Estadísticas del periodo actual, con la misma fecha de corte para todo el equipo.
+    total_contratos = total_realizados = total_programados = total_atrasados = 0
+    total_pagos = Decimal("0.00")
     for t in trabajadores:
-        t.mantenimientos_mes = Mantenimiento.objects.filter(trabajadores=t, fecha__gte=inicio_mes, fecha__lte=hoy, estado="realizado").count()
+        mantenimientos = Mantenimiento.objects.filter(trabajadores=t, fecha__gte=inicio_mes, fecha__lte=hoy)
+        t.mantenimientos_mes = mantenimientos.filter(estado="realizado").count()
+        t.mantenimientos_programados = mantenimientos.count()
+        t.mantenimientos_pendientes = mantenimientos.exclude(estado="realizado").count()
+        t.mantenimientos_atrasados = mantenimientos.filter(fecha__lt=hoy).exclude(estado="realizado").count()
+        t.cumplimiento_pct = round(100 * t.mantenimientos_mes / t.mantenimientos_programados) if t.mantenimientos_programados else None
         t.ordenes_mes = OrdenTrabajo.objects.filter(trabajador=t, fecha__gte=inicio_mes, fecha__lte=hoy, estado="completada").count()
         t.inventario_productos_count = InventarioTrabajador.objects.filter(trabajador=t, stock__gt=0).count()
         t.contratos_activos_count = Contrato.objects.filter(tecnico_designado=t, activo=True).count()
         t.pagos_mes = PagoTrabajador.objects.filter(obligacion__trabajador=t, activo=True, fecha__gte=inicio_mes, fecha__lte=hoy).aggregate(total=Sum("monto"))["total"] or Decimal("0.00")
-    return render(request, "dashboard/trabajadores_list.html", {"trabajadores": trabajadores, "hoy": hoy, "ciudades": Ciudad.objects.filter(activa=True), "ciudad_id": ciudad_id})
+        total_contratos += t.contratos_activos_count
+        total_realizados += t.mantenimientos_mes
+        total_programados += t.mantenimientos_programados
+        total_atrasados += t.mantenimientos_atrasados
+        total_pagos += t.pagos_mes
+    resumen = {
+        "personal": sum(1 for t in trabajadores if t.activo),
+        "contratos": total_contratos, "realizados": total_realizados,
+        "programados": total_programados, "atrasados": total_atrasados,
+        "cumplimiento": round(total_realizados * 100 / total_programados) if total_programados else None,
+        "pagos": total_pagos,
+    }
+    return render(request, "dashboard/trabajadores_list.html", {
+        "trabajadores": trabajadores, "resumen": resumen, "hoy": hoy,
+        "ciudades": Ciudad.objects.filter(activa=True), "ciudad_id": ciudad_id,
+    })
 
 
 def _rango_trabajador_request(request):
@@ -4042,7 +4065,7 @@ def notificaciones_json_view(request):
         _actualizar_alertas_inventario_contratos(request.user)
         try:
             from finanzas.alertas_financieras import generar_alertas_financieras
-            generar_alertas_financieras(enviar_push=False)
+            generar_alertas_financieras(enviar_push=True)
         except Exception:
             logger.exception("No se pudieron actualizar las alertas financieras.")
 
@@ -5395,7 +5418,7 @@ def mantenimiento_detalle_view(request, pk):
                     titulo="✅ Mantenimiento realizado",
                     mensaje=f"El mantenimiento de {mantenimiento.cliente} fue finalizado por {actor}.",
                     url=f"/dashboard/mantenimientos/{mantenimiento.pk}/",
-                    enviar_push=False,
+                    enviar_push=True,
                     excluir_user_id=request.user.id if es_usuario_admin else None,
                 )
             _registrar_actividad(
@@ -6816,7 +6839,7 @@ def unread_count_view(request):
     if es_admin(request.user):
         try:
             from finanzas.alertas_financieras import generar_alertas_financieras
-            generar_alertas_financieras(enviar_push=False)
+            generar_alertas_financieras(enviar_push=True)
         except Exception:
             logger.exception("No se pudieron actualizar las alertas financieras.")
 
