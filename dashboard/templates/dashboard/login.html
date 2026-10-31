@@ -18,7 +18,7 @@
   <link rel="manifest" href="/dashboard/manifest.json?v=20261001-aquo">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="{% static 'dashboard/jvaqua-login.css' %}?v=20261031-aquo-ai23">
+  <link rel="stylesheet" href="{% static 'dashboard/jvaqua-login.css' %}?v=20261031-aquo-mobile25">
 </head>
 <body>
 <div class="login-page">
@@ -87,32 +87,21 @@
   </section>
 
   <section class="login-panel">
-    <div class="mobile-aquo-hero" aria-label="AQUO 360">
+    <div class="mobile-aquo-hero" aria-label="AQUO 360, asistente con inteligencia artificial">
       <div class="mobile-aquo-brand">
         <div class="aquo-mark aquo-mark-mobile" aria-hidden="true">
-          <svg viewBox="0 0 48 48" focusable="false">
-            <path d="M24 4C18.4 12.4 10 21.3 10 30.1 10 38.2 16.3 44 24 44s14-5.8 14-13.9C38 21.3 29.6 12.4 24 4Z"></path>
-            <path class="aquo-mark-wave" d="M16.5 31.5c4.7 3.2 10.2 3.2 15 0"></path>
-          </svg>
+          <svg viewBox="0 0 48 48" focusable="false"><path d="M24 4C18.4 12.4 10 21.3 10 30.1 10 38.2 16.3 44 24 44s14-5.8 14-13.9C38 21.3 29.6 12.4 24 4Z"></path><path class="aquo-mark-wave" d="M16.5 31.5c4.7 3.2 10.2 3.2 15 0"></path></svg>
         </div>
-        <div>
-          <strong>AQUO <span>360</span></strong>
-          <small>Asistencia inteligente para piscinas</small>
+        <div><strong>AQUO <span>360</span></strong><small>Asistencia inteligente para piscinas</small></div>
+      </div>
+      <div class="mobile-aquo-ad">
+        <div class="mobile-aquo-ad-copy">
+          <span class="mobile-ai-label">✦ INTELIGENCIA ARTIFICIAL</span>
+          <h1>Hola, soy <span>AQUO.</span></h1>
+          <p>Tu piscina, en modo inteligente. Diagnostica, calcula y aprende conmigo.</p>
+          <div class="mobile-ai-chips"><span>Diagnóstico</span><span>Dosificación</span><span>Plan inteligente</span></div>
         </div>
-      </div>
-      <h1>Tu piscina en mejores manos: <span>las tuyas.</span></h1>
-      <p>Diagnostica, calcula, aprende y mantén tu piscina con AQUO.</p>
-      <div class="mobile-feature-chips" aria-hidden="true">
-        <span>✦ Diagnóstico</span><span>⌁ Dosificación</span><span>✓ Plan inteligente</span>
-      </div>
-    </div>
-
-    <div class="aquo-guide-card aquo-guide-mobile">
-      <img src="{% static 'asistente_tecnico/characters/aquo-avatar-hq.webp' %}" alt="AQUO">
-      <div class="aquo-guide-bubble">
-        <strong>¿Tienes un problema con tu piscina?</strong>
-        <p>Yo te digo qué revisar, qué producto usar y cuánto aplicar.</p>
-        <div class="aquo-guide-tags"><span>Diagnosticar</span><span>Calcular</span><span>Resolver</span></div>
+        <img class="mobile-aquo-full" src="{% static 'dashboard/images/aquo-login-full.webp' %}?v=20261031-full" alt="AQUO, asistente de inteligencia artificial de cuerpo completo" loading="eager">
       </div>
     </div>
 
