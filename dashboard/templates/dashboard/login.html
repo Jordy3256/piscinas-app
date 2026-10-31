@@ -18,7 +18,7 @@
   <link rel="manifest" href="/dashboard/manifest.json?v=20261001-aquo">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="{% static 'dashboard/jvaqua-login.css' %}?v=20261031-login20">
+  <link rel="stylesheet" href="{% static 'dashboard/jvaqua-login.css' %}?v=20261031-aquo-ai22">
 </head>
 <body>
 <div class="login-page">
@@ -46,12 +46,17 @@
         organizar el mantenimiento y resolver problemas paso a paso.
       </p>
 
-      <div class="login-showcase" aria-label="Vista ilustrativa de funciones AQUO">
-  <div class="showcase-pool" aria-hidden="true"><div class="pool-ripple ripple-one"></div><div class="pool-ripple ripple-two"></div><div class="pool-sheen"></div><span class="pool-label">AQUO 360 · POOL INTELLIGENCE</span></div>
-  <div class="showcase-status"><span class="showcase-status-icon">✓</span><div><strong>Agua en equilibrio</strong><small>pH 7.4 · Cloro 2.0 ppm</small></div><span class="showcase-live">IDEAL</span></div>
-  <div class="showcase-insight"><span>✦ AQUO recomienda</span><strong>Tu próximo mantenimiento, bajo control.</strong></div>
-</div>
-<div class="brand-features">
+      <div class="aquo-ai-hero" aria-label="AQUO, inteligencia artificial para piscinas">
+        <div class="aquo-ai-halo" aria-hidden="true"></div>
+        <div class="aquo-ai-portrait"><img src="{% static 'asistente_tecnico/characters/aquo-avatar-hq.webp' %}" alt="AQUO, tu asistente inteligente" loading="eager"></div>
+        <div class="aquo-ai-copy">
+          <span class="aquo-ai-pill"><span class="aquo-ai-pulse"></span> ASISTENTE CON INTELIGENCIA ARTIFICIAL</span>
+          <h2>Hola, soy <em>AQUO.</em></h2>
+          <p>Tu asistente inteligente para piscinas. Cuéntame qué pasa con el agua y te guío paso a paso: qué revisar, cuánto aplicar y qué hacer después.</p>
+          <div class="aquo-ai-metrics"><span>✦ Diagnóstico de agua</span><span>◈ Cálculo de dosis</span><span>✓ Guía paso a paso</span></div>
+        </div>
+      </div>
+      <div class="brand-features">
         <article class="brand-feature">
           <span class="feature-icon">✦</span>
           <div><strong>Diagnóstico inteligente</strong><small>Interpreta pH, cloro y estado del agua.</small></div>
@@ -68,15 +73,6 @@
           <span class="feature-icon">◎</span>
           <div><strong>Aprende y resuelve</strong><small>Guías, biblioteca, curso y soporte en un solo lugar.</small></div>
         </article>
-      </div>
-
-      <div class="aquo-guide-card aquo-guide-desktop">
-        <img src="{% static 'asistente_tecnico/characters/aquo-avatar-hq.webp' %}" alt="AQUO, asistente inteligente para piscinas">
-        <div class="aquo-guide-bubble">
-          <strong>Hola, soy AQUO.</strong>
-          <p>Cuéntame qué pasa con tu piscina y te guío paso a paso: qué revisar, cuánto aplicar y qué hacer después.</p>
-          <div class="aquo-guide-tags"><span>Agua verde</span><span>pH / Cloro</span><span>Dosificación</span><span>Mantenimiento</span></div>
-        </div>
       </div>
 
       <a class="brand-cta" href="/dashboard/asistente/digital/registro/">

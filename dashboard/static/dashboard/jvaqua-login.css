@@ -650,3 +650,34 @@ a{text-decoration:none}
 @media(max-width:1100px){.login-showcase{height:155px}.showcase-insight{display:none}.brand-main h1{font-size:clamp(2.3rem,4vw,4rem)}}
 @media(max-width:900px){.login-showcase{display:none}}
 @media(prefers-reduced-motion:reduce){.pool-sheen{animation:none}.brand-feature{transition:none}}
+
+/* AQUO AI 2.2: sección publicitaria y corrección de altura */
+@media(min-width:901px){
+ html,body{min-height:100%;height:auto!important;overflow-x:hidden!important;overflow-y:auto!important}
+ .login-page{height:auto!important;min-height:100dvh!important;overflow:visible!important;align-items:stretch}
+ .login-brand,.login-panel{height:auto!important;min-height:100dvh!important;overflow:visible!important}
+ .login-brand{justify-content:space-between;gap:8px;padding-top:clamp(16px,2.4vw,32px);padding-bottom:clamp(12px,1.7vw,25px)}
+ .brand-main{margin:auto 0;padding:8px 0!important;max-width:760px}
+ .brand-main h1{font-size:clamp(2.3rem,3.65vw,4.3rem);line-height:1.02}
+ .brand-main>p{font-size:clamp(.78rem,.9vw,.96rem);margin:9px 0 0;line-height:1.4}
+ .brand-features{margin-top:10px;gap:7px}
+ .brand-feature{padding:8px 10px}
+ .brand-cta{margin-top:9px}
+ .login-panel{justify-content:center;gap:12px;padding-top:18px;padding-bottom:18px}
+}
+.aquo-ai-hero{position:relative;isolation:isolate;display:grid;grid-template-columns:clamp(108px,13vw,184px) minmax(0,1fr);align-items:center;gap:15px;min-height:174px;margin:15px 0 9px;padding:17px 20px;border:1px solid rgba(139,242,255,.38);border-radius:23px;overflow:hidden;background:radial-gradient(circle at 20% 60%,rgba(64,240,236,.36),transparent 42%),linear-gradient(115deg,rgba(5,95,172,.92),rgba(3,39,106,.96));box-shadow:0 16px 36px rgba(0,27,79,.25)}
+.aquo-ai-hero:before{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(120deg,transparent 55%,rgba(65,226,245,.13) 100%)}
+.aquo-ai-halo{position:absolute;width:230px;height:230px;left:-20px;top:-18px;border:1px solid rgba(145,244,255,.18);border-radius:50%;box-shadow:0 0 0 30px rgba(131,248,255,.045),0 0 0 65px rgba(131,248,255,.035);pointer-events:none}
+.aquo-ai-portrait{height:150px;width:100%;max-width:170px;align-self:end;overflow:hidden;border-radius:19px 19px 12px 12px;background:linear-gradient(160deg,#3dbde7,#e1faff);border:1px solid rgba(205,251,255,.55);box-shadow:0 8px 24px rgba(0,25,70,.32)}
+.aquo-ai-portrait img{width:100%;height:100%;object-fit:cover;object-position:center 24%;display:block}
+.aquo-ai-copy{position:relative;min-width:0;color:white}
+.aquo-ai-pill{display:inline-flex;align-items:center;gap:7px;padding:5px 9px;border-radius:99px;background:rgba(62,221,242,.16);border:1px solid rgba(144,245,255,.28);color:#a8fcf9;font-size:clamp(.51rem,.67vw,.68rem);font-weight:900;letter-spacing:.06em}
+.aquo-ai-pulse{width:7px;height:7px;border-radius:50%;background:#54f2c7;box-shadow:0 0 0 4px rgba(84,242,199,.16)}
+.aquo-ai-copy h2{font-weight:900;letter-spacing:-.035em;font-size:clamp(1.3rem,2vw,2.05rem);margin:9px 0 6px;line-height:1.08}
+.aquo-ai-copy h2 em{font-style:normal;color:#79f1f2}
+.aquo-ai-copy p{font-size:clamp(.68rem,.8vw,.85rem);line-height:1.43;color:#e0f2ff;margin:0}
+.aquo-ai-metrics{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px}
+.aquo-ai-metrics span{padding:5px 7px;border-radius:7px;background:rgba(255,255,255,.13);color:#e9ffff;font-weight:700;font-size:clamp(.54rem,.62vw,.66rem)}
+@media(min-width:901px) and (max-width:1150px){.aquo-ai-hero{grid-template-columns:100px 1fr;padding:12px;gap:10px;min-height:150px}.aquo-ai-portrait{height:125px}.aquo-ai-metrics span{padding:4px 5px}}
+@media(max-width:900px){.aquo-ai-hero{display:none}}
+@media(max-width:900px) and (max-height:700px){html,body,.login-page,.login-panel{height:auto!important;min-height:100dvh!important;overflow-y:auto!important}.login-panel{padding-bottom:120px!important}}
