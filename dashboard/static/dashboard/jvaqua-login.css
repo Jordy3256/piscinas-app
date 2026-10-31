@@ -608,3 +608,45 @@ a{text-decoration:none}
     padding-bottom:calc(108px + env(safe-area-inset-bottom))!important
   }
 }
+\n
+/* AQUO 360 Login 2.0 — presentación comercial, sin alterar autenticación */
+.login-page{grid-template-columns:minmax(0,1.18fr) minmax(410px,.82fr);background:linear-gradient(125deg,#031d51 0%,#0758bb 49%,#07b5ce 100%)}
+.login-brand{padding:clamp(24px,3.4vw,54px) clamp(28px,4.1vw,72px);background:radial-gradient(ellipse at 80% 23%,rgba(41,202,245,.26),transparent 48%),radial-gradient(ellipse at 15% 80%,rgba(25,130,235,.34),transparent 48%)}
+.brand-main{max-width:730px;padding:18px 0}
+.brand-main h1{font-size:clamp(2.65rem,4.65vw,5.4rem);letter-spacing:-.065em;line-height:1.01}
+.brand-main h1 span{background:linear-gradient(95deg,#8ff8f3,#65d9ff,#d1ffff);background-clip:text;-webkit-background-clip:text;color:transparent}
+.brand-main>p{margin-top:15px;font-size:clamp(.94rem,1.1vw,1.07rem);line-height:1.5}
+.brand-features{margin-top:17px;gap:9px;max-width:680px}
+.brand-feature{padding:10px 12px;border-radius:14px;background:rgba(255,255,255,.09);transition:background .2s,transform .2s}
+.brand-feature:hover{background:rgba(255,255,255,.16);transform:translateY(-2px)}
+.brand-cta{margin-top:15px}
+.login-showcase{position:relative;max-width:690px;height:195px;margin:20px 0 5px;border-radius:22px;overflow:hidden;border:1px solid rgba(255,255,255,.3);box-shadow:0 20px 45px rgba(0,17,58,.28);background:#037fae}
+.showcase-pool{position:absolute;inset:0;background:radial-gradient(ellipse at 30% 70%,rgba(184,255,249,.52),transparent 40%),repeating-linear-gradient(162deg,transparent 0 22px,rgba(255,255,255,.07) 24px 26px,transparent 28px 55px),linear-gradient(125deg,#0066a4,#04b5d5 52%,#45d9d9)}
+.showcase-pool:before{content:"";position:absolute;inset:15px;border:5px solid rgba(219,250,255,.45);border-radius:16px;box-shadow:inset 0 0 22px rgba(2,54,114,.3)}
+.pool-ripple{position:absolute;border:2px solid rgba(255,255,255,.22);border-radius:50%;width:260px;height:80px;left:25%;top:35%;transform:rotate(-12deg)}
+.ripple-two{width:400px;height:130px;left:8%;top:19%;opacity:.6}
+.pool-sheen{position:absolute;inset:0;background:linear-gradient(110deg,transparent 25%,rgba(255,255,255,.2) 42%,transparent 57%);animation:aquoSheen 9s ease-in-out infinite}
+@keyframes aquoSheen{50%{transform:translateX(18%)}}
+.pool-label{position:absolute;left:27px;bottom:23px;color:#eaffff;font-size:.63rem;font-weight:900;letter-spacing:.16em;text-shadow:0 2px 8px #036}
+.showcase-status,.showcase-insight{position:absolute;display:flex;align-items:center;gap:10px;border:1px solid rgba(255,255,255,.6);background:rgba(255,255,255,.94);color:#123052;box-shadow:0 10px 26px rgba(0,27,64,.2);backdrop-filter:blur(8px)}
+.showcase-status{right:20px;top:18px;padding:10px 12px;border-radius:14px}
+.showcase-status-icon{background:#ddf9ed;color:#08794d;border-radius:10px;padding:6px 9px;font-weight:900}
+.showcase-status strong,.showcase-insight strong{display:block;font-size:.75rem}
+.showcase-status small{display:block;color:#71869a;font-size:.64rem}
+.showcase-live{color:#09835a;font-size:.6rem;font-weight:900}
+.showcase-insight{right:20px;bottom:18px;display:block;padding:10px 13px;border-radius:12px;max-width:240px}
+.showcase-insight span{display:block;font-size:.61rem;color:#0767b7;font-weight:900}
+.showcase-insight strong{margin-top:3px}
+.login-panel{background:radial-gradient(ellipse at 80% 10%,#e8faff,transparent 52%),linear-gradient(155deg,#e2efff,#eff8ff 65%,#ccecf5);padding:25px}
+.login-card{width:min(100%,485px);border-radius:26px;border:1px solid rgba(255,255,255,.85);box-shadow:0 25px 60px rgba(4,46,94,.15);padding:clamp(25px,2.6vw,38px)}
+.login-card::before{height:5px;background:linear-gradient(90deg,#0061d8,#00a4e2,#68e9dc)}
+.login-online-dot{display:inline-block;width:8px;height:8px;background:#14c7ad;border-radius:50%;margin-right:6px;box-shadow:0 0 0 4px #ddfaf4}
+.login-card h2{font-size:clamp(1.7rem,2.5vw,2.25rem)}
+.login-input .form-control{background:#f2f7ff}
+.login-input .form-control:focus{background:white}
+.login-submit{background:linear-gradient(100deg,#0952c6,#078dc1);box-shadow:0 12px 25px rgba(3,100,187,.25)}
+.login-register{background:#eff8ff}
+.install-banner{box-shadow:0 16px 35px rgba(0,53,105,.18)}
+@media(max-width:1100px){.login-showcase{height:155px}.showcase-insight{display:none}.brand-main h1{font-size:clamp(2.3rem,4vw,4rem)}}
+@media(max-width:900px){.login-showcase{display:none}}
+@media(prefers-reduced-motion:reduce){.pool-sheen{animation:none}.brand-feature{transition:none}}
