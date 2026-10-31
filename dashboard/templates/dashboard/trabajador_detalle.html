@@ -27,6 +27,18 @@
 .wp-pdf-menu{position:relative;z-index:1080}.wp-pdf-menu .dropdown-menu{z-index:1090;min-width:230px}
 
 .wp-hero{padding:1rem 1.2rem;border-radius:20px}.wp-avatar{width:66px;height:66px;flex-basis:66px;border-radius:17px}.wp-hero h2{font-size:clamp(1.25rem,2.2vw,1.9rem)}.wp-kpi{padding:.75rem .9rem;border-radius:14px;border-top:3px solid #0b5ed7}.wp-kpi:nth-child(2){border-top-color:#12a890}.wp-kpi:nth-child(3){border-top-color:#e9a23b}.wp-kpi:nth-child(4){border-top-color:#7459ce}.wp-kpi:nth-child(5){border-top-color:#079cc2}.wp-kpi:nth-child(6){border-top-color:#e16b82}.wp-kpi .fs-3{font-size:1.45rem!important}.wp-section{scroll-margin-top:215px}.wp-nav{background:#fff;padding:.55rem;border-radius:15px;border:1px solid #e2eaf5;flex-wrap:wrap}.wp-nav a{border-radius:10px}.wp-nav a.wp-current{background:#0b5ed7;color:white;border-color:#0b5ed7}.wp-table th{background:#f0f6ff!important;color:#486381;font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap}.wp-table td{vertical-align:middle;padding:.6rem .7rem}.wp-table tbody tr:hover{background:#f7fbff}.wp-toolbar{display:flex;gap:.55rem;align-items:center;flex-wrap:wrap}.wp-toolbar input,.wp-toolbar select{max-width:260px}.wp-mini{font-size:.75rem;color:#708096}.wp-empty{padding:1.3rem;text-align:center;color:#718096}.wp-progress{height:7px;background:#e8eff8;border-radius:8px;overflow:hidden}.wp-progress>span{display:block;height:100%;background:#13a888}.wp-info-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:.7rem}.wp-info-grid>div{padding:.75rem;background:#f5f8fd;border-radius:12px}.wp-photo-box{padding:.8rem}.wp-contract-count{font-weight:700;color:#0b5ed7}.wp-table-wrap{max-width:100%;overflow-x:auto}.wp-contract-row[hidden]{display:none!important}@media(max-width:700px){.wp-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.wp-kpi{padding:.65rem}.wp-hero{padding:.85rem}.wp-toolbar input,.wp-toolbar select{max-width:100%;width:100%}}
+
+.wp-table td{padding:.38rem .6rem!important;font-size:.86rem;line-height:1.25}
+.wp-table th{padding:.52rem .6rem!important}
+.wp-table .wp-mini{font-size:.7rem}
+.wp-section{padding:.85rem!important;margin-bottom:.8rem!important}
+.wp-section h5{margin-bottom:.55rem}
+.wp-section h6{margin-top:.85rem!important;margin-bottom:.4rem}
+.wp-list-footer{display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;padding:.5rem .65rem;background:#f6f9fe;border:1px solid #e4ebf6;border-top:0;border-radius:0 0 12px 12px;font-size:.78rem;color:#60748e}
+.wp-list-toggle{background:#e8f1ff;color:#0756b5;border:1px solid #c8dcfb;border-radius:9px;padding:.35rem .8rem;font-weight:700;cursor:pointer}
+.wp-list-toggle:hover{background:#d5e6ff}
+.wp-list-footer[hidden],.wp-table tr[hidden]{display:none!important}
+.wp-section .table-responsive,.wp-section .wp-table-wrap{border-radius:12px 12px 0 0}
 </style>
 <div class="wp-hero mb-3"><div class="d-flex justify-content-between gap-3 flex-wrap align-items-start"><div class="wp-hero-main"><div class="wp-avatar">{% if trabajador.foto_perfil %}<img src="{{ trabajador.foto_perfil.url }}" alt="{{ trabajador.user.get_full_name|default:trabajador.user.username }}">{% else %}{{ trabajador.user.first_name|default:trabajador.user.username|slice:":1"|upper }}{% endif %}</div><div><div class="small opacity-75 text-uppercase fw-bold">Expediente digital</div><h2 class="fw-bold mb-1">{{ trabajador.user.get_full_name|default:trabajador.user.username }}</h2><div class="opacity-75">{{ trabajador.telefono|default:"Sin teléfono" }} · {{ trabajador.user.email|default:"Sin correo" }}</div>{% if trabajador.ciudad_principal %}<div class="small opacity-75 mt-1">📍 {{ trabajador.ciudad_principal.nombre }}</div>{% endif %}</div></div><div><span class="badge {% if trabajador.activo %}text-bg-success{% else %}text-bg-secondary{% endif %}">{% if trabajador.activo %}Activo{% else %}Inactivo{% endif %}</span></div></div></div>
 <form id="wp-period-form" class="card border-0 shadow-sm mb-3" method="get"><div class="card-body"><div class="row g-2 align-items-end"><div class="col-md-4"><label class="form-label small fw-bold">Desde</label><input class="form-control" type="date" name="desde" value="{{ desde|date:'Y-m-d' }}"></div><div class="col-md-4"><label class="form-label small fw-bold">Hasta</label><input class="form-control" type="date" name="hasta" value="{{ hasta|date:'Y-m-d' }}"></div><div class="col-md-4 d-grid"><button class="btn btn-primary">Aplicar período</button></div></div></div></form>
@@ -40,4 +52,77 @@
 <section id="finanzas" class="wp-section p-3 mb-3"><h5 class="fw-bold">Nómina y pagos</h5><div class="table-responsive"><table class="table wp-table"><thead><tr><th>Fecha</th><th>Contrato / período</th><th>Monto</th></tr></thead><tbody>{% for p in pagos %}<tr><td>{{ p.fecha|date:"d/m/Y" }}</td><td>{{ p.obligacion.concepto_origen }} · {{ p.obligacion.periodo_label }}</td><td>${{ p.monto|floatformat:2 }}</td></tr>{% empty %}<tr><td colspan="3" class="text-muted">Sin pagos registrados.</td></tr>{% endfor %}</tbody></table></div><h6 class="mt-3">Anticipos</h6><div class="table-responsive"><table class="table wp-table"><thead><tr><th>Fecha</th><th>Período</th><th>Monto</th><th>Estado</th></tr></thead><tbody>{% for a in anticipos %}<tr><td>{{ a.fecha|date:"d/m/Y" }}</td><td>{{ a.periodo_label }}</td><td>${{ a.monto|floatformat:2 }}</td><td>{% if a.descontado %}Descontado{% else %}Pendiente{% endif %}</td></tr>{% empty %}<tr><td colspan="4" class="text-muted">Sin anticipos registrados.</td></tr>{% endfor %}</tbody></table></div></section>
 <section id="inventario" class="wp-section p-3 mb-3"><h5 class="fw-bold">Inventario asignado</h5><div class="table-responsive"><table class="table wp-table"><thead><tr><th>Producto</th><th>Cantidad</th></tr></thead><tbody>{% for x in inventario %}<tr><td>{{ x.insumo.nombre }}</td><td>{{ x.stock|floatformat:"-3" }} {{ x.insumo.unidad_corta }}</td></tr>{% empty %}<tr><td colspan="2" class="text-muted">Sin inventario asignado.</td></tr>{% endfor %}</tbody></table></div><h6 class="mt-3">Consumos</h6><div class="table-responsive"><table class="table wp-table"><thead><tr><th>Fecha</th><th>Producto</th><th>Cantidad</th></tr></thead><tbody>{% for u in usos %}<tr><td>{{ u.mantenimiento.fecha|date:"d/m/Y" }}</td><td>{{ u.insumo.nombre }}</td><td>{{ u.cantidad_mostrada }} {{ u.unidad_mostrada }}</td></tr>{% empty %}<tr><td colspan="3" class="text-muted">Sin consumos.</td></tr>{% endfor %}</tbody></table></div></section>
 <section id="conocimiento" class="wp-section p-3 mb-3"><h5 class="fw-bold">Centro de Conocimiento</h5><p class="text-muted">Academia: <strong>{{ academia_completadas }}/{{ academia_total }}</strong> lecciones ({{ academia_pct|floatformat:0 }}%).</p><div class="table-responsive"><table class="table wp-table"><thead><tr><th>Fecha</th><th>Diagnóstico</th><th>Resultado</th></tr></thead><tbody>{% for c in casos_asistente %}<tr><td>{{ c.creado_en|date:"d/m/Y" }}</td><td>{{ c.diagnostico }}</td><td>{{ c.get_resultado_display }}</td></tr>{% empty %}<tr><td colspan="3" class="text-muted">Sin casos del Asistente.</td></tr>{% endfor %}</tbody></table></div></section>
+<script>
+(function(){
+function init(){
+ const tables=Array.from(document.querySelectorAll('.wp-section table.wp-table'));
+ tables.forEach((table,index)=>{
+  const tbody=table.tBodies[0];if(!tbody)return;
+  const rows=Array.from(tbody.querySelectorAll('tr')).filter(row=>!row.querySelector('td[colspan]'));
+  if(!rows.length)return;
+  let expanded=false;
+  const footer=document.createElement('div');footer.className='wp-list-footer';
+  const label=document.createElement('span');
+  const button=document.createElement('button');button.type='button';button.className='wp-list-toggle';
+  button.setAttribute('aria-expanded','false');
+  button.setAttribute('aria-controls',table.id||('wp-list-'+index));
+  if(!table.id)table.id='wp-list-'+index;
+  footer.append(label,button);
+  const container=table.closest('.table-responsive, .wp-table-wrap')||table;
+  container.insertAdjacentElement('afterend',footer);
+  const contract=table.id==='wp-contract-table';
+  function refresh(){
+   const eligible=rows.filter(row=>!contract||row.dataset.wpFiltered!=='yes');
+   const current=Array.from(tbody.querySelectorAll('tr')).filter(row=>rows.includes(row));
+   const visible=current.filter(row=>eligible.includes(row));
+   visible.forEach((row,i)=>{row.hidden=!expanded&&i>=5;});
+   rows.filter(row=>!eligible.includes(row)).forEach(row=>row.hidden=true);
+   const shown=Math.min(visible.length,expanded?visible.length:5);
+   label.textContent='Mostrando '+shown+' de '+visible.length+' registros';
+   button.textContent=expanded?'Ver menos':'Ver todos ('+visible.length+')';
+   button.hidden=visible.length<=5;
+   footer.hidden=visible.length===0;
+   button.setAttribute('aria-expanded',String(expanded));
+  }
+  button.addEventListener('click',()=>{expanded=!expanded;refresh();});
+  table.wpRefresh=refresh;
+  refresh();
+ });
+ const contract=document.getElementById('wp-contract-table');
+ if(contract){
+  const rows=Array.from(contract.querySelectorAll('tr.wp-contract-row'));
+  const search=document.getElementById('wp-contract-search');
+  const status=document.getElementById('wp-contract-status');
+  const sort=document.getElementById('wp-contract-sort');
+  const count=document.getElementById('wp-visible-count');
+  const empty=document.getElementById('wp-contract-empty');
+  const tbody=contract.tBodies[0];
+  function refreshContracts(){
+   const term=search.value.trim().toLocaleLowerCase();
+   const state=status.value;
+   let matches=0;
+   rows.forEach(row=>{
+    const match=(!term||row.textContent.toLocaleLowerCase().includes(term))&&(state==='todos'||row.dataset.status===state);
+    row.dataset.wpFiltered=match?'no':'yes';
+    if(match)matches++;
+   });
+   const ordered=[...rows];
+   if(sort.value==='nombre')ordered.sort((a,b)=>a.dataset.name.localeCompare(b.dataset.name,'es'));
+   if(sort.value==='valor')ordered.sort((a,b)=>(parseFloat(b.dataset.value)||0)-(parseFloat(a.dataset.value)||0));
+   ordered.forEach(row=>tbody.appendChild(row));
+   if(count)count.textContent=matches+' de '+rows.length;
+   if(empty)empty.hidden=matches!==0||rows.length===0;
+   if(contract.wpRefresh)contract.wpRefresh();
+  }
+  [search,status,sort].forEach(el=>{if(el)el.addEventListener(el===search?'input':'change',refreshContracts)});
+  refreshContracts();
+ }
+ const nav=document.querySelector('.wp-nav');
+ if(nav)nav.querySelectorAll('a[href^="#"]').forEach(a=>a.addEventListener('click',()=>{
+  nav.querySelectorAll('a').forEach(x=>x.classList.remove('wp-current'));a.classList.add('wp-current');
+ }));
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
+})();
+</script>
 {% endblock %}
