@@ -1,6 +1,6 @@
 {% extends "dashboard/base_admin.html" %}
 {% block content %}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoYx6gX1wM/7Y=" crossorigin="" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
 /* Vista cartográfica prioritaria: controles pequeños y mapa visible al abrir. */
 .map-shell{max-width:1600px;margin:4px auto;padding:0 10px;color:#172b4d}
@@ -15,18 +15,18 @@
 .map-filter-panel>summary::-webkit-details-marker{display:none}
 .map-filter-panel[open]>summary{background:#e9f3ff;border-color:#9cc8f8}
 .map-controls{position:absolute;right:0;top:calc(100% + 6px);display:flex;align-items:center;flex-wrap:wrap;gap:6px;width:max-content;max-width:min(92vw,400px);padding:10px;background:#fff;border:1px solid #dce7f4;border-radius:12px;box-shadow:0 12px 35px #1839632b}
-.map-controls input[type=date]{border:1px solid #dce7f4;border-radius:8px;padding:6px;font-size:12px;max-width:150px}.map-controls label{font-size:11px;color:#24436b}.map-controls a,.map-controls select{display:inline-flex;align-items:center;justify-content:center;background:white;border:1px solid #dce7f4;border-radius:9px;padding:8px 10px;color:#24436b;text-decoration:none;font-size:12px;min-height:35px}
+.map-controls .date-fields{display:flex;gap:7px;flex-wrap:wrap;align-items:end;width:100%;border-top:1px solid #e6edf7;padding-top:9px}
+.map-controls .date-fields label{font-size:11px;color:#506787;display:flex;flex-direction:column;gap:4px}
+.map-controls input[type=date]{border:1px solid #dce7f4;border-radius:8px;padding:7px;font-size:12px;max-width:145px}
+.map-controls button{background:#0869d4;border:0;border-radius:8px;color:white;padding:8px 12px;cursor:pointer;font-weight:700}
+.map-controls .date-note{font-size:10px;color:#61758b;line-height:1.3}
+.map-controls a,.map-controls select{display:inline-flex;align-items:center;justify-content:center;background:white;border:1px solid #dce7f4;border-radius:9px;padding:8px 10px;color:#24436b;text-decoration:none;font-size:12px;min-height:35px}
 .map-controls a.selected{background:#0869d4;color:white}.map-controls form{margin:0}.map-controls select{max-width:210px}
-.map-frame{position:relative;width:100%;height:clamp(500px,82vh,1100px);border-radius:13px;overflow:hidden;border:1px solid #d9e7f4}
-/* Aislar Leaflet de reglas globales de imágenes, transformaciones y paneles. */
-#mapa-piscinas.leaflet-container{position:relative;isolation:isolate;overflow:hidden;background:#e9f1f8}
-#mapa-piscinas .leaflet-pane,
-#mapa-piscinas .leaflet-map-pane,
-#mapa-piscinas .leaflet-tile-pane,
-#mapa-piscinas .leaflet-layer{position:absolute;left:0;top:0}
-#mapa-piscinas .leaflet-tile{width:256px!important;height:256px!important;max-width:none!important;max-height:none!important;min-width:0!important;object-fit:fill!important;border:0!important;border-radius:0!important;margin:0!important;padding:0!important;box-shadow:none!important}
+/* Leaflet debe controlar sus capas; no heredar estilos de imágenes de la app. */
+#mapa-piscinas.leaflet-container{position:relative;isolation:isolate;background:#e9f0f8}
+#mapa-piscinas .leaflet-tile{width:256px!important;height:256px!important;max-width:none!important;max-height:none!important;object-fit:fill!important;border-radius:0!important;box-shadow:none!important;margin:0!important;padding:0!important}
 #mapa-piscinas .leaflet-marker-icon,#mapa-piscinas .leaflet-marker-shadow{max-width:none!important;max-height:none!important}
-#mapa-piscinas .leaflet-control-container img{max-width:none!important}
+.map-frame{height:clamp(500px,82vh,1100px);border-radius:13px;overflow:hidden;border:1px solid #d9e7f4}
 .map-pending{margin:9px 0;padding:10px 12px;background:white;border-radius:11px}.map-pending summary{cursor:pointer;font-size:12px;font-weight:700}.map-pending li{margin:8px 0}
 .map-note{color:#61758b;font-size:12px;margin-top:7px}.map-info{margin:8px 0;color:#61758b;font-size:12px}.map-info summary{cursor:pointer}
 @media(max-width:750px){
@@ -37,6 +37,13 @@
  .map-controls{right:0;max-width:min(94vw,340px)}.map-controls a,.map-controls select{font-size:11px;padding:7px 8px}
  .map-frame{height:calc(100dvh - 235px);min-height:380px;border-radius:11px}
 }
+
+.map-timebar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:3px 0 7px;padding:5px 7px;border:1px solid #dce7f4;border-radius:10px;background:#ffffffed;font-size:11px}
+.map-timebar button{border:1px solid #dce7f4;border-radius:8px;background:white;color:#24436b;padding:7px 9px;cursor:pointer;font-size:11px;font-weight:700}
+.map-timebar button.active{background:#0969d4;color:white;border-color:#0969d4}
+.map-timebar .map-growth{margin-left:auto;color:#506787;font-size:11px}
+.map-timebar .map-growth strong{color:#0869d4}
+@media(max-width:750px){.map-timebar{gap:4px}.map-timebar button{padding:6px;font-size:10px}.map-timebar .map-growth{margin-left:0;width:100%;text-align:center;font-size:10px}}
 </style>
 <div class="map-shell">
   <div class="map-heading"><div class="map-title">🗺️ Mapa de expansión JVAQUA</div></div>
@@ -52,18 +59,31 @@
         <a class="{% if modo == 'activos' %}selected{% endif %}" href="?modo=activos{% if ciudad_seleccionada %}&ciudad={{ ciudad_seleccionada|urlencode }}{% endif %}">🟢 Activas</a>
         <a class="{% if modo == 'historial' %}selected{% endif %}" href="?modo=historial{% if ciudad_seleccionada %}&ciudad={{ ciudad_seleccionada|urlencode }}{% endif %}">🔴 Historial</a>
         <a class="{% if modo == 'todos' %}selected{% endif %}" href="?modo=todos{% if ciudad_seleccionada %}&ciudad={{ ciudad_seleccionada|urlencode }}{% endif %}">🌎 Todas</a>
-        <form method="get"><input type="hidden" name="modo" value="{{ modo }}"><select name="ciudad" aria-label="Filtrar ciudad" onchange="this.form.submit()"><option value="">Todas las ciudades</option>{% for c in ciudades %}<option value="{{ c }}" {% if c == ciudad_seleccionada %}selected{% endif %}>{{ c }}</option>{% endfor %}</select></form>
-        <form method="get" class="map-date-form">
+        <form method="get"><input type="hidden" name="modo" value="{{ modo }}"><input type="hidden" name="fecha" value="{{ fecha_consulta }}"><input type="hidden" name="comparar" value="{{ fecha_comparar }}"><input type="hidden" name="tercera" value="{{ fecha_tercera }}"><input type="hidden" name="vista" value="{{ vista }}"><select name="ciudad" aria-label="Filtrar ciudad" onchange="this.form.submit()"><option value="">Todas las ciudades</option>{% for c in ciudades %}<option value="{{ c }}" {% if c == ciudad_seleccionada %}selected{% endif %}>{{ c }}</option>{% endfor %}</select></form>
+        <form method="get" class="date-fields">
           <input type="hidden" name="modo" value="{{ modo }}">
           <input type="hidden" name="ciudad" value="{{ ciudad_seleccionada }}">
-          <label>Fecha de consulta <input type="date" name="fecha" value="{{ fecha_consulta|default:'' }}"></label>
-          <button type="submit">Consultar</button>
-          {% if fecha_consulta %}<a href="?modo={{ modo }}{% if ciudad_seleccionada %}&ciudad={{ ciudad_seleccionada|urlencode }}{% endif %}">Hoy</a>{% endif %}
+          <label>Fecha inicial<input type="date" name="fecha" value="{{ fecha_consulta }}"></label>
+          <label>Fecha B<input type="date" name="comparar" value="{{ fecha_comparar }}"></label>
+          <label>Fecha C (opcional)<input type="date" name="tercera" value="{{ fecha_tercera }}"></label>
+          <label>Visualización<select name="vista"><option value="vigentes" {% if vista == "vigentes" %}selected{% endif %}>🟢 Activos en cada fecha</option><option value="acumulados" {% if vista == "acumulados" %}selected{% endif %}>🔵 Incorporados acumulados</option></select></label>
+          <button type="submit">Aplicar</button>
+          {% if fecha_consulta %}<a href="?modo={{ modo }}{% if ciudad_seleccionada %}&ciudad={{ ciudad_seleccionada|urlencode }}{% endif %}">Limpiar fechas</a>{% endif %}
+          <div class="date-note">Activos: considera altas, bajas y reactivaciones registradas. Los cambios sin historial no pueden reconstruirse con exactitud.</div>
         </form>
-        <small style="font-size:10px;color:#61758b">La fecha usa inicio y fin contractual registrados; las bajas sin fecha histórica no pueden reconstruirse con exactitud.</small>
       </div>
     </details>
   </div>
+  {% if fecha_consulta and fecha_comparar %}
+  <div class="map-timebar" id="mapa-comparacion" aria-label="Evolución histórica: alternar fechas">
+    <span>👻 Evolución</span>
+    <button type="button" class="active" data-momento="a" aria-pressed="true">A · {{ fecha_consulta }}</button>
+    <button type="button" data-momento="b" aria-pressed="false">B · {{ fecha_comparar }}</button>
+    {% if fecha_tercera %}<button type="button" data-momento="c" aria-pressed="false">C · {{ fecha_tercera }}</button>{% endif %}
+    <button type="button" id="mapa-reproducir" aria-label="Reproducir evolución">▶</button>
+    <span class="map-growth" id="mapa-crecimiento">{% if fecha_tercera %}A: <strong>{{ comparacion_resumen.a }}</strong> · B: <strong>{{ comparacion_resumen.b }}</strong> · C: <strong>{{ comparacion_resumen.c }}</strong> · A→B: <strong id="neto-ab"></strong> · B→C: <strong id="neto-bc"></strong> · Total: <strong id="mapa-neto"></strong>{% else %}A: <strong>{{ comparacion_resumen.a }}</strong> · B: <strong>{{ comparacion_resumen.b }}</strong> · Nuevas: <strong>+{{ comparacion_resumen.altas }}</strong> · Salidas: <strong>-{{ comparacion_resumen.bajas }}</strong> · Neto: <strong id="mapa-neto"></strong>{% endif %} · {{ vista|capfirst }}</span>
+  </div>
+  {% elif fecha_consulta %}<p class="map-note" style="margin:3px 0 6px">📅 Situación contractual estimada al {{ fecha_consulta }}</p>{% endif %}
   <p id="mapa-tile-aviso" class="map-note" hidden role="status">⚠️ No se pudieron cargar algunas imágenes de MapTiler. Comprueba la clave API, el dominio autorizado y la conexión. Los marcadores siguen disponibles.</p>
   {% if not maptiler_api_key %}<p class="map-note" role="alert">⚠️ Falta configurar MAPTILER_API_KEY en las variables de entorno del servicio web de Render. Los marcadores se mostrarán sin mapa base.</p>{% endif %}
   <div id="mapa-piscinas" class="map-frame" aria-label="Mapa interactivo de piscinas"></div>
@@ -84,25 +104,67 @@
      maxZoom:19,maxNativeZoom:19,updateWhenIdle:true,keepBuffer:4,
      attribution:'&copy; <a href="https://www.maptiler.com/copyright/" target="_blank" rel="noopener noreferrer">MapTiler</a> &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a>'
    }).addTo(map);
-   tiles.on('tileerror',()=>{document.getElementById('mapa-tile-aviso').hidden=false;});
+   let erroresTiles=0, respaldoActivado=false;
+   tiles.on('tileerror',()=>{
+     erroresTiles++;
+     if(erroresTiles>=3 && !respaldoActivado){
+       respaldoActivado=true;
+       map.removeLayer(tiles);
+       L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
+         maxZoom:19,attribution:'&copy; OpenStreetMap contributors'
+       }).addTo(map);
+       document.getElementById('mapa-tile-aviso').hidden=false;
+     }
+   });
  }
  const refreshMap=()=>map.invalidateSize({pan:false});
  requestAnimationFrame(()=>requestAnimationFrame(refreshMap));
- setTimeout(refreshMap,250);setTimeout(refreshMap,1000);
+ setTimeout(refreshMap,350);setTimeout(refreshMap,1200);
  window.addEventListener('load',refreshMap);
  if(window.ResizeObserver){new ResizeObserver(refreshMap).observe(document.getElementById('mapa-piscinas'));}
- document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshMap();});
  const puntos=JSON.parse(document.getElementById('mapa-puntos').textContent),bounds=[];
+ const timebar=document.getElementById('mapa-comparacion');
+ const neto=document.getElementById('mapa-neto');
+ if(neto){const a=Number('{{ comparacion_resumen.a }}'),b=Number('{{ comparacion_resumen.b }}'),c=Number('{{ comparacion_resumen.c }}');const fmt=n=>(n>0?'+':'')+n;neto.textContent=fmt({% if fecha_tercera %}c{% else %}b{% endif %}-a);const ab=document.getElementById('neto-ab'),bc=document.getElementById('neto-bc');if(ab)ab.textContent=fmt(b-a);if(bc)bc.textContent=fmt(c-b);}
+ const markerLayer=L.layerGroup().addTo(map);
  const grupos={};
  puntos.forEach(p=>{const key=p.lat.toFixed(5)+','+p.lon.toFixed(5);(grupos[key]||(grupos[key]=[])).push(p)});
- Object.values(grupos).forEach(grupo=>{
-   const p=grupo[0],count=grupo.length,color=grupo.some(x=>x.activo)?'#16a36a':'#dc4955';
-   const icon=L.divIcon({className:'',html:'<div style="width:34px;height:34px;background:'+color+';border:3px solid white;border-radius:50%;color:white;display:grid;place-items:center;box-shadow:0 2px 12px #0004;font-weight:bold">'+(count>1?count:'🏊')+'</div>',iconSize:[36,36],iconAnchor:[18,18]});
-   const marker=L.marker([p.lat,p.lon],{icon}).addTo(map);bounds.push([p.lat,p.lon]);
-   const box=document.createElement('div');box.style.minWidth='190px';
-   grupo.forEach((x,i)=>{if(i)box.appendChild(document.createElement('hr'));const title=document.createElement('strong');title.textContent=x.cliente;box.appendChild(title);['sector','ciudad','frecuencia','tecnico_designado'].forEach(k=>{if(x[k]){const div=document.createElement('div');div.textContent=x[k];box.appendChild(div)}});const state=document.createElement('div');state.textContent=x.activo?'🟢 Activo':'🔴 Histórico';box.appendChild(state);const link=document.createElement('a');link.href='/dashboard/contratos/'+x.id+'/';link.textContent='Ver contrato';box.appendChild(link)});
-   marker.bindPopup(box);
- });
+ function dibujar(momento){
+   markerLayer.clearLayers();
+   const visibles=puntos.filter(p=>!timebar || (momento==='a'?p.vigente_a:momento==='b'?p.vigente_b:p.vigente_c));
+   const agrupados={};
+   visibles.forEach(p=>{const key=p.lat.toFixed(5)+','+p.lon.toFixed(5);(agrupados[key]||(agrupados[key]=[])).push(p)});
+   Object.values(agrupados).forEach(grupo=>{
+     const p=grupo[0],count=grupo.length;
+     const nueva=Boolean(timebar && momento!=='a' && grupo.some(x=>momento==='b'?(!x.vigente_a&&x.vigente_b):(!x.vigente_b&&x.vigente_c)));
+     const color=nueva?'#1876db':(timebar?'#16a36a':grupo.some(x=>x.activo)?'#16a36a':'#dc4955');
+     const icon=L.divIcon({className:'',html:'<div style="width:34px;height:34px;background:'+color+';border:3px solid white;border-radius:50%;color:white;display:grid;place-items:center;box-shadow:0 2px 12px #0004;font-weight:bold">'+(count>1?count:'🏊')+'</div>',iconSize:[36,36],iconAnchor:[18,18]});
+     const marker=L.marker([p.lat,p.lon],{icon}).addTo(markerLayer);
+     const box=document.createElement('div');box.style.minWidth='190px';
+     grupo.forEach((x,i)=>{
+       if(i)box.appendChild(document.createElement('hr'));
+       const title=document.createElement('strong');title.textContent=x.cliente;box.appendChild(title);
+       ['sector','ciudad','frecuencia','tecnico_designado'].forEach(k=>{if(x[k]){const div=document.createElement('div');div.textContent=x[k];box.appendChild(div)}});
+       const state=document.createElement('div');
+       state.textContent=timebar?((momento==='b'&&!x.vigente_a)||(momento==='c'&&!x.vigente_b)?'🔵 Incorporada':'🟢 Vigente'):(x.activo?'🟢 Activo':'🔴 Histórico');
+       box.appendChild(state);
+       const link=document.createElement('a');link.href='/dashboard/contratos/'+x.id+'/';link.textContent='Ver contrato';box.appendChild(link);
+     });
+     marker.bindPopup(box);
+   });
+   if(timebar){
+     timebar.querySelectorAll('button[data-momento]').forEach(btn=>{
+       const active=btn.dataset.momento===momento;
+       btn.classList.toggle('active',active);btn.setAttribute('aria-pressed',String(active));
+     });
+   }
+ }
+ if(timebar){
+   timebar.querySelectorAll('button[data-momento]').forEach(btn=>btn.addEventListener('click',()=>{if(window.mapaPlayTimer){clearInterval(window.mapaPlayTimer);window.mapaPlayTimer=null;}dibujar(btn.dataset.momento)}));
+   const play=document.getElementById('mapa-reproducir');if(play)play.addEventListener('click',()=>{if(window.mapaPlayTimer){clearInterval(window.mapaPlayTimer);window.mapaPlayTimer=null;play.textContent='▶';return;}const pasos=Array.from(timebar.querySelectorAll('button[data-momento]')).map(b=>b.dataset.momento);let i=0;dibujar(pasos[i]);play.textContent='⏸';window.mapaPlayTimer=setInterval(()=>{i++;if(i>=pasos.length){clearInterval(window.mapaPlayTimer);window.mapaPlayTimer=null;play.textContent='▶';return;}dibujar(pasos[i]);},1600);});
+ }
+ dibujar('a');
+ puntos.forEach(p=>bounds.push([p.lat,p.lon]));
  if(bounds.length)map.fitBounds(bounds,{padding:[35,35],maxZoom:14});
 })();
 </script>
