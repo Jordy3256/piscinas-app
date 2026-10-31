@@ -9,6 +9,7 @@ from datetime import date
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.db.models import Q
 from django.shortcuts import render
+from django.utils import timezone
 
 from contratos.models import Contrato
 from dashboard.views import _geocodificar_contrato_google
@@ -73,7 +74,10 @@ def mapa_expansion_view(request):
     resumen_global = {'altas': 0, 'bajas': 0}
 
     def vigente_en_fecha(contrato, corte):
-        if not corte:
+        # En el día actual el estado administrativo es la fuente de verdad.
+        # La reconstrucción histórica por fechas puede considerar vigentes
+        # contratos desactivados sin una fecha de baja registrada.
+        if not corte or corte == timezone.localdate():
             return bool(contrato.activo)
         inicio = contrato.fecha_inicio_original or contrato.fecha_inicio
         if not inicio or corte < inicio:
