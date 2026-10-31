@@ -59,15 +59,17 @@
         <a class="{% if modo == 'activos' %}selected{% endif %}" href="?modo=activos{% if ciudad_seleccionada %}&ciudad={{ ciudad_seleccionada|urlencode }}{% endif %}">🟢 Activas</a>
         <a class="{% if modo == 'historial' %}selected{% endif %}" href="?modo=historial{% if ciudad_seleccionada %}&ciudad={{ ciudad_seleccionada|urlencode }}{% endif %}">🔴 Historial</a>
         <a class="{% if modo == 'todos' %}selected{% endif %}" href="?modo=todos{% if ciudad_seleccionada %}&ciudad={{ ciudad_seleccionada|urlencode }}{% endif %}">🌎 Todas</a>
-        <form method="get"><input type="hidden" name="modo" value="{{ modo }}"><input type="hidden" name="fecha" value="{{ fecha_consulta }}"><input type="hidden" name="comparar" value="{{ fecha_comparar }}"><select name="ciudad" aria-label="Filtrar ciudad" onchange="this.form.submit()"><option value="">Todas las ciudades</option>{% for c in ciudades %}<option value="{{ c }}" {% if c == ciudad_seleccionada %}selected{% endif %}>{{ c }}</option>{% endfor %}</select></form>
+        <form method="get"><input type="hidden" name="modo" value="{{ modo }}"><input type="hidden" name="fecha" value="{{ fecha_consulta }}"><input type="hidden" name="comparar" value="{{ fecha_comparar }}"><input type="hidden" name="tercera" value="{{ fecha_tercera }}"><input type="hidden" name="vista" value="{{ vista }}"><select name="ciudad" aria-label="Filtrar ciudad" onchange="this.form.submit()"><option value="">Todas las ciudades</option>{% for c in ciudades %}<option value="{{ c }}" {% if c == ciudad_seleccionada %}selected{% endif %}>{{ c }}</option>{% endfor %}</select></form>
         <form method="get" class="date-fields">
           <input type="hidden" name="modo" value="{{ modo }}">
           <input type="hidden" name="ciudad" value="{{ ciudad_seleccionada }}">
           <label>Fecha inicial<input type="date" name="fecha" value="{{ fecha_consulta }}"></label>
-          <label>Comparar con (opcional)<input type="date" name="comparar" value="{{ fecha_comparar }}"></label>
+          <label>Fecha B<input type="date" name="comparar" value="{{ fecha_comparar }}"></label>
+          <label>Fecha C (opcional)<input type="date" name="tercera" value="{{ fecha_tercera }}"></label>
+          <label>Visualización<select name="vista"><option value="vigentes" {% if vista == "vigentes" %}selected{% endif %}>🟢 Activos en cada fecha</option><option value="acumulados" {% if vista == "acumulados" %}selected{% endif %}>🔵 Incorporados acumulados</option></select></label>
           <button type="submit">Aplicar</button>
           {% if fecha_consulta %}<a href="?modo={{ modo }}{% if ciudad_seleccionada %}&ciudad={{ ciudad_seleccionada|urlencode }}{% endif %}">Limpiar fechas</a>{% endif %}
-          <div class="date-note">La comparación usa las fechas contractuales disponibles; no reconstruye cambios antiguos sin historial.</div>
+          <div class="date-note">Activos: considera altas, bajas y reactivaciones registradas. Los cambios sin historial no pueden reconstruirse con exactitud.</div>
         </form>
       </div>
     </details>
@@ -77,7 +79,9 @@
     <span>👻 Evolución</span>
     <button type="button" class="active" data-momento="a" aria-pressed="true">A · {{ fecha_consulta }}</button>
     <button type="button" data-momento="b" aria-pressed="false">B · {{ fecha_comparar }}</button>
-    <span class="map-growth" id="mapa-crecimiento">A: <strong>{{ comparacion_resumen.a }}</strong> · B: <strong>{{ comparacion_resumen.b }}</strong> · Nuevas: <strong>+{{ comparacion_resumen.altas }}</strong> · Salidas: <strong>-{{ comparacion_resumen.bajas }}</strong> · Neto: <strong id="mapa-neto"></strong></span>
+    {% if fecha_tercera %}<button type="button" data-momento="c" aria-pressed="false">C · {{ fecha_tercera }}</button>{% endif %}
+    <button type="button" id="mapa-reproducir" aria-label="Reproducir evolución">▶</button>
+    <span class="map-growth" id="mapa-crecimiento">{% if fecha_tercera %}A: <strong>{{ comparacion_resumen.a }}</strong> · B: <strong>{{ comparacion_resumen.b }}</strong> · C: <strong>{{ comparacion_resumen.c }}</strong> · A→B: <strong id="neto-ab"></strong> · B→C: <strong id="neto-bc"></strong> · Total: <strong id="mapa-neto"></strong>{% else %}A: <strong>{{ comparacion_resumen.a }}</strong> · B: <strong>{{ comparacion_resumen.b }}</strong> · Nuevas: <strong>+{{ comparacion_resumen.altas }}</strong> · Salidas: <strong>-{{ comparacion_resumen.bajas }}</strong> · Neto: <strong id="mapa-neto"></strong>{% endif %} · {{ vista|capfirst }}</span>
   </div>
   {% elif fecha_consulta %}<p class="map-note" style="margin:3px 0 6px">📅 Situación contractual estimada al {{ fecha_consulta }}</p>{% endif %}
   <p id="mapa-tile-aviso" class="map-note" hidden role="status">⚠️ No se pudieron cargar algunas imágenes de MapTiler. Comprueba la clave API, el dominio autorizado y la conexión. Los marcadores siguen disponibles.</p>
@@ -121,18 +125,18 @@
  const puntos=JSON.parse(document.getElementById('mapa-puntos').textContent),bounds=[];
  const timebar=document.getElementById('mapa-comparacion');
  const neto=document.getElementById('mapa-neto');
- if(neto){const a=Number('{{ comparacion_resumen.a }}'),b=Number('{{ comparacion_resumen.b }}');neto.textContent=(b-a>0?'+':'')+(b-a);}
+ if(neto){const a=Number('{{ comparacion_resumen.a }}'),b=Number('{{ comparacion_resumen.b }}'),c=Number('{{ comparacion_resumen.c }}');const fmt=n=>(n>0?'+':'')+n;neto.textContent=fmt({% if fecha_tercera %}c{% else %}b{% endif %}-a);const ab=document.getElementById('neto-ab'),bc=document.getElementById('neto-bc');if(ab)ab.textContent=fmt(b-a);if(bc)bc.textContent=fmt(c-b);}
  const markerLayer=L.layerGroup().addTo(map);
  const grupos={};
  puntos.forEach(p=>{const key=p.lat.toFixed(5)+','+p.lon.toFixed(5);(grupos[key]||(grupos[key]=[])).push(p)});
  function dibujar(momento){
    markerLayer.clearLayers();
-   const visibles=puntos.filter(p=>!timebar || (momento==='a'?p.vigente_a:p.vigente_b));
+   const visibles=puntos.filter(p=>!timebar || (momento==='a'?p.vigente_a:momento==='b'?p.vigente_b:p.vigente_c));
    const agrupados={};
    visibles.forEach(p=>{const key=p.lat.toFixed(5)+','+p.lon.toFixed(5);(agrupados[key]||(agrupados[key]=[])).push(p)});
    Object.values(agrupados).forEach(grupo=>{
      const p=grupo[0],count=grupo.length;
-     const nueva=Boolean(timebar && momento==='b' && grupo.some(x=>x.comparacion==='alta'));
+     const nueva=Boolean(timebar && momento!=='a' && grupo.some(x=>momento==='b'?(!x.vigente_a&&x.vigente_b):(!x.vigente_b&&x.vigente_c)));
      const color=nueva?'#1876db':(timebar?'#16a36a':grupo.some(x=>x.activo)?'#16a36a':'#dc4955');
      const icon=L.divIcon({className:'',html:'<div style="width:34px;height:34px;background:'+color+';border:3px solid white;border-radius:50%;color:white;display:grid;place-items:center;box-shadow:0 2px 12px #0004;font-weight:bold">'+(count>1?count:'🏊')+'</div>',iconSize:[36,36],iconAnchor:[18,18]});
      const marker=L.marker([p.lat,p.lon],{icon}).addTo(markerLayer);
@@ -142,7 +146,7 @@
        const title=document.createElement('strong');title.textContent=x.cliente;box.appendChild(title);
        ['sector','ciudad','frecuencia','tecnico_designado'].forEach(k=>{if(x[k]){const div=document.createElement('div');div.textContent=x[k];box.appendChild(div)}});
        const state=document.createElement('div');
-       state.textContent=timebar?(x.comparacion==='alta'?'🔵 Incorporada':x.comparacion==='continua'?'🟢 Continúa':'🟢 Vigente en fecha A'):(x.activo?'🟢 Activo':'🔴 Histórico');
+       state.textContent=timebar?((momento==='b'&&!x.vigente_a)||(momento==='c'&&!x.vigente_b)?'🔵 Incorporada':'🟢 Vigente'):(x.activo?'🟢 Activo':'🔴 Histórico');
        box.appendChild(state);
        const link=document.createElement('a');link.href='/dashboard/contratos/'+x.id+'/';link.textContent='Ver contrato';box.appendChild(link);
      });
@@ -156,7 +160,8 @@
    }
  }
  if(timebar){
-   timebar.querySelectorAll('button[data-momento]').forEach(btn=>btn.addEventListener('click',()=>dibujar(btn.dataset.momento)));
+   timebar.querySelectorAll('button[data-momento]').forEach(btn=>btn.addEventListener('click',()=>{if(window.mapaPlayTimer){clearInterval(window.mapaPlayTimer);window.mapaPlayTimer=null;}dibujar(btn.dataset.momento)}));
+   const play=document.getElementById('mapa-reproducir');if(play)play.addEventListener('click',()=>{if(window.mapaPlayTimer){clearInterval(window.mapaPlayTimer);window.mapaPlayTimer=null;play.textContent='▶';return;}const pasos=Array.from(timebar.querySelectorAll('button[data-momento]')).map(b=>b.dataset.momento);let i=0;dibujar(pasos[i]);play.textContent='⏸';window.mapaPlayTimer=setInterval(()=>{i++;if(i>=pasos.length){clearInterval(window.mapaPlayTimer);window.mapaPlayTimer=null;play.textContent='▶';return;}dibujar(pasos[i]);},1600);});
  }
  dibujar('a');
  puntos.forEach(p=>bounds.push([p.lat,p.lon]));
