@@ -18,7 +18,7 @@
   <link rel="manifest" href="/dashboard/manifest.json?v=20261001-aquo">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="{% static 'dashboard/jvaqua-login.css' %}?v=20261031-aquo-login-v33-piscina">
+  <link rel="stylesheet" href="{% static 'dashboard/jvaqua-login.css' %}?v=20261031-aquo-login-v34-tropical-auto">
 </head>
 <body>
 <div class="login-page">
@@ -37,10 +37,10 @@
       <div class="aquo-ai-hero" aria-label="AQUO, inteligencia artificial para piscinas">
         <div class="aquo-ai-halo" aria-hidden="true"></div>
         <div class="aquo-ai-portrait"><img src="{% static 'dashboard/images/aquo-personaje-completo.png' %}" alt="AQUO, tu asistente inteligente" loading="eager"></div>
-        <button class="aquo-thought" id="aquo-thought" type="button" aria-label="Escuchar otro consejo de AQUO">
+        <button class="aquo-thought" id="aquo-thought" type="button" aria-label="Consejos automáticos de AQUO">
           <span class="aquo-thought-greeting">¡Hola! Soy AQUO <span aria-hidden="true">💧</span></span>
           <span class="aquo-thought-message" id="aquo-thought-message" aria-live="polite">¡Aprendamos juntos a cuidar tu piscina!</span>
-          <span class="aquo-thought-hint">Tócame para descubrir más <span aria-hidden="true">↻</span></span>
+          <span class="aquo-thought-hint">Consejos para cuidar tu piscina <span aria-hidden="true">✦</span></span>
         </button>
         <div class="aquo-ai-copy">
           <span class="aquo-ai-pill"><span class="aquo-ai-pulse"></span> ASISTENTE CON INTELIGENCIA ARTIFICIAL</span>
@@ -199,6 +199,7 @@
 
 <script>
 (function(){
+  // AQUO V3.4: consejos automáticos cada 3 segundos, sin interacción obligatoria.
   const thought=document.getElementById('aquo-thought');
   const thoughtMessage=document.getElementById('aquo-thought-message');
   if(thought && thoughtMessage){
@@ -206,13 +207,17 @@
       '¡Aprendamos juntos a cuidar tu piscina!',
       'Te ayudo a calcular dosis y resolver problemas.',
       'Organiza tus visitas y mantén el agua en equilibrio.',
-      '¡Soy tu aliado para una piscina impecable!'
+      '¡Soy tu aliado para una piscina impecable!',
+      'Descubre soluciones prácticas con AQUO 360.',
+      'Cuida tu piscina con mayor confianza.'
     ];
     let tipIndex=0;
-    thought.addEventListener('click',()=>{
+    const changeTip=()=>{
+      if(document.hidden || window.matchMedia('(max-width: 900px)').matches) return;
       tipIndex=(tipIndex+1)%tips.length;
       thoughtMessage.textContent=tips[tipIndex];
-    });
+    };
+    window.setInterval(changeTip,3000);
   }
   const form=document.getElementById('jvq-login-form');
   const password=document.getElementById('jvq-password');

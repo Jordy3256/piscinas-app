@@ -113,3 +113,26 @@
 }
 @media (max-width:430px){.mobile-aquo-hero{padding-top:clamp(46px,7vh,67px)}}
 @media (prefers-reduced-motion:reduce){.aquo-thought{transition:none}}
+
+/* AQUO360 Login V3.4 — fondo tropical moderado, solo escritorio.
+   La foto original se conserva intacta; filtros únicamente visuales. */
+@media (min-width:901px){
+  .aquo-pool-backdrop{
+    background-image:linear-gradient(105deg,
+      rgba(0,39,91,.77) 0%,
+      rgba(0,79,141,.67) 43%,
+      rgba(29,130,181,.55) 70%,
+      rgba(202,234,249,.70) 100%),
+      url('images/aquo360-piscina-tropical.webp');
+    background-position:center center;
+    background-size:cover;
+    filter:blur(9px) saturate(.93);
+    transform:scale(1.025);
+  }
+  .aquo-thought{min-height:129px;display:flex;flex-direction:column;justify-content:center}
+  .aquo-thought-message{min-height:2.72em}
+  .aquo-thought-hint{opacity:.82}
+}
+@media (min-width:901px) and (max-width:1280px){
+  .aquo-thought{min-height:122px}
+}
