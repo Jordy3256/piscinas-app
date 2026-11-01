@@ -55,7 +55,7 @@
   <div class="chat-layout">
     <section class="chat-card">
       <div class="chat-top"><div class="aqua-chat-avatar">{% include 'asistente_tecnico/partials/aqua_hero.html' %}</div><div><strong>AQUO · Asistente JVAQUA</strong><div class="online">Tu héroe técnico está disponible</div></div></div>
-      <form method="post" id="resolverForm">{% csrf_token %}<input type="hidden" name="piscina_id" value="{{piscina.pk}}"><input type="hidden" name="estado_agua" id="estadoField" value=""><input type="hidden" name="categoria_consulta" id="categoryField" value="agua">
+      <form method="post" id="resolverForm">{% csrf_token %}<input type="hidden" name="piscina_id" value="{{piscina.pk}}">{% if not piscina %}<div class="alert alert-info py-2 my-2"><strong>Consulta libre con AQUO.</strong> No necesitas registrar una piscina. Para calcular dosis, indica su volumen aproximado.</div><label class="form-label fw-bold" for="volumenLibre">Volumen de la piscina (m³)</label><input id="volumenLibre" name="volumen_m3" type="number" step="0.01" min="0.01" max="100000" class="form-control mb-3" placeholder="Ej. 35" required>{% endif %}<input type="hidden" name="estado_agua" id="estadoField" value=""><input type="hidden" name="categoria_consulta" id="categoryField" value="agua">
       <div class="chat-body" id="chatBody">
         <div class="msg-row assistant"><div class="aqua-chat-avatar small">{% include 'asistente_tecnico/partials/aqua_hero.html' %}</div><div class="bubble">¡Hola{% if request.user.first_name %}, {{request.user.first_name}}{% endif %}! 👋 Soy <strong>AQUO</strong>, tu Asistente JVAQUA. Vamos a revisar <strong>{{piscina.nombre}}</strong>. ¿Qué problema quieres que revisemos hoy?</div></div>
         {% if resultado %}

@@ -2052,10 +2052,28 @@ def digital_piscina_form_view(request, pk=None):
             obj.largo_m=largo; obj.ancho_m=ancho; obj.profundidad_m=profundidad; obj.volumen_m3=volumen
             obj.tipo_filtro=request.POST.get("tipo_filtro") or "otro"; obj.desinfeccion=request.POST.get("desinfeccion") or "otro"
             obj.origen_agua=request.POST.get("origen_agua") or "potable"; obj.antecedente_hierro=request.POST.get("antecedente_hierro") or "no_se"
-            obj.notas=(request.POST.get("notas") or "").strip(); obj.principal=request.POST.get("principal")=="on"; obj.save()
+            obj.notas=(request.POST.get("notas") or "").strip(); obj.principal=request.POST.get("principal")=="on"
+            if perfil.es_profesional:
+                obj.propietario_nombre=(request.POST.get("propietario_nombre") or "").strip()[:150]
+                obj.propietario_telefono=(request.POST.get("propietario_telefono") or "").strip()[:35]
+                obj.direccion=(request.POST.get("direccion") or "").strip()[:255]
+                obj.ubicacion_referencia=(request.POST.get("ubicacion_referencia") or "").strip()[:255]
+            if perfil.puede_recordatorios_cobro:
+                valor=(request.POST.get("valor_mensual") or "").replace(",", ".").strip()
+                dia=(request.POST.get("dia_cobro") or "").strip()
+                try:
+                    obj.valor_mensual=Decimal(valor) if valor else None
+                    if obj.valor_mensual is not None and obj.valor_mensual < 0: raise ValueError
+                    obj.dia_cobro=int(dia) if dia else None
+                    if obj.dia_cobro is not None and not 1 <= obj.dia_cobro <= 31: raise ValueError
+                except (ValueError, InvalidOperation):
+                    messages.error(request, "Revisa el valor mensual y el día de cobro (1 a 31).")
+                    return redirect(request.path)
+                obj.recordatorio_cobro_activo=request.POST.get("recordatorio_cobro_activo")=="on"
+            obj.save()
             messages.success(request,"Piscina guardada. El Asistente ya puede usar estos datos.")
             return redirect("asistente_tecnico:digital_inicio")
-    return render(request,"asistente_tecnico/digital_piscina_form.html",{"obj":obj,"tipo_choices":PiscinaSuscriptor.TIPOS,"filtro_choices":PiscinaSuscriptor.FILTROS,"desinfeccion_choices":PiscinaSuscriptor.DESINFECCION,"origen_agua_choices":PiscinaSuscriptor.ORIGEN_AGUA,"hierro_choices":PiscinaSuscriptor.HIERRO})
+    return render(request,"asistente_tecnico/digital_piscina_form.html",{"obj":obj,"tipo_choices":PiscinaSuscriptor.TIPOS,"filtro_choices":PiscinaSuscriptor.FILTROS,"desinfeccion_choices":PiscinaSuscriptor.DESINFECCION,"origen_agua_choices":PiscinaSuscriptor.ORIGEN_AGUA,"hierro_choices":PiscinaSuscriptor.HIERRO,"perfil":perfil})
 
 @login_required
 @require_http_methods(["GET", "POST"])
@@ -2479,22 +2497,38 @@ def digital_resolver_view(request):
     if request.method=="POST":
         categoria_consulta=(request.POST.get("categoria_consulta") or "agua").strip()
         detalle_problema=(request.POST.get("detalle_problema") or "").strip()
-        if not piscina:
-            messages.error(request,"Primero registra tu piscina para personalizar correctamente el diagnóstico.")
-        elif categoria_consulta != "agua":
+        if categoria_consulta != "agua":
             resultado=diagnosticar_problema_tecnico(categoria_consulta, detalle_problema)
         else:
             try:
-                ph=Decimal((request.POST.get("ph") or "").replace(",",".")); cloro=Decimal((request.POST.get("cloro") or "").replace(",","."))
-            except InvalidOperation:
-                messages.error(request,"Necesito los valores de pH y cloro para darte una recomendación química segura.")
+                ph=Decimal((request.POST.get("ph") or "").replace(",","."))
+                cloro=Decimal((request.POST.get("cloro") or "").replace(",","."))
+                volumen=piscina.volumen_m3 if piscina else Decimal((request.POST.get("volumen_m3") or "").replace(",","."))
+                if not (0 < volumen <= 100000): raise ValueError
+            except (InvalidOperation, ValueError, TypeError):
+                messages.error(request,"Indica pH, cloro y un volumen válido para recibir una recomendación segura.")
             else:
                 estado=request.POST.get("estado_agua") or ""
                 if estado not in {x[0] for x in CasoAsistenteTecnico.ESTADO_AGUA_CHOICES}:
                     messages.error(request,"Selecciona cómo se ve el agua.")
                 else:
-                    motor=_motor_activo(); resultado=calcular_recomendacion(piscina.volumen_m3,ph,cloro,estado,piscina.tipo_piscina,motor.reglas,tipo_agua=piscina.origen_agua,antecedente_hierro=piscina.antecedente_hierro)
-                    caso=CasoAsistenteTecnico.objects.create(user=request.user,piscina=piscina,motor=motor,volumen_m3=piscina.volumen_m3,ph_inicial=ph,cloro_inicial=cloro,estado_agua=estado,tipo_piscina=piscina.tipo_piscina,diagnostico=resultado["diagnostico"],tipo_tratamiento=resultado["tipo_tratamiento"],prioridad=resultado["prioridad"],resumen=resultado["resumen"],protocolo=resultado["protocolo"],productos_sugeridos=resultado["productos_sugeridos"],explicaciones=resultado["explicaciones"],advertencias=resultado["advertencias"],seguimiento_programado_para=timezone.now()+timedelta(hours=resultado["seguimiento_horas"]))
+                    motor=_motor_activo()
+                    resultado=calcular_recomendacion(
+                        volumen,ph,cloro,estado,
+                        piscina.tipo_piscina if piscina else "residencial",motor.reglas,
+                        tipo_agua=piscina.origen_agua if piscina else "potable",
+                        antecedente_hierro=piscina.antecedente_hierro if piscina else "no_se",
+                    )
+                    caso=CasoAsistenteTecnico.objects.create(
+                        user=request.user,piscina=piscina,motor=motor,volumen_m3=volumen,
+                        ph_inicial=ph,cloro_inicial=cloro,estado_agua=estado,
+                        tipo_piscina=piscina.tipo_piscina if piscina else "residencial",
+                        diagnostico=resultado["diagnostico"],tipo_tratamiento=resultado["tipo_tratamiento"],
+                        prioridad=resultado["prioridad"],resumen=resultado["resumen"],
+                        protocolo=resultado["protocolo"],productos_sugeridos=resultado["productos_sugeridos"],
+                        explicaciones=resultado["explicaciones"],advertencias=resultado["advertencias"],
+                        seguimiento_programado_para=timezone.now()+timedelta(hours=resultado["seguimiento_horas"]),
+                    )
     return render(request,"asistente_tecnico/digital_resolver.html",{
         "piscinas":piscinas,"piscina":piscina,"resultado":resultado,"caso":caso,
         "estado_choices":CasoAsistenteTecnico.ESTADO_AGUA_CHOICES,
