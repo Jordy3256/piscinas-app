@@ -1264,9 +1264,9 @@ def academia_pdf_manual_view(request):
 
 def _planes_digitales():
     return [
-        {"codigo": "individual", "nombre": "Individual", "precio": Decimal("4.99"), "piscinas": 1, "soporte_mensajes": 5},
-        {"codigo": "esencial", "nombre": "Esencial", "precio": Decimal("7.99"), "piscinas": 3, "soporte_mensajes": 10},
-        {"codigo": "profesional", "nombre": "Profesional", "precio": Decimal("19.99"), "piscinas": 30, "soporte_mensajes": 50},
+        {"codigo": "individual", "nombre": "Individual", "precio": Decimal("1.99"), "piscinas": 1, "soporte_mensajes": 5},
+        {"codigo": "esencial", "nombre": "Esencial", "precio": Decimal("3.99"), "piscinas": 3, "soporte_mensajes": 10},
+        {"codigo": "profesional", "nombre": "Profesional", "precio": Decimal("9.99"), "piscinas": 30, "soporte_mensajes": 50},
     ]
 
 

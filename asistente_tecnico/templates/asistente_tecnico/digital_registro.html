@@ -42,38 +42,65 @@ body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,
 @media(max-width:980px){.reg-page{grid-template-columns:1fr}.reg-side{display:none}.reg-main{min-height:100dvh;padding:22px}.mobile-brand{display:flex;align-items:center;gap:9px;margin-bottom:14px}.mobile-brand .brand-mark{width:40px;height:40px;border:0;background:linear-gradient(145deg,#0759b9,#08a7c5);color:#fff;border-radius:12px}.mobile-brand strong{display:block;color:#075ab9;font-size:.82rem;letter-spacing:.1em}.mobile-brand small{display:block;color:#7a8d9e;font-size:.62rem}.reg-shell{max-width:760px}}
 @media(max-width:700px){.reg-main{padding:14px}.reg-top{margin-bottom:10px}.reg-step{display:none}.reg-card{border-radius:22px}.reg-head{padding:20px 18px 16px}.secure-note{display:none}.reg-body{padding:18px}.plans{grid-template-columns:1fr}.plan{min-height:0}.reg-actions{flex-direction:column}.submit{width:100%}.fineprint{max-width:none;text-align:center}.back-login{font-size:.67rem}}
 @media(max-width:430px){.reg-main{padding:10px}.reg-head h2{font-size:1.5rem}.reg-body{padding:15px}.field .form-control{height:47px}}
+
+/* AQUO360 Registro V4 — visual coherente con login; no modifica la lógica del formulario */
+.reg-page{grid-template-columns:minmax(470px,1fr) minmax(640px,1.05fr);background:#dff4ff}
+.reg-page:before{background:linear-gradient(120deg,rgba(5,42,91,.08),rgba(218,246,255,.8))}
+.reg-side{isolation:isolate;min-height:100dvh;padding:clamp(32px,4vw,70px);justify-content:center;background:linear-gradient(115deg,rgba(0,48,108,.9),rgba(4,110,173,.74))}
+.reg-side:before{z-index:-2;inset:-22px;top:-22px;right:-22px;bottom:-22px;width:auto;height:auto;border-radius:0;background:linear-gradient(110deg,rgba(3,43,96,.7),rgba(0,104,166,.5)),url("/static/dashboard/images/aquo360-piscina-tropical.webp") center / cover no-repeat;filter:blur(9px);transform:scale(1.04)}
+.reg-side:after{z-index:-1;width:110%;height:32%;left:-4%;bottom:-12%;border-radius:45% 45% 0 0;background:linear-gradient(15deg,rgba(0,178,223,.5),rgba(1,71,164,.12));border:0;transform:rotate(-9deg)}
+.reg-side-content{position:relative;z-index:2;max-width:min(55%,440px)}
+.reg-side-content h1{font-size:clamp(2.5rem,3.7vw,4.2rem);font-weight:950;letter-spacing:-.06em;line-height:1.04;margin:22px 0 14px}
+.reg-side-content h1 span{color:#59edfa}
+.reg-side-content>p{font-size:clamp(.86rem,1.05vw,1.04rem);line-height:1.65;color:#eef9ff}
+.reg-side .side-benefits{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:24px}
+.reg-side .benefit{display:flex;flex-direction:column;align-items:flex-start;gap:5px;padding:12px;border:1px solid rgba(110,231,255,.45);background:rgba(0,53,118,.45);backdrop-filter:blur(6px)}
+.reg-side .benefit i{background:none;width:auto;height:auto;font-size:1.2rem;color:#65f0ff}
+.reg-side .benefit strong{font-size:.73rem}
+.reg-side .side-foot{margin-top:28px;color:#d4eaff}
+.reg-aquo{position:absolute;z-index:1;right:0;bottom:5%;width:47%;max-height:83%;object-fit:contain;object-position:bottom;filter:drop-shadow(0 24px 22px rgba(0,24,64,.26))}
+.reg-aquo-bubble{position:absolute;z-index:3;right:2%;top:22%;width:min(230px,30%);padding:15px;border-radius:20px;background:rgba(255,255,255,.97);box-shadow:0 16px 35px rgba(0,29,71,.2);color:#06386e;pointer-events:none}
+.reg-aquo-bubble:after{content:"";position:absolute;left:18px;bottom:-13px;border:7px solid transparent;border-top-color:#fff}
+.reg-aquo-bubble strong{display:block;font-size:.91rem}.reg-aquo-bubble small{display:block;margin-top:6px;font-size:.73rem;line-height:1.4}
+.reg-main{padding:24px clamp(18px,3.4vw,56px);background:linear-gradient(135deg,rgba(240,251,255,.75),rgba(215,244,255,.58))}
+.reg-shell{max-width:850px}
+.reg-card{border-radius:34px;box-shadow:0 30px 70px rgba(6,54,106,.13)}
+.reg-head{display:block;text-align:center;padding:25px 26px 20px}
+.reg-head>div:first-child{width:100%}.reg-head .secure-note{justify-content:center;margin-top:10px}
+.reg-form-logo{display:block;max-width:250px;width:58%;height:auto;max-height:86px;object-fit:contain;margin:0 auto 8px}
+.reg-head h2{color:#082c67;font-size:clamp(1.65rem,2.5vw,2.25rem)}
+.reg-head p{margin:7px auto 0}
+.field .form-control{background:#eef5ff;border-color:#b8d9ff;border-radius:15px}
+.plan{border-radius:18px}.plan:has(input:checked){background:linear-gradient(145deg,#eaf5ff,#f2ffff)}
+.submit{border-radius:999px;background:linear-gradient(105deg,#0754d0,#00c5d9)}
+@media(max-width:1190px){.reg-page{grid-template-columns:minmax(380px,.8fr) minmax(580px,1.2fr)}.reg-side-content{max-width:59%}.reg-aquo{width:45%}.reg-aquo-bubble{top:15%;right:2%}}
+@media(max-width:980px){.reg-page{display:block}.reg-side{display:none}.reg-main{min-height:100dvh;display:block;padding:25px 16px 35px;background:linear-gradient(180deg,#d7f5ff 0%,#f7fcff 28%,#e8f9ff 100%)}.reg-shell{max-width:720px;margin:auto}.mobile-brand{display:flex;justify-content:center;margin:0 auto 14px;padding:15px 0 4px}.mobile-brand img{width:min(76%,310px);height:auto;max-height:90px;object-fit:contain}.reg-top{margin-bottom:12px}.reg-step{display:none}.reg-head{padding:18px 18px 16px}.reg-form-logo{display:none}.reg-card{border-radius:25px}}
+@media(max-width:700px){.reg-main{padding:14px 12px 28px}.mobile-brand{padding:6px 0;margin-bottom:8px}.mobile-brand img{width:min(72%,270px)}.reg-head h2{font-size:1.8rem}.reg-head p{font-size:.82rem}.reg-body{padding:16px}.plans{grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}.plan{padding:11px 9px;min-height:150px}.plan-tag{font-size:.5rem;padding:4px}.plan-name{font-size:.75rem;margin-top:13px}.price{font-size:1.3rem}.price small{font-size:.55rem}.plan-copy,.plan-feature{font-size:.57rem}.reg-actions{margin-top:17px}.reg-card{border-radius:22px}}
+@media(max-width:400px){.plans{grid-template-columns:1fr}.plan{min-height:0;padding:12px 15px}.plan-name{margin-top:6px}.reg-main{padding:10px 9px 25px}}
 </style>
 </head>
 <body>
 <div class="reg-page">
-  <aside class="reg-side">
-    <div class="brand">
-      <div class="brand-mark">JV</div>
-      <div><div class="brand-name">JVAQUA</div><div class="brand-sub">DIGITAL · INTELIGENCIA PARA TU PISCINA</div></div>
-    </div>
-
-    <div class="side-main">
-      <div class="side-pill"><i class="bi bi-stars"></i> Empieza hoy</div>
-      <h1>Tu piscina puede ser <span>mucho más simple.</span></h1>
-      <p>JVAQUA Digital reúne inteligencia, planificación y conocimiento técnico en una sola experiencia.</p>
-
+  <aside class="reg-side" aria-label="Conoce AQUO 360">
+    <div class="reg-side-content">
+      <div class="side-pill"><i class="bi bi-stars"></i> Tecnología inteligente para tu piscina</div>
+      <h1>Tu piscina, <span>más inteligente</span> con AQUO.</h1>
+      <p>Diagnostica el agua, calcula tratamientos y organiza tus mantenimientos con la ayuda de tu asistente inteligente.</p>
       <div class="side-benefits">
-        <div class="benefit"><i class="bi bi-stars"></i><div><strong>AQUO inteligente</strong><small>Diagnóstico, recomendaciones y dosificaciones.</small></div></div>
-        <div class="benefit"><i class="bi bi-calendar2-check"></i><div><strong>Plan semanal</strong><small>Qué hacer en cada visita y cuánto aplicar.</small></div></div>
-        <div class="benefit"><i class="bi bi-mortarboard"></i><div><strong>Aprende mientras cuidas</strong><small>Curso completo y biblioteca técnica JVAQUA.</small></div></div>
-        <div class="benefit"><i class="bi bi-clock-history"></i><div><strong>Historial por piscina</strong><small>Conserva la información incluso si tu suscripción vence.</small></div></div>
+        <div class="benefit"><i class="bi bi-droplet-half"></i><strong>Diagnóstico</strong></div>
+        <div class="benefit"><i class="bi bi-beaker"></i><strong>Dosificación</strong></div>
+        <div class="benefit"><i class="bi bi-calendar-check"></i><strong>Plan semanal</strong></div>
+        <div class="benefit"><i class="bi bi-book"></i><strong>Aprendizaje</strong></div>
       </div>
+      <div class="side-foot">AQUO 360 · by JVAQUA</div>
     </div>
-
-    <div class="side-foot">© 2026 JVAQUA · Tecnología y conocimiento para piscinas</div>
+    <img class="reg-aquo" src="{% static 'dashboard/images/aquo-personaje-completo.png' %}" alt="AQUO, tu asistente inteligente" loading="eager">
+    <div class="reg-aquo-bubble" aria-live="off"><strong id="regAquoMessage">¡Hola! Soy AQUO 💧</strong><small>Te acompaño a cuidar tu piscina.</small></div>
   </aside>
 
   <main class="reg-main">
     <div class="reg-shell">
-      <div class="mobile-brand">
-        <div class="brand-mark">JV</div>
-        <div><strong>JVAQUA DIGITAL</strong><small>Inteligencia para tu piscina</small></div>
-      </div>
+      <div class="mobile-brand"><img src="{% static 'dashboard/images/aquo360-logo-oficial.png' %}" alt="AQUO 360" loading="eager"></div>
 
       <div class="reg-top">
         <div class="reg-step"><span>1</span> Crea tu cuenta <i class="bi bi-chevron-right"></i> <span>2</span> Realiza el pago <i class="bi bi-chevron-right"></i> <span>3</span> Activación</div>
@@ -84,9 +111,10 @@ body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,
         {% csrf_token %}
         <div class="reg-head">
           <div>
-            <div class="reg-eyebrow">Tu acceso a JVAQUA Digital</div>
+            <img class="reg-form-logo" src="{% static 'dashboard/images/aquo360-logo-oficial.png' %}" alt="AQUO 360" loading="eager">
+            <div class="reg-eyebrow">Comienza tu experiencia</div>
             <h2>Crea tu cuenta</h2>
-            <p>Completa tus datos, selecciona el plan que necesitas y continúa al pago seguro.</p>
+            <p>Regístrate, elige tu plan y comienza a cuidar tu piscina con AQUO.</p>
           </div>
           <div class="secure-note"><i class="bi bi-shield-check"></i> Información protegida</div>
         </div>
@@ -164,6 +192,12 @@ body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,
       input.focus({preventScroll:true});
     });
   });
+  const bubble=document.getElementById('regAquoMessage');
+  if(bubble && !window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+    const messages=['¡Hola! Soy AQUO 💧','Aprendamos juntos a cuidar tu piscina.','Calcula dosis con mayor confianza.','Organiza tu plan de mantenimiento.','Tu mejor aliado para el agua perfecta.'];
+    let index=0;
+    window.setInterval(()=>{index=(index+1)%messages.length;bubble.textContent=messages[index];},3000);
+  }
   const form=document.getElementById('digitalRegisterForm');
   form?.addEventListener('submit',()=>{
     const b=document.getElementById('registerSubmit');

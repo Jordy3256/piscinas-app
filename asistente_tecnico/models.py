@@ -503,9 +503,9 @@ class PerfilSuscriptor(models.Model):
         ("profesional", "Plan Profesional"),
     ]
     PRECIOS = {
-        "individual": Decimal("4.99"),
-        "esencial": Decimal("7.99"),
-        "profesional": Decimal("19.99"),
+        "individual": Decimal("1.99"),
+        "esencial": Decimal("3.99"),
+        "profesional": Decimal("9.99"),
     }
     LIMITES = {"individual": 1, "esencial": 3, "profesional": 30}
     LIMITES_MENSAJES_SOPORTE = {"individual": 5, "esencial": 10, "profesional": 50}
@@ -536,7 +536,7 @@ class PerfilSuscriptor(models.Model):
 
     @property
     def precio_mensual(self):
-        return self.PRECIOS.get(self.plan, Decimal("4.99"))
+        return self.PRECIOS.get(self.plan, Decimal("1.99"))
 
     @property
     def limite_mensajes_soporte_diario(self):
