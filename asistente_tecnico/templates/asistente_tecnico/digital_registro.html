@@ -279,6 +279,33 @@ body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,
 @media(max-width:980px){.plans{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:700px){.plans{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.plan{min-height:142px;padding:10px}.plan:has(input:checked){padding:9.5px}.plan .price{font-size:1.3rem}.plan-name{font-size:.8rem}.plan-feature{font-size:.61rem}}
 @media(max-width:400px){.plans{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.plan{min-height:145px;padding:8px 6px}.plan:has(input:checked){padding:7.5px 5.5px}.plan .price{font-size:1.12rem}.plan-feature{font-size:.55rem}}
+
+/* AQUO360 Registro V5 — pulido visual sin cambios en registro ni suscripciones */
+@media(min-width:981px){
+  /* El mensaje vive en la esquina superior del panel, nunca sobre el rostro. */
+  .reg-aquo-bubble{top:clamp(26px,6.5vh,64px);right:clamp(18px,2.5vw,42px);width:clamp(185px,16vw,238px);padding:13px 16px 13px 45px;border:1px solid rgba(202,235,255,.95);border-radius:19px;background:linear-gradient(145deg,#fff,#eefaff);box-shadow:0 15px 38px rgba(1,37,87,.17)}
+  .reg-aquo-bubble:after{left:30%;bottom:-12px;border-width:6px;border-top-color:#f4fcff}
+  .reg-aquo-bubble strong{font-size:.82rem;line-height:1.28;transition:opacity .18s ease,transform .18s ease}
+  .reg-aquo-bubble strong.is-changing{opacity:0;transform:translateY(5px)}
+  .reg-aquo-bubble small{font-size:.68rem;line-height:1.25;margin-top:5px}
+  .bubble-spark{position:absolute;left:12px;top:14px;width:25px;height:25px;border-radius:9px;display:grid;place-items:center;background:linear-gradient(145deg,#0c69e2,#12cbd6);color:white;font-size:.85rem;box-shadow:0 5px 12px rgba(0,111,210,.22)}
+  .reg-side .side-benefits{gap:9px}
+  .reg-side .benefit{min-height:76px;align-items:center;justify-content:center;text-align:center;gap:5px;border-radius:16px;border-color:rgba(135,227,255,.5);background:linear-gradient(155deg,rgba(5,70,141,.66),rgba(2,117,173,.43));box-shadow:inset 0 1px rgba(255,255,255,.12),0 8px 22px rgba(0,31,82,.08);transition:transform .2s ease,background .2s ease}
+  .reg-side .benefit:hover{transform:translateY(-3px);background:rgba(4,116,190,.65)}
+  .reg-side .benefit i{font-size:1.4rem;line-height:1.1}
+  .reg-side .benefit:nth-child(2) i{color:#7ef2c7}
+  .reg-side .benefit:nth-child(3) i{color:#c5d8ff}
+  .reg-side .benefit:nth-child(4) i{color:#e3c4ff}
+  .reg-side .benefit strong{font-size:.74rem;line-height:1.2}
+  .reg-form-logo{max-width:265px}
+  .plan{transition:transform .2s ease,box-shadow .2s ease,border-color .2s ease}
+  .plan:hover{transform:translateY(-3px);box-shadow:0 12px 22px rgba(20,77,136,.14)}
+  .plan-icon{box-shadow:0 5px 12px color-mix(in srgb,var(--plan-accent) 25%,transparent)}
+  .plan .price{letter-spacing:-.045em}
+}
+@media(min-width:981px) and (max-height:740px){.reg-aquo-bubble{top:16px}.reg-side .benefit{min-height:60px}}
+@media(max-width:980px){.reg-aquo-bubble{display:none}}
+@media(prefers-reduced-motion:reduce){.reg-side .benefit,.plan,.reg-aquo-bubble strong{transition:none!important}}
 </style>
 </head>
 <body>
@@ -297,7 +324,7 @@ body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,
       <div class="side-foot">AQUO 360 · by JVAQUA</div>
     </div>
     <img class="reg-aquo" src="{% static 'dashboard/images/aquo-personaje-completo.png' %}" alt="AQUO, tu asistente inteligente" loading="eager">
-    <div class="reg-aquo-bubble" aria-live="off"><strong id="regAquoMessage">¡Hola! Soy AQUO 💧</strong><small>Te acompaño a cuidar tu piscina.</small></div>
+    <div class="reg-aquo-bubble" aria-live="off"><span class="bubble-spark" aria-hidden="true"><i class="bi bi-stars"></i></span><strong id="regAquoMessage">¡Hola! Soy AQUO 💧</strong><small>Te acompaño a cuidar tu piscina.</small></div>
   </aside>
 
   <main class="reg-main">
@@ -398,7 +425,7 @@ body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,
   if(bubble && !window.matchMedia('(prefers-reduced-motion: reduce)').matches){
     const messages=['¡Hola! Soy AQUO 💧','Aprendamos juntos a cuidar tu piscina.','Calcula dosis con mayor confianza.','Organiza tu plan de mantenimiento.','Tu mejor aliado para el agua perfecta.'];
     let index=0;
-    window.setInterval(()=>{index=(index+1)%messages.length;bubble.textContent=messages[index];},3000);
+    window.setInterval(()=>{index=(index+1)%messages.length;bubble.classList.add('is-changing');window.setTimeout(()=>{bubble.textContent=messages[index];bubble.classList.remove('is-changing');},180);},3000);
   }
   const form=document.getElementById('digitalRegisterForm');
   form?.addEventListener('submit',()=>{
