@@ -2,7 +2,7 @@
 {% block title %}Mis piscinas · JVAQUA Digital{% endblock %}
 {% block extra_head %}<style>
 .pools-wrap{max-width:1050px;margin:auto}.pool-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
-.pool-profile{border:1px solid #deebf2;border-radius:23px;background:#fff;padding:20px;text-decoration:none;color:#18394e;transition:.18s}
+.pools-wrap h2{font-size:1.4rem}.pool-profile{border:1px solid #deebf2;border-radius:17px;background:#fff;padding:14px;text-decoration:none;color:#18394e;transition:.18s}
 .pool-profile:hover{transform:translateY(-2px);box-shadow:0 12px 30px rgba(17,54,83,.08);border-color:#bcddea}
 .pool-icon{width:48px;height:48px;border-radius:16px;background:#eaf8fd;color:#0879b7;display:grid;place-items:center;font-size:1.25rem}
 @media(max-width:700px){.pool-grid{grid-template-columns:1fr}}
@@ -10,8 +10,8 @@
 {% block content %}
 <div class="pools-wrap">
   <div class="d-flex justify-content-between align-items-end gap-3 flex-wrap mb-3">
-    <div><div class="jd-kicker">MIS PISCINAS</div><h2 class="fw-bold mb-1">Cada piscina, su propio perfil</h2><p class="text-muted mb-0">AQUO mantiene separados sus datos, diagnósticos, planes e historial.</p></div>
-    {% if perfil.piscinas_disponibles > 0 %}<a class="btn jd-btn jd-btn-primary" href="{% url 'asistente_tecnico:digital_piscina_nueva' %}"><i class="bi bi-plus-lg me-1"></i>Agregar piscina</a>{% endif %}
+    <div><div class="jd-kicker">MIS PISCINAS</div><h2 class="fw-bold mb-1">{% if perfil.es_profesional %}Cartera de piscinas{% else %}Mis piscinas{% endif %}</h2><p class="text-muted mb-0">{% if perfil.es_profesional %}Clientes, ubicación y programación de mantenimiento en un solo lugar.{% else %}AQUO mantiene separados tus datos, diagnósticos y planes.{% endif %}</p></div>
+    {% if perfil.piscinas_disponibles == None or perfil.piscinas_disponibles > 0 %}<a class="btn jd-btn jd-btn-primary" href="{% url 'asistente_tecnico:digital_piscina_nueva' %}"><i class="bi bi-plus-lg me-1"></i>Agregar piscina</a>{% endif %}
   </div>
   <div class="pool-grid">
     {% for p in piscinas %}
