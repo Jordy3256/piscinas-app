@@ -11,6 +11,7 @@ urlpatterns = [
     path("administracion/suscripciones-digitales/<int:pk>/revisar/", views.digital_suscripcion_revisar_view, name="digital_suscripcion_revisar"),
     path("digital/", views.digital_inicio_view, name="digital_inicio"),
     path("digital/resolver/", views.digital_resolver_view, name="digital_resolver"),
+    path("digital/agenda/", views.digital_agenda_view, name="digital_agenda"),
     path("digital/piscinas/", views.digital_piscinas_view, name="digital_piscinas"),
     path("digital/piscina/<int:pk>/", views.digital_piscina_detalle_view, name="digital_piscina_detalle"),
     path("digital/soporte/", views.digital_soporte_view, name="digital_soporte"),

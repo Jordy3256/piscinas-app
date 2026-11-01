@@ -1,5 +1,6 @@
 from django.urls import reverse
-from datetime import timedelta, datetime, time
+from datetime import timedelta, datetime, time, date
+import calendar
 from decimal import Decimal, InvalidOperation
 
 from django.contrib import messages
@@ -2075,6 +2076,93 @@ def digital_piscina_form_view(request, pk=None):
             return redirect("asistente_tecnico:digital_inicio")
     return render(request,"asistente_tecnico/digital_piscina_form.html",{"obj":obj,"tipo_choices":PiscinaSuscriptor.TIPOS,"filtro_choices":PiscinaSuscriptor.FILTROS,"desinfeccion_choices":PiscinaSuscriptor.DESINFECCION,"origen_agua_choices":PiscinaSuscriptor.ORIGEN_AGUA,"hierro_choices":PiscinaSuscriptor.HIERRO,"perfil":perfil})
 
+def _fechas_agenda(plan, inicio, fin):
+    """Genera visitas recurrentes sin duplicados y sin borrar las realizadas."""
+    dias = [int(d) for d in (plan.dias_semana or []) if str(d).isdigit() and 0 <= int(d) <= 6]
+    if not dias:
+        dias = [int(i * 7 / plan.frecuencia_semanal) for i in range(plan.frecuencia_semanal)]
+        dias = sorted({(inicio.weekday() + x) % 7 for x in dias})
+    fechas = []
+    actual = inicio
+    while actual <= fin:
+        if actual.weekday() in dias:
+            fechas.append(actual)
+        actual += timedelta(days=1)
+    return fechas
+
+
+def _generar_agenda_digital(plan, inicio, fin):
+    """Idempotente: se preservan las visitas completadas."""
+    fechas = _fechas_agenda(plan, inicio, fin)
+    existentes = VisitaProgramadaPiscina.objects.filter(plan=plan, fecha__gte=inicio, fecha__lte=fin)
+    for visita in existentes:
+        if visita.estado == 'programada' and visita.fecha not in fechas:
+            visita.delete()
+    for fecha in fechas:
+        visita, _ = VisitaProgramadaPiscina.objects.get_or_create(
+            plan=plan, piscina=plan.piscina, fecha=fecha, visita_numero=1,
+            defaults={'plan_resultado': {'tareas': plan.rutina_visita(1)}},
+        )
+        if visita.estado == 'programada':
+            momento = timezone.make_aware(datetime.combine(fecha, time(hour=7)), timezone.get_current_timezone())
+            NotificacionDigital.objects.get_or_create(
+                suscriptor=plan.piscina.suscriptor, visita=visita, tipo='visita_hoy',
+                defaults={'piscina': plan.piscina, 'titulo': f'Mantenimiento: {plan.piscina.nombre}',
+                          'mensaje': f'Hoy tienes programado el mantenimiento de {plan.piscina.nombre}.',
+                          'programada_para': momento},
+            )
+    return len(fechas)
+
+
+@login_required
+def digital_agenda_view(request):
+    perfil = _suscriptor(request.user)
+    if not perfil:
+        return HttpResponseForbidden('No autorizado')
+    hoy = timezone.localdate()
+    try:
+        anio = int(request.GET.get('anio', hoy.year))
+        mes = int(request.GET.get('mes', hoy.month))
+        if not 2020 <= anio <= 2100 or not 1 <= mes <= 12:
+            raise ValueError
+    except (TypeError, ValueError):
+        anio, mes = hoy.year, hoy.month
+    inicio = date(anio, mes, 1)
+    fin = date(anio, mes, calendar.monthrange(anio, mes)[1])
+    if request.method == 'POST':
+        visita = get_object_or_404(VisitaProgramadaPiscina, pk=request.POST.get('visita_id'),
+            piscina__suscriptor=perfil, piscina__activa=True)
+        if visita.estado == 'programada':
+            visita.estado = 'completada'
+            visita.save(update_fields=['estado', 'actualizado_en'])
+            visita.notificaciones.update(leida=True)
+            messages.success(request, 'Visita marcada como realizada.')
+        return redirect(f"{reverse('asistente_tecnico:digital_agenda')}?anio={anio}&mes={mes}")
+    planes = PlanMantenimientoPiscina.objects.filter(
+        piscina__suscriptor=perfil, piscina__activa=True, activo=True).select_related('piscina')
+    # Mantener al día el mes visible sin duplicar visitas.
+    for plan in planes:
+        _generar_agenda_digital(plan, max(inicio, hoy), fin) if fin >= hoy else None
+    visitas = list(VisitaProgramadaPiscina.objects.filter(
+        piscina__suscriptor=perfil, piscina__activa=True, fecha__gte=inicio, fecha__lte=fin
+    ).select_related('piscina').order_by('fecha', 'piscina__nombre'))
+    por_fecha = {}
+    for visita in visitas:
+        por_fecha.setdefault(visita.fecha, []).append(visita)
+    semanas = []
+    for semana in calendar.Calendar(firstweekday=0).monthdatescalendar(anio, mes):
+        semanas.append([{'fecha': dia, 'en_mes': dia.month == mes,
+                         'visitas': por_fecha.get(dia, []), 'hoy': dia == hoy} for dia in semana])
+    anterior = inicio - timedelta(days=1)
+    siguiente = fin + timedelta(days=1)
+    return render(request, 'asistente_tecnico/digital_agenda.html', {
+        'perfil': perfil, 'semanas': semanas, 'visitas': visitas,
+        'mes_nombre': ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][mes],
+        'anio': anio, 'mes': mes, 'anterior': anterior, 'siguiente': siguiente,
+        'total': len(visitas), 'pendientes': sum(v.estado == 'programada' for v in visitas),
+    })
+
+
 @login_required
 @require_http_methods(["GET", "POST"])
 def digital_plan_mantenimiento_view(request, pk):
@@ -2094,6 +2182,7 @@ def digital_plan_mantenimiento_view(request, pk):
         "ph": "",
         "cloro": "",
         "estado_agua": "transparente",
+        "dias_semana": plan.dias_semana or [],
     }
 
     def _fechas_semana(frecuencia):
@@ -2197,14 +2286,18 @@ def digital_plan_mantenimiento_view(request, pk):
             frecuencia = 1
         frecuencia = min(max(frecuencia, 1), 7)
 
-        ph_txt = (request.POST.get("ph") or "").replace(",", ".").strip()
-        cloro_txt = (request.POST.get("cloro") or "").replace(",", ".").strip()
+        dias = sorted({int(x) for x in request.POST.getlist("dias_semana") if x.isdigit() and 0 <= int(x) <= 6})
+        if dias:
+            frecuencia = len(dias)
+        ph_txt = (request.POST.get("ph") or ("7.4" if perfil.es_profesional else "")).replace(",", ".").strip()
+        cloro_txt = (request.POST.get("cloro") or ("1.5" if perfil.es_profesional else "")).replace(",", ".").strip()
         estado = (request.POST.get("estado_agua") or "transparente").strip()
         valores = {
             "frecuencia": frecuencia,
             "ph": ph_txt,
             "cloro": cloro_txt,
             "estado_agua": estado,
+            "dias_semana": dias,
         }
 
         try:
@@ -2219,7 +2312,8 @@ def digital_plan_mantenimiento_view(request, pk):
             )
         else:
             plan.frecuencia_semanal = frecuencia
-            plan.save(update_fields=["frecuencia_semanal", "actualizado_en"])
+            plan.dias_semana = dias
+            plan.save(update_fields=["frecuencia_semanal", "dias_semana", "actualizado_en"])
 
             resultado = calcular_recomendacion(
                 volumen=float(piscina.volumen_m3),
@@ -2231,52 +2325,19 @@ def digital_plan_mantenimiento_view(request, pk):
                 antecedente_hierro=piscina.antecedente_hierro,
             )
 
-            fechas = _fechas_semana(frecuencia)
-            # Reprogramar únicamente visitas futuras aún no ejecutadas de este ciclo.
-            VisitaProgramadaPiscina.objects.filter(
-                plan=plan,
-                fecha__gte=timezone.localdate(),
-                estado="programada",
-            ).delete()
-
+            # Programación mensual recurrente; fechas elegidas por el usuario.
+            hoy = timezone.localdate()
+            ultimo = date(hoy.year, hoy.month, calendar.monthrange(hoy.year, hoy.month)[1])
+            _generar_agenda_digital(plan, hoy, ultimo)
+            fechas = _fechas_agenda(plan, hoy, min(hoy + timedelta(days=6), ultimo))
             for numero, fecha in enumerate(fechas, start=1):
-                tareas = _armar_tareas(numero, resultado)
-                visita = VisitaProgramadaPiscina.objects.create(
-                    plan=plan,
-                    piscina=piscina,
-                    fecha=fecha,
-                    visita_numero=numero,
-                    plan_resultado={
-                        "ph_inicial": str(ph),
-                        "cloro_inicial": str(cloro),
-                        "estado_agua": estado,
-                        "diagnostico": resultado.get("diagnostico", ""),
-                        "tareas": tareas,
-                    },
-                )
-                plan_visitas.append({
-                    "obj": visita,
-                    "fecha": fecha,
-                    "numero": numero,
-                    "tareas": tareas,
-                })
-
-                # La notificación queda programada para las 07:00 del día de la visita.
-                momento = timezone.make_aware(
-                    datetime.combine(fecha, time(hour=7)),
-                    timezone.get_current_timezone(),
-                )
-                NotificacionDigital.objects.get_or_create(
-                    suscriptor=perfil,
-                    visita=visita,
-                    tipo="visita_hoy",
-                    defaults={
-                        "piscina": piscina,
-                        "titulo": f"Mantenimiento de {piscina.nombre}",
-                        "mensaje": f"Hoy corresponde la visita {numero} de {frecuencia}. Abre tu plan y sigue los pasos preparados por AQUO.",
-                        "programada_para": momento,
-                    },
-                )
+                visita = VisitaProgramadaPiscina.objects.filter(plan=plan, fecha=fecha, estado='programada').first()
+                if visita:
+                    tareas = _armar_tareas(numero, resultado)
+                    visita.plan_resultado = {'ph_inicial': str(ph), 'cloro_inicial': str(cloro),
+                        'estado_agua': estado, 'diagnostico': resultado.get('diagnostico', ''), 'tareas': tareas}
+                    visita.save(update_fields=['plan_resultado', 'actualizado_en'])
+                    plan_visitas.append({'obj': visita, 'fecha': fecha, 'numero': numero, 'tareas': tareas})
 
             NotificacionDigital.objects.create(
                 suscriptor=perfil,
@@ -2318,6 +2379,7 @@ def digital_plan_mantenimiento_view(request, pk):
             "valores": valores,
             "historial": historial,
             "frecuencias": PlanMantenimientoPiscina.FRECUENCIAS,
+            "dias_opciones": [(0,"Lun"),(1,"Mar"),(2,"Mié"),(3,"Jue"),(4,"Vie"),(5,"Sáb"),(6,"Dom")],
             "estados_agua": [
                 ("transparente", "Transparente / normal"),
                 ("ligeramente_turbia", "Ligeramente turbia"),
@@ -2368,6 +2430,17 @@ def digital_registrar_mantenimiento_view(request, pk):
         if visita_programada
         else plan.rutina_visita(visita_numero)
     )
+
+    if not perfil.puede_registrar_mantenimientos:
+        if not visita_programada:
+            messages.error(request, 'Selecciona una visita programada.')
+            return redirect('asistente_tecnico:digital_plan_mantenimiento', pk=piscina.pk)
+        if visita_programada.estado == 'programada':
+            visita_programada.estado = 'completada'
+            visita_programada.save(update_fields=['estado', 'actualizado_en'])
+            visita_programada.notificaciones.update(leida=True)
+        messages.success(request, 'Visita marcada como realizada.')
+        return redirect('asistente_tecnico:digital_plan_mantenimiento', pk=piscina.pk)
 
     RegistroMantenimientoPiscina.objects.create(
         piscina=piscina,

@@ -695,6 +695,7 @@ class PlanMantenimientoPiscina(models.Model):
         choices=FRECUENCIAS,
         default=1,
     )
+    dias_semana = models.JSONField(default=list, blank=True)  # lunes=0, domingo=6
     retrolavado_dias = models.PositiveSmallIntegerField(default=15)
     arena_deteriorada = models.BooleanField(default=False)
     activo = models.BooleanField(default=True)
