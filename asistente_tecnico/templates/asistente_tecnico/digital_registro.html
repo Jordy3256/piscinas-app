@@ -268,6 +268,17 @@ body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,
  .plan .price{font-size:1rem}
 }
 
+
+/* AQUO360: cuatro planes comerciales */
+.plans{grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.plan--empresarial{--plan-accent:#c48a24;--plan-ink:#75501c;--plan-light:#fff3d9;--plan-border:#e7c27b}
+.plan--empresarial .plan-icon{background:linear-gradient(135deg,#e8b752,#a66d16)}
+.plan--empresarial .plan-copy strong{color:#8c5b12;font-weight:900}
+.plan-soon{display:inline-block;margin-top:3px;color:var(--plan-ink);font-weight:850}
+@media(min-width:981px){.plans{gap:7px}.plan{padding:10px 8px;min-width:0}.plan:has(input:checked){padding:9.5px 7.5px}.plan .price{font-size:1.35rem}.plan-name{font-size:.8rem}.plan-feature{font-size:.57rem}.plan-tag{font-size:.48rem}.plan-icon{width:30px;height:30px;margin-top:7px}}
+@media(max-width:980px){.plans{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:700px){.plans{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.plan{min-height:142px;padding:10px}.plan:has(input:checked){padding:9.5px}.plan .price{font-size:1.3rem}.plan-name{font-size:.8rem}.plan-feature{font-size:.61rem}}
+@media(max-width:400px){.plans{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.plan{min-height:145px;padding:8px 6px}.plan:has(input:checked){padding:7.5px 5.5px}.plan .price{font-size:1.12rem}.plan-feature{font-size:.55rem}}
 </style>
 </head>
 <body>
@@ -349,11 +360,11 @@ body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,
               {% for p in planes %}
               <label class="plan plan--{{ p.codigo }}">
                 <input class="form-check-input" type="radio" name="plan" value="{{ p.codigo }}" {% if plan_inicial == p.codigo %}checked{% endif %}>
-                {% if p.codigo == 'individual' %}<span class="plan-tag">Para empezar</span><span class="plan-icon"><i class="bi bi-droplet-fill"></i></span>{% elif p.codigo == 'esencial' %}<span class="plan-tag">Más popular</span><span class="plan-icon"><i class="bi bi-water"></i></span>{% else %}<span class="plan-tag">Profesional</span><span class="plan-icon"><i class="bi bi-gem"></i></span>{% endif %}
+                {% if p.codigo == 'individual' %}<span class="plan-tag">Para empezar</span><span class="plan-icon"><i class="bi bi-droplet-fill"></i></span>{% elif p.codigo == 'esencial' %}<span class="plan-tag">Más popular</span><span class="plan-icon"><i class="bi bi-water"></i></span>{% elif p.codigo == 'profesional' %}<span class="plan-tag">Profesional</span><span class="plan-icon"><i class="bi bi-gem"></i></span>{% else %}<span class="plan-tag">Para empresas</span><span class="plan-icon"><i class="bi bi-buildings-fill"></i></span>{% endif %}
                 <div class="plan-name">{{ p.nombre }}</div>
                 <div class="price">${{ p.precio }} <small>/ mes</small></div>
-                <div class="plan-copy">Hasta {{ p.piscinas }} piscina{% if p.piscinas != 1 %}s{% endif %}</div>
-                <div class="plan-feature"><i class="bi bi-check2 text-success me-1"></i>AQUO + Curso + Biblioteca + Plan Semanal</div>
+                <div class="plan-copy">{% if p.piscinas is None %}<strong>∞ Piscinas ilimitadas</strong>{% else %}Hasta {{ p.piscinas }} piscina{% if p.piscinas != 1 %}s{% endif %}{% endif %}</div>
+                <div class="plan-feature"><i class="bi bi-check2 text-success me-1"></i>AQUO + Curso + Biblioteca + Plan Semanal{% if p.codigo == "profesional" or p.codigo == "empresarial" %}<br><span class="plan-soon"><i class="bi bi-calendar2-week me-1"></i>Agenda · Próximamente</span>{% endif %}</div>
               </label>
               {% endfor %}
             </div>

@@ -1267,6 +1267,7 @@ def _planes_digitales():
         {"codigo": "individual", "nombre": "Individual", "precio": Decimal("1.99"), "piscinas": 1, "soporte_mensajes": 5},
         {"codigo": "esencial", "nombre": "Esencial", "precio": Decimal("3.99"), "piscinas": 3, "soporte_mensajes": 10},
         {"codigo": "profesional", "nombre": "Profesional", "precio": Decimal("9.99"), "piscinas": 30, "soporte_mensajes": 50},
+        {"codigo": "empresarial", "nombre": "Empresarial", "precio": Decimal("19.99"), "piscinas": None, "soporte_mensajes": 100},
     ]
 
 
@@ -2030,7 +2031,7 @@ def digital_piscina_form_view(request, pk=None):
             messages.error(request,"Ingresa un volumen válido o las tres dimensiones de la piscina.")
         else:
             if obj is None:
-                if perfil.piscinas.filter(activa=True).count() >= perfil.limite_piscinas:
+                if perfil.limite_piscinas is not None and perfil.piscinas.filter(activa=True).count() >= perfil.limite_piscinas:
                     messages.error(request, f"Tu plan {perfil.get_plan_display()} permite hasta {perfil.limite_piscinas} piscina(s). Puedes cambiar de plan desde tu suscripción.")
                     return redirect("asistente_tecnico:digital_inicio")
                 obj=PiscinaSuscriptor(suscriptor=perfil)

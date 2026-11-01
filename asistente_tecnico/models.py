@@ -501,14 +501,16 @@ class PerfilSuscriptor(models.Model):
         ("individual", "Plan Individual"),
         ("esencial", "Plan Esencial"),
         ("profesional", "Plan Profesional"),
+        ("empresarial", "Plan Empresarial"),
     ]
     PRECIOS = {
         "individual": Decimal("1.99"),
         "esencial": Decimal("3.99"),
         "profesional": Decimal("9.99"),
+        "empresarial": Decimal("19.99"),
     }
-    LIMITES = {"individual": 1, "esencial": 3, "profesional": 30}
-    LIMITES_MENSAJES_SOPORTE = {"individual": 5, "esencial": 10, "profesional": 50}
+    LIMITES = {"individual": 1, "esencial": 3, "profesional": 30, "empresarial": None}
+    LIMITES_MENSAJES_SOPORTE = {"individual": 5, "esencial": 10, "profesional": 50, "empresarial": 100}
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="perfil_suscriptor")
     estado = models.CharField(max_length=20, choices=ESTADOS, default="pendiente", db_index=True)
     plan = models.CharField(max_length=30, choices=PLANES, default="individual")
@@ -566,7 +568,7 @@ class PerfilSuscriptor(models.Model):
 
     @property
     def piscinas_disponibles(self):
-        return max(0, self.limite_piscinas - self.piscinas.filter(activa=True).count())
+        return None if self.limite_piscinas is None else max(0, self.limite_piscinas - self.piscinas.filter(activa=True).count())
 
     def __str__(self):
         return f"{self.user} · {self.get_estado_display()}"
