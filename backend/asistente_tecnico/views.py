@@ -1,18 +1,24 @@
-from datetime import timedelta
+from django.urls import reverse
+from datetime import timedelta, datetime, time
 from decimal import Decimal, InvalidOperation
 
 from django.contrib import messages
+from django.contrib.auth import get_user_model, login as auth_login, logout as auth_logout
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Count, Q
-from django.http import HttpResponseForbidden
+from django.http import HttpResponseForbidden, JsonResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from backend.pdf_branding import draw_jvaqua_pdf_page
 from django.views.decorators.http import require_http_methods
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 
 from trabajadores.models import Trabajador
-from .engine import DEFAULT_RULES, calcular_recomendacion
-from .models import CasoAsistenteTecnico, MotorRecomendacion
+from .engine import DEFAULT_RULES, calcular_recomendacion, diagnosticar_problema_tecnico, PROBLEMAS_TECNICOS
+from .models import CasoAsistenteTecnico, MotorRecomendacion, ContenidoAcademia, ProgresoContenidoAcademia, FavoritoContenidoAcademia, ConsultaContenidoAcademia, PerfilSuscriptor, PiscinaSuscriptor, PlanMantenimientoPiscina, RegistroMantenimientoPiscina, VisitaProgramadaPiscina, NotificacionDigital, SugerenciaDigital, SolicitudSuscripcionDigital, ConversacionSoporteDigital, MensajeSoporteDigital, AdjuntoSoporteDigital
 from .services import generar_recordatorios_seguimiento
 
 
@@ -30,6 +36,104 @@ def _es_trabajador(user):
         return False
     grupos = {g.name.strip().lower() for g in user.groups.all()}
     return "trabajadores" in grupos or "trabajador" in grupos
+
+
+def _notificar_admin_digital(titulo, mensaje, url="/dashboard/asistente/administracion/suscripciones-digitales/"):
+    """Crea avisos internos para todos los administradores del ERP."""
+    try:
+        from dashboard.models import Notificacion
+        User = get_user_model()
+        admins = User.objects.filter(
+            Q(is_superuser=True)
+            | Q(is_staff=True)
+            | Q(groups__name__in=["Administradores", "Administrador", "Admins", "Adimistradores"])
+        ).distinct()
+        for admin_user in admins:
+            Notificacion.objects.create(
+                user=admin_user,
+                titulo=titulo[:150],
+                mensaje=mensaje,
+                url=url,
+                tipo="general",
+                leida=False,
+            )
+    except Exception:
+        # La creación de la cuenta/pago nunca debe fallar por una notificación.
+        pass
+
+
+def _sincronizar_notificacion_admin_soporte():
+    """
+    Mantiene UNA sola notificación de administración para Soporte Digital.
+
+    Mientras existan mensajes de clientes pendientes de leer, cada administrador
+    tiene una única notificación agregada. Cuando ya no quedan pendientes,
+    la notificación se elimina.
+    """
+    try:
+        from dashboard.models import Notificacion
+
+        User = get_user_model()
+        admins = User.objects.filter(
+            Q(is_superuser=True)
+            | Q(is_staff=True)
+            | Q(groups__name__in=["Administradores", "Administrador", "Admins", "Adimistradores"])
+        ).distinct()
+
+        pendientes = MensajeSoporteDigital.objects.filter(
+            remitente="cliente",
+            leido_admin=False,
+        )
+        total = pendientes.count()
+        conversaciones = pendientes.values("conversacion_id").distinct().count()
+
+        for admin_user in admins:
+            # Limpia avisos antiguos por mensaje de las versiones anteriores.
+            Notificacion.objects.filter(
+                user=admin_user,
+                tipo="general",
+                titulo__icontains="soporte JVAQUA Digital",
+            ).exclude(referencia_id=-9001).delete()
+
+            if total:
+                Notificacion.objects.update_or_create(
+                    user=admin_user,
+                    tipo="general",
+                    referencia_id=-9001,
+                    defaults={
+                        "titulo": "Mensajes pendientes de soporte",
+                        "mensaje": (
+                            f"Tienes {total} mensaje(s) pendiente(s) en "
+                            f"{conversaciones} conversación(es) de JVAQUA Digital."
+                        ),
+                        "url": "/dashboard/asistente/administracion/soporte/",
+                        "leida": False,
+                        "leida_en": None,
+                    },
+                )
+            else:
+                Notificacion.objects.filter(
+                    user=admin_user,
+                    tipo="general",
+                    referencia_id=-9001,
+                ).delete()
+    except Exception:
+        # El flujo de soporte no debe romperse por un aviso administrativo.
+        pass
+
+
+def _suscriptor(user):
+    if not user.is_authenticated:
+        return None
+    try:
+        perfil = user.perfil_suscriptor
+        return perfil if perfil.tiene_acceso else None
+    except PerfilSuscriptor.DoesNotExist:
+        return None
+
+
+def _es_suscriptor(user):
+    return _suscriptor(user) is not None
 
 
 def _trabajador(user):
@@ -53,7 +157,11 @@ def _motor_activo():
 
 
 def _base_template(user):
-    return "dashboard/base_admin.html" if _es_admin(user) else "dashboard/base_trabajador.html"
+    if _es_admin(user):
+        return "dashboard/base_admin.html"
+    if _es_suscriptor(user):
+        return "asistente_tecnico/base_suscriptor.html"
+    return "dashboard/base_trabajador.html"
 
 
 def _actualizar_recordatorios(user):
@@ -65,81 +173,152 @@ def _actualizar_recordatorios(user):
         pass
 
 
+def _academia_relacionada_con_diagnostico(resultado, limite=6):
+    """Conecta Resolver con contenido oficial sin convertir la Academia en requisito."""
+    if not resultado:
+        return []
+    tipo = (resultado.get("tipo_tratamiento") or "").lower()
+    diagnostico = (resultado.get("diagnostico") or "").lower()
+    resumen = (resultado.get("resumen") or "").lower()
+    texto = f"{tipo} {diagnostico} {resumen}"
+
+    modulos = {"fundamentos"}
+    terminos = []
+    if "floc" in texto or "verde" in texto or "turb" in texto:
+        modulos.update({"problemas", "productos", "mantenimiento"})
+        terminos += ["floc", "sulfato", "verde", "turb"]
+    if "ph" in texto:
+        modulos.add("quimica"); terminos += ["ph", "metasilicato", "reductor"]
+    if "cloro" in texto or "desinf" in texto:
+        modulos.update({"quimica", "productos"}); terminos += ["cloro", "tricloro"]
+    if "filtr" in texto or "circul" in texto:
+        modulos.update({"equipos", "preventivo"}); terminos += ["filtro", "bomba", "circul"]
+
+    qs = ContenidoAcademia.objects.filter(estado="aprobado").exclude(acceso="suscriptor")
+    filtro = Q(modulo_curso__in=modulos)
+    for termino in terminos:
+        filtro |= Q(titulo__icontains=termino) | Q(etiquetas__icontains=termino) | Q(resumen__icontains=termino)
+    return list(qs.filter(filtro).order_by("orden_curso", "orden", "titulo").distinct()[:limite])
+
+
 @login_required
 @require_http_methods(["GET", "POST"])
 def asistente_inicio_view(request):
+    """
+    AQUO para técnicos JVAQUA.
+
+    Usa el mismo motor evolucionado de JVAQUA Digital, adaptado al flujo de
+    campo del trabajador: agua + problemas técnicos + biblioteca relacionada.
+    """
+    if _es_suscriptor(request.user):
+        return redirect("asistente_tecnico:digital_resolver")
     if not (_es_trabajador(request.user) or _es_admin(request.user)):
         return HttpResponseForbidden("No autorizado")
+
     _actualizar_recordatorios(request.user)
     motor = _motor_activo()
     resultado = None
     caso = None
 
+    categoria_consulta = (request.POST.get("categoria_consulta") or "agua").strip()
+    detalle_problema = (request.POST.get("detalle_problema") or "").strip()
+    metodo_volumen = (request.POST.get("metodo_volumen") or "volumen").strip()
+    origen_agua = (request.POST.get("origen_agua") or "potable").strip()
+    antecedente_hierro = (request.POST.get("antecedente_hierro") or "no_se").strip()
+
+    origenes_validos = {"potable", "pozo", "mixta", "otro"}
+    hierro_validos = {"no_se", "si", "no"}
+    if origen_agua not in origenes_validos:
+        origen_agua = "potable"
+    if antecedente_hierro not in hierro_validos:
+        antecedente_hierro = "no_se"
+
     if request.method == "POST":
-        metodo_volumen = (request.POST.get("metodo_volumen") or "volumen").strip()
-        try:
-            ph = Decimal((request.POST.get("ph") or "").replace(",", "."))
-            cloro = Decimal((request.POST.get("cloro") or "").replace(",", "."))
-
-            if metodo_volumen == "dimensiones":
-                largo = Decimal((request.POST.get("largo_m") or "").replace(",", "."))
-                ancho = Decimal((request.POST.get("ancho_m") or "").replace(",", "."))
-                profundidad = Decimal((request.POST.get("profundidad_m") or "").replace(",", "."))
-                if largo <= 0 or ancho <= 0 or profundidad <= 0:
-                    raise ValueError
-                volumen = (largo * ancho * profundidad).quantize(Decimal("0.01"))
+        if categoria_consulta != "agua":
+            if categoria_consulta not in PROBLEMAS_TECNICOS:
+                messages.error(request, "Selecciona el problema que deseas revisar con AQUO.")
             else:
-                volumen = Decimal((request.POST.get("volumen_m3") or "").replace(",", "."))
-        except (InvalidOperation, ValueError):
-            messages.error(
-                request,
-                "Revisa las medidas o el volumen, pH y cloro. Deben ser valores numéricos válidos.",
-            )
+                resultado = diagnosticar_problema_tecnico(categoria_consulta, detalle_problema)
         else:
-            estado = request.POST.get("estado_agua") or ""
-            tipo_piscina = request.POST.get("tipo_piscina") or ""
-            estados_validos = {x[0] for x in CasoAsistenteTecnico.ESTADO_AGUA_CHOICES}
-            tipos_validos = {x[0] for x in CasoAsistenteTecnico.TIPO_PISCINA_CHOICES}
-            errores = []
-            if volumen <= 0 or volumen > 5000:
-                errores.append("El volumen debe ser mayor que 0.")
-            if ph < 0 or ph > 14:
-                errores.append("El pH debe estar entre 0 y 14.")
-            if cloro < 0 or cloro > 20:
-                errores.append("El cloro debe estar entre 0 y 20 ppm.")
-            if estado not in estados_validos:
-                errores.append("Selecciona el estado del agua.")
-            if tipo_piscina not in tipos_validos:
-                errores.append("Selecciona el tipo de piscina.")
+            try:
+                ph = Decimal((request.POST.get("ph") or "").replace(",", "."))
+                cloro = Decimal((request.POST.get("cloro") or "").replace(",", "."))
 
-            if errores:
-                for error in errores:
-                    messages.error(request, error)
-            else:
-                resultado = calcular_recomendacion(volumen, ph, cloro, estado, tipo_piscina, motor.reglas)
-                caso = CasoAsistenteTecnico.objects.create(
-                    user=request.user,
-                    trabajador=_trabajador(request.user),
-                    motor=motor,
-                    volumen_m3=volumen,
-                    ph_inicial=ph,
-                    cloro_inicial=cloro,
-                    estado_agua=estado,
-                    tipo_piscina=tipo_piscina,
-                    diagnostico=resultado["diagnostico"],
-                    tipo_tratamiento=resultado["tipo_tratamiento"],
-                    prioridad=resultado["prioridad"],
-                    resumen=resultado["resumen"],
-                    protocolo=resultado["protocolo"],
-                    productos_sugeridos=resultado["productos_sugeridos"],
-                    explicaciones=resultado["explicaciones"],
-                    advertencias=resultado["advertencias"],
-                    foto_inicial=request.FILES.get("foto_inicial"),
-                    seguimiento_programado_para=timezone.now() + timedelta(hours=resultado["seguimiento_horas"]),
+                if metodo_volumen == "dimensiones":
+                    largo = Decimal((request.POST.get("largo_m") or "").replace(",", "."))
+                    ancho = Decimal((request.POST.get("ancho_m") or "").replace(",", "."))
+                    profundidad = Decimal((request.POST.get("profundidad_m") or "").replace(",", "."))
+                    if largo <= 0 or ancho <= 0 or profundidad <= 0:
+                        raise ValueError
+                    volumen = (largo * ancho * profundidad).quantize(Decimal("0.01"))
+                else:
+                    volumen = Decimal((request.POST.get("volumen_m3") or "").replace(",", "."))
+            except (InvalidOperation, ValueError):
+                messages.error(
+                    request,
+                    "Revisa volumen/dimensiones, pH y cloro. AQUO necesita valores válidos para calcular con seguridad.",
                 )
-                messages.success(request, f"Diagnóstico guardado como caso #{caso.pk}. El seguimiento se solicitará después de aproximadamente 24 horas.")
+            else:
+                estado = request.POST.get("estado_agua") or ""
+                tipo_piscina = request.POST.get("tipo_piscina") or ""
+                estados_validos = {x[0] for x in CasoAsistenteTecnico.ESTADO_AGUA_CHOICES}
+                tipos_validos = {x[0] for x in CasoAsistenteTecnico.TIPO_PISCINA_CHOICES}
+
+                errores = []
+                if volumen <= 0 or volumen > 5000:
+                    errores.append("El volumen debe ser mayor a 0 y razonable para una piscina.")
+                if ph < 0 or ph > 14:
+                    errores.append("El pH debe estar entre 0 y 14.")
+                if cloro < 0 or cloro > 20:
+                    errores.append("El cloro debe estar entre 0 y 20 ppm.")
+                if estado not in estados_validos:
+                    errores.append("Selecciona el estado actual del agua.")
+                if tipo_piscina not in tipos_validos:
+                    errores.append("Selecciona el tipo de piscina.")
+
+                if errores:
+                    for error in errores:
+                        messages.error(request, error)
+                else:
+                    resultado = calcular_recomendacion(
+                        volumen,
+                        ph,
+                        cloro,
+                        estado,
+                        tipo_piscina,
+                        motor.reglas,
+                        tipo_agua=origen_agua,
+                        antecedente_hierro=antecedente_hierro,
+                    )
+                    caso = CasoAsistenteTecnico.objects.create(
+                        user=request.user,
+                        trabajador=_trabajador(request.user),
+                        motor=motor,
+                        volumen_m3=volumen,
+                        ph_inicial=ph,
+                        cloro_inicial=cloro,
+                        estado_agua=estado,
+                        tipo_piscina=tipo_piscina,
+                        diagnostico=resultado["diagnostico"],
+                        tipo_tratamiento=resultado["tipo_tratamiento"],
+                        prioridad=resultado["prioridad"],
+                        resumen=resultado["resumen"],
+                        protocolo=resultado["protocolo"],
+                        productos_sugeridos=resultado["productos_sugeridos"],
+                        explicaciones=resultado["explicaciones"],
+                        advertencias=resultado["advertencias"],
+                        foto_inicial=request.FILES.get("foto_inicial"),
+                        seguimiento_programado_para=timezone.now() + timedelta(
+                            hours=resultado["seguimiento_horas"]
+                        ),
+                    )
+                    messages.success(
+                        request,
+                        f"AQUO guardó el diagnóstico como caso #{caso.pk}. Podrás verificar su evolución desde Mis casos.",
+                    )
 
     recientes = CasoAsistenteTecnico.objects.filter(user=request.user).select_related("motor")[:5]
+
     return render(request, "asistente_tecnico/inicio.html", {
         "base_template": _base_template(request.user),
         "resultado": resultado,
@@ -148,7 +327,14 @@ def asistente_inicio_view(request):
         "recientes": recientes,
         "estado_choices": CasoAsistenteTecnico.ESTADO_AGUA_CHOICES,
         "tipo_choices": CasoAsistenteTecnico.TIPO_PISCINA_CHOICES,
+        "problemas_tecnicos": PROBLEMAS_TECNICOS,
+        "categoria_consulta": categoria_consulta,
+        "detalle_problema": detalle_problema,
+        "metodo_volumen": metodo_volumen,
+        "origen_agua": origen_agua,
+        "antecedente_hierro": antecedente_hierro,
         "es_admin": _es_admin(request.user),
+        "articulos_relacionados": _academia_relacionada_con_diagnostico(resultado),
     })
 
 
@@ -417,21 +603,19 @@ def _progreso_usuario(user):
 def centro_conocimiento_view(request):
     if not (_es_trabajador(request.user) or _es_admin(request.user)):
         return HttpResponseForbidden("No autorizado")
-    total, completadas, porcentaje = _progreso_usuario(request.user)
-    categorias = CategoriaAcademia.objects.filter(activa=True).prefetch_related("lecciones")
-    articulos = ArticuloBiblioteca.objects.filter(publicada=True)
-    casos_destacados = CasoAsistenteTecnico.objects.filter(destacado=True).select_related("user", "motor")[:6]
+    oficiales = ContenidoAcademia.objects.filter(estado="aprobado")
+    if not _es_admin(request.user):
+        oficiales = oficiales.exclude(acceso="suscriptor")
+    curso = oficiales.exclude(modulo_curso="")
+    total = curso.count()
+    completadas = ProgresoContenidoAcademia.objects.filter(user=request.user, completado=True, contenido__in=curso).count()
+    porcentaje = round((completadas / total) * 100) if total else 0
+    recientes = [x.contenido for x in ConsultaContenidoAcademia.objects.filter(user=request.user, contenido__estado="aprobado").select_related("contenido")[:4]]
+    favoritos = [x.contenido for x in FavoritoContenidoAcademia.objects.filter(user=request.user, contenido__estado="aprobado").select_related("contenido")[:4]]
     return render(request, "asistente_tecnico/centro_conocimiento.html", {
-        "base_template": _base_template(request.user),
-        "motor": _motor_activo(),
-        "consejo": _consejo_del_dia(),
-        "categorias_count": categorias.count(),
-        "lecciones_count": LeccionAcademia.objects.filter(publicada=True, categoria__activa=True).count(),
-        "articulos_count": articulos.count(),
-        "casos_count": casos_destacados.count(),
-        "total_lecciones": total,
-        "completadas": completadas,
-        "porcentaje": porcentaje,
+        "base_template": _base_template(request.user), "consejo": _consejo_del_dia(),
+        "total_contenidos": oficiales.count(), "total_curso": total, "completadas": completadas,
+        "porcentaje": porcentaje, "recientes": recientes, "favoritos": favoritos,
         "es_admin": _es_admin(request.user),
     })
 
@@ -672,8 +856,11 @@ def consejo_form_view(request, pk=None):
 # ============================================================
 from django.http import HttpResponse
 from django.utils.text import slugify
-from .forms import ContenidoAcademiaForm, ImagenContenidoAcademiaForm, ExperienciaConocimientoForm
-from .models import ContenidoAcademia, ImagenContenidoAcademia, VersionContenidoAcademia, ExperienciaConocimiento
+from .forms import ContenidoAcademiaForm, ImagenContenidoAcademiaForm, MaterialAudiovisualAcademiaForm, MaterialAudiovisualAcademiaForm, ExperienciaConocimientoForm
+from .models import (
+    ContenidoAcademia, ImagenContenidoAcademia, MaterialAudiovisualAcademia, VersionContenidoAcademia, ExperienciaConocimiento,
+    ProgresoContenidoAcademia, FavoritoContenidoAcademia, ConsultaContenidoAcademia,
+)
 
 
 def _snapshot_contenido(obj):
@@ -681,7 +868,7 @@ def _snapshot_contenido(obj):
         "tipo", "codigo", "titulo", "slug", "resumen", "nivel", "tiempo_lectura_min", "estado", "version",
         "introduccion", "contenido", "procedimiento", "herramientas_materiales", "funcionamiento", "componentes",
         "mantenimiento", "fallas_frecuentes", "buenas_practicas", "errores_comunes", "recomendaciones_jvaqua",
-        "referencias_tecnicas", "etiquetas", "orden",
+        "referencias_tecnicas", "etiquetas", "acceso", "modulo_curso", "orden_curso", "orden",
     ]
     return {c: getattr(obj, c, "") for c in campos}
 
@@ -771,6 +958,41 @@ def academia_cms_imagen_form_view(request, contenido_pk):
 
 
 @login_required
+@require_http_methods(["GET", "POST"])
+def academia_cms_material_form_view(request, contenido_pk):
+    if not _es_admin(request.user):
+        return HttpResponseForbidden("No autorizado")
+    contenido = get_object_or_404(ContenidoAcademia, pk=contenido_pk)
+    if request.method == "POST":
+        form = MaterialAudiovisualAcademiaForm(request.POST, request.FILES)
+        if form.is_valid():
+            material = form.save(commit=False)
+            material.contenido = contenido
+            material.save()
+            messages.success(request, "Material audiovisual añadido correctamente.")
+            return redirect("asistente_tecnico:cms_contenido_editar", pk=contenido.pk)
+    else:
+        form = MaterialAudiovisualAcademiaForm()
+    return render(
+        request,
+        "asistente_tecnico/cms_material_form.html",
+        {"base_template": "dashboard/base_admin.html", "form": form, "contenido": contenido, "es_admin": True},
+    )
+
+
+@login_required
+@require_http_methods(["POST"])
+def academia_cms_material_eliminar_view(request, pk):
+    if not _es_admin(request.user):
+        return HttpResponseForbidden("No autorizado")
+    material = get_object_or_404(MaterialAudiovisualAcademia, pk=pk)
+    contenido_pk = material.contenido_id
+    material.delete()
+    messages.success(request, "Material audiovisual eliminado.")
+    return redirect("asistente_tecnico:cms_contenido_editar", pk=contenido_pk)
+
+
+@login_required
 @require_http_methods(["POST"])
 def academia_cms_imagen_eliminar_view(request, pk):
     if not _es_admin(request.user):
@@ -782,27 +1004,156 @@ def academia_cms_imagen_eliminar_view(request, pk):
 
 @login_required
 def academia_publica_view(request):
-    if not (_es_trabajador(request.user) or _es_admin(request.user)):
+    if not (_es_trabajador(request.user) or _es_admin(request.user) or _es_suscriptor(request.user)):
         return HttpResponseForbidden("No autorizado")
-    qs = ContenidoAcademia.objects.filter(estado="aprobado")
-    q = (request.GET.get("q") or "").strip(); tipo = (request.GET.get("tipo") or "").strip()
-    if q:
-        qs = qs.filter(Q(titulo__icontains=q) | Q(resumen__icontains=q) | Q(etiquetas__icontains=q) | Q(contenido__icontains=q) | Q(procedimiento__icontains=q) | Q(fallas_frecuentes__icontains=q))
-    if tipo: qs = qs.filter(tipo=tipo)
-    return render(request, "asistente_tecnico/academia_cms_publica.html", {
-        "base_template": _base_template(request.user), "contenidos": qs[:200], "q": q, "tipo": tipo,
-        "tipos": ContenidoAcademia.TIPOS, "es_admin": _es_admin(request.user), "consejo": _consejo_del_dia(),
-    })
 
+    visibles = ContenidoAcademia.objects.filter(estado="aprobado")
+    if _es_suscriptor(request.user):
+        visibles = visibles.exclude(acceso="interno")
+    elif not _es_admin(request.user):
+        visibles = visibles.exclude(acceso="suscriptor")
+
+    q = (request.GET.get("q") or "").strip()
+    tipo = (request.GET.get("tipo") or "").strip()
+    modo = (request.GET.get("modo") or "consultar").strip()
+    modulo = (request.GET.get("modulo") or "").strip()
+
+    completadas_ids = set(
+        ProgresoContenidoAcademia.objects.filter(user=request.user, completado=True)
+        .values_list("contenido_id", flat=True)
+    )
+
+    # El progreso siempre representa el curso completo visible para el usuario,
+    # independientemente de los filtros de búsqueda que esté usando.
+    curso_base = list(visibles.exclude(modulo_curso="").order_by("orden", "titulo"))
+    rango_modulo = {codigo: i for i, (codigo, _nombre) in enumerate(ContenidoAcademia.MODULOS_CURSO)}
+    curso_base.sort(key=lambda x: (rango_modulo.get(x.modulo_curso, 999), x.orden_curso, x.orden, x.titulo.lower()))
+    curso_total = len(curso_base)
+    curso_completadas = sum(1 for c in curso_base if c.pk in completadas_ids)
+    curso_porcentaje = round((curso_completadas / curso_total) * 100) if curso_total else 0
+    continuar = next((c for c in curso_base if c.pk not in completadas_ids), None)
+
+    qs = visibles
+    if q:
+        qs = qs.filter(
+            Q(titulo__icontains=q) | Q(resumen__icontains=q) | Q(etiquetas__icontains=q) |
+            Q(contenido__icontains=q) | Q(procedimiento__icontains=q) |
+            Q(fallas_frecuentes__icontains=q)
+        )
+    if tipo:
+        qs = qs.filter(tipo=tipo)
+    if modulo:
+        qs = qs.filter(modulo_curso=modulo)
+
+    grupos_curso = []
+    recientes = [x.contenido for x in ConsultaContenidoAcademia.objects.filter(
+        user=request.user, contenido__estado="aprobado"
+    ).select_related("contenido")[:6]]
+    favoritos = [x.contenido for x in FavoritoContenidoAcademia.objects.filter(
+        user=request.user, contenido__estado="aprobado"
+    ).select_related("contenido")[:6]]
+
+    if modo == "aprender":
+        lista = list(qs.exclude(modulo_curso=""))
+        lista.sort(key=lambda x: (rango_modulo.get(x.modulo_curso, 999), x.orden_curso, x.orden, x.titulo.lower()))
+        for codigo, nombre in ContenidoAcademia.MODULOS_CURSO:
+            contenidos_modulo = [c for c in lista if c.modulo_curso == codigo]
+            if contenidos_modulo:
+                hechos = sum(1 for c in contenidos_modulo if c.pk in completadas_ids)
+                grupos_curso.append({
+                    "codigo": codigo,
+                    "nombre": nombre,
+                    "contenidos": contenidos_modulo,
+                    "total": len(contenidos_modulo),
+                    "completados": hechos,
+                    "porcentaje": round((hechos / len(contenidos_modulo)) * 100) if contenidos_modulo else 0,
+                })
+        contenidos = lista
+    else:
+        contenidos = list(qs.order_by("tipo", "orden", "titulo")[:200])
+
+    return render(request, "asistente_tecnico/academia_cms_publica.html", {
+        "base_template": _base_template(request.user),
+        "contenidos": contenidos,
+        "grupos_curso": grupos_curso,
+        "q": q, "tipo": tipo, "modo": modo, "modulo": modulo,
+        "tipos": ContenidoAcademia.TIPOS, "modulos": ContenidoAcademia.MODULOS_CURSO,
+        "completadas_ids": completadas_ids,
+        "curso_total": curso_total, "curso_completadas": curso_completadas,
+        "curso_porcentaje": curso_porcentaje, "continuar": continuar,
+        "curso_xp": curso_completadas * 40,
+        "recientes": recientes, "favoritos": favoritos,
+        "es_admin": _es_admin(request.user), "consejo": _consejo_del_dia(),
+    })
 
 @login_required
 def academia_contenido_detalle_view(request, slug):
-    if not (_es_trabajador(request.user) or _es_admin(request.user)):
+    if not (_es_trabajador(request.user) or _es_admin(request.user) or _es_suscriptor(request.user)):
         return HttpResponseForbidden("No autorizado")
     filtros = {"slug": slug}
-    if not _es_admin(request.user): filtros["estado"] = "aprobado"
-    obj = get_object_or_404(ContenidoAcademia.objects.prefetch_related("relacionados", "galeria"), **filtros)
-    return render(request, "asistente_tecnico/academia_contenido_detalle.html", {"base_template":_base_template(request.user),"obj":obj,"es_admin":_es_admin(request.user)})
+    if not _es_admin(request.user):
+        filtros["estado"] = "aprobado"
+    obj = get_object_or_404(
+        ContenidoAcademia.objects.prefetch_related("relacionados", "galeria"), **filtros
+    )
+    if _es_suscriptor(request.user) and obj.acceso == "interno":
+        return HttpResponseForbidden("Contenido exclusivo del equipo JVAQUA")
+    if not (_es_admin(request.user) or _es_suscriptor(request.user)) and obj.acceso == "suscriptor":
+        return HttpResponseForbidden("Contenido no disponible para este perfil")
+
+    ConsultaContenidoAcademia.objects.update_or_create(
+        user=request.user, contenido=obj, defaults={"consultado_en": timezone.now()}
+    )
+    completado = ProgresoContenidoAcademia.objects.filter(
+        user=request.user, contenido=obj, completado=True
+    ).exists()
+    favorito = FavoritoContenidoAcademia.objects.filter(user=request.user, contenido=obj).exists()
+
+    siguiente = None
+    if obj.modulo_curso:
+        visibles = ContenidoAcademia.objects.filter(estado="aprobado").exclude(modulo_curso="")
+        if _es_suscriptor(request.user):
+            visibles = visibles.exclude(acceso="interno")
+        elif not _es_admin(request.user):
+            visibles = visibles.exclude(acceso="suscriptor")
+        lista = list(visibles)
+        rango_modulo = {codigo: i for i, (codigo, _nombre) in enumerate(ContenidoAcademia.MODULOS_CURSO)}
+        lista.sort(key=lambda x: (rango_modulo.get(x.modulo_curso, 999), x.orden_curso, x.orden, x.titulo.lower()))
+        ids = [c.pk for c in lista]
+        if obj.pk in ids:
+            idx = ids.index(obj.pk)
+            if idx + 1 < len(lista):
+                siguiente = lista[idx + 1]
+
+    return render(request, "asistente_tecnico/academia_contenido_detalle.html", {
+        "base_template": _base_template(request.user), "obj": obj,
+        "es_admin": _es_admin(request.user), "completado": completado,
+        "favorito": favorito, "siguiente": siguiente, "es_curso": request.GET.get("curso") == "1",
+    })
+
+@login_required
+@require_http_methods(["POST"])
+def academia_contenido_completar_view(request, slug):
+    obj = get_object_or_404(ContenidoAcademia, slug=slug, estado="aprobado")
+    if _es_suscriptor(request.user) and obj.acceso == "interno":
+        return HttpResponseForbidden("Contenido exclusivo del equipo JVAQUA")
+    ProgresoContenidoAcademia.objects.update_or_create(user=request.user, contenido=obj, defaults={"completado": True, "completado_en": timezone.now()})
+    messages.success(request, "Contenido marcado como aprendido.")
+    return redirect("asistente_tecnico:academia_contenido_detalle", slug=slug)
+
+
+@login_required
+@require_http_methods(["POST"])
+def academia_contenido_favorito_view(request, slug):
+    obj = get_object_or_404(ContenidoAcademia, slug=slug, estado="aprobado")
+    if _es_suscriptor(request.user) and obj.acceso == "interno":
+        return HttpResponseForbidden("Contenido exclusivo del equipo JVAQUA")
+    fav = FavoritoContenidoAcademia.objects.filter(user=request.user, contenido=obj)
+    if fav.exists():
+        fav.delete(); messages.info(request, "Eliminado de favoritos.")
+    else:
+        FavoritoContenidoAcademia.objects.create(user=request.user, contenido=obj); messages.success(request, "Guardado en favoritos.")
+    return redirect("asistente_tecnico:academia_contenido_detalle", slug=slug)
 
 
 @login_required
@@ -878,7 +1229,7 @@ def _pdf_response(nombre, objetos):
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import mm
     from reportlab.platypus import SimpleDocTemplate, PageBreak, Paragraph
-    buf=BytesIO(); doc=SimpleDocTemplate(buf,pagesize=A4,rightMargin=16*mm,leftMargin=16*mm,topMargin=16*mm,bottomMargin=16*mm)
+    buf=BytesIO(); doc=SimpleDocTemplate(buf,pagesize=A4,rightMargin=16*mm,leftMargin=16*mm,topMargin=24*mm,bottomMargin=16*mm)
     styles=_pdf_styles(); story=[]
     objs=list(objetos)
     if len(objs)>1:
@@ -886,7 +1237,7 @@ def _pdf_response(nombre, objetos):
     for i,obj in enumerate(objs):
         if i: story.append(PageBreak())
         story.extend(_contenido_story(obj,styles))
-    doc.build(story); data=buf.getvalue(); buf.close()
+    doc.build(story, onFirstPage=draw_jvaqua_pdf_page, onLaterPages=draw_jvaqua_pdf_page); data=buf.getvalue(); buf.close()
     resp=HttpResponse(data,content_type="application/pdf"); resp["Content-Disposition"]=f'attachment; filename="{nombre}"'; return resp
 
 
@@ -909,3 +1260,1233 @@ def academia_pdf_categoria_view(request, tipo):
 def academia_pdf_manual_view(request):
     qs=ContenidoAcademia.objects.filter(estado="aprobado")
     return _pdf_response("Manual_Tecnico_Oficial_JVAQUA.pdf",qs)
+
+
+def _planes_digitales():
+    return [
+        {"codigo": "individual", "nombre": "Individual", "precio": Decimal("1.99"), "piscinas": 1, "soporte_mensajes": 5},
+        {"codigo": "esencial", "nombre": "Esencial", "precio": Decimal("3.99"), "piscinas": 3, "soporte_mensajes": 10},
+        {"codigo": "profesional", "nombre": "Profesional", "precio": Decimal("9.99"), "piscinas": 30, "soporte_mensajes": 50},
+        {"codigo": "empresarial", "nombre": "Empresarial", "precio": Decimal("19.99"), "piscinas": None, "soporte_mensajes": 100},
+    ]
+
+
+def _plan_digital(codigo):
+    return next((p for p in _planes_digitales() if p["codigo"] == codigo), None)
+
+
+@require_http_methods(["GET", "POST"])
+def digital_registro_view(request):
+    if request.user.is_authenticated:
+        try:
+            perfil = request.user.perfil_suscriptor
+            return redirect("asistente_tecnico:digital_inicio" if perfil.tiene_acceso else "asistente_tecnico:digital_acceso")
+        except PerfilSuscriptor.DoesNotExist:
+            pass
+
+    plan_inicial = (request.GET.get("plan") or request.POST.get("plan") or "individual").strip()
+    if not _plan_digital(plan_inicial):
+        plan_inicial = "individual"
+
+    if request.method == "POST":
+        nombre = (request.POST.get("nombre") or "").strip()
+        apellido = (request.POST.get("apellido") or "").strip()
+        correo = (request.POST.get("correo") or "").strip().lower()
+        telefono = (request.POST.get("telefono") or "").strip()
+        password = request.POST.get("password") or ""
+        password2 = request.POST.get("password2") or ""
+        plan = (request.POST.get("plan") or "individual").strip()
+        User = get_user_model()
+
+        if not nombre or not correo or not telefono:
+            messages.error(request, "Completa nombre, correo y teléfono.")
+        elif not _plan_digital(plan):
+            messages.error(request, "Selecciona un plan válido.")
+        elif password != password2:
+            messages.error(request, "Las contraseñas no coinciden.")
+        elif User.objects.filter(username__iexact=correo).exists() or User.objects.filter(email__iexact=correo).exists():
+            messages.error(request, "Ya existe una cuenta con ese correo. Inicia sesión para continuar.")
+        else:
+            try:
+                validate_password(password)
+            except ValidationError as exc:
+                messages.error(request, " ".join(exc.messages))
+            else:
+                with transaction.atomic():
+                    user = User.objects.create_user(
+                        username=correo, email=correo, password=password,
+                        first_name=nombre[:150], last_name=apellido[:150],
+                    )
+                    PerfilSuscriptor.objects.create(
+                        user=user, estado="pendiente", plan=plan,
+                        telefono=telefono[:30], inicio=timezone.localdate(),
+                    )
+                auth_login(request, user)
+                nombre_cliente = f"{nombre} {apellido}".strip()
+                _notificar_admin_digital(
+                    "Nuevo registro en JVAQUA Digital",
+                    f"{nombre_cliente or correo} se registró con el Plan {_plan_digital(plan)['nombre']}. Revisa su activación cuando envíe el pago.",
+                )
+                messages.success(request, "Cuenta creada. Realiza el pago para activar JVAQUA Digital.")
+                return redirect("asistente_tecnico:digital_acceso")
+
+    return render(request, "asistente_tecnico/digital_registro.html", {
+        "planes": _planes_digitales(), "plan_inicial": plan_inicial,
+    })
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def digital_acceso_view(request):
+    try:
+        perfil = request.user.perfil_suscriptor
+    except PerfilSuscriptor.DoesNotExist:
+        return HttpResponseForbidden("Esta cuenta no pertenece a JVAQUA Digital.")
+
+    if perfil.tiene_acceso and request.method == "GET" and request.GET.get("renovar") != "1":
+        return redirect("asistente_tecnico:digital_inicio")
+
+    plan_codigo = (request.POST.get("plan") or request.GET.get("plan") or perfil.plan or "individual").strip()
+    plan = _plan_digital(plan_codigo) or _plan_digital("individual")
+    pendiente = perfil.solicitudes_suscripcion.filter(estado="pendiente").first()
+
+    if request.method == "POST":
+        if pendiente:
+            messages.info(request, "Ya tienes un pago pendiente de verificación.")
+            return redirect("asistente_tecnico:digital_acceso")
+
+        metodo = (request.POST.get("metodo_envio") or "plataforma").strip()
+        if metodo not in {"plataforma", "whatsapp", "ambos"}:
+            metodo = "plataforma"
+        comprobante = request.FILES.get("comprobante")
+        if metodo in {"plataforma", "ambos"} and not comprobante:
+            messages.error(request, "Adjunta el comprobante o selecciona que lo enviaste por WhatsApp.")
+        else:
+            tipo = "renovacion" if perfil.acceso_hasta else "alta"
+            SolicitudSuscripcionDigital.objects.create(
+                suscriptor=perfil, tipo=tipo, plan=plan["codigo"], valor=plan["precio"],
+                comprobante=comprobante, metodo_envio=metodo,
+                observacion_cliente=(request.POST.get("observacion") or "").strip()[:300],
+            )
+            perfil.plan = plan["codigo"]
+            if not perfil.tiene_acceso:
+                perfil.estado = "pendiente"
+            perfil.save(update_fields=["plan", "estado", "actualizado_en"])
+            correo_acceso = request.user.email or request.user.username
+            nombre_acceso = f"{request.user.first_name} {request.user.last_name}".strip() or request.user.username
+            _notificar_admin_digital(
+                "Pago pendiente · JVAQUA Digital",
+                f"{nombre_acceso} envió un pago de ${plan['precio']} para el Plan {plan['nombre']}. Verifica el comprobante y activa la suscripción.",
+            )
+            auth_logout(request)
+            return render(
+                request,
+                "asistente_tecnico/digital_pago_enviado.html",
+                {
+                    "correo_acceso": correo_acceso,
+                    "plan": plan,
+                    "nombre_acceso": nombre_acceso,
+                },
+            )
+
+    nombre = f"{request.user.first_name} {request.user.last_name}".strip() or request.user.username
+    whatsapp_texto = (
+        "Hola JVAQUA, acabo de realizar el pago de mi suscripción a JVAQUA Digital.%0A"
+        f"Nombre: {nombre}%0A"
+        f"Correo: {request.user.email or request.user.username}%0A"
+        f"Teléfono: {perfil.telefono}%0A"
+        f"Plan: {plan['nombre']}%0A"
+        f"Valor: ${plan['precio']}%0A"
+        f"Solicitud: {'Renovación' if perfil.acceso_hasta else 'Activación de nueva suscripción'}.%0A"
+        "Adjunto mi comprobante de pago."
+    )
+    return render(request, "asistente_tecnico/digital_acceso.html", {
+        "perfil": perfil, "planes": _planes_digitales(), "plan": plan,
+        "pendiente": pendiente, "whatsapp_texto": whatsapp_texto,
+    })
+
+
+@login_required
+@require_http_methods(["GET"])
+def digital_suscripciones_admin_view(request):
+    if not _es_admin(request.user):
+        return HttpResponseForbidden("No autorizado")
+    estado = (request.GET.get("estado") or "pendiente").strip()
+    qs = SolicitudSuscripcionDigital.objects.select_related("suscriptor__user", "revisada_por")
+    if estado in {"pendiente", "aprobada", "rechazada"}:
+        qs = qs.filter(estado=estado)
+    return render(request, "asistente_tecnico/digital_suscripciones_admin.html", {
+        "base_template": "dashboard/base_admin.html",
+        "solicitudes": qs[:200],
+        "estado_filtro": estado,
+        "pendientes_total": SolicitudSuscripcionDigital.objects.filter(estado="pendiente").count(),
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def digital_suscripcion_revisar_view(request, pk):
+    if not _es_admin(request.user):
+        return HttpResponseForbidden("No autorizado")
+    accion = (request.POST.get("accion") or "").strip()
+    if accion not in {"aprobar", "rechazar"}:
+        return HttpResponseBadRequest("Acción inválida")
+
+    with transaction.atomic():
+        solicitud = get_object_or_404(
+            SolicitudSuscripcionDigital.objects.select_for_update().select_related("suscriptor"),
+            pk=pk,
+        )
+        if solicitud.estado != "pendiente":
+            messages.info(request, "Esta solicitud ya fue revisada.")
+            return redirect("asistente_tecnico:digital_suscripciones_admin")
+
+        perfil = solicitud.suscriptor
+        solicitud.observacion_admin = (request.POST.get("observacion_admin") or "").strip()[:300]
+        solicitud.revisada_por = request.user
+        solicitud.revisada_en = timezone.now()
+
+        if accion == "aprobar":
+            hoy = timezone.localdate()
+            base = perfil.acceso_hasta if perfil.acceso_hasta and perfil.acceso_hasta >= hoy else hoy
+            perfil.plan = solicitud.plan
+            perfil.estado = "activo"
+            perfil.acceso_hasta = base + timedelta(days=30)
+            perfil.save(update_fields=["plan", "estado", "acceso_hasta", "actualizado_en"])
+            solicitud.estado = "aprobada"
+            messages.success(request, f"Suscripción aprobada. Acceso activo hasta {perfil.acceso_hasta:%d/%m/%Y}.")
+        else:
+            solicitud.estado = "rechazada"
+            if not perfil.tiene_acceso:
+                perfil.estado = "pendiente"
+                perfil.save(update_fields=["estado", "actualizado_en"])
+            messages.warning(request, "Solicitud rechazada.")
+
+        solicitud.save(update_fields=["estado", "observacion_admin", "revisada_por", "revisada_en"])
+
+    return redirect("asistente_tecnico:digital_suscripciones_admin")
+
+@login_required
+def digital_inicio_view(request):
+    perfil = _suscriptor(request.user)
+    if not perfil:
+        try:
+            request.user.perfil_suscriptor
+            return redirect("asistente_tecnico:digital_acceso")
+        except PerfilSuscriptor.DoesNotExist:
+            return HttpResponseForbidden("Tu acceso a JVAQUA Digital no está activo.")
+    piscinas = perfil.piscinas.filter(activa=True)
+    principal = piscinas.filter(principal=True).first() or piscinas.first()
+    recientes_qs = CasoAsistenteTecnico.objects.filter(user=request.user)
+    if principal:
+        recientes_qs = recientes_qs.filter(piscina=principal)
+    recientes = recientes_qs[:4]
+    progreso_total = ContenidoAcademia.objects.filter(estado="aprobado").exclude(acceso="interno").exclude(modulo_curso="").count()
+    completados = ProgresoContenidoAcademia.objects.filter(user=request.user, completado=True, contenido__estado="aprobado").exclude(contenido__acceso="interno").count()
+    porcentaje = round(completados * 100 / progreso_total) if progreso_total else 0
+    plan = PlanMantenimientoPiscina.objects.filter(piscina=principal, activo=True).first() if principal else None
+    return render(request, "asistente_tecnico/digital_inicio.html", {"perfil":perfil,"piscinas":piscinas,"principal":principal,"recientes":recientes,"curso_porcentaje":porcentaje,"plan_mantenimiento":plan,"base_template":"asistente_tecnico/base_suscriptor.html"})
+
+
+@login_required
+def digital_piscinas_view(request):
+    perfil = _suscriptor(request.user)
+    if not perfil:
+        return HttpResponseForbidden("No autorizado")
+    piscinas = perfil.piscinas.filter(activa=True)
+    return render(
+        request,
+        "asistente_tecnico/digital_piscinas.html",
+        {"perfil": perfil, "piscinas": piscinas},
+    )
+
+
+@login_required
+def digital_piscina_detalle_view(request, pk):
+    perfil = _suscriptor(request.user)
+    if not perfil:
+        return HttpResponseForbidden("No autorizado")
+    piscina = get_object_or_404(PiscinaSuscriptor, pk=pk, suscriptor=perfil, activa=True)
+    casos = piscina.casos_asistente.filter(user=request.user)[:12]
+    mantenimientos = piscina.mantenimientos_digitales.all()[:12]
+    visitas = piscina.visitas_programadas.all()[:12]
+    plan = PlanMantenimientoPiscina.objects.filter(piscina=piscina, activo=True).first()
+    return render(
+        request,
+        "asistente_tecnico/digital_piscina_detalle.html",
+        {
+            "perfil": perfil,
+            "piscina": piscina,
+            "casos": casos,
+            "mantenimientos": mantenimientos,
+            "visitas": visitas,
+            "plan": plan,
+        },
+    )
+
+
+
+def _tipo_adjunto_soporte(archivo):
+    content_type = (getattr(archivo, "content_type", "") or "").lower()
+    if content_type.startswith("image/"):
+        return "imagen"
+    if content_type.startswith("video/"):
+        return "video"
+    return "archivo"
+
+
+def _guardar_adjuntos_soporte(mensaje, archivos):
+    # 30 MB por archivo: suficiente para fotos y videos cortos de soporte.
+    limite = 30 * 1024 * 1024
+    permitidos = {
+        "image/jpeg", "image/png", "image/webp", "image/gif",
+        "video/mp4", "video/webm", "video/quicktime",
+    }
+    for archivo in archivos:
+        content_type = (getattr(archivo, "content_type", "") or "").lower()
+        if content_type not in permitidos:
+            raise ValidationError("Solo se permiten imágenes JPG/PNG/WEBP/GIF y videos MP4/WEBM/MOV.")
+        if archivo.size > limite:
+            raise ValidationError("Cada archivo debe pesar máximo 30 MB.")
+        AdjuntoSoporteDigital.objects.create(
+            mensaje=mensaje,
+            archivo=archivo,
+            tipo=_tipo_adjunto_soporte(archivo),
+            nombre_original=(archivo.name or "")[:255],
+            tamano=archivo.size or 0,
+        )
+
+
+def _estado_limite_soporte(perfil):
+    usados = perfil.mensajes_soporte_hoy
+    limite = perfil.limite_mensajes_soporte_diario
+    return {
+        "usados": usados,
+        "limite": limite,
+        "restantes": max(0, limite - usados),
+        "agotado": usados >= limite,
+    }
+
+
+def _respuesta_limite_soporte(request, perfil, *, ajax=False):
+    estado = _estado_limite_soporte(perfil)
+    texto = (
+        f"Alcanzaste el límite diario de {estado['limite']} mensajes de soporte "
+        f"incluidos en tu {perfil.get_plan_display()}. Podrás volver a escribir mañana."
+    )
+    if ajax or request.headers.get("x-requested-with") == "XMLHttpRequest":
+        return JsonResponse({
+            "ok": False,
+            "error": texto,
+            "codigo": "limite_soporte_diario",
+            "limite": estado["limite"],
+            "usados": estado["usados"],
+            "restantes": 0,
+        }, status=429)
+    messages.warning(request, texto)
+    return None
+
+
+def _soporte_conversacion_payload(conversacion, *, admin=False):
+    """
+    Serializa una conversación para las burbujas flotantes.
+
+    IMPORTANTE:
+    Este es un helper interno, NO una vista HTTP, por lo tanto no debe llevar
+    @login_required. Las vistas API que lo llaman sí están protegidas.
+    """
+    if admin:
+        usuario = conversacion.suscriptor.user
+        titulo = usuario.get_full_name() or usuario.username
+        no_leidos = conversacion.mensajes.filter(
+            remitente="cliente",
+            leido_admin=False,
+        ).count()
+        ultimo_entrante_id = (
+            conversacion.mensajes.filter(remitente="cliente")
+            .order_by("-id")
+            .values_list("id", flat=True)
+            .first()
+            or 0
+        )
+        base = f"/dashboard/asistente/administracion/soporte/{conversacion.pk}/"
+    else:
+        titulo = "Soporte JVAQUA"
+        no_leidos = conversacion.mensajes.filter(
+            remitente="admin",
+            leido_cliente=False,
+        ).count()
+        ultimo_entrante_id = (
+            conversacion.mensajes.filter(remitente="admin")
+            .order_by("-id")
+            .values_list("id", flat=True)
+            .first()
+            or 0
+        )
+        base = f"/dashboard/asistente/digital/soporte/{conversacion.pk}/"
+
+    return {
+        "id": conversacion.pk,
+        "titulo": titulo,
+        "subtitulo": (conversacion.asunto or conversacion.get_categoria_display())[:80],
+        "no_leidos": no_leidos,
+        "ultimo_entrante_id": ultimo_entrante_id,
+        "estado": conversacion.estado,
+        "estado_label": conversacion.get_estado_display(),
+        "url": base + "?support_float=1",
+        "url_completa": base,
+    }
+
+
+@login_required
+def digital_soporte_burbuja_api(request):
+    perfil = _suscriptor(request.user)
+    if not perfil:
+        return JsonResponse({"ok": False, "error": "No autorizado"}, status=403)
+    conversaciones = list(
+        perfil.conversaciones_soporte.exclude(estado="cerrada")
+        .order_by("-ultimo_mensaje_en", "-id")[:5]
+    )
+    payload = [_soporte_conversacion_payload(c, admin=False) for c in conversaciones]
+    return JsonResponse({
+        "ok": True,
+        "conversaciones": payload,
+        "no_leidos": sum(x["no_leidos"] for x in payload),
+        "limite": _estado_limite_soporte(perfil),
+    })
+
+
+@login_required
+def soporte_admin_burbuja_api(request):
+    if not _es_admin(request.user):
+        return JsonResponse({"ok": False, "error": "No autorizado"}, status=403)
+    conversaciones = list(
+        ConversacionSoporteDigital.objects.exclude(estado="cerrada")
+        .select_related("suscriptor__user")
+        .order_by("-ultimo_mensaje_en", "-id")[:8]
+    )
+    payload = [_soporte_conversacion_payload(c, admin=True) for c in conversaciones]
+    return JsonResponse({
+        "ok": True,
+        "conversaciones": payload,
+        "no_leidos": sum(x["no_leidos"] for x in payload),
+    })
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def digital_soporte_view(request):
+    perfil = _suscriptor(request.user)
+    if not perfil:
+        return HttpResponseForbidden("No autorizado")
+
+    conversaciones = perfil.conversaciones_soporte.prefetch_related("mensajes").all()
+    piscinas = perfil.piscinas.filter(activa=True)
+
+    if request.method == "POST":
+        texto = (request.POST.get("mensaje") or "").strip()
+        archivos = request.FILES.getlist("adjuntos")
+        categoria = (request.POST.get("categoria") or "soporte_tecnico").strip()
+        if categoria not in {x[0] for x in ConversacionSoporteDigital.CATEGORIAS}:
+            categoria = "otro"
+        piscina = None
+        piscina_id = request.POST.get("piscina_id")
+        if piscina_id:
+            piscina = piscinas.filter(pk=piscina_id).first()
+
+        if not texto and not archivos:
+            messages.error(request, "Escribe un mensaje o adjunta una foto/video.")
+        elif _estado_limite_soporte(perfil)["agotado"]:
+            _respuesta_limite_soporte(request, perfil)
+        else:
+            with transaction.atomic():
+                conversacion = ConversacionSoporteDigital.objects.create(
+                    suscriptor=perfil,
+                    piscina=piscina,
+                    categoria=categoria,
+                    asunto=(texto[:120] if texto else "Archivo enviado a soporte"),
+                    estado="espera_admin",
+                )
+                mensaje = MensajeSoporteDigital.objects.create(
+                    conversacion=conversacion,
+                    remitente="cliente",
+                    autor=request.user,
+                    texto=texto,
+                    leido_cliente=True,
+                    leido_admin=False,
+                )
+                try:
+                    _guardar_adjuntos_soporte(mensaje, archivos)
+                except ValidationError as exc:
+                    transaction.set_rollback(True)
+                    messages.error(request, exc.messages[0])
+                    return redirect("asistente_tecnico:digital_soporte")
+                conversacion.ultimo_mensaje_en = mensaje.creado_en
+                conversacion.save(update_fields=["ultimo_mensaje_en", "actualizada_en"])
+            _sincronizar_notificacion_admin_soporte()
+            return redirect(
+                f"{reverse('asistente_tecnico:digital_soporte_chat', args=[conversacion.pk])}?support_started=1"
+            )
+
+    return render(request, "asistente_tecnico/digital_soporte.html", {
+        "perfil": perfil, "piscinas": piscinas,
+        "categorias_soporte": ConversacionSoporteDigital.CATEGORIAS,
+        "conversaciones": conversaciones,
+        "limite_soporte": _estado_limite_soporte(perfil),
+    })
+
+
+
+
+def _serializar_mensaje_soporte(mensaje):
+    adjuntos = []
+    for adjunto in mensaje.adjuntos.all():
+        try:
+            url = adjunto.archivo.url
+        except Exception:
+            url = ""
+        adjuntos.append({
+            "id": adjunto.pk,
+            "tipo": adjunto.tipo,
+            "nombre": adjunto.nombre_original or "Adjunto",
+            "url": url,
+        })
+    return {
+        "id": mensaje.pk,
+        "remitente": mensaje.remitente,
+        "texto": mensaje.texto or "",
+        "creado_en": timezone.localtime(mensaje.creado_en).strftime("%d/%m/%Y %H:%M"),
+        "adjuntos": adjuntos,
+    }
+
+
+@login_required
+def digital_soporte_mensajes_api(request, pk):
+    perfil = _suscriptor(request.user)
+    if not perfil:
+        return JsonResponse({"ok": False, "error": "No autorizado"}, status=403)
+
+    conversacion = get_object_or_404(
+        ConversacionSoporteDigital,
+        pk=pk,
+        suscriptor=perfil,
+    )
+    desde = request.GET.get("desde")
+    qs = conversacion.mensajes.prefetch_related("adjuntos").all()
+    try:
+        if desde:
+            qs = qs.filter(pk__gt=int(desde))
+    except (TypeError, ValueError):
+        pass
+
+    conversacion.mensajes.filter(
+        remitente="admin",
+        leido_cliente=False,
+    ).update(leido_cliente=True)
+
+    return JsonResponse({
+        "ok": True,
+        "estado": conversacion.estado,
+        "estado_label": conversacion.get_estado_display(),
+        "mensajes": [_serializar_mensaje_soporte(m) for m in qs],
+    })
+
+
+@login_required
+def soporte_admin_mensajes_api(request, pk):
+    if not _es_admin(request.user):
+        return JsonResponse({"ok": False, "error": "No autorizado"}, status=403)
+
+    conversacion = get_object_or_404(ConversacionSoporteDigital, pk=pk)
+    desde = request.GET.get("desde")
+    qs = conversacion.mensajes.prefetch_related("adjuntos").all()
+    try:
+        if desde:
+            qs = qs.filter(pk__gt=int(desde))
+    except (TypeError, ValueError):
+        pass
+
+    conversacion.mensajes.filter(
+        remitente="cliente",
+        leido_admin=False,
+    ).update(leido_admin=True)
+    _sincronizar_notificacion_admin_soporte()
+
+    return JsonResponse({
+        "ok": True,
+        "estado": conversacion.estado,
+        "estado_label": conversacion.get_estado_display(),
+        "mensajes": [_serializar_mensaje_soporte(m) for m in qs],
+    })
+
+@login_required
+@require_http_methods(["GET", "POST"])
+@xframe_options_sameorigin
+def digital_soporte_chat_view(request, pk):
+    perfil = _suscriptor(request.user)
+    if not perfil:
+        return HttpResponseForbidden("No autorizado")
+    conversacion = get_object_or_404(
+        ConversacionSoporteDigital.objects.select_related("piscina").prefetch_related("mensajes__adjuntos"),
+        pk=pk, suscriptor=perfil,
+    )
+    conversacion.mensajes.filter(remitente="admin", leido_cliente=False).update(leido_cliente=True)
+
+    if request.method == "POST":
+        texto = (request.POST.get("mensaje") or "").strip()
+        archivos = request.FILES.getlist("adjuntos")
+        if not texto and not archivos:
+            messages.error(request, "Escribe un mensaje o adjunta una foto/video.")
+        elif _estado_limite_soporte(perfil)["agotado"]:
+            limite_response = _respuesta_limite_soporte(request, perfil)
+            if limite_response:
+                return limite_response
+        else:
+            with transaction.atomic():
+                mensaje = MensajeSoporteDigital.objects.create(
+                    conversacion=conversacion, remitente="cliente", autor=request.user,
+                    texto=texto, leido_cliente=True, leido_admin=False,
+                )
+                try:
+                    _guardar_adjuntos_soporte(mensaje, archivos)
+                except ValidationError as exc:
+                    transaction.set_rollback(True)
+                    messages.error(request, exc.messages[0])
+                    return redirect("asistente_tecnico:digital_soporte_chat", pk=pk)
+                conversacion.estado = "espera_admin"
+                conversacion.ultimo_mensaje_en = mensaje.creado_en
+                conversacion.save(update_fields=["estado", "ultimo_mensaje_en", "actualizada_en"])
+            _sincronizar_notificacion_admin_soporte()
+            if request.headers.get("x-requested-with") == "XMLHttpRequest":
+                mensaje = MensajeSoporteDigital.objects.prefetch_related("adjuntos").get(pk=mensaje.pk)
+                return JsonResponse({
+                    "ok": True,
+                    "mensaje": _serializar_mensaje_soporte(mensaje),
+                    "estado": conversacion.estado,
+                    "estado_label": conversacion.get_estado_display(),
+                    "limite_soporte": _estado_limite_soporte(perfil),
+                })
+            return redirect("asistente_tecnico:digital_soporte_chat", pk=pk)
+
+    return render(request, "asistente_tecnico/digital_soporte_chat.html", {
+        "perfil": perfil,
+        "conversacion": conversacion,
+        "limite_soporte": _estado_limite_soporte(perfil),
+    })
+
+
+@login_required
+def soporte_admin_lista_view(request):
+    if not _es_admin(request.user):
+        return HttpResponseForbidden("No autorizado")
+    estado = (request.GET.get("estado") or "abiertas").strip()
+    qs = ConversacionSoporteDigital.objects.select_related(
+        "suscriptor__user", "piscina"
+    ).annotate(
+        no_leidos=Count("mensajes", filter=Q(mensajes__remitente="cliente", mensajes__leido_admin=False))
+    )
+    if estado == "abiertas":
+        qs = qs.exclude(estado="cerrada")
+    elif estado in {x[0] for x in ConversacionSoporteDigital.ESTADOS}:
+        qs = qs.filter(estado=estado)
+    return render(request, "asistente_tecnico/soporte_admin_lista.html", {
+        "base_template": "dashboard/base_admin.html",
+        "conversaciones": qs,
+        "estado_filtro": estado,
+        "pendientes_soporte": qs.filter(estado="espera_admin").count(),
+    })
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+@xframe_options_sameorigin
+def soporte_admin_chat_view(request, pk):
+    if not _es_admin(request.user):
+        return HttpResponseForbidden("No autorizado")
+    conversacion = get_object_or_404(
+        ConversacionSoporteDigital.objects.select_related(
+            "suscriptor__user", "piscina"
+        ).prefetch_related("mensajes__adjuntos"),
+        pk=pk,
+    )
+    conversacion.mensajes.filter(remitente="cliente", leido_admin=False).update(leido_admin=True)
+    _sincronizar_notificacion_admin_soporte()
+
+    if request.method == "POST":
+        accion = request.POST.get("accion")
+        if accion == "cerrar":
+            conversacion.estado = "cerrada"
+            conversacion.save(update_fields=["estado", "actualizada_en"])
+            messages.success(request, "Conversación cerrada.")
+            return redirect("asistente_tecnico:soporte_admin_lista")
+        if accion == "reabrir":
+            conversacion.estado = "espera_admin"
+            conversacion.save(update_fields=["estado", "actualizada_en"])
+            return redirect("asistente_tecnico:soporte_admin_chat", pk=pk)
+
+        texto = (request.POST.get("mensaje") or "").strip()
+        archivos = request.FILES.getlist("adjuntos")
+        if texto or archivos:
+            with transaction.atomic():
+                mensaje = MensajeSoporteDigital.objects.create(
+                    conversacion=conversacion, remitente="admin", autor=request.user,
+                    texto=texto, leido_admin=True, leido_cliente=False,
+                )
+                try:
+                    _guardar_adjuntos_soporte(mensaje, archivos)
+                except ValidationError as exc:
+                    transaction.set_rollback(True)
+                    messages.error(request, exc.messages[0])
+                    return redirect("asistente_tecnico:soporte_admin_chat", pk=pk)
+                conversacion.estado = "espera_cliente"
+                conversacion.ultimo_mensaje_en = mensaje.creado_en
+                conversacion.save(update_fields=["estado", "ultimo_mensaje_en", "actualizada_en"])
+            # NotificacionDigital no posee campo URL y exige programada_para.
+            # Usamos el tipo existente "recordatorio" para no alterar el esquema.
+            NotificacionDigital.objects.create(
+                suscriptor=conversacion.suscriptor,
+                tipo="recordatorio",
+                titulo="JVAQUA respondió tu mensaje",
+                mensaje=(texto[:180] or "Te enviamos un archivo en Soporte."),
+                programada_para=timezone.now(),
+            )
+            if request.headers.get("x-requested-with") == "XMLHttpRequest":
+                mensaje = MensajeSoporteDigital.objects.prefetch_related("adjuntos").get(pk=mensaje.pk)
+                return JsonResponse({
+                    "ok": True,
+                    "mensaje": _serializar_mensaje_soporte(mensaje),
+                    "estado": conversacion.estado,
+                    "estado_label": conversacion.get_estado_display(),
+                })
+            return redirect("asistente_tecnico:soporte_admin_chat", pk=pk)
+
+    return render(request, "asistente_tecnico/soporte_admin_chat.html", {
+        "base_template": "dashboard/base_admin.html",
+        "conversacion": conversacion,
+    })
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def digital_sugerencias_view(request):
+    perfil = _suscriptor(request.user)
+    if not perfil:
+        return HttpResponseForbidden("No autorizado")
+    piscinas = perfil.piscinas.filter(activa=True)
+    if request.method == "POST":
+        categoria = (request.POST.get("categoria") or "general").strip()
+        if categoria not in {x[0] for x in SugerenciaDigital.CATEGORIAS}:
+            categoria = "general"
+        mensaje = (request.POST.get("mensaje") or "").strip()
+        piscina = None
+        piscina_id = request.POST.get("piscina_id")
+        if piscina_id:
+            piscina = piscinas.filter(pk=piscina_id).first()
+        calificacion = None
+        try:
+            valor = int(request.POST.get("calificacion") or 0)
+            if 1 <= valor <= 5:
+                calificacion = valor
+        except (TypeError, ValueError):
+            pass
+        if len(mensaje) < 5:
+            messages.error(request, "Cuéntanos un poco más para poder entender tu sugerencia.")
+        else:
+            SugerenciaDigital.objects.create(
+                suscriptor=perfil,
+                piscina=piscina,
+                categoria=categoria,
+                calificacion=calificacion,
+                mensaje=mensaje,
+            )
+            messages.success(request, "Gracias. Tu opinión fue enviada directamente a JVAQUA.")
+            return redirect("asistente_tecnico:digital_sugerencias")
+    propias = perfil.sugerencias_digitales.all()[:6]
+    return render(
+        request,
+        "asistente_tecnico/digital_sugerencias.html",
+        {
+            "perfil": perfil,
+            "piscinas": piscinas,
+            "categorias": SugerenciaDigital.CATEGORIAS,
+            "propias": propias,
+        },
+    )
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def digital_piscina_form_view(request, pk=None):
+    perfil = _suscriptor(request.user)
+    if not perfil: return HttpResponseForbidden("No autorizado")
+    obj = get_object_or_404(PiscinaSuscriptor, pk=pk, suscriptor=perfil) if pk else None
+    if request.method == "POST":
+        try:
+            largo = Decimal((request.POST.get("largo_m") or "0").replace(",",".")) if request.POST.get("largo_m") else None
+            ancho = Decimal((request.POST.get("ancho_m") or "0").replace(",",".")) if request.POST.get("ancho_m") else None
+            profundidad = Decimal((request.POST.get("profundidad_m") or "0").replace(",",".")) if request.POST.get("profundidad_m") else None
+            vol_txt=(request.POST.get("volumen_m3") or "").replace(",",".")
+            volumen=Decimal(vol_txt) if vol_txt else ((largo*ancho*profundidad).quantize(Decimal("0.01")) if largo and ancho and profundidad else Decimal("0"))
+            if volumen <= 0: raise ValueError
+        except (InvalidOperation, ValueError):
+            messages.error(request,"Ingresa un volumen válido o las tres dimensiones de la piscina.")
+        else:
+            if obj is None:
+                if perfil.limite_piscinas is not None and perfil.piscinas.filter(activa=True).count() >= perfil.limite_piscinas:
+                    messages.error(request, f"Tu plan {perfil.get_plan_display()} permite hasta {perfil.limite_piscinas} piscina(s). Puedes cambiar de plan desde tu suscripción.")
+                    return redirect("asistente_tecnico:digital_inicio")
+                obj=PiscinaSuscriptor(suscriptor=perfil)
+            obj.nombre=(request.POST.get("nombre") or "Mi piscina").strip()[:100]
+            obj.tipo_piscina=request.POST.get("tipo_piscina") or "residencial"
+            obj.largo_m=largo; obj.ancho_m=ancho; obj.profundidad_m=profundidad; obj.volumen_m3=volumen
+            obj.tipo_filtro=request.POST.get("tipo_filtro") or "otro"; obj.desinfeccion=request.POST.get("desinfeccion") or "otro"
+            obj.origen_agua=request.POST.get("origen_agua") or "potable"; obj.antecedente_hierro=request.POST.get("antecedente_hierro") or "no_se"
+            obj.notas=(request.POST.get("notas") or "").strip(); obj.principal=request.POST.get("principal")=="on"; obj.save()
+            messages.success(request,"Piscina guardada. El Asistente ya puede usar estos datos.")
+            return redirect("asistente_tecnico:digital_inicio")
+    return render(request,"asistente_tecnico/digital_piscina_form.html",{"obj":obj,"tipo_choices":PiscinaSuscriptor.TIPOS,"filtro_choices":PiscinaSuscriptor.FILTROS,"desinfeccion_choices":PiscinaSuscriptor.DESINFECCION,"origen_agua_choices":PiscinaSuscriptor.ORIGEN_AGUA,"hierro_choices":PiscinaSuscriptor.HIERRO})
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def digital_plan_mantenimiento_view(request, pk):
+    perfil = _suscriptor(request.user)
+    if not perfil:
+        return HttpResponseForbidden("No autorizado")
+
+    piscina = get_object_or_404(
+        PiscinaSuscriptor, pk=pk, suscriptor=perfil, activa=True
+    )
+    plan, _ = PlanMantenimientoPiscina.objects.get_or_create(piscina=piscina)
+
+    resultado = None
+    plan_visitas = []
+    valores = {
+        "frecuencia": plan.frecuencia_semanal,
+        "ph": "",
+        "cloro": "",
+        "estado_agua": "transparente",
+    }
+
+    def _fechas_semana(frecuencia):
+        """Distribuye las visitas de forma uniforme desde hoy en los próximos 7 días."""
+        hoy = timezone.localdate()
+        if frecuencia <= 1:
+            return [hoy]
+        offsets = [int(i * 7 / frecuencia) for i in range(frecuencia)]
+        return [hoy + timedelta(days=offset) for offset in offsets]
+
+    def _guia_para(texto):
+        texto = (texto or "").lower()
+        if "ph" in texto or ("cloro" in texto and "medir" in texto):
+            return "medir pH y cloro"
+        if "pozo" in texto or "hierro" in texto or "precipitado" in texto:
+            return "agua de pozo hierro"
+        if "aspir" in texto:
+            return "aspirado piscina"
+        if "cepill" in texto:
+            return "cepillado piscina"
+        if "basura" in texto or "superficial" in texto:
+            return "limpieza superficial cernidera"
+        if "canastilla" in texto or "skimmer" in texto:
+            return "limpieza skimmer canastilla bomba"
+        if "retrolavado" in texto:
+            return "retrolavado filtro"
+        if "tratamiento" in texto or "químico" in texto or "quimico" in texto:
+            return "tratamiento químico mantenimiento"
+        return "mantenimiento piscina"
+
+    def _armar_tareas(numero, recomendacion):
+        base = plan.rutina_visita(numero)
+        tareas = []
+        productos_agregados = False
+
+        for tarea in base:
+            es_tratamiento = "tratamiento químico" in tarea.lower() or "tratamiento quimico" in tarea.lower()
+            if es_tratamiento and numero == 1:
+                productos = recomendacion.get("productos_sugeridos", []) if recomendacion else []
+                if productos:
+                    for producto in productos:
+                        tareas.append({
+                            "tipo": "quimico",
+                            "titulo": f"Aplicar {producto.get('nombre', 'producto recomendado')}",
+                            "detalle": f"{producto.get('cantidad', '')} {producto.get('unidad', '')}".strip(),
+                            "motivo": producto.get("motivo", ""),
+                            "guia": producto.get("nombre", "tratamiento químico"),
+                        })
+                    productos_agregados = True
+                else:
+                    tareas.append({
+                        "tipo": "ok",
+                        "titulo": "No aplicar correctivos químicos adicionales",
+                        "detalle": "Las mediciones no requieren una corrección adicional según los estándares actuales de AQUO.",
+                        "motivo": "",
+                        "guia": "tratamiento químico mantenimiento",
+                    })
+                    productos_agregados = True
+                continue
+
+            if es_tratamiento and numero > 1:
+                tareas.append({
+                    "tipo": "control",
+                    "titulo": "Volver a medir pH y cloro antes de agregar químicos",
+                    "detalle": "No repitas automáticamente la dosis de la primera visita. Si las mediciones cambiaron, vuelve a calcular con AQUO.",
+                    "motivo": "",
+                    "guia": "medir pH y cloro",
+                })
+                continue
+
+            tareas.append({
+                "tipo": "tarea",
+                "titulo": tarea,
+                "detalle": "",
+                "motivo": "",
+                "guia": _guia_para(tarea),
+            })
+
+        if numero == 1 and recomendacion and recomendacion.get("protocolo"):
+            for paso in recomendacion["protocolo"]:
+                titulo = str(paso.get("titulo", "")).strip()
+                detalle = str(paso.get("detalle", "")).strip()
+                if not titulo:
+                    continue
+                # No duplicar el producto si ya está reflejado como tarea de dosificación.
+                if productos_agregados and "aplicar" in titulo.lower():
+                    continue
+                tareas.append({
+                    "tipo": "protocolo",
+                    "titulo": titulo,
+                    "detalle": detalle,
+                    "motivo": "",
+                    "guia": _guia_para(titulo + " " + detalle),
+                })
+        return tareas
+
+    if request.method == "POST":
+        try:
+            frecuencia = int(request.POST.get("frecuencia_semanal") or 1)
+        except (TypeError, ValueError):
+            frecuencia = 1
+        frecuencia = min(max(frecuencia, 1), 7)
+
+        ph_txt = (request.POST.get("ph") or "").replace(",", ".").strip()
+        cloro_txt = (request.POST.get("cloro") or "").replace(",", ".").strip()
+        estado = (request.POST.get("estado_agua") or "transparente").strip()
+        valores = {
+            "frecuencia": frecuencia,
+            "ph": ph_txt,
+            "cloro": cloro_txt,
+            "estado_agua": estado,
+        }
+
+        try:
+            ph = Decimal(ph_txt)
+            cloro = Decimal(cloro_txt)
+            if ph <= 0 or cloro < 0:
+                raise InvalidOperation
+        except (InvalidOperation, ValueError):
+            messages.error(
+                request,
+                "Ingresa valores válidos de pH y cloro para crear el plan semanal.",
+            )
+        else:
+            plan.frecuencia_semanal = frecuencia
+            plan.save(update_fields=["frecuencia_semanal", "actualizado_en"])
+
+            resultado = calcular_recomendacion(
+                volumen=float(piscina.volumen_m3),
+                ph=float(ph),
+                cloro=float(cloro),
+                estado_agua=estado,
+                tipo_piscina=piscina.tipo_piscina,
+                tipo_agua=piscina.origen_agua,
+                antecedente_hierro=piscina.antecedente_hierro,
+            )
+
+            fechas = _fechas_semana(frecuencia)
+            # Reprogramar únicamente visitas futuras aún no ejecutadas de este ciclo.
+            VisitaProgramadaPiscina.objects.filter(
+                plan=plan,
+                fecha__gte=timezone.localdate(),
+                estado="programada",
+            ).delete()
+
+            for numero, fecha in enumerate(fechas, start=1):
+                tareas = _armar_tareas(numero, resultado)
+                visita = VisitaProgramadaPiscina.objects.create(
+                    plan=plan,
+                    piscina=piscina,
+                    fecha=fecha,
+                    visita_numero=numero,
+                    plan_resultado={
+                        "ph_inicial": str(ph),
+                        "cloro_inicial": str(cloro),
+                        "estado_agua": estado,
+                        "diagnostico": resultado.get("diagnostico", ""),
+                        "tareas": tareas,
+                    },
+                )
+                plan_visitas.append({
+                    "obj": visita,
+                    "fecha": fecha,
+                    "numero": numero,
+                    "tareas": tareas,
+                })
+
+                # La notificación queda programada para las 07:00 del día de la visita.
+                momento = timezone.make_aware(
+                    datetime.combine(fecha, time(hour=7)),
+                    timezone.get_current_timezone(),
+                )
+                NotificacionDigital.objects.get_or_create(
+                    suscriptor=perfil,
+                    visita=visita,
+                    tipo="visita_hoy",
+                    defaults={
+                        "piscina": piscina,
+                        "titulo": f"Mantenimiento de {piscina.nombre}",
+                        "mensaje": f"Hoy corresponde la visita {numero} de {frecuencia}. Abre tu plan y sigue los pasos preparados por AQUO.",
+                        "programada_para": momento,
+                    },
+                )
+
+            NotificacionDigital.objects.create(
+                suscriptor=perfil,
+                piscina=piscina,
+                tipo="plan_creado",
+                titulo="Plan semanal preparado",
+                mensaje=f"AQUO programó {frecuencia} visita{'s' if frecuencia != 1 else ''} para {piscina.nombre}.",
+                programada_para=timezone.now(),
+            )
+            messages.success(
+                request,
+                f"AQUO preparó y programó {frecuencia} visita{'s' if frecuencia != 1 else ''} para los próximos 7 días.",
+            )
+    else:
+        visitas_guardadas = VisitaProgramadaPiscina.objects.filter(
+            plan=plan,
+            fecha__gte=timezone.localdate(),
+            estado="programada",
+        ).order_by("fecha", "visita_numero")[:7]
+        for visita in visitas_guardadas:
+            data = visita.plan_resultado or {}
+            plan_visitas.append({
+                "obj": visita,
+                "fecha": visita.fecha,
+                "numero": visita.visita_numero,
+                "tareas": data.get("tareas", []),
+            })
+
+    historial = piscina.mantenimientos_digitales.all()[:8]
+    return render(
+        request,
+        "asistente_tecnico/digital_plan_mantenimiento.html",
+        {
+            "perfil": perfil,
+            "piscina": piscina,
+            "plan": plan,
+            "resultado": resultado,
+            "plan_visitas": plan_visitas,
+            "valores": valores,
+            "historial": historial,
+            "frecuencias": PlanMantenimientoPiscina.FRECUENCIAS,
+            "estados_agua": [
+                ("transparente", "Transparente / normal"),
+                ("ligeramente_turbia", "Ligeramente turbia"),
+                ("muy_turbia", "Muy turbia"),
+                ("verde", "Verde / con algas"),
+            ],
+        },
+    )
+
+
+@login_required
+@require_http_methods(["POST"])
+def digital_registrar_mantenimiento_view(request, pk):
+    perfil = _suscriptor(request.user)
+    if not perfil:
+        return HttpResponseForbidden("No autorizado")
+
+    piscina = get_object_or_404(
+        PiscinaSuscriptor, pk=pk, suscriptor=perfil, activa=True
+    )
+    plan, _ = PlanMantenimientoPiscina.objects.get_or_create(piscina=piscina)
+
+    try:
+        visita_numero = int(request.POST.get("visita_numero") or 1)
+    except ValueError:
+        visita_numero = 1
+
+    def dec(name):
+        valor = (request.POST.get(name) or "").replace(",", ".").strip()
+        if not valor:
+            return None
+        try:
+            return Decimal(valor)
+        except InvalidOperation:
+            return None
+
+    visita_programada = None
+    visita_programada_id = request.POST.get("visita_programada_id")
+    if visita_programada_id:
+        visita_programada = VisitaProgramadaPiscina.objects.filter(
+            pk=visita_programada_id,
+            piscina=piscina,
+            plan=plan,
+        ).first()
+
+    tareas = (
+        (visita_programada.plan_resultado or {}).get("tareas", [])
+        if visita_programada
+        else plan.rutina_visita(visita_numero)
+    )
+
+    RegistroMantenimientoPiscina.objects.create(
+        piscina=piscina,
+        visita_numero=visita_numero,
+        ph=dec("ph"),
+        cloro=dec("cloro"),
+        tareas=tareas,
+        observaciones=(request.POST.get("observaciones") or "").strip(),
+    )
+
+    if visita_programada:
+        visita_programada.estado = "completada"
+        visita_programada.save(update_fields=["estado", "actualizado_en"])
+        visita_programada.notificaciones.update(leida=True)
+
+    messages.success(
+        request,
+        "Mantenimiento completado y guardado en el historial de la piscina.",
+    )
+    return redirect(
+        "asistente_tecnico:digital_plan_mantenimiento", pk=piscina.pk
+    )
+
+
+@login_required
+@require_http_methods(["GET"])
+def digital_notificaciones_view(request):
+    perfil = _suscriptor(request.user)
+    if not perfil:
+        return HttpResponseForbidden("No autorizado")
+
+    ahora = timezone.now()
+    notificaciones = NotificacionDigital.objects.filter(
+        suscriptor=perfil,
+        programada_para__lte=ahora,
+    ).select_related("piscina", "visita")[:80]
+
+    return render(
+        request,
+        "asistente_tecnico/digital_notificaciones.html",
+        {
+            "perfil": perfil,
+            "notificaciones": notificaciones,
+        },
+    )
+
+
+@login_required
+@require_http_methods(["POST"])
+def digital_notificacion_leer_view(request, pk):
+    perfil = _suscriptor(request.user)
+    if not perfil:
+        return HttpResponseForbidden("No autorizado")
+
+    notificacion = get_object_or_404(
+        NotificacionDigital,
+        pk=pk,
+        suscriptor=perfil,
+    )
+    notificacion.leida = True
+    notificacion.save(update_fields=["leida"])
+
+    destino = request.POST.get("next") or ""
+    if destino.startswith("/"):
+        return redirect(destino)
+    if notificacion.piscina_id:
+        return redirect(
+            "asistente_tecnico:digital_plan_mantenimiento",
+            pk=notificacion.piscina_id,
+        )
+    return redirect("asistente_tecnico:digital_notificaciones")
+
+
+@login_required
+@require_http_methods(["POST"])
+def digital_notificaciones_leer_todas_view(request):
+    perfil = _suscriptor(request.user)
+    if not perfil:
+        return HttpResponseForbidden("No autorizado")
+
+    NotificacionDigital.objects.filter(
+        suscriptor=perfil,
+        programada_para__lte=timezone.now(),
+        leida=False,
+    ).update(leida=True)
+    return redirect("asistente_tecnico:digital_notificaciones")
+
+
+@login_required
+@require_http_methods(["POST"])
+def digital_notificacion_eliminar_view(request, pk):
+    perfil = _suscriptor(request.user)
+    if not perfil:
+        return HttpResponseForbidden("No autorizado")
+    get_object_or_404(NotificacionDigital, pk=pk, suscriptor=perfil).delete()
+    messages.success(request, "Notificación eliminada.")
+    return redirect("asistente_tecnico:digital_notificaciones")
+
+
+@login_required
+@require_http_methods(["POST"])
+def digital_notificaciones_eliminar_todas_view(request):
+    perfil = _suscriptor(request.user)
+    if not perfil:
+        return HttpResponseForbidden("No autorizado")
+    NotificacionDigital.objects.filter(
+        suscriptor=perfil,
+        programada_para__lte=timezone.now(),
+    ).delete()
+    messages.success(request, "Se eliminaron tus notificaciones.")
+    return redirect("asistente_tecnico:digital_notificaciones")
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+@xframe_options_sameorigin
+def digital_resolver_view(request):
+    perfil=_suscriptor(request.user)
+    if not perfil: return HttpResponseForbidden("No autorizado")
+    piscinas=perfil.piscinas.filter(activa=True)
+    piscina=None; resultado=None; caso=None; categoria_consulta="agua"; detalle_problema=""
+    pid=request.POST.get("piscina_id") or request.GET.get("piscina")
+    if pid:
+        piscina=piscinas.filter(pk=pid).first()
+    elif piscinas.count() == 1:
+        piscina=piscinas.first()
+    if request.method=="POST":
+        categoria_consulta=(request.POST.get("categoria_consulta") or "agua").strip()
+        detalle_problema=(request.POST.get("detalle_problema") or "").strip()
+        if not piscina:
+            messages.error(request,"Primero registra tu piscina para personalizar correctamente el diagnóstico.")
+        elif categoria_consulta != "agua":
+            resultado=diagnosticar_problema_tecnico(categoria_consulta, detalle_problema)
+        else:
+            try:
+                ph=Decimal((request.POST.get("ph") or "").replace(",",".")); cloro=Decimal((request.POST.get("cloro") or "").replace(",","."))
+            except InvalidOperation:
+                messages.error(request,"Necesito los valores de pH y cloro para darte una recomendación química segura.")
+            else:
+                estado=request.POST.get("estado_agua") or ""
+                if estado not in {x[0] for x in CasoAsistenteTecnico.ESTADO_AGUA_CHOICES}:
+                    messages.error(request,"Selecciona cómo se ve el agua.")
+                else:
+                    motor=_motor_activo(); resultado=calcular_recomendacion(piscina.volumen_m3,ph,cloro,estado,piscina.tipo_piscina,motor.reglas,tipo_agua=piscina.origen_agua,antecedente_hierro=piscina.antecedente_hierro)
+                    caso=CasoAsistenteTecnico.objects.create(user=request.user,piscina=piscina,motor=motor,volumen_m3=piscina.volumen_m3,ph_inicial=ph,cloro_inicial=cloro,estado_agua=estado,tipo_piscina=piscina.tipo_piscina,diagnostico=resultado["diagnostico"],tipo_tratamiento=resultado["tipo_tratamiento"],prioridad=resultado["prioridad"],resumen=resultado["resumen"],protocolo=resultado["protocolo"],productos_sugeridos=resultado["productos_sugeridos"],explicaciones=resultado["explicaciones"],advertencias=resultado["advertencias"],seguimiento_programado_para=timezone.now()+timedelta(hours=resultado["seguimiento_horas"]))
+    return render(request,"asistente_tecnico/digital_resolver.html",{
+        "piscinas":piscinas,"piscina":piscina,"resultado":resultado,"caso":caso,
+        "estado_choices":CasoAsistenteTecnico.ESTADO_AGUA_CHOICES,
+        "problemas_tecnicos":PROBLEMAS_TECNICOS,
+        "categoria_consulta":categoria_consulta,"detalle_problema":detalle_problema,
+        "articulos_relacionados":_academia_relacionada_con_diagnostico(resultado),
+    })

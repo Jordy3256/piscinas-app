@@ -1,3 +1,4 @@
+from decimal import Decimal
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
@@ -64,6 +65,14 @@ class CasoAsistenteTecnico(models.Model):
         on_delete=models.PROTECT,
         related_name="casos",
     )
+    piscina = models.ForeignKey(
+        "PiscinaSuscriptor",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="casos_asistente",
+    )
+
 
     volumen_m3 = models.DecimalField(max_digits=9, decimal_places=2)
     ph_inicial = models.DecimalField(max_digits=4, decimal_places=2)
@@ -278,6 +287,18 @@ class ContenidoAcademia(models.Model):
         ("intermedio", "Intermedio"),
         ("avanzado", "Avanzado"),
     ]
+    ACCESOS = [
+        ("compartido", "Trabajadores y suscriptores"),
+        ("interno", "Solo JVAQUA"),
+        ("suscriptor", "Solo suscriptores"),
+    ]
+    MODULOS_CURSO = [
+        ("fundamentos", "1. Fundamentos"), ("quimica", "2. Química del agua"),
+        ("productos", "3. Productos químicos"), ("mantenimiento", "4. Mantenimiento"),
+        ("problemas", "5. Problemas del agua"), ("equipos", "6. Equipos"),
+        ("preventivo", "7. Mantenimiento preventivo"), ("seguridad", "8. Seguridad"),
+        ("estandar", "9. Estándar JVAQUA"), ("avanzado", "10. Conocimiento avanzado"),
+    ]
     tipo = models.CharField(max_length=20, choices=TIPOS, db_index=True)
     codigo = models.CharField(max_length=40, unique=True)
     titulo = models.CharField(max_length=180)
@@ -301,6 +322,9 @@ class ContenidoAcademia(models.Model):
     recomendaciones_jvaqua = models.TextField(blank=True, default="")
     referencias_tecnicas = models.TextField(blank=True, default="")
     etiquetas = models.CharField(max_length=500, blank=True, default="")
+    acceso = models.CharField(max_length=20, choices=ACCESOS, default="compartido", db_index=True)
+    modulo_curso = models.CharField(max_length=30, choices=MODULOS_CURSO, blank=True, default="", db_index=True)
+    orden_curso = models.PositiveSmallIntegerField(default=0)
     relacionados = models.ManyToManyField("self", blank=True, symmetrical=True)
     orden = models.PositiveSmallIntegerField(default=0)
     creado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="contenidos_academia_creados")
@@ -322,6 +346,30 @@ class ContenidoAcademia(models.Model):
     def es_oficial(self):
         return self.estado == "aprobado"
 
+    @property
+    def visual_asset(self):
+        """Ilustración editorial de respaldo cuando el CMS no tiene una foto cargada."""
+        slug = (self.slug or "").lower()
+        modulo = (self.modulo_curso or "").lower()
+        tipo = (self.tipo or "").lower()
+
+        reglas = [
+            (("ph" in slug) or ("alcalinidad" in slug) or ("dureza" in slug) or ("cianur" in slug), "asistente_tecnico/academia/water-balance.svg"),
+            (("cloro" in slug) or ("tricloro" in slug) or ("alguicida" in slug) or ("sulfato" in slug) or ("quim" in modulo), "asistente_tecnico/academia/chemistry.svg"),
+            (("bomba" in slug) or ("cebado" in slug), "asistente_tecnico/academia/pump.svg"),
+            (("filtro" in slug) or ("arena" in slug) or ("retrolavado" in slug), "asistente_tecnico/academia/filter.svg"),
+            (("multivalvula" in slug) or ("valvula" in slug), "asistente_tecnico/academia/multiport.svg"),
+            (("verde" in slug) or ("turbia" in slug) or ("flocul" in slug), "asistente_tecnico/academia/water-recovery.svg"),
+            (("seguridad" in slug) or (modulo == "seguridad"), "asistente_tecnico/academia/safety.svg"),
+            (("calor" in slug) or ("calef" in slug), "asistente_tecnico/academia/heat-pump.svg"),
+            ((tipo == "equipo") or (modulo == "equipos"), "asistente_tecnico/academia/equipment.svg"),
+            ((tipo == "procedimiento") or (modulo in {"mantenimiento", "preventivo", "estandar"}), "asistente_tecnico/academia/maintenance.svg"),
+        ]
+        for coincide, asset in reglas:
+            if coincide:
+                return asset
+        return "asistente_tecnico/academia/pool-flow.svg"
+
 
 class ImagenContenidoAcademia(models.Model):
     contenido = models.ForeignKey(ContenidoAcademia, on_delete=models.CASCADE, related_name="galeria")
@@ -338,6 +386,37 @@ class ImagenContenidoAcademia(models.Model):
 
     def __str__(self):
         return self.titulo or f"Imagen #{self.pk}"
+
+
+class MaterialAudiovisualAcademia(models.Model):
+    TIPOS = [
+        ("video", "Video"),
+        ("audio", "Audio"),
+    ]
+    contenido = models.ForeignKey(
+        ContenidoAcademia,
+        on_delete=models.CASCADE,
+        related_name="materiales_audiovisuales",
+    )
+    tipo = models.CharField(max_length=10, choices=TIPOS, default="video", db_index=True)
+    archivo = models.FileField(upload_to="academia/audiovisual/%Y/%m/")
+    titulo = models.CharField(max_length=160)
+    descripcion = models.CharField(max_length=320, blank=True, default="")
+    duracion_texto = models.CharField(
+        max_length=30, blank=True, default="",
+        help_text="Opcional. Ej.: 45 s, 1:20 min."
+    )
+    orden = models.PositiveSmallIntegerField(default=0)
+    activo = models.BooleanField(default=True, db_index=True)
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["orden", "id"]
+        verbose_name = "Material audiovisual de Academia"
+        verbose_name_plural = "Material audiovisual de Academia"
+
+    def __str__(self):
+        return f"{self.get_tipo_display()} · {self.titulo}"
 
 
 class VersionContenidoAcademia(models.Model):
@@ -386,3 +465,500 @@ class ExperienciaConocimiento(models.Model):
 
     def __str__(self):
         return self.titulo
+
+
+class ProgresoContenidoAcademia(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="progreso_contenido_academia")
+    contenido = models.ForeignKey(ContenidoAcademia, on_delete=models.CASCADE, related_name="progresos_curso")
+    completado = models.BooleanField(default=True)
+    completado_en = models.DateTimeField(default=timezone.now)
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["user", "contenido"], name="ati_unique_user_content_progress")]
+        ordering = ["-completado_en"]
+
+
+class FavoritoContenidoAcademia(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="favoritos_academia")
+    contenido = models.ForeignKey(ContenidoAcademia, on_delete=models.CASCADE, related_name="favoritos")
+    creado_en = models.DateTimeField(auto_now_add=True)
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["user", "contenido"], name="ati_unique_user_content_favorite")]
+        ordering = ["-creado_en"]
+
+
+class ConsultaContenidoAcademia(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="consultas_academia")
+    contenido = models.ForeignKey(ContenidoAcademia, on_delete=models.CASCADE, related_name="consultas")
+    consultado_en = models.DateTimeField(default=timezone.now, db_index=True)
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["user", "contenido"], name="ati_unique_user_content_recent")]
+        ordering = ["-consultado_en"]
+
+
+class PerfilSuscriptor(models.Model):
+    ESTADOS = [("pendiente", "Pendiente de activación"), ("activo", "Activo"), ("pausado", "Pausado"), ("vencido", "Vencido")]
+    PLANES = [
+        ("individual", "Plan Individual"),
+        ("esencial", "Plan Esencial"),
+        ("profesional", "Plan Profesional"),
+        ("empresarial", "Plan Empresarial"),
+    ]
+    PRECIOS = {
+        "individual": Decimal("1.99"),
+        "esencial": Decimal("3.99"),
+        "profesional": Decimal("9.99"),
+        "empresarial": Decimal("19.99"),
+    }
+    LIMITES = {"individual": 1, "esencial": 3, "profesional": 30, "empresarial": None}
+    LIMITES_MENSAJES_SOPORTE = {"individual": 5, "esencial": 10, "profesional": 50, "empresarial": 100}
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="perfil_suscriptor")
+    estado = models.CharField(max_length=20, choices=ESTADOS, default="pendiente", db_index=True)
+    plan = models.CharField(max_length=30, choices=PLANES, default="individual")
+    telefono = models.CharField(max_length=30, blank=True, default="")
+    inicio = models.DateField(default=timezone.localdate)
+    prueba_hasta = models.DateField(null=True, blank=True)
+    acceso_hasta = models.DateField(null=True, blank=True)
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Suscriptor JVAQUA Digital"
+        verbose_name_plural = "Suscriptores JVAQUA Digital"
+
+    @property
+    def tiene_acceso(self):
+        hoy = timezone.localdate()
+        if self.estado == "activo":
+            return not self.acceso_hasta or self.acceso_hasta >= hoy
+        return False
+
+    @property
+    def limite_piscinas(self):
+        return self.LIMITES.get(self.plan, 1)
+
+    @property
+    def precio_mensual(self):
+        return self.PRECIOS.get(self.plan, Decimal("1.99"))
+
+    @property
+    def limite_mensajes_soporte_diario(self):
+        return self.LIMITES_MENSAJES_SOPORTE.get(self.plan, 5)
+
+    def mensajes_soporte_en_fecha(self, fecha=None):
+        fecha = fecha or timezone.localdate()
+        return MensajeSoporteDigital.objects.filter(
+            conversacion__suscriptor=self,
+            remitente="cliente",
+            creado_en__date=fecha,
+        ).count()
+
+    @property
+    def mensajes_soporte_hoy(self):
+        return self.mensajes_soporte_en_fecha()
+
+    @property
+    def mensajes_soporte_restantes_hoy(self):
+        return max(0, self.limite_mensajes_soporte_diario - self.mensajes_soporte_hoy)
+
+    @property
+    def dias_restantes(self):
+        if not self.acceso_hasta:
+            return 0
+        return max(0, (self.acceso_hasta - timezone.localdate()).days)
+
+    @property
+    def piscinas_disponibles(self):
+        return None if self.limite_piscinas is None else max(0, self.limite_piscinas - self.piscinas.filter(activa=True).count())
+
+    def __str__(self):
+        return f"{self.user} · {self.get_estado_display()}"
+
+
+class SolicitudSuscripcionDigital(models.Model):
+    TIPOS = [("alta", "Nueva suscripción"), ("renovacion", "Renovación")]
+    ESTADOS = [
+        ("pendiente", "Pendiente de verificación"),
+        ("aprobada", "Aprobada"),
+        ("rechazada", "Rechazada"),
+    ]
+    METODOS = [
+        ("plataforma", "Comprobante subido en JVAQUA Digital"),
+        ("whatsapp", "Comprobante enviado por WhatsApp"),
+        ("ambos", "Plataforma y WhatsApp"),
+    ]
+
+    suscriptor = models.ForeignKey(
+        PerfilSuscriptor, on_delete=models.CASCADE, related_name="solicitudes_suscripcion"
+    )
+    tipo = models.CharField(max_length=16, choices=TIPOS, default="alta", db_index=True)
+    plan = models.CharField(max_length=30, choices=PerfilSuscriptor.PLANES)
+    valor = models.DecimalField(max_digits=8, decimal_places=2)
+    comprobante = models.FileField(upload_to="jvaqua_digital/comprobantes/%Y/%m/", null=True, blank=True)
+    metodo_envio = models.CharField(max_length=16, choices=METODOS, default="plataforma")
+    observacion_cliente = models.CharField(max_length=300, blank=True, default="")
+    estado = models.CharField(max_length=16, choices=ESTADOS, default="pendiente", db_index=True)
+    observacion_admin = models.CharField(max_length=300, blank=True, default="")
+    revisada_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="suscripciones_digitales_revisadas",
+    )
+    creada_en = models.DateTimeField(auto_now_add=True, db_index=True)
+    revisada_en = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-creada_en", "-id"]
+        verbose_name = "Solicitud de suscripción JVAQUA Digital"
+        verbose_name_plural = "Solicitudes de suscripción JVAQUA Digital"
+
+    def __str__(self):
+        return f"{self.suscriptor.user} · {self.get_plan_display()} · {self.get_estado_display()}"
+
+
+class PiscinaSuscriptor(models.Model):
+    TIPOS = CasoAsistenteTecnico.TIPO_PISCINA_CHOICES
+    DESINFECCION = [("cloro", "Cloro"), ("sal", "Cloración salina"), ("otro", "Otro / no lo sé")]
+    FILTROS = [("arena", "Filtro de arena"), ("cartucho", "Filtro de cartucho"), ("otro", "Otro / no lo sé")]
+    ORIGEN_AGUA = [("potable", "Potable / red pública"), ("pozo", "Pozo"), ("mixta", "Mixta"), ("otro", "Otro / no lo sé")]
+    HIERRO = [("no_se", "No lo sé"), ("si", "Sí / ha reaccionado al cloro"), ("no", "No detectado")]
+    suscriptor = models.ForeignKey(PerfilSuscriptor, on_delete=models.CASCADE, related_name="piscinas")
+    nombre = models.CharField(max_length=100, default="Mi piscina")
+    tipo_piscina = models.CharField(max_length=30, choices=TIPOS, default="residencial")
+    largo_m = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)
+    ancho_m = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)
+    profundidad_m = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)
+    volumen_m3 = models.DecimalField(max_digits=9, decimal_places=2)
+    tipo_filtro = models.CharField(max_length=20, choices=FILTROS, default="arena")
+    desinfeccion = models.CharField(max_length=20, choices=DESINFECCION, default="cloro")
+    origen_agua = models.CharField(max_length=20, choices=ORIGEN_AGUA, default="potable", db_index=True)
+    antecedente_hierro = models.CharField(max_length=12, choices=HIERRO, default="no_se")
+    notas = models.TextField(blank=True, default="")
+    principal = models.BooleanField(default=False, db_index=True)
+    activa = models.BooleanField(default=True, db_index=True)
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-principal", "nombre"]
+        verbose_name = "Piscina de suscriptor"
+        verbose_name_plural = "Piscinas de suscriptores"
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        if self.principal:
+            type(self).objects.filter(suscriptor=self.suscriptor).exclude(pk=self.pk).update(principal=False)
+
+    def __str__(self):
+        return f"{self.suscriptor.user} · {self.nombre}"
+
+
+class PlanMantenimientoPiscina(models.Model):
+    FRECUENCIAS = [
+        (1, "1 vez por semana"),
+        (2, "2 veces por semana"),
+        (3, "3 veces por semana"),
+        (4, "4 veces por semana"),
+        (5, "5 veces por semana"),
+        (6, "6 veces por semana"),
+        (7, "7 veces por semana"),
+    ]
+
+    piscina = models.OneToOneField(
+        PiscinaSuscriptor,
+        on_delete=models.CASCADE,
+        related_name="plan_mantenimiento",
+    )
+    frecuencia_semanal = models.PositiveSmallIntegerField(
+        choices=FRECUENCIAS,
+        default=1,
+    )
+    retrolavado_dias = models.PositiveSmallIntegerField(default=15)
+    arena_deteriorada = models.BooleanField(default=False)
+    activo = models.BooleanField(default=True)
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Plan de mantenimiento de piscina"
+        verbose_name_plural = "Planes de mantenimiento de piscinas"
+
+    def __str__(self):
+        return f"{self.piscina} · {self.get_frecuencia_semanal_display()}"
+
+    @property
+    def frecuencia_retrolavado_dias(self):
+        return 7 if self.arena_deteriorada else self.retrolavado_dias
+
+    def rutina_visita(self, visita_numero=1):
+        """Devuelve la rutina base JVAQUA para una piscina residencial normal.
+
+        No fija dosis químicas: el tratamiento depende de las mediciones reales de
+        pH/CL y del estado del agua evaluado por AQUO.
+        """
+        try:
+            visita_numero = int(visita_numero)
+        except (TypeError, ValueError):
+            visita_numero = 1
+
+        alerta_pozo = self.piscina.origen_agua in {"pozo", "mixta"}
+        # En planes con varias visitas, las primeras son de control/limpieza
+        # y la última concentra la rutina completa. AQUO puede incluir una
+        # dosificación química en la primera visita según la medición inicial.
+        if self.frecuencia_semanal > 1 and visita_numero < self.frecuencia_semanal:
+            tareas = [
+                "Medir pH y cloro",
+                "Aspirar en desagüe o filtración solo si es necesario",
+                "Cepillar paredes y piso",
+                "Recoger basura superficial",
+                "Revisar canastillas y nivel de agua",
+                "Aplicar el tratamiento químico indicado por AQUO si corresponde",
+                "Finalizar mantenimiento",
+            ]
+            if alerta_pozo:
+                tareas.insert(1, "Observar coloración o precipitados antes de clorar; en agua de pozo considerar hierro/metales")
+            return tareas
+
+        # Visita única semanal o última visita de un plan con varias visitas.
+        tareas = [
+            "Medir pH y cloro",
+            "Aspirar en desagüe o filtración obligatoriamente, según convenga",
+            "Cepillar paredes y piso",
+            "Recoger basura superficial",
+            "Limpiar canastilla de skimmer y bomba",
+            "Aplicar tratamiento químico según las mediciones de pH y cloro",
+            "Finalizar mantenimiento",
+        ]
+        if alerta_pozo:
+            tareas.insert(1, "Observar coloración o precipitados antes de clorar; en agua de pozo considerar hierro/metales")
+        return tareas
+
+
+
+class VisitaProgramadaPiscina(models.Model):
+    ESTADOS = [
+        ("programada", "Programada"),
+        ("completada", "Completada"),
+        ("omitida", "Omitida"),
+    ]
+
+    plan = models.ForeignKey(
+        PlanMantenimientoPiscina,
+        on_delete=models.CASCADE,
+        related_name="visitas_programadas",
+    )
+    piscina = models.ForeignKey(
+        PiscinaSuscriptor,
+        on_delete=models.CASCADE,
+        related_name="visitas_programadas",
+    )
+    fecha = models.DateField(db_index=True)
+    visita_numero = models.PositiveSmallIntegerField(default=1)
+    estado = models.CharField(max_length=16, choices=ESTADOS, default="programada", db_index=True)
+    plan_resultado = models.JSONField(default=dict, blank=True)
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["fecha", "visita_numero"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["plan", "fecha", "visita_numero"],
+                name="uq_plan_visita_fecha_numero",
+            )
+        ]
+        verbose_name = "Visita programada JVAQUA Digital"
+        verbose_name_plural = "Visitas programadas JVAQUA Digital"
+
+    def __str__(self):
+        return f"{self.piscina} · {self.fecha} · visita {self.visita_numero}"
+
+
+class NotificacionDigital(models.Model):
+    TIPOS = [
+        ("plan_creado", "Plan creado"),
+        ("visita_hoy", "Visita de hoy"),
+        ("recordatorio", "Recordatorio"),
+    ]
+
+    suscriptor = models.ForeignKey(
+        PerfilSuscriptor,
+        on_delete=models.CASCADE,
+        related_name="notificaciones_digitales",
+    )
+    piscina = models.ForeignKey(
+        PiscinaSuscriptor,
+        on_delete=models.CASCADE,
+        related_name="notificaciones_digitales",
+        null=True,
+        blank=True,
+    )
+    visita = models.ForeignKey(
+        VisitaProgramadaPiscina,
+        on_delete=models.CASCADE,
+        related_name="notificaciones",
+        null=True,
+        blank=True,
+    )
+    tipo = models.CharField(max_length=20, choices=TIPOS, default="recordatorio", db_index=True)
+    titulo = models.CharField(max_length=150)
+    mensaje = models.TextField()
+    programada_para = models.DateTimeField(db_index=True)
+    leida = models.BooleanField(default=False, db_index=True)
+    creada_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-programada_para", "-creada_en"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["suscriptor", "visita", "tipo"],
+                name="uq_notificacion_digital_visita_tipo",
+            )
+        ]
+        verbose_name = "Notificación JVAQUA Digital"
+        verbose_name_plural = "Notificaciones JVAQUA Digital"
+
+    @property
+    def disponible(self):
+        return self.programada_para <= timezone.now()
+
+    def __str__(self):
+        return f"{self.suscriptor} · {self.titulo}"
+
+class RegistroMantenimientoPiscina(models.Model):
+    piscina = models.ForeignKey(
+        PiscinaSuscriptor,
+        on_delete=models.CASCADE,
+        related_name="mantenimientos_digitales",
+    )
+    fecha = models.DateField(default=timezone.localdate, db_index=True)
+    visita_numero = models.PositiveSmallIntegerField(default=1)
+    ph = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
+    cloro = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    tareas = models.JSONField(default=list, blank=True)
+    observaciones = models.TextField(blank=True, default="")
+    completado = models.BooleanField(default=True)
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-fecha", "-creado_en"]
+        verbose_name = "Mantenimiento JVAQUA Digital"
+        verbose_name_plural = "Mantenimientos JVAQUA Digital"
+
+    def __str__(self):
+        return f"{self.piscina} · {self.fecha} · visita {self.visita_numero}"
+
+
+class SugerenciaDigital(models.Model):
+    CATEGORIAS = [
+        ("general", "Aplicación en general"),
+        ("aquo", "Asistente AQUO"),
+        ("plan", "Plan semanal"),
+        ("curso", "Curso"),
+        ("biblioteca", "Biblioteca"),
+        ("piscinas", "Mis piscinas"),
+        ("otro", "Otro"),
+    ]
+    ESTADOS = [
+        ("nueva", "Nueva"),
+        ("revision", "En revisión"),
+        ("considerada", "Considerada"),
+        ("cerrada", "Cerrada"),
+    ]
+
+    suscriptor = models.ForeignKey(
+        PerfilSuscriptor,
+        on_delete=models.CASCADE,
+        related_name="sugerencias_digitales",
+    )
+    piscina = models.ForeignKey(
+        PiscinaSuscriptor,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="sugerencias",
+    )
+    categoria = models.CharField(max_length=20, choices=CATEGORIAS, default="general", db_index=True)
+    calificacion = models.PositiveSmallIntegerField(null=True, blank=True)
+    mensaje = models.TextField()
+    estado = models.CharField(max_length=20, choices=ESTADOS, default="nueva", db_index=True)
+    respuesta_interna = models.TextField(blank=True, default="")
+    creada_en = models.DateTimeField(auto_now_add=True, db_index=True)
+    actualizada_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-creada_en", "-id"]
+        verbose_name = "Sugerencia JVAQUA Digital"
+        verbose_name_plural = "Sugerencias JVAQUA Digital"
+
+    def __str__(self):
+        return f"{self.suscriptor} · {self.get_categoria_display()}"
+
+
+class ConversacionSoporteDigital(models.Model):
+    CATEGORIAS = [
+        ("soporte_tecnico", "Soporte técnico de piscina"),
+        ("aquo", "AQUO / recomendaciones"),
+        ("plataforma", "Ayuda con JVAQUA Digital"),
+        ("suscripcion", "Suscripción / pago"),
+        ("sugerencia", "Sugerencia"),
+        ("otro", "Otro"),
+    ]
+    ESTADOS = [
+        ("abierta", "Abierta"),
+        ("espera_admin", "Esperando respuesta de JVAQUA"),
+        ("espera_cliente", "Esperando respuesta del cliente"),
+        ("cerrada", "Cerrada"),
+    ]
+    suscriptor = models.ForeignKey(PerfilSuscriptor, on_delete=models.CASCADE, related_name="conversaciones_soporte")
+    piscina = models.ForeignKey(PiscinaSuscriptor, on_delete=models.SET_NULL, null=True, blank=True, related_name="conversaciones_soporte")
+    categoria = models.CharField(max_length=24, choices=CATEGORIAS, default="soporte_tecnico", db_index=True)
+    asunto = models.CharField(max_length=160, blank=True, default="")
+    estado = models.CharField(max_length=20, choices=ESTADOS, default="espera_admin", db_index=True)
+    ultimo_mensaje_en = models.DateTimeField(default=timezone.now, db_index=True)
+    creada_en = models.DateTimeField(auto_now_add=True)
+    actualizada_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-ultimo_mensaje_en", "-id"]
+        verbose_name = "Conversación de soporte JVAQUA Digital"
+        verbose_name_plural = "Conversaciones de soporte JVAQUA Digital"
+
+    def __str__(self):
+        return f"#{self.pk} · {self.suscriptor.user} · {self.get_categoria_display()}"
+
+
+class MensajeSoporteDigital(models.Model):
+    REMITENTES = [("cliente", "Cliente"), ("admin", "JVAQUA")]
+    conversacion = models.ForeignKey(ConversacionSoporteDigital, on_delete=models.CASCADE, related_name="mensajes")
+    remitente = models.CharField(max_length=10, choices=REMITENTES, db_index=True)
+    autor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="mensajes_soporte_digital")
+    texto = models.TextField(blank=True, default="")
+    leido_cliente = models.BooleanField(default=False, db_index=True)
+    leido_admin = models.BooleanField(default=False, db_index=True)
+    creado_en = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["creado_en", "id"]
+        verbose_name = "Mensaje de soporte JVAQUA Digital"
+        verbose_name_plural = "Mensajes de soporte JVAQUA Digital"
+
+    def __str__(self):
+        return f"{self.conversacion} · {self.get_remitente_display()}"
+
+
+def soporte_adjunto_upload_to(instance, filename):
+    return f"jvaqua_digital/soporte/{instance.mensaje.conversacion_id}/{filename}"
+
+
+class AdjuntoSoporteDigital(models.Model):
+    TIPOS = [("imagen", "Imagen"), ("video", "Video"), ("archivo", "Archivo")]
+    mensaje = models.ForeignKey(MensajeSoporteDigital, on_delete=models.CASCADE, related_name="adjuntos")
+    archivo = models.FileField(upload_to=soporte_adjunto_upload_to)
+    tipo = models.CharField(max_length=12, choices=TIPOS, default="archivo")
+    nombre_original = models.CharField(max_length=255, blank=True, default="")
+    tamano = models.PositiveBigIntegerField(default=0)
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["id"]
+        verbose_name = "Adjunto de soporte JVAQUA Digital"
+        verbose_name_plural = "Adjuntos de soporte JVAQUA Digital"
