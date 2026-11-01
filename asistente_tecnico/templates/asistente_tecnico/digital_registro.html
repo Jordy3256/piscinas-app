@@ -338,6 +338,19 @@ body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,
  .plan-checklist .plan-checklist-soon{font-size:.61rem}
 }
 @media(max-width:400px){.plan-checklist{font-size:.61rem;gap:4px}.plan-checklist .plan-checklist-soon{font-size:.56rem}}
+/* AQUO360 Registro V5.4 — globo junto al hombro, rostro despejado. */
+@media(min-width:981px){
+  .reg-aquo-bubble{
+    top:46%!important;
+    right:clamp(6px,1vw,16px)!important;
+    width:clamp(170px,13.5vw,215px)!important;
+    transform:translateY(-50%)!important;
+  }
+  .reg-aquo-bubble:after{left:-12px;bottom:38%;border:6px solid transparent;border-right-color:#f4fcff}
+}
+@media(min-width:981px) and (max-height:740px){.reg-aquo-bubble{top:46%!important}}
+.plan-checklist .plan-checklist-agenda{font-weight:700;color:var(--plan-ink)}
+.plan-checklist .plan-checklist-agenda i{color:#0fa87e}
 </style>
 </head>
 <body>
@@ -427,7 +440,7 @@ body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,
                   <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i><span>Curso</span></li>
                   <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i><span>Biblioteca</span></li>
                   <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i><span>Plan de mantenimiento</span></li>
-                  {% if p.codigo == "profesional" or p.codigo == "empresarial" %}<li class="plan-checklist-soon"><i class="bi bi-clock-history" aria-hidden="true"></i><span>Agenda · Próximamente</span></li>{% endif %}
+                  {% if p.codigo == "profesional" or p.codigo == "empresarial" %}<li class="plan-checklist-agenda"><i class="bi bi-check-circle-fill" aria-hidden="true"></i><span>Agenda</span></li>{% endif %}
                 </ul>
               </label>
               {% endfor %}
