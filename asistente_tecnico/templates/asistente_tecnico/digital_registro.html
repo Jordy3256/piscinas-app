@@ -315,24 +315,29 @@ body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,
   .reg-head{padding-top:15px!important}
 }
 @media(min-width:981px) and (max-height:740px){.reg-aquo-bubble{top:52%!important}}
-/* AQUO360 Registro V5.2: globo por encima del hombro, sin tapar al personaje */
-@media (min-width:981px){
-  .reg-aquo-bubble{
-    top:clamp(105px,17vh,155px)!important;
-    right:clamp(10px,1.5vw,25px)!important;
-    transform:none!important;
-    width:clamp(190px,15vw,235px);
-  }
-  .reg-aquo-bubble:after{
-    left:36%!important;right:auto!important;bottom:-13px!important;
-    border:7px solid transparent!important;
-    border-top-color:#f4fcff!important;
-  }
-  .reg-side .benefit:nth-child(2) i{font-size:1.45rem;color:#7ef2c7}
+
+/* AQUO360 V5.3: icono de dosificación y beneficios en lista vertical */
+.reg-side .benefit .bi-eyedropper{display:block;font-size:1.35rem;line-height:1.2;color:#57f4e5}
+.plan-checklist{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:5px;color:var(--plan-ink);font-size:.72rem;line-height:1.25;text-align:left}
+.plan-checklist li{display:flex;align-items:flex-start;gap:6px;min-width:0}
+.plan-checklist li i{flex:0 0 auto;font-size:.77rem;line-height:1.25;color:#0fa87e}
+.plan-checklist li span{min-width:0;overflow-wrap:anywhere}
+.plan-checklist .plan-checklist-soon{color:var(--plan-ink);font-weight:700;font-size:.67rem}
+.plan-checklist .plan-checklist-soon i{color:var(--plan-accent)}
+@media(min-width:981px){
+ .plan-checklist{font-size:.66rem;gap:4px;margin-top:7px}
+ .plan-checklist li i{font-size:.7rem}
+ .plan-checklist .plan-checklist-soon{font-size:.62rem}
+ .plan{padding-bottom:12px}
+ .plan:has(input:checked){padding-bottom:11.5px}
 }
-@media (min-width:981px) and (max-height:740px){
-  .reg-aquo-bubble{top:clamp(65px,12vh,95px)!important}
+@media(max-width:700px){
+ .plan-checklist{font-size:.66rem;gap:4px;margin-top:7px}
+ .plan-checklist li{gap:4px}
+ .plan-checklist li i{font-size:.66rem}
+ .plan-checklist .plan-checklist-soon{font-size:.61rem}
 }
+@media(max-width:400px){.plan-checklist{font-size:.61rem;gap:4px}.plan-checklist .plan-checklist-soon{font-size:.56rem}}
 </style>
 </head>
 <body>
@@ -344,7 +349,7 @@ body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,
       <p>Diagnostica el agua, calcula tratamientos y organiza tus mantenimientos con la ayuda de tu asistente inteligente.</p>
       <div class="side-benefits">
         <div class="benefit"><i class="bi bi-droplet-half"></i><strong>Diagnóstico</strong></div>
-        <div class="benefit"><i class="bi bi-flask"></i><strong>Dosificación</strong></div>
+        <div class="benefit"><i class="bi bi-eyedropper" aria-hidden="true"></i><strong>Dosificación</strong></div>
         <div class="benefit"><i class="bi bi-calendar-check"></i><strong>Plan semanal</strong></div>
         <div class="benefit"><i class="bi bi-book"></i><strong>Aprendizaje</strong></div>
       </div>
@@ -416,8 +421,14 @@ body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,
                 {% if p.codigo == 'individual' %}<span class="plan-tag">Para empezar</span><span class="plan-icon"><i class="bi bi-droplet-fill"></i></span>{% elif p.codigo == 'esencial' %}<span class="plan-tag">Más popular</span><span class="plan-icon"><i class="bi bi-water"></i></span>{% elif p.codigo == 'profesional' %}<span class="plan-tag">Profesional</span><span class="plan-icon"><i class="bi bi-gem"></i></span>{% else %}<span class="plan-tag">Para empresas</span><span class="plan-icon"><i class="bi bi-buildings-fill"></i></span>{% endif %}
                 <div class="plan-name">{{ p.nombre }}</div>
                 <div class="price">${{ p.precio }} <small>/ mes</small></div>
-                <div class="plan-copy">{% if p.piscinas is None %}<strong>∞ Piscinas ilimitadas</strong>{% else %}Hasta {{ p.piscinas }} piscina{% if p.piscinas != 1 %}s{% endif %}{% endif %}</div>
-                <div class="plan-feature"><i class="bi bi-check2 text-success me-1"></i>AQUO + Curso + Biblioteca + Plan Semanal{% if p.codigo == "profesional" or p.codigo == "empresarial" %}<br><span class="plan-soon"><i class="bi bi-calendar2-week me-1"></i>Agenda · Próximamente</span>{% endif %}</div>
+                <ul class="plan-checklist" aria-label="Beneficios del plan {{ p.nombre }}">
+                  <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i><span>{% if p.piscinas is None %}Piscinas ilimitadas{% elif p.piscinas == 1 %}1 piscina{% else %}{{ p.piscinas }} piscinas{% endif %}</span></li>
+                  <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i><span>AQUO</span></li>
+                  <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i><span>Curso</span></li>
+                  <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i><span>Biblioteca</span></li>
+                  <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i><span>Plan de mantenimiento</span></li>
+                  {% if p.codigo == "profesional" or p.codigo == "empresarial" %}<li class="plan-checklist-soon"><i class="bi bi-clock-history" aria-hidden="true"></i><span>Agenda · Próximamente</span></li>{% endif %}
+                </ul>
               </label>
               {% endfor %}
             </div>
