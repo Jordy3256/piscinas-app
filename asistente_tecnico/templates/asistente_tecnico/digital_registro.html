@@ -306,6 +306,15 @@ body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,
 @media(min-width:981px) and (max-height:740px){.reg-aquo-bubble{top:16px}.reg-side .benefit{min-height:60px}}
 @media(max-width:980px){.reg-aquo-bubble{display:none}}
 @media(prefers-reduced-motion:reduce){.reg-side .benefit,.plan,.reg-aquo-bubble strong{transition:none!important}}
+/* AQUO360 Registro V5.1 — burbuja a la altura del torso y cabecera limpia */
+@media(min-width:981px){
+  /* Ubicada a un lado del torso, lejos del rostro y sin salir de pantalla. */
+  .reg-aquo-bubble{top:54%;right:clamp(12px,1.8vw,28px);width:clamp(185px,15vw,225px);transform:translateY(-50%)}
+  .reg-aquo-bubble:after{left:-12px;bottom:42%;border:6px solid transparent;border-right-color:#f4fcff;border-top-color:transparent}
+  .reg-form-logo{display:none!important}
+  .reg-head{padding-top:15px!important}
+}
+@media(min-width:981px) and (max-height:740px){.reg-aquo-bubble{top:52%!important}}
 </style>
 </head>
 <body>
@@ -341,7 +350,6 @@ body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,
         <div class="reg-head">
           <div>
             <img class="reg-form-logo" src="{% static 'dashboard/images/aquo360-logo-oficial.png' %}" alt="AQUO 360" loading="eager">
-            <div class="reg-eyebrow">Comienza tu experiencia</div>
             <h2>Crea tu cuenta</h2>
             <p>Regístrate, elige tu plan y comienza a cuidar tu piscina con AQUO.</p>
           </div>
