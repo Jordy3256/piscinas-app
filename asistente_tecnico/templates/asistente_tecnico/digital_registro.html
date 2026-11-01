@@ -338,19 +338,42 @@ body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,
  .plan-checklist .plan-checklist-soon{font-size:.61rem}
 }
 @media(max-width:400px){.plan-checklist{font-size:.61rem;gap:4px}.plan-checklist .plan-checklist-soon{font-size:.56rem}}
-/* AQUO360 Registro V5.4 — globo junto al hombro, rostro despejado. */
+/* AQUO360 Registro V5.5 — globo por encima del rostro, sin invadir AQUO. */
 @media(min-width:981px){
   .reg-aquo-bubble{
-    top:46%!important;
-    right:clamp(6px,1vw,16px)!important;
-    width:clamp(170px,13.5vw,215px)!important;
-    transform:translateY(-50%)!important;
+    top:clamp(110px,20%,180px)!important;
+    right:clamp(12px,1.6vw,28px)!important;
+    width:clamp(190px,15vw,235px)!important;
+    transform:none!important;
+    padding:12px 14px 12px 45px!important;
   }
-  .reg-aquo-bubble:after{left:-12px;bottom:38%;border:6px solid transparent;border-right-color:#f4fcff}
+  .reg-aquo-bubble:after{
+    left:38%!important;bottom:-12px!important;
+    border:6px solid transparent!important;
+    border-top-color:#f4fcff!important;
+  }
 }
-@media(min-width:981px) and (max-height:740px){.reg-aquo-bubble{top:46%!important}}
+@media(min-width:981px) and (max-height:740px){
+  .reg-aquo-bubble{top:clamp(72px,16%,118px)!important}
+}
 .plan-checklist .plan-checklist-agenda{font-weight:700;color:var(--plan-ink)}
 .plan-checklist .plan-checklist-agenda i{color:#0fa87e}
+/* La capacidad es el diferenciador principal entre planes. */
+.plan-checklist li.plan-pool-count{
+  display:flex;align-items:center;gap:7px;
+  margin:6px 0 7px;padding:7px 8px;
+  border-radius:10px;
+  background:color-mix(in srgb,var(--plan-accent) 12%,white);
+  border:1px solid color-mix(in srgb,var(--plan-accent) 33%,white);
+  color:var(--plan-ink);font-size:clamp(.72rem,.82vw,.92rem);
+  font-weight:900;line-height:1.2;
+}
+.plan-checklist li.plan-pool-count i{color:var(--plan-accent);font-size:1.05em;flex:none}
+.plan-checklist li.plan-pool-count span{font-weight:900}
+@media(min-width:981px){
+ .plan-checklist li.plan-pool-count{font-size:clamp(.68rem,.75vw,.83rem);padding:6px 5px;margin:5px 0 6px;gap:4px}
+}
+@media(max-width:430px){.plan-checklist li.plan-pool-count{font-size:.76rem}}
 </style>
 </head>
 <body>
@@ -435,7 +458,7 @@ body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,
                 <div class="plan-name">{{ p.nombre }}</div>
                 <div class="price">${{ p.precio }} <small>/ mes</small></div>
                 <ul class="plan-checklist" aria-label="Beneficios del plan {{ p.nombre }}">
-                  <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i><span>{% if p.piscinas is None %}Piscinas ilimitadas{% elif p.piscinas == 1 %}1 piscina{% else %}{{ p.piscinas }} piscinas{% endif %}</span></li>
+                  <li class="plan-pool-count"><i class="bi bi-water" aria-hidden="true"></i><span>{% if p.piscinas is None %}∞ Piscinas ilimitadas{% elif p.piscinas == 1 %}1 piscina{% else %}{{ p.piscinas }} piscinas{% endif %}</span></li>
                   <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i><span>AQUO</span></li>
                   <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i><span>Curso</span></li>
                   <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i><span>Biblioteca</span></li>
