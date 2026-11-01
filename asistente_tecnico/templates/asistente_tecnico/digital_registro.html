@@ -315,6 +315,24 @@ body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,
   .reg-head{padding-top:15px!important}
 }
 @media(min-width:981px) and (max-height:740px){.reg-aquo-bubble{top:52%!important}}
+/* AQUO360 Registro V5.2: globo por encima del hombro, sin tapar al personaje */
+@media (min-width:981px){
+  .reg-aquo-bubble{
+    top:clamp(105px,17vh,155px)!important;
+    right:clamp(10px,1.5vw,25px)!important;
+    transform:none!important;
+    width:clamp(190px,15vw,235px);
+  }
+  .reg-aquo-bubble:after{
+    left:36%!important;right:auto!important;bottom:-13px!important;
+    border:7px solid transparent!important;
+    border-top-color:#f4fcff!important;
+  }
+  .reg-side .benefit:nth-child(2) i{font-size:1.45rem;color:#7ef2c7}
+}
+@media (min-width:981px) and (max-height:740px){
+  .reg-aquo-bubble{top:clamp(65px,12vh,95px)!important}
+}
 </style>
 </head>
 <body>
@@ -326,7 +344,7 @@ body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,
       <p>Diagnostica el agua, calcula tratamientos y organiza tus mantenimientos con la ayuda de tu asistente inteligente.</p>
       <div class="side-benefits">
         <div class="benefit"><i class="bi bi-droplet-half"></i><strong>Diagnóstico</strong></div>
-        <div class="benefit"><i class="bi bi-beaker"></i><strong>Dosificación</strong></div>
+        <div class="benefit"><i class="bi bi-flask"></i><strong>Dosificación</strong></div>
         <div class="benefit"><i class="bi bi-calendar-check"></i><strong>Plan semanal</strong></div>
         <div class="benefit"><i class="bi bi-book"></i><strong>Aprendizaje</strong></div>
       </div>
