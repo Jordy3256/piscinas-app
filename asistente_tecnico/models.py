@@ -533,6 +533,23 @@ class PerfilSuscriptor(models.Model):
         return False
 
     @property
+    def es_profesional(self):
+        """Planes orientados a técnicos y empresas."""
+        return self.plan in {"profesional", "empresarial"}
+
+    @property
+    def puede_agenda(self):
+        return self.es_profesional
+
+    @property
+    def puede_registrar_mantenimientos(self):
+        return self.plan == "empresarial"
+
+    @property
+    def puede_recordatorios_cobro(self):
+        return self.plan == "empresarial"
+
+    @property
     def limite_piscinas(self):
         return self.LIMITES.get(self.plan, 1)
 

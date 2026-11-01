@@ -1485,7 +1485,19 @@ def digital_inicio_view(request):
     completados = ProgresoContenidoAcademia.objects.filter(user=request.user, completado=True, contenido__estado="aprobado").exclude(contenido__acceso="interno").count()
     porcentaje = round(completados * 100 / progreso_total) if progreso_total else 0
     plan = PlanMantenimientoPiscina.objects.filter(piscina=principal, activo=True).first() if principal else None
-    return render(request, "asistente_tecnico/digital_inicio.html", {"perfil":perfil,"piscinas":piscinas,"principal":principal,"recientes":recientes,"curso_porcentaje":porcentaje,"plan_mantenimiento":plan,"base_template":"asistente_tecnico/base_suscriptor.html"})
+    contexto = {"perfil": perfil, "piscinas": piscinas, "principal": principal,
+                "recientes": recientes, "curso_porcentaje": porcentaje,
+                "plan_mantenimiento": plan,
+                "base_template": "asistente_tecnico/base_suscriptor.html",
+                "total_piscinas": piscinas.count(),
+                "limite_piscinas_texto": perfil.limite_piscinas if perfil.limite_piscinas is not None else "∞",
+                "soporte_restante": perfil.mensajes_soporte_restantes_hoy}
+    if perfil.es_profesional:
+        # Se muestra la capacidad del plan sin activar todavía operaciones nuevas.
+        contexto["piscinas_con_plan"] = PlanMantenimientoPiscina.objects.filter(
+            piscina__suscriptor=perfil, piscina__activa=True, activo=True
+        ).count()
+    return render(request, "asistente_tecnico/digital_inicio.html", contexto)
 
 
 @login_required
