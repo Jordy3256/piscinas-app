@@ -2142,7 +2142,13 @@ def digital_piscina_form_view(request, pk=None):
             profundidad = Decimal((request.POST.get("profundidad_m") or "0").replace(",",".")) if request.POST.get("profundidad_m") else None
             vol_txt=(request.POST.get("volumen_m3") or "").replace(",",".")
             volumen=Decimal(vol_txt) if vol_txt else ((largo*ancho*profundidad).quantize(Decimal("0.01")) if largo and ancho and profundidad else Decimal("0"))
-            if volumen <= 0: raise ValueError
+            # Validar magnitudes ANTES de enviarlas a DecimalField/PostgreSQL.
+            # Infinity/NaN y números demasiado grandes no son medidas válidas.
+            for dimension in (largo, ancho, profundidad):
+                if dimension is not None and (not dimension.is_finite() or dimension <= 0 or dimension > Decimal("99999.99")):
+                    raise ValueError
+            if not volumen.is_finite() or volumen <= 0 or volumen > Decimal("9999999.99"):
+                raise ValueError
         except (InvalidOperation, ValueError):
             messages.error(request,"Ingresa un volumen válido o las tres dimensiones de la piscina.")
         else:
@@ -2167,14 +2173,29 @@ def digital_piscina_form_view(request, pk=None):
                 dia=(request.POST.get("dia_cobro") or "").strip()
                 try:
                     obj.valor_mensual=Decimal(valor) if valor else None
-                    if obj.valor_mensual is not None and obj.valor_mensual < 0: raise ValueError
+                    if obj.valor_mensual is not None and (
+                        not obj.valor_mensual.is_finite()
+                        or obj.valor_mensual < 0
+                        or obj.valor_mensual > Decimal("99999999.99")
+                        or obj.valor_mensual.as_tuple().exponent < -2
+                    ):
+                        raise ValueError
                     obj.dia_cobro=int(dia) if dia else None
                     if obj.dia_cobro is not None and not 1 <= obj.dia_cobro <= 31: raise ValueError
                 except (ValueError, InvalidOperation):
                     messages.error(request, "Revisa el valor mensual y el día de cobro (1 a 31).")
                     return redirect(request.path)
                 obj.recordatorio_cobro_activo=request.POST.get("recordatorio_cobro_activo")=="on"
-            obj.save()
+            # Bloquear el perfil al crear: dos pestañas simultáneas no pueden
+            # superar el número de piscinas contratado. No afecta a ediciones.
+            with transaction.atomic():
+                PerfilSuscriptor.objects.select_for_update().get(pk=perfil.pk)
+                if obj.pk is None and perfil.limite_piscinas is not None:
+                    existentes = PiscinaSuscriptor.objects.filter(suscriptor=perfil, activa=True).count()
+                    if existentes >= perfil.limite_piscinas:
+                        messages.error(request, "Has alcanzado el límite de piscinas de tu plan.")
+                        return redirect("asistente_tecnico:digital_inicio")
+                obj.save()
             messages.success(request,"Piscina guardada. El Asistente ya puede usar estos datos.")
             return redirect("asistente_tecnico:digital_inicio")
     return render(request,"asistente_tecnico/digital_piscina_form.html",{"obj":obj,"tipo_choices":PiscinaSuscriptor.TIPOS,"filtro_choices":PiscinaSuscriptor.FILTROS,"desinfeccion_choices":PiscinaSuscriptor.DESINFECCION,"origen_agua_choices":PiscinaSuscriptor.ORIGEN_AGUA,"hierro_choices":PiscinaSuscriptor.HIERRO,"perfil":perfil})
