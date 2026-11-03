@@ -1067,3 +1067,30 @@ class PagoCobroDigital(models.Model):
 
     def __str__(self):
         return f"{self.cobro} · {self.importe}"
+
+
+class SuscripcionPushDigital(models.Model):
+    """Endpoints exclusivos de AQUO360; nunca usa dashboard.PushSubscription."""
+    suscriptor = models.ForeignKey(PerfilSuscriptor, on_delete=models.CASCADE, related_name="suscripciones_push_digitales")
+    endpoint = models.TextField(unique=True)
+    p256dh = models.TextField()
+    auth = models.TextField()
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Dispositivo push AQUO360"
+        verbose_name_plural = "Dispositivos push AQUO360"
+
+
+class EntregaPushDigital(models.Model):
+    """Deduplicación por aviso y dispositivo; no afecta las notificaciones del ERP."""
+    notificacion = models.ForeignKey(NotificacionDigital, on_delete=models.CASCADE, related_name="entregas_push")
+    suscripcion = models.ForeignKey(SuscripcionPushDigital, on_delete=models.CASCADE, related_name="entregas_push")
+    estado = models.CharField(max_length=12, default="pendiente", choices=[("pendiente", "Pendiente"), ("enviando", "Enviando"), ("enviado", "Enviado"), ("fallido", "Fallido")])
+    intentos = models.PositiveSmallIntegerField(default=0)
+    ultimo_intento = models.DateTimeField(null=True, blank=True)
+    enviado_en = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["notificacion", "suscripcion"], name="uq_aquo_push_aviso_dispositivo")]

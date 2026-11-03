@@ -1,3 +1,4 @@
+import json
 from django.urls import reverse
 from datetime import timedelta, datetime, time, date
 import calendar
@@ -10,7 +11,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Count, Q, Sum
-from django.http import HttpResponseForbidden, JsonResponse, HttpResponseBadRequest, FileResponse, Http404
+from django.http import HttpResponseForbidden, JsonResponse, HttpResponseBadRequest, FileResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from backend.pdf_branding import draw_jvaqua_pdf_page
@@ -2788,3 +2789,89 @@ def digital_cobro_pago_view(request, pk):
                                             nota=(request.POST.get("nota") or "").strip()[:255])
             messages.success(request, f"Pago de ${monto:.2f} registrado para {cobro.piscina.nombre}.")
     return redirect(f"{reverse('asistente_tecnico:digital_cartera')}?anio={cobro.periodo.year}&mes={cobro.periodo.month}")
+
+
+@login_required
+@require_http_methods(["GET"])
+def digital_push_estado_view(request):
+    from django.conf import settings
+    from .models import SuscripcionPushDigital
+    perfil = _suscriptor(request.user)
+    if not perfil:
+        return HttpResponseForbidden("No autorizado")
+    return JsonResponse({"activado": SuscripcionPushDigital.objects.filter(suscriptor=perfil).exists(),
+                         "vapidPublicKey": getattr(settings, "VAPID_PUBLIC_KEY", "") or ""})
+
+
+@login_required
+@require_http_methods(["POST"])
+def digital_push_suscribir_view(request):
+    from .models import SuscripcionPushDigital
+    perfil = _suscriptor(request.user)
+    if not perfil:
+        return HttpResponseForbidden("No autorizado")
+    try:
+        datos = json.loads(request.body.decode("utf-8"))
+        endpoint = datos["endpoint"]
+        claves = datos["keys"]
+        p256dh, auth = claves["p256dh"], claves["auth"]
+        if not (isinstance(endpoint, str) and endpoint.startswith("https://")
+                and all(isinstance(x, str) and 12 <= len(x) <= 2048 for x in [endpoint, p256dh, auth])):
+            raise ValueError
+    except (KeyError, ValueError, TypeError, UnicodeDecodeError, json.JSONDecodeError):
+        return JsonResponse({"ok": False, "error": "Suscripción inválida"}, status=400)
+    # No reasignar a otro suscriptor un endpoint ya asociado: aislamiento estricto.
+    registrado = SuscripcionPushDigital.objects.filter(endpoint=endpoint).first()
+    if registrado and registrado.suscriptor_id != perfil.pk:
+        return JsonResponse({"ok": False, "error": "Dispositivo vinculado a otra cuenta. Desactiva sus avisos en esa cuenta."}, status=409)
+    SuscripcionPushDigital.objects.update_or_create(
+        endpoint=endpoint,
+        defaults={"suscriptor": perfil, "p256dh": p256dh, "auth": auth},
+    )
+    return JsonResponse({"ok": True})
+
+
+@login_required
+@require_http_methods(["POST"])
+def digital_push_cancelar_view(request):
+    from .models import SuscripcionPushDigital
+    perfil = _suscriptor(request.user)
+    if not perfil:
+        return HttpResponseForbidden("No autorizado")
+    try:
+        endpoint = json.loads(request.body.decode("utf-8")).get("endpoint", "")
+    except (ValueError, UnicodeDecodeError):
+        return JsonResponse({"ok": False}, status=400)
+    SuscripcionPushDigital.objects.filter(suscriptor=perfil, endpoint=endpoint).delete()
+    return JsonResponse({"ok": True})
+
+
+@require_http_methods(["GET"])
+def digital_sw_view(request):
+    """Worker independiente, limitado a /dashboard/asistente/digital/."""
+    script = r"""
+self.addEventListener('push', event => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch (_) {}
+  const title = String(data.title || 'AQUO360');
+  const url = String(data.url || '/dashboard/asistente/digital/notificaciones/');
+  const safe = url.startsWith('/dashboard/asistente/digital/') && !url.startsWith('//')
+    ? url : '/dashboard/asistente/digital/notificaciones/';
+  event.waitUntil(self.registration.showNotification(title, {
+    body: String(data.body || 'Tienes un recordatorio.'),
+    icon: '/static/dashboard/icons/icon-192.png',
+    tag: String(data.tag || 'aquo360'),
+    data: {url: safe}
+  }));
+});
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  const u = String((event.notification.data || {}).url || '/dashboard/asistente/digital/notificaciones/');
+  const path = u.startsWith('/dashboard/asistente/digital/') ? u : '/dashboard/asistente/digital/notificaciones/';
+  event.waitUntil(clients.openWindow(path));
+});
+"""
+    resp = HttpResponse(script, content_type="text/javascript; charset=utf-8")
+    resp["Cache-Control"] = "no-cache"
+    resp["Service-Worker-Allowed"] = "/dashboard/asistente/digital/"
+    return resp
