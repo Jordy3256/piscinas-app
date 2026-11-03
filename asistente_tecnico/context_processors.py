@@ -1,4 +1,4 @@
-from django.db.models import Q
+from django.db.models import Q, Count, Max
 from django.utils import timezone
 
 from .models import (
@@ -19,31 +19,30 @@ def _es_admin(user):
 
 
 def _payload_cliente(perfil):
+    """Datos de soporte para la burbuja flotante sin consultas por conversación."""
     resultado = []
-    for conv in (
+    conversaciones = (
         perfil.conversaciones_soporte.exclude(estado="cerrada")
-        .order_by("-ultimo_mensaje_en", "-id")[:8]
-    ):
-        no_leidos = conv.mensajes.filter(
-            remitente="admin",
-            leido_cliente=False,
-        ).count()
-        if no_leidos <= 0:
-            continue
-
-        ultimo_entrante_id = (
-            conv.mensajes.filter(remitente="admin")
-            .order_by("-id")
-            .values_list("id", flat=True)
-            .first()
-            or 0
+        .annotate(
+            pendientes=Count(
+                "mensajes",
+                filter=Q(mensajes__remitente="admin", mensajes__leido_cliente=False),
+            ),
+            ultimo_entrante_id=Max(
+                "mensajes__id", filter=Q(mensajes__remitente="admin")
+            ),
         )
+        .order_by("-ultimo_mensaje_en", "-id")[:8]
+    )
+    for conv in conversaciones:
+        if conv.pendientes <= 0:
+            continue
         resultado.append({
             "id": conv.pk,
             "titulo": "Soporte JVAQUA",
             "subtitulo": (conv.asunto or conv.get_categoria_display())[:80],
-            "no_leidos": no_leidos,
-            "ultimo_entrante_id": ultimo_entrante_id,
+            "no_leidos": conv.pendientes,
+            "ultimo_entrante_id": conv.ultimo_entrante_id or 0,
             "estado": conv.estado,
             "estado_label": conv.get_estado_display(),
             "url": f"/dashboard/asistente/digital/soporte/{conv.pk}/?support_float=1",
@@ -53,33 +52,32 @@ def _payload_cliente(perfil):
 
 
 def _payload_admin():
+    """Hasta 12 conversaciones recientes usando una sola consulta agregada."""
     resultado = []
-    for conv in (
+    conversaciones = (
         ConversacionSoporteDigital.objects.exclude(estado="cerrada")
         .select_related("suscriptor__user")
-        .order_by("-ultimo_mensaje_en", "-id")[:12]
-    ):
-        no_leidos = conv.mensajes.filter(
-            remitente="cliente",
-            leido_admin=False,
-        ).count()
-        if no_leidos <= 0:
-            continue
-
-        ultimo_entrante_id = (
-            conv.mensajes.filter(remitente="cliente")
-            .order_by("-id")
-            .values_list("id", flat=True)
-            .first()
-            or 0
+        .annotate(
+            pendientes=Count(
+                "mensajes",
+                filter=Q(mensajes__remitente="cliente", mensajes__leido_admin=False),
+            ),
+            ultimo_entrante_id=Max(
+                "mensajes__id", filter=Q(mensajes__remitente="cliente")
+            ),
         )
+        .order_by("-ultimo_mensaje_en", "-id")[:12]
+    )
+    for conv in conversaciones:
+        if conv.pendientes <= 0:
+            continue
         user = conv.suscriptor.user
         resultado.append({
             "id": conv.pk,
             "titulo": user.get_full_name() or user.username,
             "subtitulo": (conv.asunto or conv.get_categoria_display())[:80],
-            "no_leidos": no_leidos,
-            "ultimo_entrante_id": ultimo_entrante_id,
+            "no_leidos": conv.pendientes,
+            "ultimo_entrante_id": conv.ultimo_entrante_id or 0,
             "estado": conv.estado,
             "estado_label": conv.get_estado_display(),
             "url": f"/dashboard/asistente/administracion/soporte/{conv.pk}/?support_float=1",

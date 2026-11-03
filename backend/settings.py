@@ -187,7 +187,11 @@ if CLOUDINARY_URL:
 # =========================
 # MIDDLEWARE
 # =========================
+# Diagnóstico opcional: desactivado por defecto; habilitar sólo al medir.
+JVAQUA_PERF_TIMING = os.environ.get("JVAQUA_PERF_TIMING", "false").lower() == "true"
+
 MIDDLEWARE = [
+    "backend.performance_middleware.ServerTimingMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
 
