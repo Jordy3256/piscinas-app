@@ -807,6 +807,7 @@ class NotificacionDigital(models.Model):
         ("cobro_proximo", "Cobro próximo"),
         ("cobro_hoy", "Cobro de hoy"),
         ("cobro_vencido", "Cobro vencido"),
+        ("suscripcion_proxima", "Suscripción por vencer"),
     ]
 
     suscriptor = models.ForeignKey(
@@ -843,7 +844,8 @@ class NotificacionDigital(models.Model):
                 fields=["suscriptor", "visita", "tipo"],
                 name="uq_notificacion_digital_visita_tipo",
             ),
-            models.UniqueConstraint(fields=["suscriptor", "cobro", "tipo"], name="uq_aquo_cobro_aviso_tipo")
+            models.UniqueConstraint(fields=["suscriptor", "cobro", "tipo"], name="uq_aquo_cobro_aviso_tipo"),
+            models.UniqueConstraint(fields=["suscriptor", "tipo", "programada_para"], condition=models.Q(tipo="suscripcion_proxima"), name="uq_aquo_aviso_renovacion_dia")
         ]
         verbose_name = "Notificación JVAQUA Digital"
         verbose_name_plural = "Notificaciones JVAQUA Digital"

@@ -47,21 +47,60 @@ def generar_recordatorios_mantenimientos(fecha=None):
     return nuevos
 
 
+def generar_avisos_renovacion(fecha=None):
+    """Avisos 3, 1 y 0 días antes de vencer: solo suscripciones activas.
+
+    La fecha del aviso sirve de clave idempotente. No cambia el plan, ni cobra,
+    ni modifica permisos. Los avisos pertenecen al suscriptor digital.
+    """
+    fecha = fecha or timezone.localdate()
+    fecha_aviso = timezone.make_aware(datetime.combine(fecha, time(7)), timezone.get_current_timezone())
+    nuevos = 0
+    perfiles = PerfilSuscriptor.objects.filter(
+        estado="activo", acceso_hasta__in=[fecha, fecha + timedelta(days=1), fecha + timedelta(days=3)],
+    )
+    for perfil in perfiles.iterator():
+        if not perfil.tiene_acceso:
+            continue
+        restantes = (perfil.acceso_hasta - fecha).days
+        mensaje = (
+            "Tu suscripción AQUO360 vence hoy. Renueva para mantener el acceso."
+            if restantes == 0 else
+            f"Tu suscripción AQUO360 vence en {restantes} día(s) "
+            f"({perfil.acceso_hasta:%d/%m/%Y}). Puedes solicitar la renovación."
+        )
+        _, creado = NotificacionDigital.objects.get_or_create(
+            suscriptor=perfil, tipo="suscripcion_proxima", programada_para=fecha_aviso,
+            defaults={"titulo": "Renueva tu suscripción AQUO360", "mensaje": mensaje},
+        )
+        nuevos += int(creado)
+    return nuevos
+
+
 def generar_recordatorios_digitales(fecha=None):
     fecha = fecha or timezone.localdate()
     nuevos_visitas = generar_recordatorios_mantenimientos(fecha)
+    nuevas_renovaciones = generar_avisos_renovacion(fecha)
     nuevos_cargos = 0
     for perfil in PerfilSuscriptor.objects.filter(plan="empresarial", estado="activo"):
         if perfil.tiene_acceso:
             nuevos_cargos += crear_cobros_mes(perfil, fecha.year, fecha.month)
     nuevos_cobros = generar_avisos_cobros(fecha)
-    return {"visitas": nuevos_visitas, "cargos": nuevos_cargos, "cobros": nuevos_cobros}
+    return {"visitas": nuevos_visitas, "cargos": nuevos_cargos, "cobros": nuevos_cobros, "renovaciones": nuevas_renovaciones}
 
 
 def _aviso_vigente(n):
     perfil = n.suscriptor
     if not perfil.tiene_acceso:
         return False
+    if n.tipo == "suscripcion_proxima":
+        fecha_aviso = timezone.localtime(n.programada_para).date()
+        return bool(
+            n.suscriptor.estado == "activo"
+            and n.suscriptor.acceso_hasta
+            and (n.suscriptor.acceso_hasta - fecha_aviso).days in (0, 1, 3)
+            and fecha_aviso == timezone.localdate()
+        )
     if n.visita_id:
         return bool(n.visita.estado == "programada" and n.visita.plan.activo and n.visita.fecha == timezone.localdate()
                     and n.piscina and n.piscina.activa and n.visita.piscina_id == n.piscina_id)
@@ -91,7 +130,7 @@ def enviar_push_digitales():
     comienzo = timezone.make_aware(datetime.combine(timezone.localdate(), time.min), timezone.get_current_timezone())
     avisos = NotificacionDigital.objects.select_related("suscriptor", "piscina", "visita", "cobro__piscina").filter(
         programada_para__gte=comienzo, programada_para__lte=ahora, leida=False,
-        tipo__in=["visita_hoy", "cobro_proximo", "cobro_hoy", "cobro_vencido"],
+        tipo__in=["visita_hoy", "cobro_proximo", "cobro_hoy", "cobro_vencido", "suscripcion_proxima"],
     )
     enviados = fallidos = 0
     for aviso in avisos.iterator():
@@ -109,7 +148,8 @@ def enviar_push_digitales():
             )
             if not actualizado:
                 continue
-            enlace = BASE_DIGITAL + ("cartera/" if aviso.cobro_id else "agenda/")
+            enlace = (BASE_DIGITAL + "suscripcion/?renovar=1" if aviso.tipo == "suscripcion_proxima"
+                      else BASE_DIGITAL + ("cartera/" if aviso.cobro_id else "agenda/"))
             cuerpo = json.dumps({"title": aviso.titulo, "body": aviso.mensaje, "url": enlace,
                                  "tag": f"aquo360-{aviso.pk}"}, ensure_ascii=False)
             try:
