@@ -1373,7 +1373,9 @@ def digital_acceso_view(request):
     except PerfilSuscriptor.DoesNotExist:
         return HttpResponseForbidden("Esta cuenta no pertenece a JVAQUA Digital.")
 
-    if perfil.tiene_acceso and request.method == "GET" and request.GET.get("renovar") != "1":
+    if (perfil.tiene_acceso and request.method == "GET"
+            and request.GET.get("renovar") != "1"
+            and not perfil.solicitudes_suscripcion.filter(estado="pendiente").exists()):
         return redirect("asistente_tecnico:digital_inicio")
 
     plan_codigo = (request.POST.get("plan") or request.GET.get("plan") or perfil.plan or "individual").strip()
@@ -1381,43 +1383,56 @@ def digital_acceso_view(request):
     pendiente = perfil.solicitudes_suscripcion.filter(estado="pendiente").first()
 
     if request.method == "POST":
-        if pendiente:
-            messages.info(request, "Ya tienes un pago pendiente de verificación.")
+        # El plan solicitado NO debe afectar al plan vigente hasta aprobar el pago.
+        if not _plan_digital(plan_codigo):
+            messages.error(request, "El plan seleccionado no es válido.")
             return redirect("asistente_tecnico:digital_acceso")
 
         metodo = (request.POST.get("metodo_envio") or "plataforma").strip()
         if metodo not in {"plataforma", "whatsapp", "ambos"}:
-            metodo = "plataforma"
+            messages.error(request, "Selecciona una forma válida de enviar el comprobante.")
+            return redirect("asistente_tecnico:digital_acceso")
         comprobante = request.FILES.get("comprobante")
         if metodo in {"plataforma", "ambos"} and not comprobante:
-            messages.error(request, "Adjunta el comprobante o selecciona que lo enviaste por WhatsApp.")
-        else:
-            tipo = "renovacion" if perfil.acceso_hasta else "alta"
+            messages.error(request, "Adjunta el comprobante o indica que lo enviaste por WhatsApp.")
+            return redirect("asistente_tecnico:digital_acceso")
+        if comprobante and (
+            comprobante.size > 8 * 1024 * 1024
+            or not comprobante.name.lower().endswith((".jpg", ".jpeg", ".png", ".webp", ".pdf"))
+        ):
+            messages.error(request, "El comprobante debe ser JPG, PNG, WEBP o PDF y pesar máximo 8 MB.")
+            return redirect("asistente_tecnico:digital_acceso")
+
+        # Bloqueo transaccional contra doble envío desde pestañas simultáneas.
+        with transaction.atomic():
+            perfil_bloqueado = PerfilSuscriptor.objects.select_for_update().get(pk=perfil.pk)
+            if SolicitudSuscripcionDigital.objects.filter(
+                suscriptor=perfil_bloqueado, estado="pendiente"
+            ).exists():
+                messages.info(request, "Ya tienes un pago pendiente de verificación.")
+                return redirect("asistente_tecnico:digital_acceso")
+            tipo = "renovacion" if perfil_bloqueado.acceso_hasta else "alta"
             SolicitudSuscripcionDigital.objects.create(
-                suscriptor=perfil, tipo=tipo, plan=plan["codigo"], valor=plan["precio"],
-                comprobante=comprobante, metodo_envio=metodo,
+                suscriptor=perfil_bloqueado, tipo=tipo, plan=plan["codigo"],
+                valor=plan["precio"], comprobante=comprobante, metodo_envio=metodo,
                 observacion_cliente=(request.POST.get("observacion") or "").strip()[:300],
             )
-            perfil.plan = plan["codigo"]
-            if not perfil.tiene_acceso:
-                perfil.estado = "pendiente"
-            perfil.save(update_fields=["plan", "estado", "actualizado_en"])
-            correo_acceso = request.user.email or request.user.username
-            nombre_acceso = f"{request.user.first_name} {request.user.last_name}".strip() or request.user.username
-            _notificar_admin_digital(
-                "Pago pendiente · JVAQUA Digital",
-                f"{nombre_acceso} envió un pago de ${plan['precio']} para el Plan {plan['nombre']}. Verifica el comprobante y activa la suscripción.",
-            )
-            auth_logout(request)
-            return render(
-                request,
-                "asistente_tecnico/digital_pago_enviado.html",
-                {
-                    "correo_acceso": correo_acceso,
-                    "plan": plan,
-                    "nombre_acceso": nombre_acceso,
-                },
-            )
+            # Una renovación no suspende el acceso actual. Una alta no lo activa.
+            if not perfil_bloqueado.tiene_acceso and perfil_bloqueado.estado != "pendiente":
+                perfil_bloqueado.estado = "pendiente"
+                perfil_bloqueado.save(update_fields=["estado", "actualizado_en"])
+        correo_acceso = request.user.email or request.user.username
+        nombre_acceso = f"{request.user.first_name} {request.user.last_name}".strip() or request.user.username
+        _notificar_admin_digital(
+            "Pago pendiente · AQUO360",
+            f"{nombre_acceso} solicitó el Plan {plan['nombre']} por ${plan['precio']}. "
+            "Verifica el comprobante antes de activar o cambiar el plan.",
+        )
+        auth_logout(request)
+        return render(
+            request, "asistente_tecnico/digital_pago_enviado.html",
+            {"correo_acceso": correo_acceso, "plan": plan, "nombre_acceso": nombre_acceso},
+        )
 
     nombre = f"{request.user.first_name} {request.user.last_name}".strip() or request.user.username
     whatsapp_texto = (
@@ -1471,7 +1486,9 @@ def digital_suscripcion_revisar_view(request, pk):
             messages.info(request, "Esta solicitud ya fue revisada.")
             return redirect("asistente_tecnico:digital_suscripciones_admin")
 
-        perfil = solicitud.suscriptor
+        # Bloquear también el perfil: evita dos aprobaciones concurrentes que
+        # puedan extender el mismo vencimiento de forma inconsistente.
+        perfil = PerfilSuscriptor.objects.select_for_update().get(pk=solicitud.suscriptor_id)
         solicitud.observacion_admin = (request.POST.get("observacion_admin") or "").strip()[:300]
         solicitud.revisada_por = request.user
         solicitud.revisada_en = timezone.now()
