@@ -2839,32 +2839,48 @@ def digital_resolver_view(request):
             try:
                 ph=Decimal((request.POST.get("ph") or "").replace(",","."))
                 cloro=Decimal((request.POST.get("cloro") or "").replace(",","."))
-                volumen=piscina.volumen_m3 if piscina else Decimal((request.POST.get("volumen_m3") or "").replace(",","."))
-                if not (0 < volumen <= 100000): raise ValueError
+                volumen_texto=(request.POST.get("volumen_m3") or "").strip()
+                volumen=piscina.volumen_m3 if piscina else (Decimal(volumen_texto.replace(",",".")) if volumen_texto else None)
+                if volumen is not None and not (0 < volumen <= 100000): raise ValueError
             except (InvalidOperation, ValueError, TypeError):
-                messages.error(request,"Indica pH, cloro y un volumen válido para recibir una recomendación segura.")
+                messages.error(request,"Comprueba que el pH y el cloro sean números válidos. El volumen es opcional para una orientación inicial.")
             else:
                 estado=request.POST.get("estado_agua") or ""
                 if estado not in {x[0] for x in CasoAsistenteTecnico.ESTADO_AGUA_CHOICES}:
                     messages.error(request,"Selecciona cómo se ve el agua.")
                 else:
                     motor=_motor_activo()
-                    resultado=calcular_recomendacion(
+                    if volumen is None:
+                        resultado={
+                            "diagnostico": "Evaluación preliminar del estado del agua",
+                            "resumen": "El aspecto del agua y las mediciones permiten orientar la revisión, pero sin volumen no es seguro calcular cantidades de productos.",
+                            "tipo_tratamiento": "orientacion_preliminar", "prioridad": "media",
+                            "protocolo": [
+                                {"titulo": "Comprueba las mediciones", "detalle": "Verifica pH y cloro libre con un equipo de medición confiable antes de tratar el agua."},
+                                {"titulo": "Revisa la filtración", "detalle": "Inspecciona la circulación, el filtro y la presencia de residuos o algas. No manipules equipos eléctricos sin protección."},
+                                {"titulo": "Indica el volumen", "detalle": "Para recibir cantidades químicas calculadas, registra el volumen aproximado en m³ y vuelve a consultar."},
+                            ], "productos_sugeridos": [], "explicaciones": [],
+                            "advertencias": ["No aplicar dosis basadas únicamente en esta orientación preliminar.", "Evita el baño si el agua está verde o turbia, hasta recuperar condiciones sanitarias verificadas."],
+                            "seguimiento_horas": 24,
+                        }
+                    else:
+                        resultado=calcular_recomendacion(
                         volumen,ph,cloro,estado,
                         piscina.tipo_piscina if piscina else "residencial",motor.reglas,
                         tipo_agua=piscina.origen_agua if piscina else "potable",
                         antecedente_hierro=piscina.antecedente_hierro if piscina else "no_se",
                     )
-                    caso=CasoAsistenteTecnico.objects.create(
-                        user=request.user,piscina=piscina,motor=motor,volumen_m3=volumen,
-                        ph_inicial=ph,cloro_inicial=cloro,estado_agua=estado,
-                        tipo_piscina=piscina.tipo_piscina if piscina else "residencial",
-                        diagnostico=resultado["diagnostico"],tipo_tratamiento=resultado["tipo_tratamiento"],
-                        prioridad=resultado["prioridad"],resumen=resultado["resumen"],
-                        protocolo=resultado["protocolo"],productos_sugeridos=resultado["productos_sugeridos"],
-                        explicaciones=resultado["explicaciones"],advertencias=resultado["advertencias"],
-                        seguimiento_programado_para=timezone.now()+timedelta(hours=resultado["seguimiento_horas"]),
-                    )
+                    if volumen is not None:
+                        caso=CasoAsistenteTecnico.objects.create(
+                            user=request.user,piscina=piscina,motor=motor,volumen_m3=volumen,
+                            ph_inicial=ph,cloro_inicial=cloro,estado_agua=estado,
+                            tipo_piscina=piscina.tipo_piscina if piscina else "residencial",
+                            diagnostico=resultado["diagnostico"],tipo_tratamiento=resultado["tipo_tratamiento"],
+                            prioridad=resultado["prioridad"],resumen=resultado["resumen"],
+                            protocolo=resultado["protocolo"],productos_sugeridos=resultado["productos_sugeridos"],
+                            explicaciones=resultado["explicaciones"],advertencias=resultado["advertencias"],
+                            seguimiento_programado_para=timezone.now()+timedelta(hours=resultado["seguimiento_horas"]),
+                        )
     return render(request,"asistente_tecnico/digital_resolver.html",{
         "piscinas":piscinas,"piscina":piscina,"resultado":resultado,"caso":caso,
         "estado_choices":CasoAsistenteTecnico.ESTADO_AGUA_CHOICES,
