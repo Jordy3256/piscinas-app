@@ -1,0 +1,15 @@
+{% extends base_template %}
+{% block title %}Avisos administrativos AQUO360{% endblock %}
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+    <div><div class="small text-info fw-bold">ADMINISTRACIÓN · AQUO360</div><h2 class="h4 fw-bold mb-1">Avisos digitales</h2><p class="text-muted mb-0">{{ pendientes }} sin leer · Bandeja independiente de JVAQUA ERP</p></div>
+    <div class="d-flex gap-2"><a class="btn btn-sm btn-outline-primary" href="{% url 'asistente_tecnico:digital_suscripciones_admin' %}">Suscripciones</a><a class="btn btn-sm btn-outline-primary" href="{% url 'asistente_tecnico:soporte_admin_lista' %}">Soporte</a></div>
+  </div>
+  {% if pendientes %}<form method="post" class="mb-3">{% csrf_token %}<button class="btn btn-sm btn-primary">Marcar todos como leídos</button></form>{% endif %}
+  <div class="row g-2">
+    {% for aviso in avisos %}<div class="col-12"><div class="card rounded-3 border-0 shadow-sm {% if not aviso.leida %}border-start border-4 border-info{% endif %}"><div class="card-body py-3"><div class="d-flex justify-content-between gap-2"><strong>{{ aviso.titulo }}</strong><small class="text-muted">{{ aviso.creada_en|date:"d/m/Y H:i" }}</small></div><div class="text-muted small mt-1">{{ aviso.mensaje }}</div>{% if aviso.url %}<a class="btn btn-sm btn-outline-primary mt-2" href="{{ aviso.url }}">Abrir sección</a>{% endif %}</div></div></div>
+    {% empty %}<div class="col-12"><div class="alert alert-light border">Sin avisos por ahora.</div></div>{% endfor %}
+  </div>
+</div>
+{% endblock %}

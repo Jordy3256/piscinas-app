@@ -1096,3 +1096,30 @@ class EntregaPushDigital(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["notificacion", "suscripcion"], name="uq_aquo_push_aviso_dispositivo")]
+
+
+class AvisoAdministrativoAquo(models.Model):
+    """Bandeja administrativa independiente de la del ERP JVAQUA."""
+    TIPOS = [("evento", "Evento"), ("soporte", "Soporte")]
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="avisos_admin_aquo"
+    )
+    tipo = models.CharField(max_length=15, choices=TIPOS, default="evento", db_index=True)
+    titulo = models.CharField(max_length=150)
+    mensaje = models.TextField(blank=True)
+    url = models.CharField(max_length=250, blank=True)
+    leida = models.BooleanField(default=False, db_index=True)
+    creada_en = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-creada_en", "-pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["usuario", "tipo"],
+                condition=models.Q(tipo="soporte"),
+                name="aquo_admin_un_aviso_soporte",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.usuario} · {self.titulo}"

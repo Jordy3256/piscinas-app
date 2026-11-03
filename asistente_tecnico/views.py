@@ -20,7 +20,7 @@ from django.views.decorators.clickjacking import xframe_options_sameorigin
 
 from trabajadores.models import Trabajador
 from .engine import DEFAULT_RULES, calcular_recomendacion, diagnosticar_problema_tecnico, PROBLEMAS_TECNICOS
-from .models import CasoAsistenteTecnico, MotorRecomendacion, ContenidoAcademia, ProgresoContenidoAcademia, FavoritoContenidoAcademia, ConsultaContenidoAcademia, PerfilSuscriptor, PiscinaSuscriptor, PlanMantenimientoPiscina, RegistroMantenimientoPiscina, EvidenciaMantenimientoDigital, VisitaProgramadaPiscina, NotificacionDigital, SugerenciaDigital, SolicitudSuscripcionDigital, ConversacionSoporteDigital, MensajeSoporteDigital, AdjuntoSoporteDigital, CobroPiscinaDigital, PagoCobroDigital
+from .models import CasoAsistenteTecnico, MotorRecomendacion, ContenidoAcademia, ProgresoContenidoAcademia, FavoritoContenidoAcademia, ConsultaContenidoAcademia, PerfilSuscriptor, PiscinaSuscriptor, PlanMantenimientoPiscina, RegistroMantenimientoPiscina, EvidenciaMantenimientoDigital, VisitaProgramadaPiscina, NotificacionDigital, SugerenciaDigital, SolicitudSuscripcionDigital, ConversacionSoporteDigital, MensajeSoporteDigital, AdjuntoSoporteDigital, CobroPiscinaDigital, PagoCobroDigital, AvisoAdministrativoAquo
 from .services import generar_recordatorios_seguimiento
 from .cartera_digital import crear_cobros_mes
 
@@ -41,87 +41,53 @@ def _es_trabajador(user):
     return "trabajadores" in grupos or "trabajador" in grupos
 
 
+def _admins_aquo():
+    """Destinatarios de la bandeja AQUO360; no genera avisos del ERP."""
+    User = get_user_model()
+    return User.objects.filter(
+        Q(is_superuser=True) | Q(is_staff=True)
+        | Q(groups__name__in=["Administradores", "Administrador", "Admins", "Adimistradores"])
+    ).distinct()
+
+
 def _notificar_admin_digital(titulo, mensaje, url="/dashboard/asistente/administracion/suscripciones-digitales/"):
-    """Crea avisos internos para todos los administradores del ERP."""
+    """Avisos en una tabla exclusiva AQUO360 (nunca dashboard.Notificacion)."""
+    from .models import AvisoAdministrativoAquo
+    # No aceptar enlaces arbitrarios en notificaciones creadas desde el portal.
+    if not url.startswith("/dashboard/asistente/") or url.startswith("//"):
+        url = reverse("asistente_tecnico:digital_suscripciones_admin")
     try:
-        from dashboard.models import Notificacion
-        User = get_user_model()
-        admins = User.objects.filter(
-            Q(is_superuser=True)
-            | Q(is_staff=True)
-            | Q(groups__name__in=["Administradores", "Administrador", "Admins", "Adimistradores"])
-        ).distinct()
-        for admin_user in admins:
-            Notificacion.objects.create(
-                user=admin_user,
-                titulo=titulo[:150],
-                mensaje=mensaje,
-                url=url,
-                tipo="general",
-                leida=False,
+        for admin_user in _admins_aquo():
+            AvisoAdministrativoAquo.objects.create(
+                usuario=admin_user, tipo="evento", titulo=titulo[:150],
+                mensaje=mensaje[:1000], url=url,
             )
     except Exception:
-        # La creación de la cuenta/pago nunca debe fallar por una notificación.
+        # No bloquear la solicitud por fallos en la bandeja de avisos.
         pass
 
 
 def _sincronizar_notificacion_admin_soporte():
-    """
-    Mantiene UNA sola notificación de administración para Soporte Digital.
-
-    Mientras existan mensajes de clientes pendientes de leer, cada administrador
-    tiene una única notificación agregada. Cuando ya no quedan pendientes,
-    la notificación se elimina.
-    """
+    """Un solo aviso AQUO360 de soporte no leído por administrador."""
+    from .models import AvisoAdministrativoAquo
     try:
-        from dashboard.models import Notificacion
-
-        User = get_user_model()
-        admins = User.objects.filter(
-            Q(is_superuser=True)
-            | Q(is_staff=True)
-            | Q(groups__name__in=["Administradores", "Administrador", "Admins", "Adimistradores"])
-        ).distinct()
-
-        pendientes = MensajeSoporteDigital.objects.filter(
-            remitente="cliente",
-            leido_admin=False,
-        )
+        pendientes = MensajeSoporteDigital.objects.filter(remitente="cliente", leido_admin=False)
         total = pendientes.count()
         conversaciones = pendientes.values("conversacion_id").distinct().count()
-
-        for admin_user in admins:
-            # Limpia avisos antiguos por mensaje de las versiones anteriores.
-            Notificacion.objects.filter(
-                user=admin_user,
-                tipo="general",
-                titulo__icontains="soporte JVAQUA Digital",
-            ).exclude(referencia_id=-9001).delete()
-
+        for admin_user in _admins_aquo():
+            qs = AvisoAdministrativoAquo.objects.filter(usuario=admin_user, tipo="soporte")
             if total:
-                Notificacion.objects.update_or_create(
-                    user=admin_user,
-                    tipo="general",
-                    referencia_id=-9001,
+                qs.update_or_create(
                     defaults={
-                        "titulo": "Mensajes pendientes de soporte",
-                        "mensaje": (
-                            f"Tienes {total} mensaje(s) pendiente(s) en "
-                            f"{conversaciones} conversación(es) de JVAQUA Digital."
-                        ),
-                        "url": "/dashboard/asistente/administracion/soporte/",
+                        "titulo": "Mensajes pendientes de soporte AQUO360",
+                        "mensaje": f"Tienes {total} mensaje(s) pendiente(s) en {conversaciones} conversación(es).",
+                        "url": reverse("asistente_tecnico:soporte_admin_lista"),
                         "leida": False,
-                        "leida_en": None,
                     },
                 )
             else:
-                Notificacion.objects.filter(
-                    user=admin_user,
-                    tipo="general",
-                    referencia_id=-9001,
-                ).delete()
+                qs.delete()
     except Exception:
-        # El flujo de soporte no debe romperse por un aviso administrativo.
         pass
 
 
@@ -1452,6 +1418,42 @@ def digital_acceso_view(request):
 
 
 @login_required
+@require_http_methods(["GET", "POST"])
+def digital_avisos_admin_view(request):
+    if not _es_admin(request.user):
+        return HttpResponseForbidden("No autorizado")
+    if request.method == "POST":
+        AvisoAdministrativoAquo.objects.filter(usuario=request.user, leida=False).update(leida=True)
+        return redirect("asistente_tecnico:digital_avisos_admin")
+    return render(request, "asistente_tecnico/digital_avisos_admin.html", {
+        "base_template": "dashboard/base_admin.html",
+        "avisos": AvisoAdministrativoAquo.objects.filter(usuario=request.user)[:100],
+        "pendientes": AvisoAdministrativoAquo.objects.filter(usuario=request.user, leida=False).count(),
+    })
+
+
+@login_required
+@require_http_methods(["GET"])
+def digital_comprobante_admin_view(request, pk):
+    """Descarga controlada para el revisor, sin exponer URL de archivo en HTML."""
+    if not _es_admin(request.user):
+        return HttpResponseForbidden("No autorizado")
+    solicitud = get_object_or_404(SolicitudSuscripcionDigital, pk=pk)
+    if not solicitud.comprobante:
+        raise Http404("Sin comprobante")
+    try:
+        archivo = solicitud.comprobante.open("rb")
+    except (OSError, FileNotFoundError, ValueError):
+        raise Http404("El archivo no está disponible")
+    from pathlib import Path
+    nombre = Path(solicitud.comprobante.name).name
+    respuesta = FileResponse(archivo, as_attachment=True, filename=nombre)
+    respuesta["Cache-Control"] = "private, no-store"
+    respuesta["X-Content-Type-Options"] = "nosniff"
+    return respuesta
+
+
+@login_required
 @require_http_methods(["GET"])
 def digital_suscripciones_admin_view(request):
     if not _es_admin(request.user):
@@ -1465,6 +1467,7 @@ def digital_suscripciones_admin_view(request):
         "solicitudes": qs[:200],
         "estado_filtro": estado,
         "pendientes_total": SolicitudSuscripcionDigital.objects.filter(estado="pendiente").count(),
+        "avisos_pendientes": AvisoAdministrativoAquo.objects.filter(usuario=request.user, leida=False).count(),
     })
 
 

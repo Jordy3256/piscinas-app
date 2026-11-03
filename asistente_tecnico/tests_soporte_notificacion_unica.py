@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
-from dashboard.models import Notificacion
+from asistente_tecnico.models import AvisoAdministrativoAquo
 from asistente_tecnico.models import PerfilSuscriptor, ConversacionSoporteDigital, MensajeSoporteDigital
 from asistente_tecnico.views import _sincronizar_notificacion_admin_soporte
 
@@ -32,11 +32,7 @@ class SoporteNotificacionUnicaTests(TestCase):
             )
             _sincronizar_notificacion_admin_soporte()
 
-        qs = Notificacion.objects.filter(
-            user=admin,
-            tipo="general",
-            referencia_id=-9001,
-        )
+        qs = AvisoAdministrativoAquo.objects.filter(usuario=admin, tipo="soporte")
         self.assertEqual(qs.count(), 1)
         self.assertIn("3 mensaje", qs.first().mensaje)
 
