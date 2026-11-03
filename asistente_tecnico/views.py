@@ -176,7 +176,7 @@ def _actualizar_recordatorios(user):
         pass
 
 
-def _academia_relacionada_con_diagnostico(resultado, limite=6):
+def _academia_relacionada_con_diagnostico(resultado, limite=6, para_suscriptor=False):
     """Conecta Resolver con contenido oficial sin convertir la Academia en requisito."""
     if not resultado:
         return []
@@ -197,7 +197,8 @@ def _academia_relacionada_con_diagnostico(resultado, limite=6):
     if "filtr" in texto or "circul" in texto:
         modulos.update({"equipos", "preventivo"}); terminos += ["filtro", "bomba", "circul"]
 
-    qs = ContenidoAcademia.objects.filter(estado="aprobado").exclude(acceso="suscriptor")
+    qs = ContenidoAcademia.objects.filter(estado="aprobado")
+    qs = qs.exclude(acceso="interno" if para_suscriptor else "suscriptor")
     filtro = Q(modulo_curso__in=modulos)
     for termino in terminos:
         filtro |= Q(titulo__icontains=termino) | Q(etiquetas__icontains=termino) | Q(resumen__icontains=termino)
@@ -1137,9 +1138,13 @@ def academia_contenido_detalle_view(request, slug):
 @login_required
 @require_http_methods(["POST"])
 def academia_contenido_completar_view(request, slug):
+    if not (_es_trabajador(request.user) or _es_admin(request.user) or _es_suscriptor(request.user)):
+        return HttpResponseForbidden("No autorizado")
     obj = get_object_or_404(ContenidoAcademia, slug=slug, estado="aprobado")
     if _es_suscriptor(request.user) and obj.acceso == "interno":
         return HttpResponseForbidden("Contenido exclusivo del equipo JVAQUA")
+    if not (_es_admin(request.user) or _es_suscriptor(request.user)) and obj.acceso == "suscriptor":
+        return HttpResponseForbidden("Contenido no disponible para este perfil")
     ProgresoContenidoAcademia.objects.update_or_create(user=request.user, contenido=obj, defaults={"completado": True, "completado_en": timezone.now()})
     messages.success(request, "Contenido marcado como aprendido.")
     return redirect("asistente_tecnico:academia_contenido_detalle", slug=slug)
@@ -1148,9 +1153,13 @@ def academia_contenido_completar_view(request, slug):
 @login_required
 @require_http_methods(["POST"])
 def academia_contenido_favorito_view(request, slug):
+    if not (_es_trabajador(request.user) or _es_admin(request.user) or _es_suscriptor(request.user)):
+        return HttpResponseForbidden("No autorizado")
     obj = get_object_or_404(ContenidoAcademia, slug=slug, estado="aprobado")
     if _es_suscriptor(request.user) and obj.acceso == "interno":
         return HttpResponseForbidden("Contenido exclusivo del equipo JVAQUA")
+    if not (_es_admin(request.user) or _es_suscriptor(request.user)) and obj.acceso == "suscriptor":
+        return HttpResponseForbidden("Contenido no disponible para este perfil")
     fav = FavoritoContenidoAcademia.objects.filter(user=request.user, contenido=obj)
     if fav.exists():
         fav.delete(); messages.info(request, "Eliminado de favoritos.")
@@ -1244,25 +1253,43 @@ def _pdf_response(nombre, objetos):
     resp=HttpResponse(data,content_type="application/pdf"); resp["Content-Disposition"]=f'attachment; filename="{nombre}"'; return resp
 
 
+def _contenidos_pdf_permitidos(user):
+    """Respeta las mismas restricciones de acceso que la academia web."""
+    if not (_es_admin(user) or _es_trabajador(user) or _es_suscriptor(user)):
+        return None
+    qs = ContenidoAcademia.objects.filter(estado="aprobado")
+    if _es_suscriptor(user):
+        qs = qs.exclude(acceso="interno")
+    elif not _es_admin(user):
+        qs = qs.exclude(acceso="suscriptor")
+    return qs
+
+
 @login_required
 def academia_pdf_articulo_view(request, slug):
-    filtros={"slug":slug};
-    if not _es_admin(request.user): filtros["estado"]="aprobado"
-    obj=get_object_or_404(ContenidoAcademia,**filtros)
-    return _pdf_response(f"JVAQUA_{slug}.pdf",[obj])
+    qs = _contenidos_pdf_permitidos(request.user)
+    if qs is None:
+        return HttpResponseForbidden("No autorizado")
+    obj = get_object_or_404(qs, slug=slug)
+    return _pdf_response(f"JVAQUA_{slug}.pdf", [obj])
 
 
 @login_required
 def academia_pdf_categoria_view(request, tipo):
-    if tipo not in {x[0] for x in ContenidoAcademia.TIPOS}: return HttpResponse("Tipo inválido",status=400)
-    qs=ContenidoAcademia.objects.filter(estado="aprobado",tipo=tipo)
-    return _pdf_response(f"JVAQUA_{tipo}.pdf",qs)
+    qs = _contenidos_pdf_permitidos(request.user)
+    if qs is None:
+        return HttpResponseForbidden("No autorizado")
+    if tipo not in {x[0] for x in ContenidoAcademia.TIPOS}:
+        return HttpResponse("Tipo inválido", status=400)
+    return _pdf_response(f"JVAQUA_{tipo}.pdf", qs.filter(tipo=tipo))
 
 
 @login_required
 def academia_pdf_manual_view(request):
-    qs=ContenidoAcademia.objects.filter(estado="aprobado")
-    return _pdf_response("Manual_Tecnico_Oficial_JVAQUA.pdf",qs)
+    qs = _contenidos_pdf_permitidos(request.user)
+    if qs is None:
+        return HttpResponseForbidden("No autorizado")
+    return _pdf_response("Manual_Tecnico_Oficial_JVAQUA.pdf", qs)
 
 
 def _planes_digitales():
@@ -1501,6 +1528,35 @@ def digital_inicio_view(request):
             piscina__suscriptor=perfil, piscina__activa=True, activo=True
         ).count()
     return render(request, "asistente_tecnico/digital_inicio.html", contexto)
+
+
+@login_required
+@require_http_methods(["GET"])
+def digital_centro_aquo_view(request):
+    """Portal educativo y de diagnóstico exclusivo de suscriptores activos.
+
+    No consulta modelos operativos del ERP interno de JVAQUA.
+    """
+    perfil = _suscriptor(request.user)
+    if not perfil:
+        return HttpResponseForbidden("Acceso exclusivo de suscriptores AQUO360 activos.")
+
+    contenidos = ContenidoAcademia.objects.filter(estado="aprobado").exclude(acceso="interno")
+    curso = contenidos.exclude(modulo_curso="")
+    total = curso.count()
+    completados = ProgresoContenidoAcademia.objects.filter(
+        user=request.user, completado=True, contenido__in=curso
+    ).count()
+    porcentaje = round(100 * completados / total) if total else 0
+    ultimo = CasoAsistenteTecnico.objects.filter(user=request.user).order_by("-creado_en").first()
+    return render(request, "asistente_tecnico/digital_centro_aquo.html", {
+        "perfil": perfil,
+        "curso_total": total,
+        "curso_completados": completados,
+        "curso_porcentaje": porcentaje,
+        "ultimo_caso": ultimo,
+        "piscinas_total": perfil.piscinas.filter(activa=True).count(),
+    })
 
 
 @login_required
@@ -2685,9 +2741,9 @@ def digital_resolver_view(request):
     piscinas=perfil.piscinas.filter(activa=True)
     piscina=None; resultado=None; caso=None; categoria_consulta="agua"; detalle_problema=""
     pid=request.POST.get("piscina_id") or request.GET.get("piscina")
-    if pid:
+    if pid and pid != "libre":
         piscina=piscinas.filter(pk=pid).first()
-    elif piscinas.count() == 1:
+    elif not pid and request.POST.get("consulta_libre") != "1" and piscinas.count() == 1:
         piscina=piscinas.first()
     if request.method=="POST":
         categoria_consulta=(request.POST.get("categoria_consulta") or "agua").strip()
@@ -2729,7 +2785,7 @@ def digital_resolver_view(request):
         "estado_choices":CasoAsistenteTecnico.ESTADO_AGUA_CHOICES,
         "problemas_tecnicos":PROBLEMAS_TECNICOS,
         "categoria_consulta":categoria_consulta,"detalle_problema":detalle_problema,
-        "articulos_relacionados":_academia_relacionada_con_diagnostico(resultado),
+        "articulos_relacionados":_academia_relacionada_con_diagnostico(resultado, para_suscriptor=True),
     })
 
 

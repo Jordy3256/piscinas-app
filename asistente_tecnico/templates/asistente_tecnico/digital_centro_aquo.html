@@ -1,0 +1,47 @@
+{% extends "asistente_tecnico/base_suscriptor.html" %}
+{% load static %}
+{% block title %}Centro AQUO · AQUO360{% endblock %}
+{% block content %}
+<style>
+.ac-center{max-width:1130px;margin:0 auto 30px;color:#183b5a}
+.ac-hero{position:relative;overflow:hidden;display:flex;align-items:center;justify-content:space-between;gap:24px;border-radius:22px;padding:25px 27px;background:linear-gradient(112deg,#063d91 0%,#087eca 60%,#00b6cf 100%);color:#fff;box-shadow:0 12px 29px rgba(4,86,161,.14)}
+.ac-hero:after{content:"";position:absolute;width:240px;height:240px;border-radius:50%;right:-70px;top:-105px;border:55px solid rgba(255,255,255,.07);pointer-events:none}
+.ac-kicker{font-size:.71rem;font-weight:900;letter-spacing:.1em;text-transform:uppercase;opacity:.84}
+.ac-hero h1{font-size:clamp(1.5rem,3vw,2.2rem);line-height:1.14;letter-spacing:-.03em;font-weight:900;margin:6px 0 9px}
+.ac-hero p{margin:0;font-size:.9rem;line-height:1.5;max-width:580px;color:#e7f6ff}
+.ac-hero-icon{font-size:4rem;color:#e1fbff;opacity:.9;position:relative;z-index:1;flex-shrink:0}
+.ac-grid{display:grid;grid-template-columns:1.1fr 1fr 1fr;gap:13px;margin-top:16px}
+.ac-tile{position:relative;display:flex;flex-direction:column;min-height:225px;padding:19px 19px 16px;border-radius:19px;border:1px solid #dceaf7;background:#fff;text-decoration:none!important;color:#17375a!important;box-shadow:0 7px 20px rgba(13,56,93,.055);transition:transform .15s,border-color .15s}
+.ac-tile:hover{transform:translateY(-2px);border-color:#9ecbfb}
+.ac-tile.primary{background:linear-gradient(155deg,#edf5ff,#fff);border-color:#c5ddff}
+.ac-tile.learn{background:linear-gradient(155deg,#f5edff,#fff);border-color:#dfd0ff}
+.ac-tile.library{background:linear-gradient(155deg,#e7fbf5,#fff);border-color:#b9ebd9}
+.ac-tile-icon{display:grid;place-items:center;width:45px;height:45px;border-radius:14px;font-size:1.42rem;background:#fff;color:#106bc9;box-shadow:0 5px 14px rgba(13,56,93,.07)}
+.ac-tile.learn .ac-tile-icon{color:#8646c1}.ac-tile.library .ac-tile-icon{color:#078f70}
+.ac-tile h2{font-size:1.14rem;font-weight:900;margin:14px 0 5px}
+.ac-tile p{font-size:.81rem;line-height:1.5;color:#657c94;margin:0 0 12px}
+.ac-tile-footer{margin-top:auto;font-weight:800;font-size:.78rem;display:flex;justify-content:space-between;gap:10px;align-items:center;color:#086cb8}
+.ac-small-panel{border:1px solid #e0eaf5;border-radius:17px;background:#fff;padding:15px 18px;margin-top:13px;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap}
+.ac-progress{height:7px;background:#e3edfa;border-radius:999px;overflow:hidden;margin-top:9px;max-width:320px}.ac-progress span{height:100%;display:block;background:linear-gradient(90deg,#8c5be8,#00a8ce)}
+.ac-stat{display:flex;gap:9px;align-items:center}.ac-stat i{font-size:1.4rem;color:#0a85cc}.ac-stat strong{display:block;font-size:.83rem}.ac-stat small{display:block;font-size:.74rem;color:#7a8da0}
+@media(max-width:780px){.ac-grid{grid-template-columns:1fr 1fr}.ac-grid>.primary{grid-column:1/-1;min-height:182px}.ac-hero{padding:20px}.ac-hero-icon{font-size:2.6rem}.ac-tile{min-height:190px}}
+@media(max-width:520px){.ac-grid{grid-template-columns:1fr;gap:10px}.ac-grid>.primary{grid-column:auto}.ac-tile{min-height:0;padding:16px}.ac-tile h2{margin:9px 0 4px}.ac-tile p{margin-bottom:8px}.ac-hero{padding:17px;border-radius:18px}.ac-hero-icon{font-size:2.2rem}.ac-hero h1{font-size:1.5rem}.ac-hero p{font-size:.81rem}}
+</style>
+<div class="ac-center">
+  <section class="ac-hero">
+    <div><div class="ac-kicker">AQUO360 · Tu centro inteligente</div><h1>Todo comienza con AQUO.</h1><p>Resuelve problemas de tu piscina, aprende con el curso y consulta nuestra biblioteca técnica. Todo desde un solo lugar.</p></div>
+    <i class="bi bi-stars ac-hero-icon" aria-hidden="true"></i>
+  </section>
+  <div class="ac-grid">
+    <a class="ac-tile primary" href="{% url 'asistente_tecnico:digital_resolver' %}"><span class="ac-tile-icon"><i class="bi bi-chat-heart-fill" aria-hidden="true"></i></span><h2>Habla con AQUO</h2><p>Consulta sobre el agua, químicos o equipos. No necesitas registrar una piscina para comenzar.</p><span class="ac-tile-footer">Iniciar diagnóstico <i class="bi bi-arrow-right"></i></span></a>
+    <a class="ac-tile learn" href="{% url 'asistente_tecnico:academia_cms' %}?modo=aprender"><span class="ac-tile-icon"><i class="bi bi-mortarboard-fill" aria-hidden="true"></i></span><h2>Curso de mantenimiento</h2><p>Aprende paso a paso y conserva tu progreso en cada tema.</p><span class="ac-tile-footer">{% if curso_total %}{{ curso_completados }} de {{ curso_total }} temas{% else %}Explorar curso{% endif %} <i class="bi bi-arrow-right"></i></span></a>
+    <a class="ac-tile library" href="{% url 'asistente_tecnico:academia_cms' %}?modo=consultar"><span class="ac-tile-icon"><i class="bi bi-journal-richtext" aria-hidden="true"></i></span><h2>Biblioteca técnica</h2><p>Busca procedimientos, productos y soluciones cuando los necesites.</p><span class="ac-tile-footer">Consultar biblioteca <i class="bi bi-arrow-right"></i></span></a>
+  </div>
+  <section class="ac-small-panel">
+    <div class="ac-stat"><i class="bi bi-graph-up-arrow" aria-hidden="true"></i><div><strong>Tu avance en el curso: {{ curso_porcentaje }}%</strong><small>{% if curso_total %}{{ curso_completados }} de {{ curso_total }} contenidos completados{% else %}El curso se está preparando{% endif %}</small><div class="ac-progress" role="progressbar" aria-valuenow="{{ curso_porcentaje }}" aria-valuemin="0" aria-valuemax="100"><span style="width:{{ curso_porcentaje }}%"></span></div></div></div>
+    <div class="ac-stat"><i class="bi bi-water" aria-hidden="true"></i><div><strong>{{ piscinas_total }} piscina{{ piscinas_total|pluralize }} registrada{{ piscinas_total|pluralize }}</strong><small>El registro es opcional para usar AQUO</small></div></div>
+    <a class="btn btn-sm btn-outline-primary rounded-pill px-3" href="{% url 'asistente_tecnico:digital_piscinas' %}">Mis piscinas</a>
+  </section>
+  {% if ultimo_caso %}<section class="ac-small-panel"><div class="ac-stat"><i class="bi bi-clock-history" aria-hidden="true"></i><div><strong>Último diagnóstico</strong><small>{{ ultimo_caso.diagnostico|truncatechars:95 }} · {{ ultimo_caso.creado_en|date:"d/m/Y" }}</small></div></div><a class="btn btn-sm btn-primary rounded-pill px-3" href="{% url 'asistente_tecnico:digital_resolver' %}">Nueva consulta</a></section>{% endif %}
+</div>
+{% endblock %}

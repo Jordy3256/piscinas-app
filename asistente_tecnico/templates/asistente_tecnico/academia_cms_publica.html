@@ -9,7 +9,7 @@
         <h2 class="fw-bold mt-2 mb-2">{% if modo == 'aprender' %}Aprende paso a paso{% else %}Encuentra la respuesta que necesitas{% endif %}</h2>
         <p class="mb-0 opacity-90">{% if modo == 'aprender' %}Aprende cada tema con lo esencial: qué comprende, qué debes saber y cómo hacerlo paso a paso. Sin información innecesaria.{% else %}Profundiza cuando lo necesites: explicación técnica, buenas prácticas, errores comunes, referencias y temas relacionados.{% endif %}</p>
       </div>
-      <a class="btn btn-outline-light" href="{% url 'asistente_tecnico:centro_conocimiento' %}">← Volver</a>
+      <a class="btn btn-outline-light" href="{% if base_template == 'asistente_tecnico/base_suscriptor.html' %}{% url 'asistente_tecnico:digital_centro_aquo' %}{% else %}{% url 'asistente_tecnico:centro_conocimiento' %}{% endif %}">← Volver</a>
     </div>
   </section>
 
