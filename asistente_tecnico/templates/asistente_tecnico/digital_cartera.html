@@ -1,0 +1,40 @@
+{% extends 'asistente_tecnico/base_suscriptor.html' %}
+{% load l10n %}
+{% block title %}Cartera y cobros · AQUO360 Empresarial{% endblock %}
+{% block extra_head %}
+<style>
+.car-wrap{max-width:1200px;margin:auto}.car-hero{background:linear-gradient(120deg,#08375f,#066dba 65%,#0ba8bc);color:white;border-radius:20px;padding:19px 22px;display:flex;align-items:center;justify-content:space-between;gap:15px;flex-wrap:wrap}
+.car-hero h1{font-size:1.55rem;margin:0;font-weight:850}.car-hero small{color:#d0eaf7}.car-arrow{display:inline-flex;align-items:center;justify-content:center;background:#ffffff24;border:1px solid #ffffff50;color:#fff;border-radius:11px;width:35px;height:35px;text-decoration:none}.car-arrow:hover{color:white;background:#ffffff48}
+.car-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:11px;margin:13px 0}.car-metric{border:1px solid #e0edf5;background:white;border-radius:16px;padding:13px 15px;box-shadow:0 6px 19px #0c54900c}.car-metric small{color:#62788d;font-weight:700}.car-metric strong{display:block;font-size:1.35rem;color:#122f4e}.car-metric.cyan{background:#ebfbff}.car-metric.green{background:#effcf4}.car-metric.orange{background:#fff5e9}.car-metric.red{background:#fff0f1}
+.car-line{display:grid;grid-template-columns:minmax(190px,2fr) 125px 110px 100px minmax(160px,1fr);align-items:center;gap:9px;padding:12px 15px;background:white;border:1px solid #e5edf3;border-radius:15px;margin:8px 0}.car-line .small-title{font-weight:850;color:#123656}.car-line small{color:#778697}.car-pill{display:inline-flex;align-items:center;gap:5px;border-radius:999px;font-size:.73rem;font-weight:800;padding:6px 10px;background:#e9f2ff;color:#1467a5}.car-pill.pagado{background:#e5f8ef;color:#14784b}.car-pill.vencido{background:#fff0ef;color:#bc4545}.car-pill.parcial{background:#fff5df;color:#966007}.car-payment{display:flex;gap:6px;align-items:center}.car-payment input{min-width:0;width:100%;max-width:100px}.car-payment button{white-space:nowrap}.car-history{font-size:.73rem;color:#667d8e;margin-top:4px}
+@media(max-width:950px){.car-line{grid-template-columns:1fr 1fr;gap:10px}.car-line>:first-child{grid-column:1 / -1}.car-line>:last-child{grid-column:1 / -1}.car-metrics{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:480px){.car-metric strong{font-size:1.14rem}.car-hero{padding:14px}.car-line{padding:12px}.car-payment{flex-wrap:wrap}.car-payment input{max-width:none;flex:1}}
+</style>
+{% endblock %}
+{% block content %}
+<div class="car-wrap">
+  <div class="car-hero">
+    <div><small><i class="bi bi-briefcase-fill me-1"></i>AQUO360 · PLAN EMPRESARIAL</small><h1><i class="bi bi-wallet2 me-2"></i>Cartera y cobros</h1><small>Control de pagos por piscina, independiente de JVAQUA ERP.</small></div>
+    <div class="d-flex align-items-center gap-2"><a class="car-arrow" href="?anio={{ previo.year }}&mes={{ previo.month }}" title="Mes anterior"><i class="bi bi-chevron-left"></i></a><span class="fw-bold">{{ mes_nombre }} {{ anio }}</span><a class="car-arrow" href="?anio={{ proximo.year }}&mes={{ proximo.month }}" title="Mes siguiente"><i class="bi bi-chevron-right"></i></a></div>
+  </div>
+  <div class="car-metrics">
+    <div class="car-metric cyan"><small>Total del mes</small><strong>${{ total|floatformat:2 }}</strong></div>
+    <div class="car-metric green"><small>Pagado</small><strong>${{ pagado|floatformat:2 }}</strong></div>
+    <div class="car-metric orange"><small>Por cobrar</small><strong>${{ saldo|floatformat:2 }}</strong></div>
+    <div class="car-metric red"><small>Vencido</small><strong>${{ vencido|floatformat:2 }}</strong></div>
+  </div>
+  <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 my-3"><h2 class="fw-bold fs-5 m-0">Cobros del período <span class="text-muted fs-6">({{ cobros|length }})</span></h2><a class="btn btn-sm btn-outline-primary rounded-pill" href="{% url 'asistente_tecnico:digital_piscinas' %}"><i class="bi bi-water me-1"></i>Configurar piscinas</a></div>
+  {% for c in cobros %}
+  <article class="car-line">
+    <div><div class="small-title">{{ c.piscina.nombre }}</div><small>Vence {{ c.vencimiento|date:"d/m/Y" }} · Cargo ${{ c.importe|floatformat:2 }}</small>{% for pago in c.pagos.all %}<div class="car-history"><i class="bi bi-check2-circle text-success"></i> Pago ${{ pago.importe|floatformat:2 }} — {{ pago.fecha_pago|date:"d/m/Y" }}{% if pago.nota %} · {{ pago.nota }}{% endif %}</div>{% endfor %}</div>
+    <div><small class="d-block">Recibido</small><strong class="text-success">${{ c.total_pagado|floatformat:2 }}</strong></div>
+    <div><small class="d-block">Saldo</small><strong>${{ c.saldo|floatformat:2 }}</strong></div>
+    <div><span class="car-pill {{ c.estado }}">{{ c.estado|capfirst }}</span></div>
+    <div>{% if c.saldo > 0 %}<form method="post" action="{% url 'asistente_tecnico:digital_cobro_pago' c.pk %}" class="car-payment">{% csrf_token %}<input type="number" min="0.01" max="{{ c.saldo|unlocalize }}" step="0.01" name="importe" value="{{ c.saldo|unlocalize }}" class="form-control form-control-sm" aria-label="Importe del pago" required><input type="hidden" name="fecha_pago" value="{{ hoy|date:'Y-m-d' }}"><button class="btn btn-primary btn-sm" type="submit">Registrar pago</button></form>{% else %}<span class="text-success small fw-bold"><i class="bi bi-check-circle-fill me-1"></i>Pagado</span>{% endif %}</div>
+  </article>
+  {% empty %}
+  <div class="jd-panel p-4 text-center"><i class="bi bi-wallet2 fs-2 text-primary"></i><h3 class="fs-5 mt-2">Todavía no hay cobros para este mes</h3><p class="text-muted mb-2">En la ficha de cada piscina empresarial registra el valor mensual y el día de cobro. Los cargos se crearán automáticamente al consultar el período.</p><a class="btn btn-primary btn-sm" href="{% url 'asistente_tecnico:digital_piscinas' %}">Ir a mis piscinas</a></div>
+  {% endfor %}
+  <p class="small text-muted mt-3"><i class="bi bi-info-circle me-1"></i>Los pagos se registran manualmente. Esta cartera es un control operativo interno del suscriptor; no procesa transferencias ni genera facturas. Los recordatorios internos se generan al ejecutar el comando diario correspondiente.</p>
+</div>
+{% endblock %}

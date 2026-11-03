@@ -13,6 +13,7 @@
     <div><div class="jd-kicker">MIS PISCINAS</div><h2 class="fw-bold mb-1">{% if perfil.es_profesional %}Cartera de piscinas{% else %}Mis piscinas{% endif %}</h2><p class="text-muted mb-0">{% if perfil.es_profesional %}Clientes, ubicación y programación de mantenimiento en un solo lugar.{% else %}AQUO mantiene separados tus datos, diagnósticos y planes.{% endif %}</p></div>
     {% if perfil.piscinas_disponibles == None or perfil.piscinas_disponibles > 0 %}<a class="btn jd-btn jd-btn-primary" href="{% url 'asistente_tecnico:digital_piscina_nueva' %}"><i class="bi bi-plus-lg me-1"></i>Agregar piscina</a>{% endif %}
   </div>
+  {% if perfil.plan == "empresarial" %}<div class="mb-3"><a class="btn btn-outline-primary rounded-pill px-3 fw-bold" href="{% url 'asistente_tecnico:digital_cartera' %}"><i class="bi bi-wallet2 me-2"></i>Gestionar cartera y cobros</a></div>{% endif %}
   <div class="pool-grid">
     {% for p in piscinas %}
     <a class="pool-profile" href="{% url 'asistente_tecnico:digital_piscina_detalle' p.pk %}">

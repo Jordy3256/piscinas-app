@@ -9,7 +9,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Count, Q, Sum
 from django.http import HttpResponseForbidden, JsonResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -19,8 +19,9 @@ from django.views.decorators.clickjacking import xframe_options_sameorigin
 
 from trabajadores.models import Trabajador
 from .engine import DEFAULT_RULES, calcular_recomendacion, diagnosticar_problema_tecnico, PROBLEMAS_TECNICOS
-from .models import CasoAsistenteTecnico, MotorRecomendacion, ContenidoAcademia, ProgresoContenidoAcademia, FavoritoContenidoAcademia, ConsultaContenidoAcademia, PerfilSuscriptor, PiscinaSuscriptor, PlanMantenimientoPiscina, RegistroMantenimientoPiscina, VisitaProgramadaPiscina, NotificacionDigital, SugerenciaDigital, SolicitudSuscripcionDigital, ConversacionSoporteDigital, MensajeSoporteDigital, AdjuntoSoporteDigital
+from .models import CasoAsistenteTecnico, MotorRecomendacion, ContenidoAcademia, ProgresoContenidoAcademia, FavoritoContenidoAcademia, ConsultaContenidoAcademia, PerfilSuscriptor, PiscinaSuscriptor, PlanMantenimientoPiscina, RegistroMantenimientoPiscina, VisitaProgramadaPiscina, NotificacionDigital, SugerenciaDigital, SolicitudSuscripcionDigital, ConversacionSoporteDigital, MensajeSoporteDigital, AdjuntoSoporteDigital, CobroPiscinaDigital, PagoCobroDigital
 from .services import generar_recordatorios_seguimiento
+from .cartera_digital import crear_cobros_mes
 
 
 def _es_admin(user):
@@ -2609,3 +2610,61 @@ def digital_resolver_view(request):
         "categoria_consulta":categoria_consulta,"detalle_problema":detalle_problema,
         "articulos_relacionados":_academia_relacionada_con_diagnostico(resultado),
     })
+
+
+@login_required
+@require_http_methods(["GET"])
+def digital_cartera_view(request):
+    perfil = _suscriptor(request.user)
+    if not perfil or perfil.plan != "empresarial":
+        return HttpResponseForbidden("Cartera disponible exclusivamente para el plan Empresarial activo.")
+    hoy = timezone.localdate()
+    try:
+        anio = int(request.GET.get("anio", hoy.year))
+        mes = int(request.GET.get("mes", hoy.month))
+        if anio < 2020 or anio > 2100 or mes < 1 or mes > 12:
+            raise ValueError
+    except (TypeError, ValueError):
+        anio, mes = hoy.year, hoy.month
+    # No duplicar períodos; el valor queda congelado cuando nace el cobro.
+    crear_cobros_mes(perfil, anio, mes)
+    periodo = date(anio, mes, 1)
+    cobros = list(CobroPiscinaDigital.objects.filter(
+        piscina__suscriptor=perfil, periodo=periodo
+    ).select_related("piscina").prefetch_related("pagos").order_by("vencimiento", "piscina__nombre"))
+    total = sum((c.importe for c in cobros), Decimal("0"))
+    pagado = sum((c.total_pagado for c in cobros), Decimal("0"))
+    vencido = sum((c.saldo for c in cobros if c.vencimiento < hoy), Decimal("0"))
+    previo = periodo - timedelta(days=1)
+    proximo = date(anio + (mes == 12), (mes % 12) + 1, 1)
+    return render(request, "asistente_tecnico/digital_cartera.html", {
+        "perfil": perfil, "cobros": cobros, "anio": anio, "mes": mes,
+        "mes_nombre": ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"][mes],
+        "total": total, "pagado": pagado, "saldo": total - pagado, "vencido": vencido,
+        "previo": previo, "proximo": proximo, "hoy": hoy,
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def digital_cobro_pago_view(request, pk):
+    perfil = _suscriptor(request.user)
+    if not perfil or perfil.plan != "empresarial":
+        return HttpResponseForbidden("No autorizado")
+    try:
+        monto = Decimal((request.POST.get("importe") or "").strip().replace(",", "."))
+        fecha_pago = date.fromisoformat(request.POST.get("fecha_pago", ""))
+        if not monto.is_finite() or monto <= 0 or monto.as_tuple().exponent < -2 or monto > Decimal("99999999.99"):
+            raise ValueError
+    except (InvalidOperation, ValueError, TypeError):
+        messages.error(request, "Revisa el importe y la fecha del pago.")
+        return redirect("asistente_tecnico:digital_cartera")
+    with transaction.atomic():
+        cobro = get_object_or_404(CobroPiscinaDigital.objects.select_for_update(), pk=pk, piscina__suscriptor=perfil)
+        if monto > cobro.saldo:
+            messages.error(request, "El pago no puede superar el saldo pendiente.")
+        else:
+            PagoCobroDigital.objects.create(cobro=cobro, importe=monto, fecha_pago=fecha_pago,
+                                            nota=(request.POST.get("nota") or "").strip()[:255])
+            messages.success(request, f"Pago de ${monto:.2f} registrado para {cobro.piscina.nombre}.")
+    return redirect(f"{reverse('asistente_tecnico:digital_cartera')}?anio={cobro.periodo.year}&mes={cobro.periodo.month}")

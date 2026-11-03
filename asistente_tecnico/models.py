@@ -2,6 +2,7 @@ from decimal import Decimal
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
+from django.utils.functional import cached_property
 
 from trabajadores.models import Trabajador
 
@@ -802,6 +803,9 @@ class NotificacionDigital(models.Model):
         ("plan_creado", "Plan creado"),
         ("visita_hoy", "Visita de hoy"),
         ("recordatorio", "Recordatorio"),
+        ("cobro_proximo", "Cobro próximo"),
+        ("cobro_hoy", "Cobro de hoy"),
+        ("cobro_vencido", "Cobro vencido"),
     ]
 
     suscriptor = models.ForeignKey(
@@ -823,6 +827,7 @@ class NotificacionDigital(models.Model):
         null=True,
         blank=True,
     )
+    cobro = models.ForeignKey("CobroPiscinaDigital", on_delete=models.CASCADE, null=True, blank=True, related_name="notificaciones")
     tipo = models.CharField(max_length=20, choices=TIPOS, default="recordatorio", db_index=True)
     titulo = models.CharField(max_length=150)
     mensaje = models.TextField()
@@ -836,7 +841,8 @@ class NotificacionDigital(models.Model):
             models.UniqueConstraint(
                 fields=["suscriptor", "visita", "tipo"],
                 name="uq_notificacion_digital_visita_tipo",
-            )
+            ),
+            models.UniqueConstraint(fields=["suscriptor", "cobro", "tipo"], name="uq_aquo_cobro_aviso_tipo")
         ]
         verbose_name = "Notificación JVAQUA Digital"
         verbose_name_plural = "Notificaciones JVAQUA Digital"
@@ -987,3 +993,56 @@ class AdjuntoSoporteDigital(models.Model):
         ordering = ["id"]
         verbose_name = "Adjunto de soporte JVAQUA Digital"
         verbose_name_plural = "Adjuntos de soporte JVAQUA Digital"
+
+
+class CobroPiscinaDigital(models.Model):
+    """Cartera independiente de JVAQUA ERP, exclusiva de AQUO360 Empresarial."""
+    piscina = models.ForeignKey(PiscinaSuscriptor, on_delete=models.CASCADE, related_name="cobros_digitales")
+    periodo = models.DateField(help_text="Primer día del mes de servicio")
+    vencimiento = models.DateField(db_index=True)
+    importe = models.DecimalField(max_digits=10, decimal_places=2)
+    observaciones = models.CharField(max_length=255, blank=True, default="")
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["vencimiento", "piscina__nombre"]
+        constraints = [models.UniqueConstraint(fields=["piscina", "periodo"], name="uq_aquo_cobro_piscina_periodo")]
+        verbose_name = "Cobro AQUO360 Empresarial"
+        verbose_name_plural = "Cobros AQUO360 Empresarial"
+
+    @cached_property
+    def total_pagado(self):
+        return sum((p.importe for p in self.pagos.all()), Decimal("0.00"))
+
+    @property
+    def saldo(self):
+        return max(Decimal("0.00"), self.importe - self.total_pagado)
+
+    @property
+    def estado(self):
+        if self.saldo == 0:
+            return "pagado"
+        if self.vencimiento < timezone.localdate():
+            return "vencido"
+        if self.total_pagado > 0:
+            return "parcial"
+        return "pendiente"
+
+    def __str__(self):
+        return f"{self.piscina.nombre} · {self.periodo:%Y-%m}"
+
+
+class PagoCobroDigital(models.Model):
+    cobro = models.ForeignKey(CobroPiscinaDigital, on_delete=models.CASCADE, related_name="pagos")
+    importe = models.DecimalField(max_digits=10, decimal_places=2)
+    fecha_pago = models.DateField(default=timezone.localdate)
+    nota = models.CharField(max_length=255, blank=True, default="")
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-fecha_pago", "-id"]
+        verbose_name = "Pago recibido AQUO360"
+        verbose_name_plural = "Pagos recibidos AQUO360"
+
+    def __str__(self):
+        return f"{self.cobro} · {self.importe}"
