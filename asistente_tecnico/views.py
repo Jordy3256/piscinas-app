@@ -2698,8 +2698,13 @@ def digital_notificacion_leer_view(request, pk):
     notificacion.leida = True
     notificacion.save(update_fields=["leida"])
 
+    # Nunca redirigir a otra web ni a las pantallas administrativas internas.
+    # Las rutas externas pueden empezar por // y son interpretadas como URL absoluta.
     destino = request.POST.get("next") or ""
-    if destino.startswith("/"):
+    if (destino.startswith("/dashboard/asistente/digital/")
+            and not destino.startswith("//")
+            and "\\" not in destino
+            and "\r" not in destino and "\n" not in destino):
         return redirect(destino)
     if notificacion.piscina_id:
         return redirect(
