@@ -74,13 +74,14 @@ def _sincronizar_notificacion_admin_soporte():
         pendientes = MensajeSoporteDigital.objects.filter(remitente="cliente", leido_admin=False)
         total = pendientes.count()
         conversaciones = pendientes.values("conversacion_id").distinct().count()
+        tecnicos = pendientes.filter(conversacion__categoria="soporte_tecnico").count()
         for admin_user in _admins_aquo():
             qs = AvisoAdministrativoAquo.objects.filter(usuario=admin_user, tipo="soporte")
             if total:
                 qs.update_or_create(
                     defaults={
-                        "titulo": "Mensajes pendientes de soporte AQUO360",
-                        "mensaje": f"Tienes {total} mensaje(s) pendiente(s) en {conversaciones} conversación(es).",
+                        "titulo": "Soporte técnico prioritario AQUO360" if tecnicos else "Mensajes pendientes de soporte AQUO360",
+                        "mensaje": f"{tecnicos} mensaje(s) técnicos prioritarios. Total: {total} mensaje(s) en {conversaciones} conversación(es)." if tecnicos else f"Tienes {total} mensaje(s) pendiente(s) en {conversaciones} conversación(es).",
                         "url": reverse("asistente_tecnico:soporte_admin_lista"),
                         "leida": False,
                     },
@@ -1774,12 +1775,17 @@ def digital_soporte_burbuja_api(request):
 
 @login_required
 def soporte_admin_burbuja_api(request):
+    from django.db.models import Case, When, Value, IntegerField
     if not _es_admin(request.user):
         return JsonResponse({"ok": False, "error": "No autorizado"}, status=403)
     conversaciones = list(
         ConversacionSoporteDigital.objects.exclude(estado="cerrada")
         .select_related("suscriptor__user")
-        .order_by("-ultimo_mensaje_en", "-id")[:8]
+        .annotate(prioridad_soporte=Case(
+            When(categoria="soporte_tecnico", then=Value(0)),
+            default=Value(1), output_field=IntegerField(),
+        ))
+        .order_by("prioridad_soporte", "-ultimo_mensaje_en", "-id")[:8]
     )
     payload = [_soporte_conversacion_payload(c, admin=True) for c in conversaciones]
     return JsonResponse({
@@ -2005,6 +2011,12 @@ def soporte_admin_lista_view(request):
         qs = qs.exclude(estado="cerrada")
     elif estado in {x[0] for x in ConversacionSoporteDigital.ESTADOS}:
         qs = qs.filter(estado=estado)
+    # Prioridad efectiva en la bandeja administrativa: primero incidencias técnicas.
+    from django.db.models import Case, When, Value, IntegerField
+    qs = qs.annotate(prioridad_soporte=Case(
+        When(categoria="soporte_tecnico", then=Value(0)),
+        default=Value(1), output_field=IntegerField()
+    )).order_by("prioridad_soporte", "-ultimo_mensaje_en", "-pk")
     return render(request, "asistente_tecnico/soporte_admin_lista.html", {
         "base_template": "dashboard/base_admin.html",
         "conversaciones": qs,
@@ -2142,8 +2154,6 @@ def digital_piscina_form_view(request, pk=None):
             profundidad = Decimal((request.POST.get("profundidad_m") or "0").replace(",",".")) if request.POST.get("profundidad_m") else None
             vol_txt=(request.POST.get("volumen_m3") or "").replace(",",".")
             volumen=Decimal(vol_txt) if vol_txt else ((largo*ancho*profundidad).quantize(Decimal("0.01")) if largo and ancho and profundidad else Decimal("0"))
-            # Validar magnitudes ANTES de enviarlas a DecimalField/PostgreSQL.
-            # Infinity/NaN y números demasiado grandes no son medidas válidas.
             for dimension in (largo, ancho, profundidad):
                 if dimension is not None and (not dimension.is_finite() or dimension <= 0 or dimension > Decimal("99999.99")):
                     raise ValueError
@@ -2178,26 +2188,26 @@ def digital_piscina_form_view(request, pk=None):
                         or obj.valor_mensual < 0
                         or obj.valor_mensual > Decimal("99999999.99")
                         or obj.valor_mensual.as_tuple().exponent < -2
-                    ):
-                        raise ValueError
+                    ): raise ValueError
                     obj.dia_cobro=int(dia) if dia else None
                     if obj.dia_cobro is not None and not 1 <= obj.dia_cobro <= 31: raise ValueError
                 except (ValueError, InvalidOperation):
                     messages.error(request, "Revisa el valor mensual y el día de cobro (1 a 31).")
                     return redirect(request.path)
                 obj.recordatorio_cobro_activo=request.POST.get("recordatorio_cobro_activo")=="on"
-            # Bloquear el perfil al crear: dos pestañas simultáneas no pueden
-            # superar el número de piscinas contratado. No afecta a ediciones.
+            nueva = obj.pk is None
             with transaction.atomic():
                 PerfilSuscriptor.objects.select_for_update().get(pk=perfil.pk)
-                if obj.pk is None and perfil.limite_piscinas is not None:
+                if nueva and perfil.limite_piscinas is not None:
                     existentes = PiscinaSuscriptor.objects.filter(suscriptor=perfil, activa=True).count()
                     if existentes >= perfil.limite_piscinas:
                         messages.error(request, "Has alcanzado el límite de piscinas de tu plan.")
                         return redirect("asistente_tecnico:digital_inicio")
                 obj.save()
-            messages.success(request,"Piscina guardada. El Asistente ya puede usar estos datos.")
-            return redirect("asistente_tecnico:digital_inicio")
+            messages.success(request,"Piscina guardada. Puedes crear su plan semanal ahora o hacerlo después.")
+            if nueva:
+                return redirect(f"{reverse('asistente_tecnico:digital_plan_mantenimiento', args=[obj.pk])}?recien_creada=1")
+            return redirect("asistente_tecnico:digital_piscinas")
     return render(request,"asistente_tecnico/digital_piscina_form.html",{"obj":obj,"tipo_choices":PiscinaSuscriptor.TIPOS,"filtro_choices":PiscinaSuscriptor.FILTROS,"desinfeccion_choices":PiscinaSuscriptor.DESINFECCION,"origen_agua_choices":PiscinaSuscriptor.ORIGEN_AGUA,"hierro_choices":PiscinaSuscriptor.HIERRO,"perfil":perfil})
 
 def _fechas_agenda(plan, inicio, fin):
@@ -2361,8 +2371,8 @@ def digital_plan_mantenimiento_view(request, pk):
                 else:
                     tareas.append({
                         "tipo": "ok",
-                        "titulo": "No aplicar correctivos químicos adicionales",
-                        "detalle": "Las mediciones no requieren una corrección adicional según los estándares actuales de AQUO.",
+                        "titulo": "Medir pH y cloro antes de dosificar",
+                        "detalle": "No apliques correctivos sin mediciones actuales. Consulta a AQUO cuando tengas los valores.",
                         "motivo": "",
                         "guia": "tratamiento químico mantenimiento",
                     })
@@ -2415,8 +2425,8 @@ def digital_plan_mantenimiento_view(request, pk):
         dias = sorted({int(x) for x in request.POST.getlist("dias_semana") if x.isdigit() and 0 <= int(x) <= 6})
         if dias:
             frecuencia = len(dias)
-        ph_txt = (request.POST.get("ph") or ("7.4" if perfil.es_profesional else "")).replace(",", ".").strip()
-        cloro_txt = (request.POST.get("cloro") or ("1.5" if perfil.es_profesional else "")).replace(",", ".").strip()
+        ph_txt = (request.POST.get("ph") or "").replace(",", ".").strip()
+        cloro_txt = (request.POST.get("cloro") or "").replace(",", ".").strip()
         estado = (request.POST.get("estado_agua") or "transparente").strip()
         valores = {
             "frecuencia": frecuencia,
@@ -2426,21 +2436,25 @@ def digital_plan_mantenimiento_view(request, pk):
             "dias_semana": dias,
         }
 
+        mediciones_completas = bool(ph_txt and cloro_txt)
         try:
-            ph = Decimal(ph_txt)
-            cloro = Decimal(cloro_txt)
-            if ph <= 0 or cloro < 0:
-                raise InvalidOperation
+            ph = Decimal(ph_txt) if ph_txt else None
+            cloro = Decimal(cloro_txt) if cloro_txt else None
+            if ph is not None and (not ph.is_finite() or not 0 < ph <= 14):
+                raise ValueError("pH fuera de rango.")
+            if cloro is not None and (not cloro.is_finite() or not 0 <= cloro <= 20):
+                raise ValueError("Cloro fuera de rango.")
         except (InvalidOperation, ValueError):
             messages.error(
                 request,
-                "Ingresa valores válidos de pH y cloro para crear el plan semanal.",
+                "Revisa los valores de pH o cloro. Puedes dejar cualquiera de ellos vacío.",
             )
         else:
             plan.frecuencia_semanal = frecuencia
             plan.dias_semana = dias
             plan.save(update_fields=["frecuencia_semanal", "dias_semana", "actualizado_en"])
 
+            # Sin mediciones no inferimos valores ni dosificaciones: solo agenda y rutina.
             resultado = calcular_recomendacion(
                 volumen=float(piscina.volumen_m3),
                 ph=float(ph),
@@ -2449,7 +2463,7 @@ def digital_plan_mantenimiento_view(request, pk):
                 tipo_piscina=piscina.tipo_piscina,
                 tipo_agua=piscina.origen_agua,
                 antecedente_hierro=piscina.antecedente_hierro,
-            )
+            ) if mediciones_completas else None
 
             # Programación mensual recurrente; fechas elegidas por el usuario.
             hoy = timezone.localdate()
@@ -2460,8 +2474,10 @@ def digital_plan_mantenimiento_view(request, pk):
                 visita = VisitaProgramadaPiscina.objects.filter(plan=plan, fecha=fecha, estado='programada').first()
                 if visita:
                     tareas = _armar_tareas(numero, resultado)
-                    visita.plan_resultado = {'ph_inicial': str(ph), 'cloro_inicial': str(cloro),
-                        'estado_agua': estado, 'diagnostico': resultado.get('diagnostico', ''), 'tareas': tareas}
+                    visita.plan_resultado = {'ph_inicial': str(ph) if ph is not None else None,
+                        'cloro_inicial': str(cloro) if cloro is not None else None,
+                        'estado_agua': estado, 'diagnostico': (resultado or {}).get('diagnostico', ''),
+                        'tareas': tareas}
                     visita.save(update_fields=['plan_resultado', 'actualizado_en'])
                     plan_visitas.append({'obj': visita, 'fecha': fecha, 'numero': numero, 'tareas': tareas})
 
@@ -2814,8 +2830,6 @@ def digital_resolver_view(request):
     pid=request.POST.get("piscina_id") or request.GET.get("piscina")
     if pid and pid != "libre":
         piscina=piscinas.filter(pk=pid).first()
-    elif not pid and request.POST.get("consulta_libre") != "1" and piscinas.count() == 1:
-        piscina=piscinas.first()
     if request.method=="POST":
         categoria_consulta=(request.POST.get("categoria_consulta") or "agua").strip()
         detalle_problema=(request.POST.get("detalle_problema") or "").strip()

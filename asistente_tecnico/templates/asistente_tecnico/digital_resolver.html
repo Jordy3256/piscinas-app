@@ -19,6 +19,17 @@
 
 .aquo-compose{gap:9px!important;align-items:center}.aquo-free-input{flex:1;min-width:0;border:1px solid #d9e7f1;background:#f8fbfd;border-radius:18px;padding:12px 15px;outline:none;color:#173d57;font-weight:650}.aquo-free-input:focus{background:#fff;border-color:#75c7e8;box-shadow:0 0 0 4px rgba(8,166,216,.09)}.voice-btn{width:43px;height:43px;border-radius:15px;border:1px solid #d9e7f1;background:#fff;color:#0879b7;display:grid;place-items:center;flex:none}.voice-btn.listening{background:#e9f9ff;color:#075ea5;box-shadow:0 0 0 5px rgba(8,166,216,.11);animation:aquoMic 1.2s infinite}.aquo-compose-hint{padding:0 18px 12px;color:#8091a1;font-size:.72rem;text-align:center}.aquo-thinking{display:flex;gap:5px;align-items:center}.aquo-thinking i{width:7px;height:7px;border-radius:50%;background:#49a9d2;display:block;animation:aquoDot 1.1s infinite}.aquo-thinking i:nth-child(2){animation-delay:.16s}.aquo-thinking i:nth-child(3){animation-delay:.32s}.aquo-thinking span{margin-left:5px;color:#607d91;font-size:.82rem;font-weight:750}@keyframes aquoDot{0%,70%,100%{transform:translateY(0);opacity:.35}35%{transform:translateY(-5px);opacity:1}}@keyframes aquoMic{50%{transform:scale(1.06)}}.aquo-free-note{font-size:.75rem;color:#6f8497;margin-left:58px;margin-top:6px}
 
+.assistant-head{margin-bottom:10px}.assistant-title h1{font-size:1.3rem}
+.chat-top{padding:11px 16px}.chat-body{min-height:340px;padding:15px}
+.chat-card,.case-card{border-radius:19px}.case-card{padding:15px;top:75px}
+.aqua-chat-avatar{width:46px!important;height:46px!important;border-radius:50%!important;overflow:hidden!important;flex:none}
+.aqua-chat-avatar.small{width:34px!important;height:34px!important}
+.aqua-chat-avatar img{object-fit:cover!important;object-position:top center!important}
+.aquo-context-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px}
+.aquo-context-btn{border:1px solid #b9d9f0;color:#066ab0;text-decoration:none;background:#fff;border-radius:13px;padding:7px 10px;font-size:.84rem;font-weight:800}
+.aquo-context-btn:hover{background:#e6f6ff}
+.aquo-volumen-panel{background:#f0f9ff;padding:10px 13px;border-radius:13px;border:1px solid #d4eafa}
+.aquo-volumen-panel summary{cursor:pointer;font-size:.8rem;font-weight:800;color:#17648d}
 </style>
 {% endblock %}
 {% block content %}
@@ -28,15 +39,19 @@
     {% if resultado %}<a class="btn btn-light border jd-btn" href="{% url 'asistente_tecnico:digital_resolver' %}{% if piscina %}?piscina={{piscina.pk}}{% endif %}"><i class="bi bi-arrow-clockwise me-1"></i>Nueva consulta</a>{% endif %}
   </div>
   <nav class="d-flex gap-2 flex-wrap mb-3" aria-label="Centro AQUO"><a class="btn btn-sm btn-outline-primary rounded-pill" href="{% url 'asistente_tecnico:digital_centro_aquo' %}"><i class="bi bi-arrow-left me-1"></i>Centro AQUO</a><a class="btn btn-sm btn-outline-secondary rounded-pill" href="{% url 'asistente_tecnico:academia_cms' %}?modo=aprender">Curso</a><a class="btn btn-sm btn-outline-secondary rounded-pill" href="{% url 'asistente_tecnico:academia_cms' %}?modo=consultar">Biblioteca</a></nav>
-  {% if piscinas %}
-  <div class="alert alert-light border rounded-4 py-2 px-3 d-flex align-items-center gap-2 flex-wrap mb-3"><i class="bi bi-water text-primary"></i><label for="poolContext" class="small fw-bold mb-0">Contexto:</label><select id="poolContext" class="form-select form-select-sm" style="width:auto;min-width:180px" onchange="location=this.value"><option value="{% url 'asistente_tecnico:digital_resolver' %}?piscina=libre" {% if not piscina %}selected{% endif %}>Consulta libre</option>{% for p in piscinas %}<option value="{% url 'asistente_tecnico:digital_resolver' %}?piscina={{p.pk}}" {% if piscina.pk == p.pk %}selected{% endif %}>{{p.nombre}}</option>{% endfor %}</select><span class="small text-muted">Puedes consultar sin seleccionar una piscina.</span></div>
-  {% endif %}
   <div class="chat-layout">
     <section class="chat-card">
-      <div class="chat-top"><div class="aqua-chat-avatar">{% include 'asistente_tecnico/partials/aqua_hero.html' %}</div><div><strong>AQUO · Asistente JVAQUA</strong><div class="online">Tu héroe técnico está disponible</div></div></div>
-      <form method="post" id="resolverForm">{% csrf_token %}{% if piscina %}<input type="hidden" name="piscina_id" value="{{piscina.pk}}">{% endif %}{% if not piscina %}<input type="hidden" name="consulta_libre" value="1"><div class="alert alert-info py-2 my-2"><strong>Consulta libre con AQUO.</strong> No necesitas registrar una piscina. Para calcular dosis, indica su volumen aproximado.</div><label class="form-label fw-bold" for="volumenLibre">Volumen de la piscina (m³)</label><input id="volumenLibre" name="volumen_m3" type="number" step="0.01" min="0.01" max="100000" class="form-control mb-3" placeholder="Ej. 35">{% endif %}<input type="hidden" name="estado_agua" id="estadoField" value=""><input type="hidden" name="categoria_consulta" id="categoryField" value="agua">
+      <div class="chat-top"><div class="aqua-chat-avatar">{% include 'asistente_tecnico/partials/aqua_hero.html' %}</div><div><strong>AQUO · Asistente inteligente</strong><div class="online">Disponible para ayudarte</div></div></div>
+      <form method="post" id="resolverForm">{% csrf_token %}{% if piscina %}<input type="hidden" name="piscina_id" value="{{piscina.pk}}">{% endif %}{% if not piscina %}<input type="hidden" name="consulta_libre" value="1">
+<details class="aquo-volumen-panel mx-3 mt-3"><summary><i class="bi bi-droplet-half me-1"></i> Volumen para cálculos de dosis (opcional al consultar)</summary><div class="pt-2"><label class="form-label small fw-bold" for="volumenLibre">Volumen de la piscina (m³)</label><input id="volumenLibre" name="volumen_m3" type="number" step="0.01" min="0.01" max="100000" class="form-control" placeholder="Ej. 35"><small class="text-muted">Solo necesario para calcular cantidades químicas.</small></div></details>{% endif %}<input type="hidden" name="estado_agua" id="estadoField" value=""><input type="hidden" name="categoria_consulta" id="categoryField" value="agua">
       <div class="chat-body" id="chatBody">
-        <div class="msg-row assistant"><div class="aqua-chat-avatar small">{% include 'asistente_tecnico/partials/aqua_hero.html' %}</div><div class="bubble">¡Hola{% if request.user.first_name %}, {{request.user.first_name}}{% endif %}! 👋 Soy <strong>AQUO</strong>, tu Asistente JVAQUA. {% if piscina %}Vamos a revisar <strong>{{ piscina.nombre }}</strong>.{% else %}Puedes consultarme sin registrar una piscina. Para calcular dosis, solo necesitaré su volumen aproximado.{% endif %} ¿Qué problema quieres que revisemos hoy?</div></div>
+        <div class="msg-row assistant"><div class="aqua-chat-avatar small">{% include 'asistente_tecnico/partials/aqua_hero.html' %}</div><div class="bubble">¡Hola{% if request.user.first_name %}, {{request.user.first_name}}{% endif %}! 👋 Soy <strong>AQUO</strong>, tu Asistente JVAQUA. {% if piscina %}Vamos a revisar <strong>{{ piscina.nombre }}</strong>. ¿Qué problema quieres que revisemos hoy?
+<div class="aquo-context-actions"><a href="{% url 'asistente_tecnico:digital_resolver' %}?piscina=libre" class="aquo-context-btn">Cambiar a consulta libre</a>{% for p in piscinas %}{% if p.pk != piscina.pk %}<a href="{% url 'asistente_tecnico:digital_resolver' %}?piscina={{ p.pk }}" class="aquo-context-btn">{{ p.nombre }}</a>{% endif %}{% endfor %}</div>
+{% else %}¿Quieres consultar una piscina registrada o hacerlo libre?{% endif %}
+{% if not piscina %}<div class="aquo-context-actions">
+<a href="{% url 'asistente_tecnico:digital_resolver' %}?piscina=libre" class="aquo-context-btn"><i class="bi bi-stars"></i> Consulta libre</a>
+{% for p in piscinas %}<a href="{% url 'asistente_tecnico:digital_resolver' %}?piscina={{ p.pk }}" class="aquo-context-btn"><i class="bi bi-water"></i> {{ p.nombre }}</a>{% endfor %}
+</div>{% endif %}</div></div>
         {% if resultado %}
           <div class="msg-row user"><div class="bubble">Ya te compartí los datos de mi piscina.</div></div>
           <div class="msg-row assistant"><div class="aqua-chat-avatar small">{% include 'asistente_tecnico/partials/aqua_hero.html' %}</div><div class="bubble">Perfecto. Ya terminé el análisis. Encontré una causa probable y preparé un plan de acción{% if caso %} para un volumen de <strong>{{caso.volumen_m3}} m³</strong>{% elif piscina %} adaptado a tu piscina de <strong>{{piscina.volumen_m3}} m³</strong>{% endif %}. Mira el diagnóstico debajo. 👇</div></div>
@@ -154,7 +169,7 @@ function processFreeText(){
    if(r.entry==='agua'){clickEntry('agua')}
    else if(r.entry==='otro'){clickEntry('otro');setTimeout(()=>{if(r.category)chooseProblem(r.category);if(r.category&&document.getElementById('detailInput'))document.getElementById('detailInput').value=text},120)}
    a.scrollIntoView({behavior:'smooth',block:'nearest'});
- },700);
+ },1200);
 }
 sendFree?.addEventListener('click',processFreeText);freeInput?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();processFreeText()}});
 const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;

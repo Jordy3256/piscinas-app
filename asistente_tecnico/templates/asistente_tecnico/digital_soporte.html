@@ -1,29 +1,79 @@
 {% extends 'asistente_tecnico/base_suscriptor.html' %}
-{% block title %}Soporte · JVAQUA Digital{% endblock %}
-{% block extra_head %}<style>
-.support-shell{max-width:980px;margin:auto}.support-hero{background:linear-gradient(135deg,#e8f8ff 0%,#f7fcff 52%,#fff 100%);border:1px solid #d7ebf5;border-radius:28px;padding:26px;box-shadow:0 18px 50px rgba(31,84,112,.08)}.support-avatar{width:62px;height:62px;border-radius:20px;display:grid;place-items:center;background:#087bb8;color:#fff;font-size:1.65rem;box-shadow:0 10px 25px rgba(8,123,184,.25)}.support-online{padding:8px 12px;background:#fff;border:1px solid #dfecef;border-radius:999px;font-size:.83rem;font-weight:700;color:#35616d}.support-card{border:1px solid #e2edf3;border-radius:20px;background:#fff}.support-row{display:flex;justify-content:space-between;gap:16px;padding:16px;border-bottom:1px solid #edf2f5;text-decoration:none;color:inherit}.support-row:last-child{border:0}.support-row:hover{background:#f8fcfe}.status-dot{width:9px;height:9px;border-radius:50%;background:#16a34a;display:inline-block}.attach-note{font-size:.82rem;color:#718096}
-</style>{% endblock %}
+{% block title %}Soporte · AQUO360{% endblock %}
+{% block extra_head %}
+<style>
+.aquo-support{max-width:1200px;margin:auto}
+.aquo-support-title{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:13px}
+.aquo-support-title h1{font-size:1.4rem;font-weight:900;margin:0;color:#113a60}
+.aquo-support-grid{display:grid;grid-template-columns:1.08fr .92fr;gap:15px;align-items:start}
+.aquo-ticket-box{background:#fff;border:1px solid #dceaf5;border-radius:21px;padding:19px;box-shadow:0 9px 27px rgba(11,64,100,.045)}
+.aquo-ticket-box.technical{background:linear-gradient(145deg,#eff8ff,#fff 72%);border-color:#80bdec}
+.aquo-ticket-head{display:flex;align-items:center;gap:10px;margin-bottom:7px}
+.aquo-ticket-head h2{font-size:1.06rem;font-weight:850;margin:0;color:#173a61}
+.aquo-support-icon{width:41px;height:41px;display:grid;place-items:center;background:#e0f2ff;border-radius:13px;color:#0878bd;font-size:1.25rem}
+.aquo-ticket-sub{font-size:.83rem;color:#607d92;margin-bottom:13px}
+.aquo-high{background:#ffebe8;color:#bd4033;font-size:.71rem;font-weight:850;border-radius:40px;padding:5px 9px}
+.aquo-normal{background:#eff5ff;color:#3268a2;font-size:.71rem;font-weight:850;border-radius:40px;padding:5px 9px}
+.aquo-ticket-box .form-label{font-size:.84rem;font-weight:800;margin-bottom:4px}
+.aquo-ticket-box .form-control,.aquo-ticket-box .form-select{border-radius:12px;border-color:#d9e7f3}
+.aquo-topic-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin:10px 0 15px}
+.aquo-topic-grid label{cursor:pointer;border:1px solid #d7e4f1;border-radius:13px;padding:10px 5px;display:grid;place-items:center;text-align:center;font-size:.75rem;font-weight:800;color:#415b78;min-height:67px}
+.aquo-topic-grid label i{font-size:1.17rem;color:#396bb0}
+.aquo-topic-grid input{position:absolute;opacity:0}
+.aquo-topic-grid label:has(input:checked){background:#e6f4ff;border-color:#138bda;color:#075f9a}
+.aquo-tickets{background:#fff;border:1px solid #dbe9f5;border-radius:19px;overflow:hidden;margin-top:16px}
+.aquo-ticket-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 17px;border-top:1px solid #eef3f8;text-decoration:none;color:#183b54}
+.aquo-ticket-row:hover{background:#f5fbff}
+.aquo-ticket-row small{color:#73889b}
+@media(max-width:900px){.aquo-support-grid{grid-template-columns:1fr}.aquo-ticket-box{padding:14px}.aquo-topic-grid{grid-template-columns:repeat(4,1fr)}}
+</style>
+{% endblock %}
 {% block content %}
-<div class="alert alert-light border rounded-4 mb-3 d-flex justify-content-between align-items-center gap-3 flex-wrap">
-  <div><strong>Soporte incluido en {{ perfil.get_plan_display }}</strong><div class="small text-muted">Puedes enviar hasta {{ limite_soporte.limite }} mensajes por día.</div></div>
-  <div class="text-end"><strong>{{ limite_soporte.restantes }}</strong><div class="small text-muted">mensajes disponibles hoy</div></div>
-</div><div class="support-shell">
-<section class="support-hero mb-3">
-<div class="d-flex align-items-center gap-3 flex-wrap">
-  <div class="support-avatar"><i class="bi bi-headset"></i></div>
-  <div class="flex-grow-1">
-    <div class="jd-kicker">SOPORTE JVAQUA DIGITAL</div>
-    <h2 class="fw-bold mb-1">Estamos aquí para ayudarte</h2>
-    <p class="text-muted mb-0">Habla directamente con nuestro equipo. Tu conversación queda guardada para que puedas continuar cuando quieras.</p>
+<div class="aquo-support">
+  <header class="aquo-support-title">
+    <div><div class="jd-kicker">AQUO360 · ATENCIÓN</div><h1>¿En qué podemos ayudarte?</h1><p class="text-muted small mb-0">La ayuda técnica de piscinas tiene prioridad de atención.</p></div>
+    <div class="small text-end text-muted">Plan {{ perfil.get_plan_display }}<br><strong>{{ limite_soporte.restantes }} / {{ limite_soporte.limite }}</strong> mensajes disponibles hoy</div>
+  </header>
+  <div class="aquo-support-grid">
+    <section class="aquo-ticket-box technical">
+      <div class="aquo-ticket-head"><div class="aquo-support-icon"><i class="bi bi-tools"></i></div><div><h2>Soporte técnico de piscinas</h2><span class="aquo-high"><i class="bi bi-lightning-fill"></i> Prioridad alta</span></div></div>
+      <p class="aquo-ticket-sub">Problemas con el agua, equipos, filtración o tratamientos. Nuestro equipo técnico revisará primero estas solicitudes.</p>
+      <form method="post" enctype="multipart/form-data">{% csrf_token %}
+        <input type="hidden" name="categoria" value="soporte_tecnico">
+        <label class="form-label" for="poolTech">Piscina relacionada (opcional)</label>
+        <select id="poolTech" class="form-select mb-2" name="piscina_id"><option value="">Consulta general</option>{% for p in piscinas %}<option value="{{ p.pk }}">{{ p.nombre }}</option>{% endfor %}</select>
+        <label class="form-label" for="msgTech">Cuéntanos el problema</label>
+        <textarea id="msgTech" name="mensaje" class="form-control" rows="3" required placeholder="Describe qué está ocurriendo con tu piscina..."></textarea>
+        <label class="form-label mt-2" for="fileTech">Fotos o videos (opcional)</label>
+        <input id="fileTech" type="file" name="adjuntos" class="form-control" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime" multiple>
+        <div class="small text-muted mt-1">Máximo 30 MB por archivo.</div>
+        <button class="btn btn-primary rounded-3 fw-bold mt-3"><i class="bi bi-chat-dots me-1"></i> Solicitar ayuda técnica</button>
+      </form>
+    </section>
+    <section class="aquo-ticket-box">
+      <div class="aquo-ticket-head"><div class="aquo-support-icon" style="background:#f1eaff;color:#7752be"><i class="bi bi-chat-square-text"></i></div><div><h2>Otros temas</h2><span class="aquo-normal">Prioridad normal</span></div></div>
+      <p class="aquo-ticket-sub">Sugerencias, problemas de la aplicación, suscripciones y otras solicitudes.</p>
+      <form method="post" enctype="multipart/form-data">{% csrf_token %}
+        <div class="aquo-topic-grid" aria-label="Tipo de solicitud">
+          <label><input type="radio" name="categoria" value="sugerencia" checked><i class="bi bi-lightbulb"></i>Sugerencias</label>
+          <label><input type="radio" name="categoria" value="plataforma"><i class="bi bi-phone"></i>Problemas con la app</label>
+          <label><input type="radio" name="categoria" value="suscripcion"><i class="bi bi-credit-card"></i>Suscripción</label>
+          <label><input type="radio" name="categoria" value="otro"><i class="bi bi-three-dots"></i>Otro</label>
+        </div>
+        <label class="form-label" for="msgOther">Cuéntanos tu solicitud</label>
+        <textarea id="msgOther" name="mensaje" class="form-control" rows="3" required placeholder="Escribe tu sugerencia, problema o consulta..."></textarea>
+        <button class="btn btn-outline-primary rounded-3 fw-bold mt-3"><i class="bi bi-send me-1"></i> Enviar solicitud</button>
+      </form>
+    </section>
   </div>
-  <div class="support-online"><span class="status-dot"></span> Soporte disponible</div>
+  <section class="aquo-tickets">
+    <div class="px-3 py-3"><strong><i class="bi bi-journal-text text-primary me-2"></i>Mis solicitudes recientes</strong></div>
+    {% for c in conversaciones %}
+    <a class="aquo-ticket-row" href="{% url 'asistente_tecnico:digital_soporte_chat' c.pk %}">
+      <div><strong>{% if c.categoria == 'soporte_tecnico' %}Soporte técnico de piscinas{% elif c.categoria == 'plataforma' %}Problemas con la app{% else %}{{ c.get_categoria_display }}{% endif %}</strong>
+        <div class="small text-muted">{{ c.asunto|default:"Conversación"|truncatechars:90 }}{% if c.piscina %} · {{ c.piscina.nombre }}{% endif %}</div><small>{{ c.ultimo_mensaje_en|date:"d/m/Y H:i" }}</small></div>
+      <span class="badge rounded-pill {% if c.estado == 'espera_admin' %}text-bg-warning{% elif c.estado == 'espera_cliente' %}text-bg-primary{% elif c.estado == 'cerrada' %}text-bg-secondary{% else %}text-bg-success{% endif %}">{{ c.get_estado_display }}</span>
+    </a>{% empty %}<div class="px-3 py-3 text-muted small">Aún no tienes solicitudes.</div>{% endfor %}
+  </section>
 </div>
-</section>
-<section class="jd-panel p-4 mb-3"><h5 class="fw-bold">Nueva conversación</h5><form method="post" enctype="multipart/form-data">{% csrf_token %}<div class="row g-3">
-<div class="col-md-6"><label class="form-label fw-bold">Tema</label><select name="categoria" class="form-select">{% for value,label in categorias_soporte %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></div>
-<div class="col-md-6"><label class="form-label fw-bold">Piscina relacionada <span class="text-muted fw-normal">(opcional)</span></label><select name="piscina_id" class="form-select"><option value="">General / no aplica</option>{% for p in piscinas %}<option value="{{ p.pk }}">{{ p.nombre }}</option>{% endfor %}</select></div>
-<div class="col-12"><label class="form-label fw-bold">¿En qué podemos ayudarte?</label><textarea name="mensaje" rows="4" class="form-control" placeholder="Escribe tu mensaje..."></textarea></div>
-<div class="col-12"><label class="form-label fw-bold">Fotos o videos <span class="text-muted fw-normal">(opcional)</span></label><input class="form-control" type="file" name="adjuntos" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime" multiple><div class="attach-note mt-1">Máximo 30 MB por archivo. JPG, PNG, WEBP, GIF, MP4, WEBM o MOV.</div></div>
-</div><button class="btn jd-btn jd-btn-primary mt-3"><i class="bi bi-chat-dots me-1"></i>Iniciar conversación</button></form></section>
-<section class="support-card"><div class="p-3 border-bottom"><strong>Mis conversaciones</strong></div>{% for c in conversaciones %}<a class="support-row" href="{% url 'asistente_tecnico:digital_soporte_chat' c.pk %}"><div><div class="fw-bold">{{ c.get_categoria_display }}</div><div class="small text-muted">{{ c.asunto|default:"Conversación con JVAQUA"|truncatechars:80 }}</div><div class="small text-muted mt-1">{{ c.ultimo_mensaje_en|date:"d/m/Y H:i" }}{% if c.piscina %} · {{ c.piscina.nombre }}{% endif %}</div></div><div class="text-end"><span class="badge rounded-pill {% if c.estado == 'espera_admin' %}text-bg-warning{% elif c.estado == 'espera_cliente' %}text-bg-primary{% elif c.estado == 'cerrada' %}text-bg-secondary{% else %}text-bg-success{% endif %}">{{ c.get_estado_display }}</span></div></a>{% empty %}<div class="p-4 text-center text-muted">Todavía no tienes conversaciones de soporte.</div>{% endfor %}</section>
-</div>{% endblock %}
+{% endblock %}

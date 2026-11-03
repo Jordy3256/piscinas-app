@@ -7,16 +7,22 @@
 .freq-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:7px}.freq-option input{display:none}.freq-option label{display:grid;place-items:center;border:1px solid #d8e5ed;border-radius:14px;padding:10px 5px;cursor:pointer;font-weight:800;color:#28506a;background:#fbfdff}.freq-option input:checked+label{background:#eaf6ff;color:#066cac;border-color:#59aee0;box-shadow:0 0 0 2px rgba(11,120,181,.08)}
 .visit-card{background:#fff;border:1px solid #dce8ef;border-radius:22px;padding:18px}.visit-date{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}.task{display:flex;gap:10px;padding:11px 0;border-bottom:1px solid #edf2f5}.task:last-child{border-bottom:0}.task-icon{width:30px;height:30px;border-radius:10px;background:#eaf6ff;color:#0878b7;display:grid;place-items:center;flex:none}.task.quimico .task-icon{background:#eaf8f1;color:#198754}.task.control .task-icon{background:#fff6df;color:#a66b00}.task-title{font-weight:850;color:#17364a;line-height:1.3}.dose{font-size:1.08rem;font-weight:900;color:#198754;margin-top:3px}.guide-link{display:inline-flex;align-items:center;gap:5px;margin-top:6px;font-size:.8rem;font-weight:800;text-decoration:none;color:#0878b7;background:#eef8fd;border-radius:999px;padding:5px 9px}.result-head{background:#f0f9f4;border:1px solid #d0eadb;border-radius:18px;padding:15px}.schedule-note{background:#eef7ff;border:1px solid #d5e9f8;border-radius:18px;padding:14px}.water-note{background:#fff8df;border:1px solid #f0df9d;border-radius:17px;padding:14px}
 @media(max-width:720px){.plan-hero{padding:22px}.flow-card{padding:16px}.freq-grid{grid-template-columns:repeat(4,1fr)}}
+.plan-hero{padding:15px 20px;border-radius:18px}
+.plan-hero h2{font-size:1.3rem;margin-bottom:3px!important}
+.flow-card{padding:16px!important;border-radius:18px!important}
+.flow-head h4{font-size:1.03rem!important}
+.flow-head{margin-bottom:10px!important}
+.plan-wrap{max-width:1160px}
 </style>
 {% endblock %}
 {% block content %}
 <div class="plan-wrap">
   <a class="text-decoration-none fw-bold" href="{% url 'asistente_tecnico:digital_inicio' %}"><i class="bi bi-arrow-left me-1"></i>Mi piscina</a>
 
-  <section class="plan-hero mt-3 mb-3">
+  <section class="plan-hero mt-2 mb-3">
     <div class="small fw-bold text-white-50">AQUO · MANTENIMIENTO AUTÓNOMO</div>
     <h2 class="fw-bold mb-2">Mi plan semanal</h2>
-    <p class="mb-0 text-white-50">Configura tu semana una sola vez. AQUO calcula el tratamiento, distribuye las visitas y te recuerda cuándo corresponde cada mantenimiento.</p>
+    <p class="mb-0 text-white-50">Elige tus días. AQUO organizará tu agenda y te recordará cada mantenimiento.</p>
     <div class="d-flex gap-2 flex-wrap mt-3">
       <span class="badge rounded-pill bg-light text-dark">{{ piscina.nombre }}</span>
       <span class="badge rounded-pill bg-light text-dark">{{ piscina.volumen_m3 }} m³</span>
@@ -24,11 +30,17 @@
     </div>
   </section>
 
+  {% if request.GET.recien_creada == "1" %}
+  <div class="alert border-0 rounded-4 d-flex align-items-center justify-content-between gap-3 flex-wrap" style="background:linear-gradient(115deg,#ddfbf2,#e9f8ff);color:#0b5662">
+    <div><strong><i class="bi bi-check-circle-fill text-success me-1"></i> ¡Piscina registrada!</strong><div>¿Deseas crear su plan semanal ahora? Es opcional y puedes hacerlo después.</div></div>
+    <div class="d-flex gap-2"><a class="btn btn-primary rounded-pill" href="#configurarPlan">Sí, crear ahora</a><a class="btn btn-light rounded-pill border" href="{% url 'asistente_tecnico:digital_piscinas' %}">Después</a></div>
+  </div>
+  {% endif %}
   {% if piscina.origen_agua == "pozo" or piscina.origen_agua == "mixta" %}
   <div class="water-note mb-3"><strong><i class="bi bi-exclamation-triangle me-1"></i>Agua de pozo/mixta:</strong> AQUO considera el posible riesgo de hierro y oxidación al recomendar químicos.</div>
   {% endif %}
 
-  <form method="post" class="flow mb-4">
+  <form method="post" class="flow mb-4" id="configurarPlan">
     {% csrf_token %}
     <section class="flow-card">
       <div class="flow-head"><div class="flow-num">1</div><div><div class="small fw-bold text-muted">FRECUENCIA</div><h4 class="fw-bold mb-0">¿Cuántas visitas quieres realizar por semana?</h4></div></div>
@@ -43,13 +55,13 @@
     </section>
 
     {% if not perfil.es_profesional %}<section class="flow-card">
-      <div class="flow-head"><div class="flow-num">2</div><div><div class="small fw-bold text-muted">ESTADO ACTUAL</div><h4 class="fw-bold mb-0">Mide el agua antes de comenzar</h4></div></div>
+      <div class="flow-head"><div class="flow-num">2</div><div><div class="small fw-bold text-muted">ESTADO ACTUAL</div><h4 class="fw-bold mb-0">Mediciones del agua (opcionales)</h4></div></div>
       <div class="row g-2">
-        <div class="col-6 col-md-3"><label class="form-label fw-bold">pH</label><input class="form-control" type="number" step=".01" min="0" name="ph" value="{{ valores.ph }}" placeholder="7.4" required></div>
-        <div class="col-6 col-md-3"><label class="form-label fw-bold">Cloro (ppm)</label><input class="form-control" type="number" step=".01" min="0" name="cloro" value="{{ valores.cloro }}" placeholder="1.5" required></div>
+        <div class="col-6 col-md-3"><label class="form-label fw-bold">pH <small class="text-muted fw-normal">· Opcional</small></label><input class="form-control" type="number" step=".01" min="0" name="ph" value="{{ valores.ph }}" placeholder="Ej. 7.4"></div>
+        <div class="col-6 col-md-3"><label class="form-label fw-bold">Cloro (ppm) <small class="text-muted fw-normal">· Opcional</small></label><input class="form-control" type="number" step=".01" min="0" name="cloro" value="{{ valores.cloro }}" placeholder="Ej. 1.5"></div>
         <div class="col-md-6"><label class="form-label fw-bold">¿Cómo está el agua?</label><select class="form-select" name="estado_agua">{% for valor,nombre in estados_agua %}<option value="{{ valor }}" {% if valores.estado_agua == valor %}selected{% endif %}>{{ nombre }}</option>{% endfor %}</select></div>
       </div>
-      <a class="guide-link mt-3" href="{% url 'asistente_tecnico:academia_cms' %}?modo=consultar&q=medir+ph+cloro"><i class="bi bi-book"></i>No sé cómo medir pH y cloro</a>
+      <div class="small text-muted mt-2">Puedes añadir una, ambas o ninguna medición. AQUO solo calculará dosis al conocer pH y cloro.</div><a class="guide-link mt-3" href="{% url 'asistente_tecnico:academia_cms' %}?modo=consultar&q=medir+ph+cloro"><i class="bi bi-book"></i>No sé cómo medir pH y cloro</a>
     </section>
 
     {% endif %}
@@ -108,7 +120,7 @@
     </div>
   </section>
   {% else %}
-  <div class="flow-card mb-4 text-center py-5"><i class="bi bi-calendar2-week fs-1 text-primary"></i><h4 class="fw-bold mt-2">Aún no tienes visitas programadas</h4><p class="text-muted mb-0">Completa los pasos 1 y 2 para que AQUO construya tu semana.</p></div>
+  <div class="flow-card mb-4 text-center py-5"><i class="bi bi-calendar2-week fs-1 text-primary"></i><h4 class="fw-bold mt-2">Aún no tienes visitas programadas</h4><p class="text-muted mb-0">Selecciona frecuencia y días para crear tu agenda. Las mediciones son opcionales.</p></div>
   {% endif %}
 
   {% if historial %}
