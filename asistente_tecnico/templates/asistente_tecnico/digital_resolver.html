@@ -97,7 +97,7 @@
         <input class="aquo-free-input" id="aquoFreeInput" type="text" autocomplete="off" placeholder="Escribe o cuéntale a AQUO qué sucede...">
         <button class="send-btn" id="aquoSendBtn" type="button" title="Enviar"><i class="bi bi-send-fill"></i></button>
       </div>
-      <div class="aquo-compose-hint" id="voiceHint">También puedes usar las respuestas rápidas de arriba.</div>
+      <div class="aquo-compose-hint" id="voiceHint">Puedes conversar libremente o usar el diagnóstico guiado de esta página.</div>
     </section>
 
   </div>
@@ -153,19 +153,25 @@ function interpretAquo(text){
  for(const [rx,cat] of rules){if(rx.test(q))return {entry:'otro',category:cat,msg:'Entendí el síntoma. Voy a abrir el diagnóstico que mejor coincide y puedes corregirme con las opciones si hace falta.'}}
  return {entry:null,msg:'Todavía no tengo suficiente información para clasificarlo con seguridad. ¿Es un problema con el estado del agua o con otra parte de la piscina?'};
 }
-function processFreeText(){
- const text=(freeInput?.value||'').trim();if(!text)return;
+const aquoHistory=[];
+async function processFreeText(){
+ const text=(freeInput?.value||'').trim();if(!text||sendFree?.disabled)return;
  const row=document.createElement('div');row.className='msg-row user dynamic-msg';row.innerHTML=`<div class="bubble">${escAquo(text)}</div>`;chatBody.appendChild(row);freeInput.value='';
- const thinking=aquoThinking('AQUO está interpretando lo que me cuentas…');
- setTimeout(()=>{thinking.remove();const r=interpretAquo(text);const phMatch=text.match(/(?:p\s*\.?\s*h|ph)\s*(?:est[aá]\s*(?:en)?|de|:|=)?\s*(\d+(?:[.,]\d+)?)/i),clMatch=text.match(/(?:cloro(?:\s+libre)?)\s*(?:est[aá]\s*(?:en)?|de|:|=)?\s*(\d+(?:[.,]\d+)?)/i);if(phMatch&&document.getElementById('phInput'))document.getElementById('phInput').value=phMatch[1].replace(',','.');if(clMatch&&document.getElementById('clInput'))document.getElementById('clInput').value=clMatch[1].replace(',','.');const a=document.createElement('div');a.className='msg-row assistant dynamic-msg';a.innerHTML=aquaMiniTemplate+`<div class="bubble">${escAquo(r.msg)}</div>`;chatBody.appendChild(a);
-   if(r.entry==='agua'){clickEntry('agua')}
-   else if(r.entry==='otro'){clickEntry('otro');setTimeout(()=>{if(r.category)chooseProblem(r.category);if(r.category&&document.getElementById('detailInput'))document.getElementById('detailInput').value=text},120)}
+ const thinking=aquoThinking('AQUO está pensando…');if(sendFree)sendFree.disabled=true;
+ try{
+   const csrf=document.querySelector('#resolverForm input[name=csrfmiddlewaretoken]')?.value||'';
+   const response=await fetch('{% url "asistente_tecnico:digital_aquo_chat_api" %}',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRFToken':csrf},body:JSON.stringify({mensaje:text,historial:aquoHistory.slice(-12),piscina_id:'{{ piscina.pk|default:"" }}'})});
+   const data=await response.json();
+   const reply=response.ok?data.respuesta:(data.error||'No pude responder en este momento.');
+   const a=document.createElement('div');a.className='msg-row assistant dynamic-msg';a.innerHTML=aquaMiniTemplate+`<div class="bubble">${escAquo(reply)}</div>`;chatBody.appendChild(a);
+   if(response.ok){aquoHistory.push({role:'user',content:text},{role:'assistant',content:reply});if(aquoHistory.length>20)aquoHistory.splice(0,aquoHistory.length-20)}
    a.scrollIntoView({behavior:'smooth',block:'nearest'});
- },1200);
+ }catch(err){const a=document.createElement('div');a.className='msg-row assistant dynamic-msg';a.innerHTML=aquaMiniTemplate+'<div class="bubble">No tengo conexión con el motor de IA en este momento. Puedes utilizar el diagnóstico técnico de la página.</div>';chatBody.appendChild(a)}
+ finally{thinking.remove();if(sendFree)sendFree.disabled=false;freeInput?.focus()}
 }
 sendFree?.addEventListener('click',processFreeText);freeInput?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();processFreeText()}});
 const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
-if(SpeechRecognition&&voiceBtn){const rec=new SpeechRecognition();rec.lang='es-EC';rec.interimResults=false;rec.maxAlternatives=1;voiceBtn.addEventListener('click',()=>{try{rec.start();voiceBtn.classList.add('listening');document.getElementById('voiceHint').textContent='Escuchando… habla con naturalidad.'}catch(e){}});rec.onresult=e=>{freeInput.value=e.results[0][0].transcript;processFreeText()};rec.onend=()=>{voiceBtn.classList.remove('listening');document.getElementById('voiceHint').textContent='También puedes usar las respuestas rápidas de arriba.'};rec.onerror=rec.onend}else if(voiceBtn){voiceBtn.style.display='none'}
+if(SpeechRecognition&&voiceBtn){const rec=new SpeechRecognition();rec.lang='es-EC';rec.interimResults=false;rec.maxAlternatives=1;voiceBtn.addEventListener('click',()=>{try{rec.start();voiceBtn.classList.add('listening');document.getElementById('voiceHint').textContent='Escuchando… habla con naturalidad.'}catch(e){}});rec.onresult=e=>{freeInput.value=e.results[0][0].transcript;processFreeText()};rec.onend=()=>{voiceBtn.classList.remove('listening');document.getElementById('voiceHint').textContent='Puedes conversar libremente o usar el diagnóstico guiado de esta página.'};rec.onerror=rec.onend}else if(voiceBtn){voiceBtn.style.display='none'}
 
 function restoreAquoDraft(){
  try{

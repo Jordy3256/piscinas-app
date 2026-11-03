@@ -18,6 +18,7 @@ urlpatterns = [
     path("digital/", views.digital_inicio_view, name="digital_inicio"),
     path("digital/aquo/", views.digital_centro_aquo_view, name="digital_centro_aquo"),
     path("digital/resolver/", views.digital_resolver_view, name="digital_resolver"),
+    path("digital/aquo/chat/", views.digital_aquo_chat_api_view, name="digital_aquo_chat_api"),
     path("digital/agenda/", views.digital_agenda_view, name="digital_agenda"),
     path("digital/visita/<int:pk>/registro/", views.digital_visita_detallada_view, name="digital_visita_detallada"),
     path("digital/evidencia/<int:pk>/", views.digital_evidencia_view, name="digital_evidencia"),
