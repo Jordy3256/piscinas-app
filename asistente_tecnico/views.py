@@ -1394,10 +1394,19 @@ def digital_acceso_view(request):
             f"{nombre_acceso} solicitó el Plan {plan['nombre']} por ${plan['precio']}. "
             "Verifica el comprobante antes de activar o cambiar el plan.",
         )
-        auth_logout(request)
+        # La primera alta pendiente requiere esperar la aprobación. En cambio,
+        # una renovación/cambio de plan no debe cerrar la sesión activa:
+        # el suscriptor conserva su plan vigente hasta que administración apruebe.
+        mantiene_acceso = perfil_bloqueado.tiene_acceso
+        if not mantiene_acceso:
+            auth_logout(request)
         return render(
             request, "asistente_tecnico/digital_pago_enviado.html",
-            {"correo_acceso": correo_acceso, "plan": plan, "nombre_acceso": nombre_acceso},
+            {
+                "correo_acceso": correo_acceso, "plan": plan,
+                "nombre_acceso": nombre_acceso,
+                "mantiene_acceso": mantiene_acceso,
+            },
         )
 
     nombre = f"{request.user.first_name} {request.user.last_name}".strip() or request.user.username

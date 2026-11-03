@@ -86,3 +86,37 @@ class FlujoSuscripcionAquoTests(TestCase):
         self.perfil.refresh_from_db()
         self.assertFalse(self.perfil.tiene_acceso)
         self.assertEqual(self.perfil.plan, "individual")
+
+    @patch("asistente_tecnico.views._notificar_admin_digital")
+    def test_renovacion_pendiente_no_cierra_sesion_activa(self, _notificar):
+        self.client.force_login(self.cliente)
+        respuesta = self.client.post(self.url_pago, {
+            "plan": "empresarial", "metodo_envio": "whatsapp",
+        })
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertTrue(respuesta.context["mantiene_acceso"])
+        self.assertEqual(int(self.client.session["_auth_user_id"]), self.cliente.pk)
+        self.assertEqual(
+            self.client.get(reverse("asistente_tecnico:digital_inicio")).status_code, 200
+        )
+        self.perfil.refresh_from_db()
+        self.assertEqual(self.perfil.plan, "individual")
+        self.assertEqual(
+            SolicitudSuscripcionDigital.objects.get(suscriptor=self.perfil).estado,
+            "pendiente",
+        )
+
+    @patch("asistente_tecnico.views._notificar_admin_digital")
+    def test_alta_pendiente_si_cierra_sesion(self, _notificar):
+        self.perfil.estado = "pendiente"
+        self.perfil.acceso_hasta = None
+        self.perfil.save(update_fields=["estado", "acceso_hasta"])
+        self.client.force_login(self.cliente)
+        respuesta = self.client.post(self.url_pago, {
+            "plan": "individual", "metodo_envio": "whatsapp",
+        })
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertFalse(respuesta.context["mantiene_acceso"])
+        self.assertNotIn("_auth_user_id", self.client.session)
+        self.perfil.refresh_from_db()
+        self.assertFalse(self.perfil.tiene_acceso)

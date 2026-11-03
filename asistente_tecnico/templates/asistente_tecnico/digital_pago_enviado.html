@@ -19,7 +19,11 @@
 
   <div class="alert alert-info border-0 rounded-4 text-start mt-4">
     <strong>¿Qué debes hacer ahora?</strong><br>
-    Espera aproximadamente <strong>30 minutos</strong> para que administración pueda verificar tu pago. Después vuelve a JVAQUA Digital e inicia sesión con el correo electrónico y la contraseña que registraste.
+    {% if mantiene_acceso %}
+    Administración revisará tu comprobante. Mientras tanto, puedes seguir utilizando AQUO360 con las funciones de tu plan vigente. El cambio solicitado solo se activará cuando se apruebe el pago.
+    {% else %}
+    Administración revisará tu comprobante. Tu acceso se habilitará al aprobarse el pago. Podrás volver a iniciar sesión con el correo y contraseña registrados.
+    {% endif %}
   </div>
 
   <div class="text-start mt-4">
@@ -28,6 +32,11 @@
     <div class="small text-muted mt-2">Utiliza este correo junto con la contraseña que creaste durante el registro.</div>
   </div>
 
+  {% if mantiene_acceso %}
+  <a class="btn btn-primary w-100 py-3 rounded-4 fw-bold mt-4" href="{% url 'asistente_tecnico:digital_inicio' %}">Volver a AQUO360</a>
+  <p class="small text-muted mt-3 mb-0">Tu suscripción actual sigue activa durante la revisión.</p>
+  {% else %}
   <a class="btn btn-primary w-100 py-3 rounded-4 fw-bold mt-4" href="/login/">Ir a iniciar sesión</a>
-  <p class="small text-muted mt-3 mb-0">Si el pago todavía aparece pendiente al ingresar, vuelve a intentarlo unos minutos después o comunícate con JVAQUA.</p>
+  <p class="small text-muted mt-3 mb-0">La activación está sujeta a la aprobación administrativa.</p>
+  {% endif %}
 </div></div></main></body></html>
