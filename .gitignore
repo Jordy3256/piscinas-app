@@ -42,3 +42,6 @@ Thumbs.db
 *.sqlite3-journal
 *.pyo
 *.pyd
+
+# AQUO360: evidencia privada (fuera de MEDIA_ROOT)
+/private_aquo360/

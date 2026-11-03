@@ -27,7 +27,7 @@
   </section></div>
   <div class="col-lg-5"><section class="jd-panel p-4 h-100">
     <div class="jd-kicker">MANTENIMIENTO</div><h4 class="fw-bold">Actividad de esta piscina</h4>
-    {% for m in mantenimientos %}<div class="timeline-item"><div class="d-flex justify-content-between"><strong>Mantenimiento · visita {{ m.visita_numero }}</strong><small>{{ m.fecha|date:"d/m/Y" }}</small></div><div class="small text-muted">pH {{ m.ph|default:"—" }} · CL {{ m.cloro|default:"—" }}</div></div>{% empty %}<div class="text-muted py-3">Sin mantenimientos registrados todavía.</div>{% endfor %}
+    {% for m in mantenimientos %}<div class="timeline-item"><div class="d-flex justify-content-between"><strong>Mantenimiento · visita {{ m.visita_numero }}</strong>{% if perfil.puede_registrar_mantenimientos and m.visita %}<a href="{% url 'asistente_tecnico:digital_visita_detallada' m.visita.pk %}" class="small ms-2">Ver registro</a>{% endif %}<small>{{ m.fecha|date:"d/m/Y" }}</small></div><div class="small text-muted">pH {{ m.ph|default:"—" }} · CL {{ m.cloro|default:"—" }}</div></div>{% empty %}<div class="text-muted py-3">Sin mantenimientos registrados todavía.</div>{% endfor %}
   </section></div>
 </div>
 <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap mt-3">

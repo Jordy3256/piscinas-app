@@ -1,0 +1,27 @@
+{% extends 'asistente_tecnico/base_suscriptor.html' %}
+{% block title %}Registro de mantenimiento · AQUO360{% endblock %}
+{% block extra_head %}<style>
+.ev-wrap{max-width:900px;margin:auto}.ev-hero{padding:17px 20px;border-radius:19px;background:linear-gradient(115deg,#073b7e,#087fca,#13b6c2);color:white}.ev-card{background:white;border:1px solid #e0ebf2;border-radius:17px;padding:18px;box-shadow:0 6px 20px #174b7710}.ev-label{font-size:.75rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#4b6c87}.ev-task{display:flex;align-items:center;gap:9px;border:1px solid #e4edf5;border-radius:11px;padding:9px;margin-bottom:6px}.ev-task input{width:19px;height:19px}.ev-body{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media(max-width:700px){.ev-body{grid-template-columns:1fr}.ev-card{padding:13px}.ev-hero{padding:14px}}
+</style>{% endblock %}
+{% block content %}<div class="ev-wrap">
+<div class="d-flex justify-content-between mb-2"><a class="small fw-bold text-decoration-none" href="{% url 'asistente_tecnico:digital_agenda' %}">← Agenda</a><span class="badge text-bg-primary">AQUO360 EMPRESARIAL</span></div>
+<section class="ev-hero mb-3"><div class="small opacity-75 fw-bold">REGISTRO DE MANTENIMIENTO</div><h3 class="fw-bold mb-1">{{ visita.piscina.nombre }}</h3><div class="small opacity-75">{{ visita.fecha|date:'d/m/Y' }} · Visita {{ visita.visita_numero }} · {{ visita.piscina.direccion|default:'Sin dirección registrada' }}</div></section>
+{% if registro %}
+<div class="ev-card mb-3"><div class="d-flex justify-content-between align-items-center flex-wrap"><h5 class="fw-bold mb-0">Mantenimiento completado</h5><span class="badge text-bg-success">Cerrado</span></div>
+<div class="row g-3 mt-1"><div class="col-sm-4"><div class="ev-label">pH</div><strong>{{ registro.ph|default:'—' }}</strong></div><div class="col-sm-4"><div class="ev-label">Cloro libre</div><strong>{{ registro.cloro|default:'—' }} ppm</strong></div><div class="col-sm-4"><div class="ev-label">Fecha de visita</div><strong>{{ registro.fecha|date:'d/m/Y' }}</strong></div></div>
+<hr><div class="ev-label mb-2">Actividades</div>{% for item in registro.tareas %}<span class="badge text-bg-light border me-1 mb-1">{{ item|title }}</span>{% empty %}<p class="text-muted small">Sin actividades marcadas.</p>{% endfor %}
+<div class="ev-label mt-3 mb-2">Químicos registrados</div>{% for codigo, cantidad in registro.quimicos.items %}<span class="badge bg-info-subtle text-info-emphasis me-1 mb-1">{{ codigo|title }}: {{ cantidad }}</span>{% empty %}<p class="text-muted small">Sin químicos registrados.</p>{% endfor %}
+<div class="ev-label mt-3">Observaciones</div><div class="small">{{ registro.observaciones|default:'Sin observaciones'|linebreaksbr }}</div>
+{% for evidencia in registro.evidencias.all %}<div class="mt-2"><a href="{% url 'asistente_tecnico:digital_evidencia' evidencia.pk %}"><i class="bi bi-paperclip me-1"></i>Fotografía {{ forloop.counter }} (descarga privada)</a></div>{% endfor %}
+</div>
+{% elif visita.estado != 'programada' %}<div class="alert alert-warning">Esta visita no está programada. No se puede registrar nuevamente.</div>
+{% else %}
+<form method="post" enctype="multipart/form-data">{% csrf_token %}
+<div class="ev-body mb-3"><div class="ev-card"><div class="ev-label mb-3">Mediciones finales</div><div class="row g-2"><div class="col-6"><label class="form-label fw-semibold">pH</label><input class="form-control" name="ph" type="number" min="0" max="14" step="0.01" placeholder="7.4"></div><div class="col-6"><label class="form-label fw-semibold">Cloro (ppm)</label><input class="form-control" name="cloro" type="number" min="0" max="100" step="0.01" placeholder="2.0"></div></div><p class="small text-muted mt-2 mb-0">Valores opcionales, según mediciones reales.</p></div>
+<div class="ev-card"><div class="ev-label mb-3">Productos aplicados</div><div class="row g-2">{% for codigo, etiqueta in quimicos.items %}<div class="col-12"><label class="form-label small mb-1">{{ etiqueta }}</label><input class="form-control form-control-sm" name="{{ codigo }}" type="number" min="0" max="100000" step="0.01" placeholder="0"></div>{% endfor %}</div></div></div>
+<div class="ev-card mb-3"><div class="ev-label mb-3">Checklist de actividades</div><div class="row g-2">{% for codigo, etiqueta in tareas.items %}<div class="col-sm-6"><label class="ev-task"><input class="form-check-input mt-0" name="tareas" type="checkbox" value="{{ codigo }}"><span class="small fw-semibold">{{ etiqueta }}</span></label></div>{% endfor %}</div></div>
+<div class="ev-card mb-3"><div class="ev-label mb-3">Observaciones y evidencias</div><label class="form-label fw-semibold">Observaciones técnicas</label><textarea name="observaciones" maxlength="2000" class="form-control mb-3" rows="3" placeholder="Estado del agua, novedades en bomba o filtro, recomendaciones…"></textarea><label class="form-label fw-semibold">Fotografías (opcional, máximo 3)</label><input type="file" name="evidencias" class="form-control" accept="image/*" multiple><p class="small text-muted mt-2 mb-0">Máximo 5 MB por fotografía. Se muestran únicamente al propietario del registro dentro de AQUO360.</p></div>
+<button type="submit" class="btn btn-primary fw-bold w-100 py-3"><i class="bi bi-check-circle me-1"></i>Guardar y finalizar mantenimiento</button>
+</form>
+{% endif %}
+</div>{% endblock %}

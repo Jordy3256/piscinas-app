@@ -10,7 +10,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Count, Q, Sum
-from django.http import HttpResponseForbidden, JsonResponse, HttpResponseBadRequest
+from django.http import HttpResponseForbidden, JsonResponse, HttpResponseBadRequest, FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from backend.pdf_branding import draw_jvaqua_pdf_page
@@ -19,7 +19,7 @@ from django.views.decorators.clickjacking import xframe_options_sameorigin
 
 from trabajadores.models import Trabajador
 from .engine import DEFAULT_RULES, calcular_recomendacion, diagnosticar_problema_tecnico, PROBLEMAS_TECNICOS
-from .models import CasoAsistenteTecnico, MotorRecomendacion, ContenidoAcademia, ProgresoContenidoAcademia, FavoritoContenidoAcademia, ConsultaContenidoAcademia, PerfilSuscriptor, PiscinaSuscriptor, PlanMantenimientoPiscina, RegistroMantenimientoPiscina, VisitaProgramadaPiscina, NotificacionDigital, SugerenciaDigital, SolicitudSuscripcionDigital, ConversacionSoporteDigital, MensajeSoporteDigital, AdjuntoSoporteDigital, CobroPiscinaDigital, PagoCobroDigital
+from .models import CasoAsistenteTecnico, MotorRecomendacion, ContenidoAcademia, ProgresoContenidoAcademia, FavoritoContenidoAcademia, ConsultaContenidoAcademia, PerfilSuscriptor, PiscinaSuscriptor, PlanMantenimientoPiscina, RegistroMantenimientoPiscina, EvidenciaMantenimientoDigital, VisitaProgramadaPiscina, NotificacionDigital, SugerenciaDigital, SolicitudSuscripcionDigital, ConversacionSoporteDigital, MensajeSoporteDigital, AdjuntoSoporteDigital, CobroPiscinaDigital, PagoCobroDigital
 from .services import generar_recordatorios_seguimiento
 from .cartera_digital import crear_cobros_mes
 
@@ -2133,6 +2133,8 @@ def digital_agenda_view(request):
     if request.method == 'POST':
         visita = get_object_or_404(VisitaProgramadaPiscina, pk=request.POST.get('visita_id'),
             piscina__suscriptor=perfil, piscina__activa=True)
+        if perfil.puede_registrar_mantenimientos:
+            return redirect('asistente_tecnico:digital_visita_detallada', pk=visita.pk)
         if visita.estado == 'programada':
             visita.estado = 'completada'
             visita.save(update_fields=['estado', 'actualizado_en'])
@@ -2443,27 +2445,145 @@ def digital_registrar_mantenimiento_view(request, pk):
         messages.success(request, 'Visita marcada como realizada.')
         return redirect('asistente_tecnico:digital_plan_mantenimiento', pk=piscina.pk)
 
-    RegistroMantenimientoPiscina.objects.create(
-        piscina=piscina,
-        visita_numero=visita_numero,
-        ph=dec("ph"),
-        cloro=dec("cloro"),
-        tareas=tareas,
-        observaciones=(request.POST.get("observaciones") or "").strip(),
-    )
+    if not visita_programada:
+        messages.error(request, "Selecciona una visita programada para registrar el mantenimiento.")
+        return redirect("asistente_tecnico:digital_plan_mantenimiento", pk=piscina.pk)
+    return redirect("asistente_tecnico:digital_visita_detallada", pk=visita_programada.pk)
 
-    if visita_programada:
-        visita_programada.estado = "completada"
-        visita_programada.save(update_fields=["estado", "actualizado_en"])
-        visita_programada.notificaciones.update(leida=True)
 
-    messages.success(
-        request,
-        "Mantenimiento completado y guardado en el historial de la piscina.",
+# Registro de visitas: únicamente datos de suscriptores digitales.
+# No hay acceso a contratos, finanzas ni mantenimientos internos JVAQUA.
+QUIMICOS_EMPRESARIAL = {
+    "cloro_granulado": "Cloro granulado (g)",
+    "tricloro": "Tricloro (g)",
+    "alguicida": "Alguicida (ml)",
+    "metasilicato": "Metasilicato (g)",
+    "floculante": "Floculante (g)",
+}
+TAREAS_EMPRESARIAL = {
+    "aspirado": "Aspirado",
+    "cepillado": "Cepillado",
+    "basura": "Recolección de basura",
+    "filtros": "Limpieza de filtros",
+    "retrolavado": "Retrolavado de arena",
+}
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def digital_visita_detallada_view(request, pk):
+    """Completar exactamente una visita empresarial de la propia suscripción."""
+    perfil = _suscriptor(request.user)
+    if perfil is None or not perfil.puede_registrar_mantenimientos:
+        return HttpResponseForbidden("Disponible solo para suscriptores Empresarial activos")
+    visita = get_object_or_404(
+        VisitaProgramadaPiscina.objects.select_related("piscina", "plan"),
+        pk=pk, piscina__suscriptor=perfil, piscina__activa=True,
     )
-    return redirect(
-        "asistente_tecnico:digital_plan_mantenimiento", pk=piscina.pk
+    registro = RegistroMantenimientoPiscina.objects.filter(visita=visita, piscina=visita.piscina).first()
+    if request.method == "GET":
+        return render(request, "asistente_tecnico/digital_visita_detallada.html", {
+            "perfil": perfil, "visita": visita, "registro": registro,
+            "tareas": TAREAS_EMPRESARIAL, "quimicos": QUIMICOS_EMPRESARIAL,
+        })
+    if registro or visita.estado != "programada":
+        messages.error(request, "Esta visita ya fue cerrada o no se encuentra programada.")
+        return redirect("asistente_tecnico:digital_visita_detallada", pk=visita.pk)
+
+    from django.core.exceptions import ValidationError as DjangoValidationError
+    from django.core.validators import validate_image_file_extension
+    fotos = request.FILES.getlist("evidencias")
+    # Render no conserva ficheros en su disco efímero entre despliegues.
+    # Requerir almacenamiento persistente configurado antes de guardar evidencias.
+    import os
+    from django.conf import settings
+    if fotos and (os.environ.get("RENDER") or os.environ.get("RENDER_SERVICE_ID")) and not os.environ.get("AQUO360_PRIVATE_MEDIA_ROOT"):
+        messages.error(request, "Las fotos requieren almacenamiento privado persistente. Contacta con el administrador.")
+        return redirect("asistente_tecnico:digital_visita_detallada", pk=visita.pk)
+    if len(fotos) > 3:
+        messages.error(request, "Puedes adjuntar hasta 3 fotografías.")
+        return redirect("asistente_tecnico:digital_visita_detallada", pk=visita.pk)
+    # Validación de extensión, peso y contenido real antes de guardar.
+    from PIL import Image, UnidentifiedImageError
+    for foto in fotos:
+        try:
+            validate_image_file_extension(foto)
+            if foto.size > 5 * 1024 * 1024 or foto.size <= 0:
+                raise ValueError("Fotografía demasiado grande o vacía")
+            with Image.open(foto) as img:
+                img.verify()
+            foto.seek(0)
+        except (DjangoValidationError, ValueError, OSError, UnidentifiedImageError):
+            messages.error(request, "Solo se aceptan imágenes válidas de hasta 5 MB.")
+            return redirect("asistente_tecnico:digital_visita_detallada", pk=visita.pk)
+
+    def numero(campo, minimo, maximo):
+        texto = (request.POST.get(campo) or "").strip().replace(",", ".")
+        if not texto:
+            return None
+        try:
+            valor = Decimal(texto)
+            if not valor.is_finite() or not minimo <= valor <= maximo:
+                raise ValueError
+            return valor
+        except (InvalidOperation, ValueError):
+            raise ValueError(campo)
+
+    try:
+        ph = numero("ph", Decimal("0"), Decimal("14"))
+        cl = numero("cloro", Decimal("0"), Decimal("100"))
+        cantidades = {}
+        for codigo in QUIMICOS_EMPRESARIAL:
+            cantidad = numero(codigo, Decimal("0"), Decimal("100000"))
+            if cantidad is not None and cantidad > 0:
+                cantidades[codigo] = str(cantidad)
+    except ValueError:
+        messages.error(request, "Revisa las mediciones y cantidades ingresadas.")
+        return redirect("asistente_tecnico:digital_visita_detallada", pk=visita.pk)
+    tareas = [codigo for codigo in TAREAS_EMPRESARIAL if codigo in request.POST.getlist("tareas")]
+    observaciones = (request.POST.get("observaciones") or "").strip()[:2000]
+
+    # Fila bloqueada: evita dos registros si se envía el formulario más de una vez.
+    with transaction.atomic():
+        bloqueada = VisitaProgramadaPiscina.objects.select_for_update().get(pk=visita.pk)
+        if bloqueada.estado != "programada" or RegistroMantenimientoPiscina.objects.filter(visita=bloqueada).exists():
+            messages.warning(request, "La visita ya fue registrada.")
+            return redirect("asistente_tecnico:digital_visita_detallada", pk=visita.pk)
+        registro = RegistroMantenimientoPiscina.objects.create(
+            piscina=bloqueada.piscina, visita=bloqueada, fecha=bloqueada.fecha,
+            visita_numero=bloqueada.visita_numero, ph=ph, cloro=cl,
+            tareas=tareas, quimicos=cantidades, observaciones=observaciones,
+            completado=True,
+        )
+        bloqueada.estado = "completada"
+        bloqueada.save(update_fields=["estado", "actualizado_en"])
+        bloqueada.notificaciones.update(leida=True)
+    # Las fotografías no se consideran críticas para confirmar el cierre.
+    for foto in fotos:
+        EvidenciaMantenimientoDigital.objects.create(registro=registro, imagen=foto)
+    messages.success(request, "Mantenimiento registrado en AQUO360 Empresarial.")
+    return redirect("asistente_tecnico:digital_visita_detallada", pk=visita.pk)
+
+
+@login_required
+def digital_evidencia_view(request, pk):
+    perfil = _suscriptor(request.user)
+    if perfil is None or not perfil.puede_registrar_mantenimientos:
+        return HttpResponseForbidden("No autorizado")
+    evidencia = get_object_or_404(
+        EvidenciaMantenimientoDigital,
+        pk=pk, registro__piscina__suscriptor=perfil,
     )
+    # Nunca publicar URLs directas de archivos de otros suscriptores.
+    try:
+        archivo = evidencia.imagen.open("rb")
+    except (OSError, ValueError, FileNotFoundError):
+        raise Http404("Archivo no disponible")
+    respuesta = FileResponse(archivo, content_type="application/octet-stream")
+    respuesta["Content-Disposition"] = 'attachment; filename="evidencia-aquo360"'
+    respuesta["Cache-Control"] = "private, no-store"
+    respuesta["X-Content-Type-Options"] = "nosniff"
+    return respuesta
 
 
 @login_required

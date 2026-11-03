@@ -5,6 +5,7 @@ from django.utils import timezone
 from django.utils.functional import cached_property
 
 from trabajadores.models import Trabajador
+from .private_storage import private_aquo_storage
 
 
 class MotorRecomendacion(models.Model):
@@ -860,11 +861,16 @@ class RegistroMantenimientoPiscina(models.Model):
         on_delete=models.CASCADE,
         related_name="mantenimientos_digitales",
     )
+    visita = models.OneToOneField(
+        VisitaProgramadaPiscina, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="registro_empresarial",
+    )
     fecha = models.DateField(default=timezone.localdate, db_index=True)
     visita_numero = models.PositiveSmallIntegerField(default=1)
     ph = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
     cloro = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     tareas = models.JSONField(default=list, blank=True)
+    quimicos = models.JSONField(default=dict, blank=True)
     observaciones = models.TextField(blank=True, default="")
     completado = models.BooleanField(default=True)
     creado_en = models.DateTimeField(auto_now_add=True)
@@ -876,6 +882,21 @@ class RegistroMantenimientoPiscina(models.Model):
 
     def __str__(self):
         return f"{self.piscina} · {self.fecha} · visita {self.visita_numero}"
+
+
+class EvidenciaMantenimientoDigital(models.Model):
+    """Fotografías privadas, relacionadas exclusivamente con mantenimiento AQUO360."""
+    registro = models.ForeignKey(
+        RegistroMantenimientoPiscina, on_delete=models.CASCADE, related_name="evidencias"
+    )
+    imagen = models.ImageField(storage=private_aquo_storage, upload_to="mantenimientos/%Y/%m/")
+    descripcion = models.CharField(max_length=90, blank=True, default="")
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["id"]
+        verbose_name = "Evidencia mantenimiento AQUO360"
+        verbose_name_plural = "Evidencias mantenimiento AQUO360"
 
 
 class SugerenciaDigital(models.Model):
