@@ -34,18 +34,14 @@
 {% endblock %}
 {% block content %}
 <div class="resolver-shell">
-  <div class="assistant-head">
-    <div class="assistant-title"><div class="jd-kicker">RESOLVER</div><h1>AQUO · Asistente Inteligente</h1><p>Cuéntame qué pasa y te acompaño paso a paso.</p></div>
-    {% if resultado %}<a class="btn btn-light border jd-btn" href="{% url 'asistente_tecnico:digital_resolver' %}{% if piscina %}?piscina={{piscina.pk}}{% endif %}"><i class="bi bi-arrow-clockwise me-1"></i>Nueva consulta</a>{% endif %}
-  </div>
   <nav class="d-flex gap-2 flex-wrap mb-3" aria-label="Centro AQUO"><a class="btn btn-sm btn-outline-primary rounded-pill" href="{% url 'asistente_tecnico:digital_centro_aquo' %}"><i class="bi bi-arrow-left me-1"></i>Centro AQUO</a><a class="btn btn-sm btn-outline-secondary rounded-pill" href="{% url 'asistente_tecnico:academia_cms' %}?modo=aprender">Curso</a><a class="btn btn-sm btn-outline-secondary rounded-pill" href="{% url 'asistente_tecnico:academia_cms' %}?modo=consultar">Biblioteca</a></nav>
   <div class="chat-layout">
     <section class="chat-card">
-      <div class="chat-top"><div class="aqua-chat-avatar">{% include 'asistente_tecnico/partials/aqua_hero.html' %}</div><div><strong>AQUO · Asistente inteligente</strong><div class="online">Disponible para ayudarte</div></div></div>
+      <div class="chat-top"><div class="aqua-chat-avatar"><img src="{% static 'asistente_tecnico/characters/aquo-avatar-hq.webp' %}" alt="AQUO" class="aquo-portrait"></div><div><strong>AQUO</strong><div class="online">Tu asistente para piscinas</div></div></div>
       <form method="post" id="resolverForm">{% csrf_token %}{% if piscina %}<input type="hidden" name="piscina_id" value="{{piscina.pk}}">{% endif %}{% if not piscina %}<input type="hidden" name="consulta_libre" value="1">
 <details class="aquo-volumen-panel mx-3 mt-3"><summary><i class="bi bi-droplet-half me-1"></i> Volumen para cálculos de dosis (opcional al consultar)</summary><div class="pt-2"><label class="form-label small fw-bold" for="volumenLibre">Volumen de la piscina (m³)</label><input id="volumenLibre" name="volumen_m3" type="number" step="0.01" min="0.01" max="100000" class="form-control" placeholder="Ej. 35"><small class="text-muted">Solo necesario para calcular cantidades químicas.</small></div></details>{% endif %}<input type="hidden" name="estado_agua" id="estadoField" value=""><input type="hidden" name="categoria_consulta" id="categoryField" value="agua">
       <div class="chat-body" id="chatBody">
-        <div class="msg-row assistant"><div class="aqua-chat-avatar small">{% include 'asistente_tecnico/partials/aqua_hero.html' %}</div><div class="bubble">¡Hola{% if request.user.first_name %}, {{request.user.first_name}}{% endif %}! 👋 Soy <strong>AQUO</strong>, tu Asistente JVAQUA. {% if piscina %}Vamos a revisar <strong>{{ piscina.nombre }}</strong>. ¿Qué problema quieres que revisemos hoy?
+        <div class="msg-row assistant"><div class="bubble">¡Hola{% if request.user.first_name %}, {{request.user.first_name}}{% endif %}! 👋 Soy <strong>AQUO</strong>, tu Asistente JVAQUA. {% if piscina %}Vamos a revisar <strong>{{ piscina.nombre }}</strong>. ¿Qué problema quieres que revisemos hoy?
 <div class="aquo-context-actions"><a href="{% url 'asistente_tecnico:digital_resolver' %}?piscina=libre" class="aquo-context-btn">Cambiar a consulta libre</a>{% for p in piscinas %}{% if p.pk != piscina.pk %}<a href="{% url 'asistente_tecnico:digital_resolver' %}?piscina={{ p.pk }}" class="aquo-context-btn">{{ p.nombre }}</a>{% endif %}{% endfor %}</div>
 {% else %}¿Quieres consultar una piscina registrada o hacerlo libre?{% endif %}
 {% if not piscina %}<div class="aquo-context-actions">
@@ -54,7 +50,7 @@
 </div>{% endif %}</div></div>
         {% if resultado %}
           <div class="msg-row user"><div class="bubble">Ya te compartí los datos de mi piscina.</div></div>
-          <div class="msg-row assistant"><div class="aqua-chat-avatar small">{% include 'asistente_tecnico/partials/aqua_hero.html' %}</div><div class="bubble">Perfecto. Ya terminé el análisis. Encontré una causa probable y preparé un plan de acción{% if caso %} para un volumen de <strong>{{caso.volumen_m3}} m³</strong>{% elif piscina %} adaptado a tu piscina de <strong>{{piscina.volumen_m3}} m³</strong>{% endif %}. Mira el diagnóstico debajo. 👇</div></div>
+          <div class="msg-row assistant"><div class="bubble">Perfecto. Ya terminé el análisis. Encontré una causa probable y preparé un plan de acción{% if caso %} para un volumen de <strong>{{caso.volumen_m3}} m³</strong>{% elif piscina %} adaptado a tu piscina de <strong>{{piscina.volumen_m3}} m³</strong>{% endif %}. Mira el diagnóstico debajo. 👇</div></div>
         {% else %}
           <span class="resolver-quick-title">Empecemos por algo simple</span>
           <div class="entry-choice-grid" id="entryChoices">
@@ -64,7 +60,7 @@
           <div class="resolver-nav"><button type="button" id="backStepBtn" disabled><i class="bi bi-arrow-left me-1"></i>Volver</button><a id="newDiagnosisBtn" href="{% url 'asistente_tecnico:digital_resolver' %}{% if piscina %}?piscina={{piscina.pk}}{% endif %}"><i class="bi bi-arrow-clockwise me-1"></i>Nuevo diagnóstico</a></div>
 
           <div id="waterConversation" class="d-none">
-            <div class="msg-row assistant"><div class="aqua-chat-avatar small">{% include 'asistente_tecnico/partials/aqua_hero.html' %}</div><div class="bubble">Perfecto. Para revisar el agua necesito primero dos datos: <strong>pH</strong> y <strong>cloro libre</strong>. Si no sabes qué son o cómo medirlos, te enseño antes de continuar.</div></div>
+            <div class="msg-row assistant"><div class="bubble">Perfecto. Para revisar el agua necesito primero dos datos: <strong>pH</strong> y <strong>cloro libre</strong>. Si no sabes qué son o cómo medirlos, te enseño antes de continuar.</div></div>
             <div class="measure-box">
               <div class="row g-2">
                 <div class="col-6"><label class="small fw-bold mb-1">pH</label><input class="form-control" type="number" step=".01" min="0" max="14" name="ph" id="phInput" placeholder="Ej. 7.4"></div>
@@ -80,19 +76,19 @@
           </div>
 
           <div id="waterStateConversation" class="d-none">
-            <div class="msg-row assistant"><div class="aqua-chat-avatar small">{% include 'asistente_tecnico/partials/aqua_hero.html' %}</div><div class="bubble">Muy bien. Solo me falta ver <strong>cómo está el agua</strong> para interpretar correctamente esas mediciones.</div></div>
+            <div class="msg-row assistant"><div class="bubble">Muy bien. Solo me falta ver <strong>cómo está el agua</strong> para interpretar correctamente esas mediciones.</div></div>
             <div class="resolver-choices" id="waterChoices">{% for v,l in estado_choices %}<button type="button" class="resolver-choice" data-value="{{v}}">{% if v == 'verde' %}🟢{% elif v == 'muy_turbia' %}🌫️{% elif v == 'ligeramente_turbia' %}💧{% else %}✨{% endif %} {{l}}</button>{% endfor %}</div>
             <div class="measure-box d-none" id="waterAnalyzeBox"><button class="btn jd-btn jd-btn-primary w-100" id="analyzeBtn"><i class="bi bi-stars me-2"></i>Obtener diagnóstico</button></div>
           </div>
 
           <div id="otherConversation" class="d-none">
-            <div class="msg-row assistant"><div class="aqua-chat-avatar small">{% include 'asistente_tecnico/partials/aqua_hero.html' %}</div><div class="bubble">Entendido. ¿Con qué parte de la piscina estás teniendo el problema?</div></div>
+            <div class="msg-row assistant"><div class="bubble">Entendido. ¿Con qué parte de la piscina estás teniendo el problema?</div></div>
             <div class="problem-grid" id="problemChoices">
               {% for value,label in problemas_tecnicos.items %}<button type="button" class="problem-choice" data-category="{{value}}"><i class="bi {% if 'bomba' in value %}bi-gear-wide-connected{% elif 'presion' in value %}bi-speedometer2{% elif value == 'fuga_agua' %}bi-droplet{% elif value == 'iluminacion' %}bi-lightbulb{% elif value == 'calentador' %}bi-thermometer-sun{% else %}bi-tools{% endif %}"></i><span>{{label}}</span></button>{% endfor %}
             </div>
           </div>
 
-          <div id="technicalConversation" class="d-none"><div class="msg-row assistant"><div class="aqua-chat-avatar small">{% include 'asistente_tecnico/partials/aqua_hero.html' %}</div><div class="bubble">Perfecto. Cuéntame <strong>qué ocurre exactamente</strong>, desde cuándo y qué notas en el equipo. AQUO usará esa información para seguir el diagnóstico adecuado.</div></div><div class="detail-box"><label class="small fw-bold mb-2">Describe lo que observas</label><textarea class="form-control" name="detalle_problema" id="detailInput" placeholder="Ej.: la bomba enciende, el prefiltro queda con aire y casi no sale agua por los retornos..."></textarea><div class="tech-note mt-2"><i class="bi bi-shield-check me-1"></i>AQUO prioriza comprobaciones seguras. Si detecta un caso eléctrico, presurizado o invasivo te indicará cuándo detenerte y llamar a un profesional.</div><button class="btn jd-btn jd-btn-primary w-100 mt-3" id="technicalAnalyzeBtn"><i class="bi bi-stars me-2"></i>Analizar el problema</button></div></div>
+          <div id="technicalConversation" class="d-none"><div class="msg-row assistant"><div class="bubble">Perfecto. Cuéntame <strong>qué ocurre exactamente</strong>, desde cuándo y qué notas en el equipo. AQUO usará esa información para seguir el diagnóstico adecuado.</div></div><div class="detail-box"><label class="small fw-bold mb-2">Describe lo que observas</label><textarea class="form-control" name="detalle_problema" id="detailInput" placeholder="Ej.: la bomba enciende, el prefiltro queda con aire y casi no sale agua por los retornos..."></textarea><div class="tech-note mt-2"><i class="bi bi-shield-check me-1"></i>AQUO prioriza comprobaciones seguras. Si detecta un caso eléctrico, presurizado o invasivo te indicará cuándo detenerte y llamar a un profesional.</div><button class="btn jd-btn jd-btn-primary w-100 mt-3" id="technicalAnalyzeBtn"><i class="bi bi-stars me-2"></i>Analizar el problema</button></div></div>
         {% endif %}
       </div></form>
       <div class="chat-compose aquo-compose">
@@ -102,12 +98,7 @@
       </div>
       <div class="aquo-compose-hint" id="voiceHint">También puedes usar las respuestas rápidas de arriba.</div>
     </section>
-    <aside class="case-card">
-      <div class="jd-kicker">{% if piscina %}TU PISCINA{% else %}CONSULTA LIBRE{% endif %}</div><div class="d-flex justify-content-between align-items-start gap-2 mt-1"><div><h5 class="fw-bold mb-1">{% if piscina %}{{ piscina.nombre }}{% else %}Sin piscina vinculada{% endif %}</h5><small class="text-muted">{% if piscina %}Datos usados para personalizar el análisis{% else %}Puedes consultar ahora y registrar tus piscinas después.{% endif %}</small></div>{% if piscina %}<a class="small fw-bold text-decoration-none" href="{% url 'asistente_tecnico:digital_piscina_editar' piscina.pk %}">Editar</a>{% endif %}</div>
-      {% if piscinas|length > 1 %}<select class="form-select pool-select mt-3" onchange="location='?piscina='+this.value">{% for p in piscinas %}<option value="{{p.pk}}" {% if p.pk == piscina.pk %}selected{% endif %}>{{p.nombre}}</option>{% endfor %}</select>{% endif %}
-      {% if piscina %}<div class="case-meta"><div class="meta"><small>Volumen</small><strong>{{piscina.volumen_m3}} m³</strong></div><div class="meta"><small>Filtro</small><strong>{{piscina.get_tipo_filtro_display}}</strong></div><div class="meta"><small>Uso</small><strong>{{piscina.get_tipo_piscina_display}}</strong></div><div class="meta"><small>Desinfección</small><strong>{{piscina.get_desinfeccion_display}}</strong></div></div>{% else %}<a class="btn btn-sm btn-outline-primary mt-3" href="{% url 'asistente_tecnico:digital_piscina_nueva' %}">Registrar piscina (opcional)</a>{% endif %}
-      <div class="progress-steps"><div class="pstep {% if resultado %}done{% else %}active{% endif %}"><span class="pico">1</span><div><strong>Cuéntame qué pasa</strong><div class="small text-muted">Aspecto y mediciones</div></div></div><div class="pstep {% if resultado %}done{% endif %}"><span class="pico">2</span><div><strong>Diagnóstico</strong><div class="small text-muted">Identifico la causa probable</div></div></div><div class="pstep {% if resultado %}done{% endif %}"><span class="pico">3</span><div><strong>Plan de acción</strong><div class="small text-muted">Pasos y cantidades</div></div></div><div class="pstep {% if resultado %}done{% endif %}"><span class="pico">4</span><div><strong>Verificación</strong><div class="small text-muted">Qué revisar después</div></div></div></div>
-    </aside>
+
   </div>
 
   {% if resultado %}
@@ -115,12 +106,12 @@
     <div class="diagnosis-banner"><div class="diag-icon"><i class="bi bi-check2-circle"></i></div><div><div class="jd-kicker">DIAGNÓSTICO COMPLETADO</div><h3 class="fw-bold mb-1">{{resultado.diagnostico}}</h3><div class="text-muted">{{resultado.resumen}}</div></div></div>
     <div class="row g-3 mt-0"><div class="col-lg-7"><section class="result-section h-100"><h5><i class="bi bi-signpost-split text-primary me-2"></i>Qué hacer ahora</h5>{% for paso in resultado.protocolo %}<div class="action"><span class="action-num">{{forloop.counter}}</span><div>{% if paso.titulo %}<div class="action-title">{{paso.titulo}}</div><div class="action-detail">{{paso.detalle}}</div>{% else %}<div class="action-detail">{{paso}}</div>{% endif %}</div></div>{% endfor %}</section></div><div class="col-lg-5"><section class="result-section h-100"><h5><i class="bi bi-droplet-half text-primary me-2"></i>Productos y cantidades</h5>{% if resultado.productos_sugeridos %}<div class="dose-grid">{% for p in resultado.productos_sugeridos %}<div class="dose"><strong>{{p.producto|default:p.nombre}}</strong><div class="dose-value">{{p.dosis|default:p.cantidad}}{% if p.unidad %} {{p.unidad}}{% endif %}</div></div>{% endfor %}</div>{% else %}<div class="text-muted small">Este caso no requiere una dosificación adicional.</div>{% endif %}</section></div></div>
     {% if resultado.advertencias %}<section class="result-section safety"><h5><i class="bi bi-shield-exclamation me-2"></i>{% if resultado.tipo_tratamiento == 'diagnostico_tecnico' %}Seguridad antes de continuar{% else %}Antes de aplicar cualquier producto{% endif %}</h5>{% for a in resultado.advertencias %}<div class="small mb-1">• {{a}}</div>{% endfor %}</section>{% endif %}
-    <section class="result-section"><div class="d-flex gap-3 align-items-start"><div class="aqua-chat-avatar small">{% include 'asistente_tecnico/partials/aqua_hero.html' %}</div><div><h5 class="mb-1">¿Qué hago después?</h5><div class="text-muted">{% if resultado.tipo_tratamiento == 'diagnostico_tecnico' %}Haz las comprobaciones en el orden indicado y detente si aparece una condición insegura. Si el síntoma cambia, vuelve a consultarme describiendo exactamente qué cambió; así puedo continuar el diagnóstico sin hacerte repetir pasos innecesarios.{% else %}Sigue el plan en el orden indicado y vuelve a comprobar el estado del agua y sus parámetros antes de repetir o modificar el tratamiento. Si el problema cambia, inicia una nueva consulta y te guiaré con los nuevos datos.{% endif %}</div></div></div></section>
+    <section class="result-section"><div class="d-flex gap-3 align-items-start"><div><h5 class="mb-1">¿Qué hago después?</h5><div class="text-muted">{% if resultado.tipo_tratamiento == 'diagnostico_tecnico' %}Haz las comprobaciones en el orden indicado y detente si aparece una condición insegura. Si el síntoma cambia, vuelve a consultarme describiendo exactamente qué cambió; así puedo continuar el diagnóstico sin hacerte repetir pasos innecesarios.{% else %}Sigue el plan en el orden indicado y vuelve a comprobar el estado del agua y sus parámetros antes de repetir o modificar el tratamiento. Si el problema cambia, inicia una nueva consulta y te guiaré con los nuevos datos.{% endif %}</div></div></div></section>
     {% if articulos_relacionados %}<section class="result-section"><h5><i class="bi bi-mortarboard text-primary me-2"></i>Aprende por qué</h5><div class="related">{% for a in articulos_relacionados %}<a href="{% url 'asistente_tecnico:academia_contenido_detalle' a.slug %}"><i class="bi bi-book me-1"></i>{{a.titulo}}</a>{% endfor %}</div></section>{% endif %}
   </div>
   {% endif %}
 </div>
-<template id="aquaMiniTemplate"><div class="aqua-chat-avatar small">{% include 'asistente_tecnico/partials/aqua_hero.html' %}</div></template>
+<template id="aquaMiniTemplate"></template>
 <script>
 const aquaMiniTemplate=document.getElementById('aquaMiniTemplate')?.innerHTML||'';
 const categoryField=document.getElementById('categoryField'),stateField=document.getElementById('estadoField');
