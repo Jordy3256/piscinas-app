@@ -1,26 +1,44 @@
-# Python
+# Python y herramientas
 __pycache__/
 *.py[cod]
-*.pyo
-*.pyd
-*.sqlite3
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 *.log
 
-# Virtual env
+# Entornos y builds
 venv/
 .venv/
-
-# Django
+node_modules/
 staticfiles/
-media/
-.env
 
-# Keys
+# Datos locales y credenciales
+.env
+.env.*
+!.env.example
 *.pem
 *.key
+*.sqlite3
+backup_postgres.json
+media/
 
-# OS/Editors
-.DS_Store
-Thumbs.db
+# Copias temporales y paquetes
+*.bak
+*.orig
+*.swp
+*.tmp
+*~
+/auditoria_finanzas_contratos.zip
+/mnt/
+
+# IDE y sistema
 .vscode/
 .idea/
+.DS_Store
+Thumbs.db
+
+# Proteccion de bases de datos locales
+*.sqlite3
+*.sqlite3-journal
+*.pyo
+*.pyd
