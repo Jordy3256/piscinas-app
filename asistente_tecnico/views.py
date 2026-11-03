@@ -1444,7 +1444,23 @@ def digital_comprobante_admin_view(request, pk):
     try:
         archivo = solicitud.comprobante.open("rb")
     except (OSError, FileNotFoundError, ValueError):
-        raise Http404("El archivo no está disponible")
+        # Compatibilidad temporal con comprobantes anteriores a la migración.
+        # Solo la vista autenticada de administración puede leer este respaldo.
+        # No se admite una ruta absoluta ni traversal fuera de MEDIA_ROOT.
+        from pathlib import Path
+        from django.conf import settings
+        nombre_legacy = Path(solicitud.comprobante.name)
+        if (nombre_legacy.is_absolute() or ".." in nombre_legacy.parts
+                or not str(nombre_legacy).startswith("jvaqua_digital/comprobantes/")):
+            raise Http404("El archivo no está disponible")
+        ruta_legacy = (Path(settings.MEDIA_ROOT) / nombre_legacy).resolve()
+        raiz_legacy = Path(settings.MEDIA_ROOT).resolve()
+        if not ruta_legacy.is_relative_to(raiz_legacy) or not ruta_legacy.is_file():
+            raise Http404("El archivo no está disponible")
+        try:
+            archivo = ruta_legacy.open("rb")
+        except OSError:
+            raise Http404("El archivo no está disponible")
     from pathlib import Path
     nombre = Path(solicitud.comprobante.name).name
     respuesta = FileResponse(archivo, as_attachment=True, filename=nombre)

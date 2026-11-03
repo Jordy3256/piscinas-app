@@ -612,7 +612,7 @@ class SolicitudSuscripcionDigital(models.Model):
     tipo = models.CharField(max_length=16, choices=TIPOS, default="alta", db_index=True)
     plan = models.CharField(max_length=30, choices=PerfilSuscriptor.PLANES)
     valor = models.DecimalField(max_digits=8, decimal_places=2)
-    comprobante = models.FileField(upload_to="jvaqua_digital/comprobantes/%Y/%m/", null=True, blank=True)
+    comprobante = models.FileField(storage=private_aquo_storage, upload_to="comprobantes/%Y/%m/", null=True, blank=True)
     metodo_envio = models.CharField(max_length=16, choices=METODOS, default="plataforma")
     observacion_cliente = models.CharField(max_length=300, blank=True, default="")
     estado = models.CharField(max_length=16, choices=ESTADOS, default="pendiente", db_index=True)
