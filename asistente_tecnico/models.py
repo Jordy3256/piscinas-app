@@ -1144,3 +1144,13 @@ class ExperienciaAquo(models.Model):
 
     def __str__(self):
         return f"Caso AQUO #{self.pk} - {self.get_resultado_reportado_display()}"
+
+
+class ConsumoImagenAquo(models.Model):
+    """Una fila por imagen realmente procesada por IA; cupo por ciclo de suscripción."""
+    suscriptor = models.ForeignKey("PerfilSuscriptor", on_delete=models.CASCADE, related_name="consumos_imagen_aquo")
+    cantidad = models.PositiveSmallIntegerField(default=1)
+    creado_en = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["suscriptor", "creado_en"], name="aquo_fotos_periodo_idx")]

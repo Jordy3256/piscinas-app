@@ -3079,8 +3079,40 @@ def digital_aquo_chat_api_view(request):
     except (ValueError, UnicodeDecodeError):
         return JsonResponse({"error": "Solicitud inválida."}, status=400)
     mensaje = data.get("mensaje", "")
-    if not isinstance(mensaje, str) or not mensaje.strip() or len(mensaje) > 2000:
-        return JsonResponse({"error": "Escribe una consulta de hasta 2000 caracteres."}, status=400)
+    imagenes = data.get("imagenes", [])
+    if not isinstance(imagenes, list) or len(imagenes) > 2:
+        return JsonResponse({"error": "Puedes adjuntar hasta dos fotografías por mensaje."}, status=400)
+    if not isinstance(mensaje, str) or len(mensaje) > 2000 or (not mensaje.strip() and not imagenes):
+        return JsonResponse({"error": "Escribe una consulta o adjunta una fotografía (máximo 2000 caracteres)."}, status=400)
+    # Decodificar y validar en servidor; no confiar en límites del navegador.
+    import base64, io, binascii
+    from PIL import Image, ImageOps
+    imagenes_api = []
+    for encoded in imagenes:
+        if not isinstance(encoded, str) or not encoded.startswith("data:image/jpeg;base64,") or len(encoded) > 360000:
+            return JsonResponse({"error": "Cada fotografía debe ser JPEG y pesar como máximo 250 KB."}, status=400)
+        try:
+            raw = base64.b64decode(encoded.partition(",")[2], validate=True)
+            if not raw or len(raw) > 250 * 1024:
+                raise ValueError("Tamaño inválido")
+            with Image.open(io.BytesIO(raw)) as img:
+                img.verify()
+            with Image.open(io.BytesIO(raw)) as img:
+                if img.format != "JPEG" or max(img.size) > 1280 or img.width * img.height > 1280 * 1280:
+                    raise ValueError("Dimensiones inválidas")
+        except (ValueError, OSError, binascii.Error):
+            return JsonResponse({"error": "Fotografía inválida. Usa una imagen JPEG comprimida."}, status=400)
+        imagenes_api.append({"type": "image_url", "image_url": {"url": encoded, "detail": "low"}})
+    from .models import ConsumoImagenAquo
+    from django.db.models import Sum
+    from django.utils import timezone as tz
+    from datetime import timedelta
+    limite_fotos = {"individual": 3, "esencial": 10, "profesional": 50, "empresarial": 200}.get(perfil.plan, 3)
+    # Cupo por mes calendario; reinicia el primer día de cada mes.
+    periodo_inicio = hoy.replace(day=1)
+    usadas = ConsumoImagenAquo.objects.filter(suscriptor=perfil, creado_en__date__gte=periodo_inicio).aggregate(total=Sum("cantidad"))["total"] or 0
+    if usadas + len(imagenes_api) > limite_fotos:
+        return JsonResponse({"error": f"Tu plan permite {limite_fotos} fotografías por período. Te quedan {max(0, limite_fotos-usadas)}.", "fotos_restantes": max(0, limite_fotos-usadas)}, status=429)
     historial = data.get("historial", [])
     if not isinstance(historial, list):
         historial = []
@@ -3115,6 +3147,11 @@ def digital_aquo_chat_api_view(request):
     precedentes = "\n".join(f"Caso verificado {i+1}: síntoma: {c.problema[:450]}; tratamiento realmente aplicado: {c.tratamiento_aplicado[:550]}; resultado: {c.observaciones[:350]}" for i,c in enumerate(experiencias))
     instrucciones = ("Eres AQUO, especialista técnico de piscinas de JVAQUA. Responde en español natural, claro y conciso, "
       "con hipótesis diferenciadas, comprobaciones útiles y seguimiento contextual. Nunca repitas preguntas respondidas. "
+      "Inicia con orientación útil y luego pregunta si es consulta libre o sobre piscina registrada; si ya se seleccionó piscina no lo repitas. "
+      "Para consulta libre pide volumen o largo, ancho y profundidad media, calcula volumen = largo × ancho × profundidad media si es rectangular. "
+      "Pregunta pH y cloro solo si son pertinentes y no se proporcionaron. Para consultas informativas responde directamente. "
+      "Si hay foto, describe únicamente lo visible, no deduzcas pH, cloro ni averías internas de una imagen. "
+      "No tienes acceso a internet en tiempo real: no inventes consultas a manuales ni fuentes externas. "
       "Distingue observación, hipótesis y diagnóstico confirmado; no inventes inspecciones, pruebas ni resultados. "
       "Analiza especialmente el orden temporal de los síntomas. Si agua cristalina se torna verde inmediatamente después "
       "de añadir cloro, considera oxidación de hierro/cobre y otras causas, sin asumir algas ni recomendar automáticamente choque. "
@@ -3130,7 +3167,8 @@ def digital_aquo_chat_api_view(request):
     for item in historial[-12:]:
         if isinstance(item, dict) and item.get("role") in ("user", "assistant") and isinstance(item.get("content"), str):
             mensajes.append({"role": item["role"], "content": item["content"][:2000]})
-    mensajes.append({"role": "user", "content": mensaje.strip()})
+    contenido_usuario = [{"type": "text", "text": mensaje.strip() or "Analiza esta fotografía de mi piscina o equipo y dime qué observas y qué datos necesitas para orientar el diagnóstico."}] + imagenes_api
+    mensajes.append({"role": "user", "content": contenido_usuario if imagenes_api else mensaje.strip()})
     try:
         respuesta = requests.post("https://api.openai.com/v1/chat/completions",
             headers={"Authorization": "Bearer " + api_key, "Content-Type": "application/json"},
@@ -3141,8 +3179,19 @@ def digital_aquo_chat_api_view(request):
         contenido = respuesta.json()["choices"][0]["message"]["content"]
         if not isinstance(contenido, str) or not contenido.strip():
             raise ValueError("Respuesta vacía")
+        if imagenes_api:
+            # La cuota solo se descuenta después de obtener respuesta válida.
+            # Bloqueo transaccional para evitar superar el cupo con peticiones simultáneas.
+            from django.db import transaction
+            with transaction.atomic():
+                PerfilSuscriptor.objects.select_for_update().get(pk=perfil.pk)
+                usadas_actual = ConsumoImagenAquo.objects.filter(suscriptor=perfil, creado_en__date__gte=periodo_inicio).aggregate(total=Sum("cantidad"))["total"] or 0
+                if usadas_actual + len(imagenes_api) > limite_fotos:
+                    return JsonResponse({"error": "Se alcanzó el cupo de fotografías de tu plan."}, status=429)
+                ConsumoImagenAquo.objects.create(suscriptor=perfil, cantidad=len(imagenes_api))
+                usadas = usadas_actual + len(imagenes_api)
         # El caso se registra como pendiente; nunca se incorpora automáticamente al conocimiento global.
         caso = ExperienciaAquo.objects.create(usuario=request.user, piscina=piscina, problema=mensaje.strip(), orientacion=contenido.strip())
-        return JsonResponse({"respuesta": contenido.strip(), "caso_id": caso.pk})
+        return JsonResponse({"respuesta": contenido.strip(), "caso_id": caso.pk, "fotos_restantes": max(0, limite_fotos-usadas)})
     except (requests.RequestException, ValueError, KeyError, IndexError, TypeError):
         return JsonResponse({"error": "No fue posible obtener una respuesta. Intenta nuevamente."}, status=502)
