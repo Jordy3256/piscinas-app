@@ -1123,3 +1123,24 @@ class AvisoAdministrativoAquo(models.Model):
 
     def __str__(self):
         return f"{self.usuario} · {self.titulo}"
+
+
+class ExperienciaAquo(models.Model):
+    """Caso conversacional: solo la validación técnica habilita reutilización entre usuarios."""
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="experiencias_aquo")
+    piscina = models.ForeignKey("PiscinaSuscriptor", on_delete=models.SET_NULL, null=True, blank=True, related_name="experiencias_aquo")
+    problema = models.TextField(max_length=2000)
+    orientacion = models.TextField(max_length=4000)
+    tratamiento_aplicado = models.TextField(max_length=2000, blank=True)
+    resultado_reportado = models.CharField(max_length=15, choices=[("pendiente", "Pendiente"), ("favorable", "Favorable"), ("parcial", "Parcial"), ("fallido", "Fallido")], default="pendiente", db_index=True)
+    observaciones = models.TextField(max_length=2000, blank=True)
+    validado_tecnicamente = models.BooleanField(default=False, db_index=True)
+    publicado_como_conocimiento = models.BooleanField(default=False, db_index=True)
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-creado_en"]
+
+    def __str__(self):
+        return f"Caso AQUO #{self.pk} - {self.get_resultado_reportado_display()}"

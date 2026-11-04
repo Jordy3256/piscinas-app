@@ -31,6 +31,22 @@
 .aquo-context-btn:hover{background:#e6f6ff}
 .aquo-volumen-panel{background:#f0f9ff;padding:10px 13px;border-radius:13px;border:1px solid #d4eafa}
 .aquo-volumen-panel summary{cursor:pointer;font-size:.8rem;font-weight:800;color:#17648d}
+
+/* AQUO360 IA V2.2: conversación futurista, navegación inferior despejada */
+.resolver-shell{max-width:1080px;padding-bottom:115px}
+.chat-layout{grid-template-columns:minmax(0,1fr)}
+.chat-card{background:linear-gradient(155deg,#fff 0%,#f4faff 100%);border:1px solid #cde7f5;box-shadow:0 20px 60px rgba(3,77,136,.11);border-radius:26px}
+.chat-top{background:linear-gradient(110deg,#e7f5ff,#f9fdff);border-bottom:1px solid #d6eaf8}
+.aqua-chat-avatar{background:linear-gradient(145deg,#b6e4ff,#eaf7ff)!important;border:2px solid #fff!important;box-shadow:0 4px 18px rgba(0,98,179,.18)!important;overflow:hidden}
+.aqua-chat-avatar img{width:100%;height:100%;object-fit:cover;object-position:center 18%;display:block}
+.chat-body{max-height:min(65vh,700px);overflow-y:auto;overscroll-behavior:contain;scrollbar-color:#9ad6f0 transparent;scrollbar-width:thin;min-height:410px}
+.chat-compose{position:relative;z-index:2;background:#fff;border-top:1px solid #d8eaf7}
+.aquo-compose-hint{background:#fff}
+.assistant .bubble{background:#edf7fd;border:1px solid #d3e9f7;box-shadow:0 4px 16px rgba(0,83,135,.04)}
+.aquo-feedback{margin:0 0 22px 48px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;color:#50758e;font-size:.8rem}
+.aquo-feedback button{border:1px solid #c9e3f2;background:#fff;border-radius:12px;color:#086ba5;padding:7px 10px;font-weight:750;cursor:pointer}
+.aquo-feedback button:hover{background:#e6f7ff}
+@media(max-width:600px){.resolver-shell{padding-bottom:125px}.chat-body{max-height:58vh;min-height:350px}.aquo-feedback{margin-left:0}}
 </style>
 {% endblock %}
 {% block content %}
@@ -38,7 +54,7 @@
   <nav class="d-flex gap-2 flex-wrap mb-3" aria-label="Centro AQUO"><a class="btn btn-sm btn-outline-primary rounded-pill" href="{% url 'asistente_tecnico:digital_centro_aquo' %}"><i class="bi bi-arrow-left me-1"></i>Centro AQUO</a><a class="btn btn-sm btn-outline-secondary rounded-pill" href="{% url 'asistente_tecnico:academia_cms' %}?modo=aprender">Curso</a><a class="btn btn-sm btn-outline-secondary rounded-pill" href="{% url 'asistente_tecnico:academia_cms' %}?modo=consultar">Biblioteca</a></nav>
   <div class="chat-layout">
     <section class="chat-card">
-      <div class="chat-top"><div class="aqua-chat-avatar"><img src="{% static 'asistente_tecnico/characters/aquo-avatar-hq.webp' %}" alt="AQUO" class="aquo-portrait"></div><div><strong>AQUO</strong><div class="online">Tu asistente para piscinas</div></div></div>
+      <div class="chat-top"><div class="aqua-chat-avatar"><img src="{% static 'asistente_tecnico/characters/aquo-chat-oficial.webp' %}" alt="AQUO" class="aquo-portrait"></div><div><strong>AQUO</strong><div class="online">Tu asistente para piscinas</div></div></div>
       <form method="post" id="resolverForm">{% csrf_token %}{% if piscina %}<input type="hidden" name="piscina_id" value="{{piscina.pk}}">{% endif %}{% if not piscina %}<input type="hidden" name="consulta_libre" value="1">
 <details class="aquo-volumen-panel mx-3 mt-3"><summary><i class="bi bi-droplet-half me-1"></i> Volumen para cálculos de dosis (opcional al consultar)</summary><div class="pt-2"><label class="form-label small fw-bold" for="volumenLibre">Volumen de la piscina (m³)</label><input id="volumenLibre" name="volumen_m3" type="number" step="0.01" min="0.01" max="100000" class="form-control" placeholder="Ej. 35"><small class="text-muted">Solo necesario para calcular cantidades químicas.</small></div></details>{% endif %}<input type="hidden" name="estado_agua" id="estadoField" value=""><input type="hidden" name="categoria_consulta" id="categoryField" value="agua">
       <div class="chat-body" id="chatBody">
@@ -112,7 +128,7 @@
   </div>
   {% endif %}
 </div>
-<template id="aquaMiniTemplate"></template>
+<template id="aquaMiniTemplate"><div class="aqua-chat-avatar small"><img src="{% static 'asistente_tecnico/characters/aquo-chat-oficial.webp' %}" alt="AQUO"></div></template>
 <script>
 const aquaMiniTemplate=document.getElementById('aquaMiniTemplate')?.innerHTML||'';
 const categoryField=document.getElementById('categoryField'),stateField=document.getElementById('estadoField');
@@ -153,7 +169,7 @@ function interpretAquo(text){
  for(const [rx,cat] of rules){if(rx.test(q))return {entry:'otro',category:cat,msg:'Entendí el síntoma. Voy a abrir el diagnóstico que mejor coincide y puedes corregirme con las opciones si hace falta.'}}
  return {entry:null,msg:'Todavía no tengo suficiente información para clasificarlo con seguridad. ¿Es un problema con el estado del agua o con otra parte de la piscina?'};
 }
-const aquoHistory=[];
+const aquoHistory=[];let aquoLastCaseId=null;
 async function processFreeText(){
  const text=(freeInput?.value||'').trim();if(!text||sendFree?.disabled)return;
  const row=document.createElement('div');row.className='msg-row user dynamic-msg';row.innerHTML=`<div class="bubble">${escAquo(text)}</div>`;chatBody.appendChild(row);freeInput.value='';
@@ -164,11 +180,13 @@ async function processFreeText(){
    const data=await response.json();
    const reply=response.ok?data.respuesta:(data.error||'No pude responder en este momento.');
    const a=document.createElement('div');a.className='msg-row assistant dynamic-msg';a.innerHTML=aquaMiniTemplate+`<div class="bubble">${escAquo(reply)}</div>`;chatBody.appendChild(a);
-   if(response.ok){aquoHistory.push({role:'user',content:text},{role:'assistant',content:reply});if(aquoHistory.length>20)aquoHistory.splice(0,aquoHistory.length-20)}
+   if(response.ok){aquoLastCaseId=data.caso_id||null;aquoHistory.push({role:'user',content:text},{role:'assistant',content:reply});if(aquoHistory.length>20)aquoHistory.splice(0,aquoHistory.length-20)}
+   if(response.ok&&aquoLastCaseId){const bar=document.createElement('div');bar.className='aquo-feedback';bar.innerHTML='<span>¿El tratamiento resolvió tu problema?</span><button type="button" data-result="favorable">Sí, quedó resuelto</button><button type="button" data-result="parcial">Parcialmente</button><button type="button" data-result="fallido">No funcionó</button>';bar.dataset.casoId=aquoLastCaseId;chatBody.appendChild(bar)}
    a.scrollIntoView({behavior:'smooth',block:'nearest'});
  }catch(err){const a=document.createElement('div');a.className='msg-row assistant dynamic-msg';a.innerHTML=aquaMiniTemplate+'<div class="bubble">No tengo conexión con el motor de IA en este momento. Puedes utilizar el diagnóstico técnico de la página.</div>';chatBody.appendChild(a)}
  finally{thinking.remove();if(sendFree)sendFree.disabled=false;freeInput?.focus()}
 }
+chatBody?.addEventListener('click',async(e)=>{const btn=e.target.closest('.aquo-feedback button');if(!btn)return;const bar=btn.closest('.aquo-feedback');const resultado=btn.dataset.result;const tratamiento=prompt('¿Qué tratamiento aplicaste realmente? (opcional)')||'';const observaciones=prompt('¿Qué ocurrió después? Describe el resultado para que un técnico pueda revisarlo. (opcional)')||'';btn.disabled=true;try{const csrf=document.querySelector('#resolverForm input[name=csrfmiddlewaretoken]')?.value||'';const r=await fetch('{% url "asistente_tecnico:digital_aquo_resultado_api" %}',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRFToken':csrf},body:JSON.stringify({caso_id:Number(bar.dataset.casoId),resultado,tratamiento,observaciones})});if(!r.ok)throw Error('error');bar.textContent='Gracias. Tu resultado quedó registrado y pendiente de revisión técnica.'}catch(err){btn.disabled=false;alert('No se pudo guardar el resultado. Inténtalo nuevamente.')}});
 sendFree?.addEventListener('click',processFreeText);freeInput?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();processFreeText()}});
 const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
 if(SpeechRecognition&&voiceBtn){const rec=new SpeechRecognition();rec.lang='es-EC';rec.interimResults=false;rec.maxAlternatives=1;voiceBtn.addEventListener('click',()=>{try{rec.start();voiceBtn.classList.add('listening');document.getElementById('voiceHint').textContent='Escuchando… habla con naturalidad.'}catch(e){}});rec.onresult=e=>{freeInput.value=e.results[0][0].transcript;processFreeText()};rec.onend=()=>{voiceBtn.classList.remove('listening');document.getElementById('voiceHint').textContent='Puedes conversar libremente o usar el diagnóstico guiado de esta página.'};rec.onerror=rec.onend}else if(voiceBtn){voiceBtn.style.display='none'}

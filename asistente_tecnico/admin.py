@@ -96,3 +96,21 @@ class MensajeSoporteDigitalAdmin(admin.ModelAdmin):
 
 
 admin.site.register(AdjuntoSoporteDigital)
+
+
+from .models import ExperienciaAquo
+
+@admin.register(ExperienciaAquo)
+class ExperienciaAquoAdmin(admin.ModelAdmin):
+    list_display = ("id", "usuario", "resultado_reportado", "validado_tecnicamente", "publicado_como_conocimiento", "creado_en")
+    list_filter = ("resultado_reportado", "validado_tecnicamente", "publicado_como_conocimiento")
+    search_fields = ("problema", "tratamiento_aplicado", "observaciones")
+    readonly_fields = ("usuario", "piscina", "problema", "orientacion", "tratamiento_aplicado", "resultado_reportado", "observaciones", "creado_en", "actualizado_en")
+
+    def save_model(self, request, obj, form, change):
+        if obj.resultado_reportado != "favorable":
+            obj.validado_tecnicamente = False
+            obj.publicado_como_conocimiento = False
+        if not obj.validado_tecnicamente:
+            obj.publicado_como_conocimiento = False
+        super().save_model(request, obj, form, change)
