@@ -49,11 +49,32 @@
 @media(max-width:600px){.resolver-shell{padding-bottom:125px}.chat-body{max-height:58vh;min-height:350px}.aquo-feedback{margin-left:0}}
 .aquo-photo-preview{display:flex;gap:8px;padding:0 16px;flex-wrap:wrap}.aquo-photo-thumb{position:relative;display:inline-flex}.aquo-photo-thumb img{width:72px;height:72px;object-fit:cover;border-radius:12px;border:1px solid #d5e9f5}.aquo-photo-thumb button{position:absolute;right:-5px;top:-7px;background:#fff;border:1px solid #bed7e8;border-radius:50%;width:23px;height:23px;cursor:pointer}.aquo-sent-photo{display:block;max-width:200px;max-height:170px;object-fit:contain;border-radius:12px;margin-top:8px}.aquo-photo-label{cursor:pointer}.chat-card{margin-bottom:115px}.chat-compose{padding-bottom:10px}.chat-body{min-height:420px;max-height:65vh;overflow-y:auto}
 .aquo-pool-context{display:flex;gap:8px;align-items:center;padding:9px 16px;color:#557991;font-size:.82rem;background:#f8fcff}.aquo-pool-context select{max-width:230px;border:1px solid #cde5f4;border-radius:12px;padding:6px 9px;background:white;color:#12547d}
+
+/* AQUO360 V2.4 — interfaz viva y compacta, sin alterar el envío de imágenes */
+.resolver-shell{max-width:1320px}
+.resolver-shell>nav{margin-bottom:12px!important}
+.chat-layout{display:block}
+.chat-card{position:relative;isolation:isolate;border:1px solid #b5e5fa!important;border-radius:28px!important;overflow:hidden;background:#fff!important;box-shadow:0 24px 65px rgba(5,84,159,.15)!important;margin-bottom:112px!important}
+.chat-card:before{content:"";position:absolute;top:0;right:0;width:270px;height:180px;background:radial-gradient(circle,rgba(0,213,225,.15),transparent 72%);pointer-events:none;z-index:-1}
+.chat-top{padding:17px 22px!important;background:linear-gradient(110deg,#0757b2 0%,#078fd1 64%,#00bfd0 100%)!important;color:white!important;border-bottom:0!important}
+.chat-top strong{color:white!important;font-size:1.16rem;letter-spacing:.015em}
+.chat-top .online{color:#e2fff6!important}.chat-top .online:before{background:#61ffb4;box-shadow:0 0 0 4px rgba(97,255,180,.17)}
+.chat-top .aqua-chat-avatar{width:56px!important;height:56px!important;flex:none;border:2px solid rgba(255,255,255,.9)!important}
+.aquo-pool-context{background:#effaff!important;border-bottom:1px solid #dbf0fa;padding:8px 20px!important}
+.chat-body{background:radial-gradient(ellipse at 85% 0%,#e8f9ff 0%,transparent 48%),linear-gradient(180deg,#fff,#f8fcff)!important;min-height:300px!important;height:min(57vh,610px);max-height:none!important;padding:20px!important;scrollbar-color:#6cc7e9 transparent}
+.assistant .bubble{background:linear-gradient(140deg,#eff9ff,#eaf5fd)!important;border:1px solid #cde7f5!important;box-shadow:0 5px 15px rgba(4,93,145,.05)!important}
+.user .bubble{background:linear-gradient(120deg,#0867cc,#009fc6)!important;box-shadow:0 9px 25px rgba(5,118,189,.17)!important}
+.chat-compose{background:#fff!important;padding:12px 16px 8px!important;gap:9px!important}
+.aquo-free-input{border-radius:18px!important;background:#f6fbff!important;border:1px solid #cce7f6!important;min-height:52px!important}
+.aquo-free-input:focus{background:#fff!important;border-color:#21addb!important;box-shadow:0 0 0 4px rgba(17,174,221,.12)!important}
+.send-btn{background:linear-gradient(135deg,#076ac9,#00a9ce)!important;box-shadow:0 8px 22px rgba(4,130,192,.22)!important}
+.aquo-compose-hint{font-size:.72rem!important;color:#6a8da5!important;padding-bottom:9px!important}
+@media(max-width:767.98px){.resolver-shell{padding-bottom:95px!important}.chat-card{margin-bottom:95px!important;border-radius:21px!important}.chat-body{height:min(56dvh,570px);min-height:260px!important;padding:13px!important}.chat-top{padding:12px 15px!important}.chat-compose{padding:10px!important}.aquo-compose-hint{font-size:.67rem!important}}
 </style>
 {% endblock %}
 {% block content %}
 <div class="resolver-shell">
-  <nav class="d-flex gap-2 flex-wrap mb-3" aria-label="Centro AQUO"><a class="btn btn-sm btn-outline-primary rounded-pill" href="{% url 'asistente_tecnico:digital_centro_aquo' %}"><i class="bi bi-arrow-left me-1"></i>Centro AQUO</a><a class="btn btn-sm btn-outline-secondary rounded-pill" href="{% url 'asistente_tecnico:academia_cms' %}?modo=aprender">Curso</a><a class="btn btn-sm btn-outline-secondary rounded-pill" href="{% url 'asistente_tecnico:academia_cms' %}?modo=consultar">Biblioteca</a></nav>
+  <nav class="d-flex gap-2 flex-wrap mb-3" aria-label="Centro AQUO"><a class="btn btn-sm btn-outline-primary rounded-pill" href="{% url 'asistente_tecnico:digital_inicio' %}"><i class="bi bi-arrow-left me-1"></i>Inicio</a><a class="btn btn-sm btn-outline-secondary rounded-pill" href="{% url 'asistente_tecnico:digital_academia_portal' %}">Curso</a><a class="btn btn-sm btn-outline-secondary rounded-pill" href="{% url 'asistente_tecnico:digital_academia_portal' %}">Biblioteca</a></nav>
   <div class="chat-layout">
     <section class="chat-card">
       <div class="chat-top"><div class="aqua-chat-avatar"><img src="{% static 'asistente_tecnico/characters/aquo-chat-oficial.webp' %}" alt="AQUO" class="aquo-portrait"></div><div><strong>AQUO</strong><div class="online">Tu asistente para piscinas</div></div></div>
@@ -186,7 +207,7 @@ async function processFreeText(){
    const a=document.createElement('div');a.className='msg-row assistant dynamic-msg';a.innerHTML=aquaMiniTemplate+`<div class="bubble">${escAquo(reply)}</div>`;chatBody.appendChild(a);
    if(!response.ok&&sentPhotos.length){aquoPhotos=sentPhotos;renderAquoPhotos()}
    if(response.ok){aquoLastCaseId=data.caso_id||null;aquoHistory.push({role:'user',content:text},{role:'assistant',content:reply});if(aquoHistory.length>20)aquoHistory.splice(0,aquoHistory.length-20)}
-   if(response.ok&&aquoLastCaseId){const bar=document.createElement('div');bar.className='aquo-feedback';bar.innerHTML='<span>¿El tratamiento resolvió tu problema?</span><button type="button" data-result="favorable">Sí, quedó resuelto</button><button type="button" data-result="parcial">Parcialmente</button><button type="button" data-result="fallido">No funcionó</button>';bar.dataset.casoId=aquoLastCaseId;chatBody.appendChild(bar)}
+   if(response.ok&&aquoLastCaseId&&/\b(tratamiento aplicado|apliqué|aplique|realicé el tratamiento|seguí los pasos|ya hice el tratamiento)\b/i.test(text)){const bar=document.createElement('div');bar.className='aquo-feedback';bar.innerHTML='<span>¿El tratamiento resolvió tu problema?</span><button type="button" data-result="favorable">Sí, quedó resuelto</button><button type="button" data-result="parcial">Parcialmente</button><button type="button" data-result="fallido">No funcionó</button>';bar.dataset.casoId=aquoLastCaseId;chatBody.appendChild(bar)}
    a.scrollIntoView({behavior:'smooth',block:'nearest'});
  }catch(err){const a=document.createElement('div');a.className='msg-row assistant dynamic-msg';a.innerHTML=aquaMiniTemplate+'<div class="bubble">No tengo conexión con el motor de IA en este momento. Puedes utilizar el diagnóstico técnico de la página.</div>';chatBody.appendChild(a)}
  finally{thinking.remove();if(sendFree)sendFree.disabled=false;freeInput?.focus()}

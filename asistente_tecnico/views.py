@@ -1579,6 +1579,33 @@ def digital_inicio_view(request):
 @login_required
 @require_http_methods(["GET"])
 def digital_centro_aquo_view(request):
+    """Compatibilidad: el antiguo Centro AQUO ahora abre directamente el chat."""
+    if not _suscriptor(request.user):
+        return HttpResponseForbidden("Acceso exclusivo de suscriptores AQUO360 activos.")
+    return redirect("asistente_tecnico:digital_resolver")
+
+
+@login_required
+@require_http_methods(["GET"])
+def digital_academia_portal_view(request):
+    """Portal independiente de curso y biblioteca; conserva el progreso existente."""
+    perfil = _suscriptor(request.user)
+    if not perfil:
+        return HttpResponseForbidden("Acceso exclusivo de suscriptores AQUO360 activos.")
+    contenidos = ContenidoAcademia.objects.filter(estado="aprobado").exclude(acceso="interno")
+    curso = contenidos.exclude(modulo_curso="")
+    total = curso.count()
+    completados = ProgresoContenidoAcademia.objects.filter(user=request.user, completado=True, contenido__in=curso).count()
+    porcentaje = round(100 * completados / total) if total else 0
+    return render(request, "asistente_tecnico/digital_centro_aquo.html", {
+        "perfil": perfil, "curso_total": total, "curso_completados": completados,
+        "curso_porcentaje": porcentaje,
+    })
+
+
+@login_required
+@require_http_methods(["GET"])
+def _digital_centro_aquo_legacy_view(request):
     """Portal educativo y de diagnóstico exclusivo de suscriptores activos.
 
     No consulta modelos operativos del ERP interno de JVAQUA.
@@ -3147,7 +3174,11 @@ def digital_aquo_chat_api_view(request):
     precedentes = "\n".join(f"Caso verificado {i+1}: síntoma: {c.problema[:450]}; tratamiento realmente aplicado: {c.tratamiento_aplicado[:550]}; resultado: {c.observaciones[:350]}" for i,c in enumerate(experiencias))
     instrucciones = ("Eres AQUO, especialista técnico de piscinas de JVAQUA. Responde en español natural, claro y conciso, "
       "con hipótesis diferenciadas, comprobaciones útiles y seguimiento contextual. Nunca repitas preguntas respondidas. "
-      "Inicia con orientación útil y luego pregunta si es consulta libre o sobre piscina registrada; si ya se seleccionó piscina no lo repitas. "
+      "En respuestas habituales usa entre 40 y 90 palabras, con máximo una pregunta concreta al final. "
+      "Si el usuario solicita explicación detallada o hay un riesgo importante, amplía lo necesario. "
+      "No enumeres cuestionarios ni solicites seis datos de golpe: prioriza el siguiente dato que cambie el diagnóstico. "
+      "Si faltan datos, ofrece primero una orientación breve y segura, sin fingir certeza. "
+      "No obligues a elegir contexto para preguntas generales; solo consulta si es una piscina registrada cuando aporte valor. "
       "Para consulta libre pide volumen o largo, ancho y profundidad media, calcula volumen = largo × ancho × profundidad media si es rectangular. "
       "Pregunta pH y cloro solo si son pertinentes y no se proporcionaron. Para consultas informativas responde directamente. "
       "Si hay foto, describe únicamente lo visible, no deduzcas pH, cloro ni averías internas de una imagen. "

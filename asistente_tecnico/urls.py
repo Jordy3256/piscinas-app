@@ -17,6 +17,7 @@ urlpatterns = [
     path("administracion/suscripciones-digitales/<int:pk>/revisar/", views.digital_suscripcion_revisar_view, name="digital_suscripcion_revisar"),
     path("digital/", views.digital_inicio_view, name="digital_inicio"),
     path("digital/aquo/", views.digital_centro_aquo_view, name="digital_centro_aquo"),
+    path("digital/academia/", views.digital_academia_portal_view, name="digital_academia_portal"),
     path("digital/resolver/", views.digital_resolver_view, name="digital_resolver"),
     path("digital/aquo/chat/", views.digital_aquo_chat_api_view, name="digital_aquo_chat_api"),
     path("digital/aquo/resultado/", views.digital_aquo_resultado_api_view, name="digital_aquo_resultado_api"),
