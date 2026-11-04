@@ -3109,7 +3109,7 @@ def digital_aquo_chat_api_view(request):
     from datetime import timedelta
     limite_fotos = {"individual": 3, "esencial": 10, "profesional": 50, "empresarial": 200}.get(perfil.plan, 3)
     # Cupo por mes calendario; reinicia el primer día de cada mes.
-    periodo_inicio = hoy.replace(day=1)
+    periodo_inicio = tz.localdate().replace(day=1)
     usadas = ConsumoImagenAquo.objects.filter(suscriptor=perfil, creado_en__date__gte=periodo_inicio).aggregate(total=Sum("cantidad"))["total"] or 0
     if usadas + len(imagenes_api) > limite_fotos:
         return JsonResponse({"error": f"Tu plan permite {limite_fotos} fotografías por período. Te quedan {max(0, limite_fotos-usadas)}.", "fotos_restantes": max(0, limite_fotos-usadas)}, status=429)
