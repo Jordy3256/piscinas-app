@@ -3100,32 +3100,6 @@ def digital_aquo_resultado_api_view(request):
 
 
 @login_required
-@require_http_methods(["GET", "POST"])
-def digital_aquo_conversaciones_api_view(request):
-    """Lista, abre o crea conversaciones del usuario autenticado."""
-    from .models import ConversacionAquo
-    if not _suscriptor(request.user):
-        return JsonResponse({"error": "No autorizado."}, status=403)
-    qs = ConversacionAquo.objects.filter(usuario=request.user)
-    if request.method == "GET":
-        cid = request.GET.get("id")
-        if cid:
-            conv = qs.filter(pk=cid).first() if cid.isdigit() else None
-            if not conv:
-                return JsonResponse({"error": "Conversación no encontrada."}, status=404)
-            return JsonResponse({"id": conv.pk, "titulo": conv.titulo, "piscina_id": conv.piscina_id, "mensajes": conv.mensajes})
-        return JsonResponse({"conversaciones": [{"id": c.pk, "titulo": c.titulo, "actualizado": c.actualizado_en.isoformat()} for c in qs[:30]]})
-    try:
-        payload = json.loads(request.body)
-    except (ValueError, UnicodeDecodeError):
-        return JsonResponse({"error": "Datos inválidos."}, status=400)
-    if payload.get("accion") != "nueva":
-        return JsonResponse({"error": "Acción no válida."}, status=400)
-    conv = ConversacionAquo.objects.create(usuario=request.user)
-    return JsonResponse({"id": conv.pk, "titulo": conv.titulo}, status=201)
-
-
-@login_required
 @require_http_methods(["POST"])
 def digital_aquo_chat_api_view(request):
     """Conversación opcional con IA. Nunca calcula dosis fuera del motor validado."""
@@ -3177,13 +3151,9 @@ def digital_aquo_chat_api_view(request):
     usadas = ConsumoImagenAquo.objects.filter(suscriptor=perfil, creado_en__date__gte=periodo_inicio).aggregate(total=Sum("cantidad"))["total"] or 0
     if usadas + len(imagenes_api) > limite_fotos:
         return JsonResponse({"error": f"Tu plan permite {limite_fotos} fotografías por período. Te quedan {max(0, limite_fotos-usadas)}.", "fotos_restantes": max(0, limite_fotos-usadas)}, status=429)
-    from .models import ConversacionAquo
-    cid = data.get("conversacion_id")
-    conversacion = ConversacionAquo.objects.filter(usuario=request.user, pk=cid).first() if str(cid).isdigit() else None
-    if cid and not conversacion:
-        return JsonResponse({"error": "Conversación no encontrada."}, status=404)
-    # Historial autoritativo desde la base de datos, nunca desde el navegador.
-    historial = conversacion.mensajes if conversacion else []
+    historial = data.get("historial", [])
+    if not isinstance(historial, list):
+        historial = []
     # Límite de peticiones por usuario: evita consumo accidental o abusivo.
     from django.utils import timezone as tz
     clave = f"aquo_ia_rate_{request.user.pk}_{tz.now().strftime('%Y%m%d%H%M')}"
@@ -3198,7 +3168,28 @@ def digital_aquo_chat_api_view(request):
     pid = data.get("piscina_id")
     if isinstance(pid, (str, int)) and str(pid).isdigit():
         piscina = perfil.piscinas.filter(pk=int(pid), activa=True).first()
-    contexto = "Consulta libre sin piscina seleccionada."
+    # La selección ocurre en la conversación, nunca en un selector externo.
+    # Revisar también las respuestas anteriores para conservar una elección explícita.
+    import unicodedata
+    def _normalizar_contexto(valor):
+        return "".join(c for c in unicodedata.normalize("NFD", valor.lower()) if unicodedata.category(c) != "Mn")
+    texto_contexto = _normalizar_contexto(mensaje)
+    historial_texto = " ".join(item.get("content", "") for item in historial[-12:]
+                              if isinstance(item, dict) and item.get("role") == "user" and isinstance(item.get("content"), str))
+    historial_contexto = _normalizar_contexto(historial_texto)
+    consulta_libre = any(exp in texto_contexto for exp in ("consulta libre", "sin registrar", "no es mi piscina", "no esta registrada"))
+    pide_registrada = any(exp in texto_contexto for exp in ("mi piscina registrada", "piscina registrada", "usar mi piscina", "sobre mi piscina", "de mi piscina"))
+    habia_elegido_registrada = any(exp in historial_contexto for exp in ("mi piscina registrada", "piscina registrada", "usar mi piscina", "sobre mi piscina", "de mi piscina"))
+    if not piscina and not consulta_libre and (pide_registrada or habia_elegido_registrada):
+        piscinas_activas = list(perfil.piscinas.filter(activa=True).order_by("pk")[:31])
+        if len(piscinas_activas) == 1:
+            piscina = piscinas_activas[0]
+        elif piscinas_activas:
+            for candidata in piscinas_activas:
+                if _normalizar_contexto(candidata.nombre) in texto_contexto or _normalizar_contexto(candidata.nombre) in historial_contexto:
+                    piscina = candidata
+                    break
+    contexto = "Consulta libre o contexto aún no elegido. No presupongas que es una piscina registrada."
     if piscina:
         contexto = f"Piscina: {piscina.nombre}; volumen: {piscina.volumen_m3} m3; tipo: {piscina.tipo_piscina}; origen del agua: {piscina.origen_agua}."
     from .models import ExperienciaAquo
@@ -3219,23 +3210,12 @@ def digital_aquo_chat_api_view(request):
       "Si el usuario solicita explicación detallada o hay un riesgo importante, amplía lo necesario. "
       "No enumeres cuestionarios ni solicites seis datos de golpe: prioriza el siguiente dato que cambie el diagnóstico. "
       "Si faltan datos, ofrece primero una orientación breve y segura, sin fingir certeza. "
-      "No obligues a elegir contexto para preguntas generales; solo consulta si es una piscina registrada cuando aporte valor. "
+      "No obligues a elegir contexto para preguntas generales. Cuando el diagnóstico requiera volumen o datos propios, pregunta de forma natural si desea usar una piscina registrada o hacer una consulta libre; espera su respuesta. Si hay varias piscinas registradas, pide su nombre. "
       "Para consulta libre pide volumen o largo, ancho y profundidad media, calcula volumen = largo × ancho × profundidad media si es rectangular. "
       "Pregunta pH y cloro solo si son pertinentes y no se proporcionaron. Para consultas informativas responde directamente. "
       "Si hay foto, describe únicamente lo visible, no deduzcas pH, cloro ni averías internas de una imagen. "
       "No tienes acceso a internet en tiempo real: no inventes consultas a manuales ni fuentes externas. "
       "Distingue observación, hipótesis y diagnóstico confirmado; no inventes inspecciones, pruebas ni resultados. "
-      "Conduce el diagnóstico por etapas y con una sola pregunta por turno. Ante agua completamente verde tras lluvia, "
-      "explica que la lluvia puede alterar la química, pide pH y cloro libre si faltan, y después plantea "
-      "opciones de recuperación según el estado del agua y la instalación, sin prometer resultados. "
-      "Si el usuario elige floculación, comprueba primero que el producto es compatible con el filtro y que "
-      "puede aspirar a desagüe. Si la piscina está registrada, usa su volumen sin volver a preguntarlo. "
-      "Guía el procedimiento en etapas: nivel de agua adecuado, verificación de válvulas y equipo, "
-      "dosificación únicamente con producto e instrucciones validadas, mezcla o recirculación según etiqueta, "
-      "sedimentación con bomba detenida cuando corresponda, y aspiración lenta a desagüe solo si es posible. "
-      "Nunca indicar mover la multiválvula con la bomba encendida; nunca cerrar todas las vías de succión, "
-      "ni permitir que la bomba funcione en seco. Indicar que una floculación no sustituye la desinfección. "
-      "Evita recomendar vinagre u otros remedios domésticos para modificar pH. "
       "Para agua completamente verde o con algas visibles, no la confundas con simple turbidez. Explica brevemente que "
       "la recuperación requiere controlar algas mediante desinfección adecuada, filtración y retirada de residuos. "
       "Considera la floculación y posterior aspirado a desagüe como opción especialmente útil para agua muy verde "
@@ -3281,23 +3261,8 @@ def digital_aquo_chat_api_view(request):
                     return JsonResponse({"error": "Se alcanzó el cupo de fotografías de tu plan."}, status=429)
                 ConsumoImagenAquo.objects.create(suscriptor=perfil, cantidad=len(imagenes_api))
                 usadas = usadas_actual + len(imagenes_api)
-        # Guardar solo intercambios exitosos. Las imágenes no se conservan en la BD.
-        from django.db import transaction
-        with transaction.atomic():
-            if conversacion:
-                conversacion = ConversacionAquo.objects.select_for_update().get(pk=conversacion.pk, usuario=request.user)
-            else:
-                conversacion = ConversacionAquo(usuario=request.user)
-            if not conversacion.mensajes:
-                conversacion.titulo = (mensaje.strip()[:90] or "Consulta con fotografía")
-            conversacion.piscina = piscina
-            conversacion.mensajes = (conversacion.mensajes + [
-                {"role": "user", "content": mensaje.strip() or "[Fotografía enviada]"},
-                {"role": "assistant", "content": contenido.strip()},
-            ])[-100:]
-            conversacion.save()
         # El caso se registra como pendiente; nunca se incorpora automáticamente al conocimiento global.
         caso = ExperienciaAquo.objects.create(usuario=request.user, piscina=piscina, problema=mensaje.strip(), orientacion=contenido.strip())
-        return JsonResponse({"respuesta": contenido.strip(), "caso_id": caso.pk, "conversacion_id": conversacion.pk, "fotos_restantes": max(0, limite_fotos-usadas)})
+        return JsonResponse({"respuesta": contenido.strip(), "caso_id": caso.pk, "fotos_restantes": max(0, limite_fotos-usadas)})
     except (requests.RequestException, ValueError, KeyError, IndexError, TypeError):
         return JsonResponse({"error": "No fue posible obtener una respuesta. Intenta nuevamente."}, status=502)
