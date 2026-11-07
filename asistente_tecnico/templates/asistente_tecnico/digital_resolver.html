@@ -88,7 +88,7 @@
       <form method="post" id="resolverForm">{% csrf_token %}{% if piscina %}<input type="hidden" name="piscina_id" value="{{piscina.pk}}">{% endif %}{% if not piscina %}<input type="hidden" name="consulta_libre" value="1">
 {% endif %}<input type="hidden" name="estado_agua" id="estadoField" value=""><input type="hidden" name="categoria_consulta" id="categoryField" value="agua">
       <div class="chat-body" id="chatBody">
-        <div class="msg-row assistant"><div class="bubble">¡Hola{% if request.user.first_name %}, {{request.user.first_name}}{% endif %}! Soy <strong>AQUO</strong>, tu asistente. ¿Cómo te puedo ayudar?</div></div>
+        <div class="msg-row assistant"><div class="aqua-chat-avatar small"><img src="{% static 'asistente_tecnico/characters/aquo-chat-oficial.webp' %}" alt="AQUO"></div><div class="bubble">¡Hola{% if request.user.first_name %}, {{request.user.first_name}}{% endif %}! Soy <strong>AQUO</strong>, tu asistente. ¿Cómo te puedo ayudar?</div></div>
         {% if resultado %}
           <div class="msg-row user"><div class="bubble">Ya te compartí los datos de mi piscina.</div></div>
           <div class="msg-row assistant"><div class="bubble">Perfecto. Ya terminé el análisis. Encontré una causa probable y preparé un plan de acción{% if caso %} para un volumen de <strong>{{caso.volumen_m3}} m³</strong>{% elif piscina %} adaptado a tu piscina de <strong>{{piscina.volumen_m3}} m³</strong>{% endif %}. Mira el diagnóstico debajo. 👇</div></div>
