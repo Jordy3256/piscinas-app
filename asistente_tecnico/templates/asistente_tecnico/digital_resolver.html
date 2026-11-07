@@ -86,7 +86,7 @@
 <div class="resolver-shell">
   <div class="chat-layout">
     <section class="chat-card">
-      <div class="chat-top"><div class="aqua-chat-avatar"><img src="{% static 'asistente_tecnico/characters/aquo-chat-oficial.webp' %}" alt="AQUO" class="aquo-portrait"></div><div><strong>AQUO</strong><div class="online">Tu asistente para piscinas</div></div><a class="aquo-close" href="{% url \'asistente_tecnico:digital_inicio\' %}" aria-label="Salir de AQUO e ir al inicio" title="Salir al inicio"><i class="bi bi-x-lg" aria-hidden="true"></i></a></div>
+      <div class="chat-top"><div class="aqua-chat-avatar"><img src="{% static 'asistente_tecnico/characters/aquo-chat-oficial.webp' %}" alt="AQUO" class="aquo-portrait"></div><div><strong>AQUO</strong><div class="online">Tu asistente para piscinas</div></div><a class="aquo-close" href="{% url 'asistente_tecnico:digital_inicio' %}" aria-label="Salir de AQUO e ir al inicio" title="Salir al inicio"><i class="bi bi-x-lg" aria-hidden="true"></i></a></div>
       <form method="post" id="resolverForm">{% csrf_token %}{% if piscina %}<input type="hidden" name="piscina_id" value="{{piscina.pk}}">{% endif %}{% if not piscina %}<input type="hidden" name="consulta_libre" value="1">
 {% endif %}<input type="hidden" name="estado_agua" id="estadoField" value=""><input type="hidden" name="categoria_consulta" id="categoryField" value="agua">
       <div class="chat-body" id="chatBody">
