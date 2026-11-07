@@ -70,11 +70,22 @@
 .send-btn{background:linear-gradient(135deg,#076ac9,#00a9ce)!important;box-shadow:0 8px 22px rgba(4,130,192,.22)!important}
 .aquo-compose-hint{font-size:.72rem!important;color:#6a8da5!important;padding-bottom:9px!important}
 @media(max-width:767.98px){.resolver-shell{padding-bottom:95px!important}.chat-card{margin-bottom:95px!important;border-radius:21px!important}.chat-body{height:min(56dvh,570px);min-height:260px!important;padding:13px!important}.chat-top{padding:12px 15px!important}.chat-compose{padding:10px!important}.aquo-compose-hint{font-size:.67rem!important}}
+/* V2.6: chat compacto, desplazamiento interno y espacio para menú fijo */
+.chat-top{padding:10px 16px!important}
+.chat-top .aqua-chat-avatar{width:44px!important;height:44px!important}
+.chat-top strong{font-size:1.04rem!important}
+.aquo-pool-context{padding:5px 16px!important}
+.chat-body{height:clamp(260px,calc(100dvh - 390px),460px)!important;min-height:260px!important;max-height:none!important;overflow-y:auto!important;padding:14px!important}
+.chat-compose{padding:8px 12px!important}
+.aquo-free-input{min-height:44px!important}
+.chat-card{margin-bottom:120px!important}
+.resolver-shell{padding-bottom:35px!important}
+@media(max-width:767.98px){.chat-body{height:clamp(230px,calc(100dvh - 335px),440px)!important;min-height:230px!important}.chat-card{margin-bottom:120px!important}.chat-top{padding:8px 12px!important}.aquo-compose-hint{font-size:.64rem!important}}
 </style>
 {% endblock %}
 {% block content %}
 <div class="resolver-shell">
-  <nav class="d-flex gap-2 flex-wrap mb-3" aria-label="Centro AQUO"><a class="btn btn-sm btn-outline-primary rounded-pill" href="{% url 'asistente_tecnico:digital_inicio' %}"><i class="bi bi-arrow-left me-1"></i>Inicio</a><a class="btn btn-sm btn-outline-secondary rounded-pill" href="{% url 'asistente_tecnico:digital_academia_portal' %}">Curso</a><a class="btn btn-sm btn-outline-secondary rounded-pill" href="{% url 'asistente_tecnico:digital_academia_portal' %}">Biblioteca</a></nav>
+  
   <div class="chat-layout">
     <section class="chat-card">
       <div class="chat-top"><div class="aqua-chat-avatar"><img src="{% static 'asistente_tecnico/characters/aquo-chat-oficial.webp' %}" alt="AQUO" class="aquo-portrait"></div><div><strong>AQUO</strong><div class="online">Tu asistente para piscinas</div></div></div>

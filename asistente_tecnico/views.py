@@ -2309,6 +2309,16 @@ def digital_agenda_view(request):
     visitas = list(VisitaProgramadaPiscina.objects.filter(
         piscina__suscriptor=perfil, piscina__activa=True, fecha__gte=inicio, fecha__lte=fin
     ).select_related('piscina').order_by('fecha', 'piscina__nombre'))
+    # Estado visual calculado: no cambia el estado persistido ni el historial.
+    for visita in visitas:
+        if visita.estado == 'completada':
+            visita.estado_visual = 'completada'
+        elif visita.estado == 'programada' and visita.fecha < hoy:
+            visita.estado_visual = 'atrasada'
+        elif visita.estado == 'programada' and visita.fecha == hoy:
+            visita.estado_visual = 'hoy'
+        else:
+            visita.estado_visual = 'programada'
     por_fecha = {}
     for visita in visitas:
         por_fecha.setdefault(visita.fecha, []).append(visita)
@@ -2323,6 +2333,7 @@ def digital_agenda_view(request):
         'mes_nombre': ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][mes],
         'anio': anio, 'mes': mes, 'anterior': anterior, 'siguiente': siguiente,
         'total': len(visitas), 'pendientes': sum(v.estado == 'programada' for v in visitas),
+        'atrasadas': sum(v.estado_visual == 'atrasada' for v in visitas),
     })
 
 
