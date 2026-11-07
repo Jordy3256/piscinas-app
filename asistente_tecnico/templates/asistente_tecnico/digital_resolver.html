@@ -80,6 +80,7 @@
 .chat-card .chat-top{display:flex!important;align-items:center!important;gap:12px!important}
 .chat-card .chat-top .aquo-close{margin-left:auto;display:grid;place-items:center;flex:none;width:40px;height:40px;border-radius:13px;color:#fff!important;border:1px solid rgba(255,255,255,.55);background:rgba(255,255,255,.16);text-decoration:none;transition:background .15s ease}
 .chat-card .chat-top .aquo-close:hover,.chat-card .chat-top .aquo-close:focus-visible{background:rgba(255,255,255,.3);outline:2px solid #fff;outline-offset:2px}
+.aquo-history-toolbar{display:flex;align-items:center;gap:9px;padding:10px 14px;background:#eef9ff;border-bottom:1px solid #cde9f5;flex-wrap:wrap}.aquo-history-toolbar select{flex:1;min-width:160px;max-width:540px;border:1px solid #b4d9ed;border-radius:12px;padding:9px;background:#fff;color:#174b69}.aquo-history-toolbar button{border:0;border-radius:12px;padding:9px 13px;background:#087dc1;color:#fff;font-weight:700;cursor:pointer}#aquoHistoryStatus{font-size:.78rem;color:#41657a}@media(max-width:600px){.aquo-history-toolbar{padding:7px;gap:6px}.aquo-history-toolbar button{padding:8px}.aquo-history-toolbar select{min-width:120px}}
 </style>
 {% endblock %}
 {% block content %}
@@ -87,6 +88,11 @@
   <div class="chat-layout">
     <section class="chat-card">
       <div class="chat-top"><div class="aqua-chat-avatar"><img src="{% static 'asistente_tecnico/characters/aquo-chat-oficial.webp' %}" alt="AQUO" class="aquo-portrait"></div><div><strong>AQUO</strong><div class="online">Tu asistente para piscinas</div></div><a class="aquo-close" href="{% url 'asistente_tecnico:digital_inicio' %}" aria-label="Salir de AQUO e ir al inicio" title="Salir al inicio"><i class="bi bi-x-lg" aria-hidden="true"></i></a></div>
+      <div class="aquo-history-toolbar" aria-label="Conversaciones de AQUO">
+        <select id="aquoConversationSelect" aria-label="Elegir conversación anterior"><option value="">Nueva conversación</option></select>
+        <button type="button" id="aquoNewConversation" title="Iniciar otra conversación"><i class="bi bi-plus-circle"></i> Nuevo chat</button>
+        <span id="aquoHistoryStatus" role="status" aria-live="polite"></span>
+      </div>
       <form method="post" id="resolverForm">{% csrf_token %}{% if piscina %}<input type="hidden" name="piscina_id" value="{{piscina.pk}}">{% endif %}{% if not piscina %}<input type="hidden" name="consulta_libre" value="1">
 {% endif %}<input type="hidden" name="estado_agua" id="estadoField" value=""><input type="hidden" name="categoria_consulta" id="categoryField" value="agua">
       <div class="chat-body" id="chatBody">
@@ -203,18 +209,55 @@ function interpretAquo(text){
  return {entry:null,msg:'Todavía no tengo suficiente información para clasificarlo con seguridad. ¿Es un problema con el estado del agua o con otra parte de la piscina?'};
 }
 const aquoHistory=[];let aquoLastCaseId=null;
+const aquoConversationSelect=document.getElementById('aquoConversationSelect');
+const aquoNewConversation=document.getElementById('aquoNewConversation');
+const aquoHistoryStatus=document.getElementById('aquoHistoryStatus');
+const aquoConversationUrl='{% url "asistente_tecnico:digital_aquo_conversaciones_api" %}';
+let aquoConversationId=null;
+const aquoWelcomeHtml=chatBody?.querySelector('.msg-row.assistant')?.outerHTML||'';
+function aquoRenderMessages(items){
+ if(!chatBody)return;
+ chatBody.innerHTML=aquoWelcomeHtml;
+ aquoHistory.length=0;aquoLastCaseId=null;
+ for(const item of items){if(!item||!['user','assistant'].includes(item.role)||typeof item.content!=='string')continue;
+   const row=document.createElement('div');row.className='msg-row '+item.role+' dynamic-msg';
+   row.innerHTML=(item.role==='assistant'?aquaMiniTemplate:'')+'<div class="bubble">'+escAquo(item.content)+'</div>';
+   chatBody.appendChild(row);aquoHistory.push({role:item.role,content:item.content});
+ }
+ chatBody.scrollTop=chatBody.scrollHeight;
+}
+async function aquoListConversations(selectId){
+ try{const r=await fetch(aquoConversationUrl,{credentials:'same-origin'});if(!r.ok)throw Error('list');
+ const data=await r.json();aquoConversationSelect.replaceChildren(new Option('Nueva conversación',''));
+ for(const c of data.conversaciones||[])aquoConversationSelect.add(new Option(c.titulo||'Conversación '+c.id,String(c.id)));
+ if(selectId)aquoConversationSelect.value=String(selectId);
+ }catch(e){aquoHistoryStatus.textContent='No se pudo cargar el historial.'}
+}
+async function aquoOpenConversation(id){
+ if(sendFree?.disabled)return;
+ if(!id){aquoConversationId=null;aquoRenderMessages([]);aquoHistoryStatus.textContent='Nuevo chat';return;}
+ aquoHistoryStatus.textContent='Cargando…';
+ try{const r=await fetch(aquoConversationUrl+'?id='+encodeURIComponent(id),{credentials:'same-origin'});
+ if(!r.ok)throw Error('load');const data=await r.json();aquoConversationId=data.id;
+ aquoRenderMessages(data.mensajes||[]);aquoConversationSelect.value=String(data.id);aquoHistoryStatus.textContent='Conversación recuperada';
+ }catch(e){aquoHistoryStatus.textContent='No se pudo abrir la conversación.'}
+}
+aquoConversationSelect?.addEventListener('change',()=>aquoOpenConversation(aquoConversationSelect.value));
+aquoNewConversation?.addEventListener('click',()=>{aquoConversationSelect.value='';aquoOpenConversation(null);freeInput?.focus()});
+aquoListConversations();
+
 async function processFreeText(){
  const text=(freeInput?.value||'').trim();if((!text&&!aquoPhotos.length)||sendFree?.disabled)return;
  const row=document.createElement('div');row.className='msg-row user dynamic-msg';row.innerHTML=`<div class="bubble">${escAquo(text)}${aquoPhotos.map(src=>`<img class="aquo-sent-photo" src="${src}" alt="Foto adjunta">`).join('')}</div>`;chatBody.appendChild(row);freeInput.value='';
  const sentPhotos=[...aquoPhotos];aquoPhotos=[];renderAquoPhotos();const thinking=aquoThinking('AQUO está analizando…');if(sendFree)sendFree.disabled=true;
  try{
    const csrf=document.querySelector('#resolverForm input[name=csrfmiddlewaretoken]')?.value||'';
-   const response=await fetch('{% url "asistente_tecnico:digital_aquo_chat_api" %}',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRFToken':csrf},body:JSON.stringify({mensaje:text,imagenes:sentPhotos,historial:aquoHistory.slice(-12),piscina_id:''})});
+   const response=await fetch('{% url "asistente_tecnico:digital_aquo_chat_api" %}',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRFToken':csrf},body:JSON.stringify({mensaje:text,imagenes:sentPhotos,conversacion_id:aquoConversationId,piscina_id:''})});
    const data=await response.json();
    const reply=response.ok?data.respuesta:(data.error||'No pude responder en este momento.');
    const a=document.createElement('div');a.className='msg-row assistant dynamic-msg';a.innerHTML=aquaMiniTemplate+`<div class="bubble">${escAquo(reply)}</div>`;chatBody.appendChild(a);
    if(!response.ok&&sentPhotos.length){aquoPhotos=sentPhotos;renderAquoPhotos()}
-   if(response.ok){aquoLastCaseId=data.caso_id||null;aquoHistory.push({role:'user',content:text},{role:'assistant',content:reply});if(aquoHistory.length>20)aquoHistory.splice(0,aquoHistory.length-20)}
+   if(response.ok){aquoLastCaseId=data.caso_id||null;aquoHistory.push({role:'user',content:text||'[Fotografía enviada]'},{role:'assistant',content:reply});aquoConversationId=data.conversacion_id||aquoConversationId;aquoHistoryStatus.textContent='Conversación guardada';aquoListConversations(aquoConversationId)}
    if(response.ok&&aquoLastCaseId&&/\b(tratamiento aplicado|apliqué|aplique|realicé el tratamiento|seguí los pasos|ya hice el tratamiento)\b/i.test(text)){const bar=document.createElement('div');bar.className='aquo-feedback';bar.innerHTML='<span>¿El tratamiento resolvió tu problema?</span><button type="button" data-result="favorable">Sí, quedó resuelto</button><button type="button" data-result="parcial">Parcialmente</button><button type="button" data-result="fallido">No funcionó</button>';bar.dataset.casoId=aquoLastCaseId;chatBody.appendChild(bar)}
    a.scrollIntoView({behavior:'smooth',block:'nearest'});
  }catch(err){const a=document.createElement('div');a.className='msg-row assistant dynamic-msg';a.innerHTML=aquaMiniTemplate+'<div class="bubble">No tengo conexión con el motor de IA en este momento. Puedes utilizar el diagnóstico técnico de la página.</div>';chatBody.appendChild(a)}
