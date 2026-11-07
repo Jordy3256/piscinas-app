@@ -87,6 +87,11 @@
       <div class="aquo-pool-context"><label for="aquoPoolSelect">Contexto:</label><select id="aquoPoolSelect"><option value="">Consulta libre</option>{% for p in piscinas %}<option value="{{p.pk}}" {% if piscina and piscina.pk == p.pk %}selected{% endif %}>{{p.nombre}}</option>{% endfor %}</select></div>
       <form method="post" id="resolverForm">{% csrf_token %}{% if piscina %}<input type="hidden" name="piscina_id" value="{{piscina.pk}}">{% endif %}{% if not piscina %}<input type="hidden" name="consulta_libre" value="1">
 {% endif %}<input type="hidden" name="estado_agua" id="estadoField" value=""><input type="hidden" name="categoria_consulta" id="categoryField" value="agua">
+      <div class="aquo-history-tools" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 16px;background:#f0f9ff;border-bottom:1px solid #d6eafa">
+        <button type="button" id="aquoNewConversation" class="btn btn-sm btn-outline-primary">＋ Nueva conversación</button>
+        <select id="aquoConversationList" aria-label="Conversaciones anteriores" class="form-select form-select-sm" style="max-width:350px"><option value="">Historial de conversaciones</option></select>
+        <span id="aquoConversationStatus" style="font-size:12px;color:#426482"></span>
+      </div>
       <div class="chat-body" id="chatBody">
         <div class="msg-row assistant"><div class="aqua-chat-avatar small"><img src="{% static 'asistente_tecnico/characters/aquo-chat-oficial.webp' %}" alt="AQUO"></div><div class="bubble">¡Hola{% if request.user.first_name %}, {{request.user.first_name}}{% endif %}! Soy <strong>AQUO</strong>, tu asistente. ¿Cómo te puedo ayudar?</div></div>
         {% if resultado %}
@@ -200,19 +205,42 @@ function interpretAquo(text){
  for(const [rx,cat] of rules){if(rx.test(q))return {entry:'otro',category:cat,msg:'Entendí el síntoma. Voy a abrir el diagnóstico que mejor coincide y puedes corregirme con las opciones si hace falta.'}}
  return {entry:null,msg:'Todavía no tengo suficiente información para clasificarlo con seguridad. ¿Es un problema con el estado del agua o con otra parte de la piscina?'};
 }
-const aquoHistory=[];let aquoLastCaseId=null;
+const aquoHistory=[];let aquoLastCaseId=null;let aquoConversationId=null;
+const aquoConversationsUrl='{% url "asistente_tecnico:digital_aquo_conversaciones_api" %}';
+const aquoConversationList=document.getElementById('aquoConversationList');
+const aquoConversationStatus=document.getElementById('aquoConversationStatus');
+function aquoRenderSaved(items){
+ chatBody.querySelectorAll('.aquo-saved-message,.dynamic-msg,.aquo-feedback').forEach(x=>x.remove());
+ aquoHistory.length=0;
+ (items||[]).forEach(item=>{if(!['user','assistant'].includes(item.role))return;const row=document.createElement('div');row.className='msg-row '+item.role+' dynamic-msg aquo-saved-message';row.innerHTML=(item.role==='assistant'?aquaMiniTemplate:'')+`<div class="bubble">${escAquo(item.content||'')}</div>`;chatBody.appendChild(row);aquoHistory.push({role:item.role,content:item.content||''})});
+ chatBody.scrollTop=chatBody.scrollHeight;
+}
+async function aquoLoadConversations(openLatest=false){
+ try{const r=await fetch(aquoConversationsUrl,{credentials:'same-origin'});if(!r.ok)throw Error();const data=await r.json();aquoConversationList.replaceChildren(new Option('Historial de conversaciones',''));
+ (data.conversaciones||[]).forEach(c=>aquoConversationList.add(new Option(c.titulo,c.id)));
+ if(openLatest&&data.conversaciones?.length){await aquoOpenConversation(data.conversaciones[0].id)}
+ else if(aquoConversationId)aquoConversationList.value=String(aquoConversationId);
+ }catch(e){aquoConversationStatus.textContent='No se pudo cargar el historial.'}
+}
+async function aquoOpenConversation(id){
+ if(sendFree?.disabled)return;const r=await fetch(aquoConversationsUrl+'?id='+encodeURIComponent(id),{credentials:'same-origin'});if(!r.ok)throw Error('No se pudo abrir la conversación');const c=await r.json();aquoConversationId=c.id;aquoConversationList.value=String(c.id);aquoRenderSaved(c.mensajes);aquoConversationStatus.textContent='Conversación recuperada';
+ if(c.piscina_id){const select=document.getElementById('aquoPoolSelect');if(select&&[...select.options].some(x=>x.value===String(c.piscina_id)))select.value=String(c.piscina_id)}
+}
+aquoConversationList?.addEventListener('change',async()=>{if(aquoConversationList.value)try{await aquoOpenConversation(aquoConversationList.value)}catch(e){alert(e.message)}});
+document.getElementById('aquoNewConversation')?.addEventListener('click',async()=>{if(sendFree?.disabled)return;try{const csrf=document.querySelector('#resolverForm input[name=csrfmiddlewaretoken]')?.value||'';const r=await fetch(aquoConversationsUrl,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRFToken':csrf},body:JSON.stringify({accion:'nueva'})});if(!r.ok)throw Error();const c=await r.json();aquoConversationId=c.id;aquoRenderSaved([]);aquoConversationStatus.textContent='Nueva conversación';await aquoLoadConversations();aquoConversationList.value=String(c.id)}catch(e){alert('No se pudo crear una nueva conversación.')}});
+if(chatBody)aquoLoadConversations(true);
 async function processFreeText(){
  const text=(freeInput?.value||'').trim();if((!text&&!aquoPhotos.length)||sendFree?.disabled)return;
  const row=document.createElement('div');row.className='msg-row user dynamic-msg';row.innerHTML=`<div class="bubble">${escAquo(text)}${aquoPhotos.map(src=>`<img class="aquo-sent-photo" src="${src}" alt="Foto adjunta">`).join('')}</div>`;chatBody.appendChild(row);freeInput.value='';
  const sentPhotos=[...aquoPhotos];aquoPhotos=[];renderAquoPhotos();const thinking=aquoThinking('AQUO está analizando…');if(sendFree)sendFree.disabled=true;
  try{
    const csrf=document.querySelector('#resolverForm input[name=csrfmiddlewaretoken]')?.value||'';
-   const response=await fetch('{% url "asistente_tecnico:digital_aquo_chat_api" %}',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRFToken':csrf},body:JSON.stringify({mensaje:text,imagenes:sentPhotos,historial:aquoHistory.slice(-12),piscina_id:document.getElementById('aquoPoolSelect')?.value||''})});
+   const response=await fetch('{% url "asistente_tecnico:digital_aquo_chat_api" %}',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRFToken':csrf},body:JSON.stringify({mensaje:text,imagenes:sentPhotos,conversacion_id:aquoConversationId,piscina_id:document.getElementById('aquoPoolSelect')?.value||''})});
    const data=await response.json();
    const reply=response.ok?data.respuesta:(data.error||'No pude responder en este momento.');
    const a=document.createElement('div');a.className='msg-row assistant dynamic-msg';a.innerHTML=aquaMiniTemplate+`<div class="bubble">${escAquo(reply)}</div>`;chatBody.appendChild(a);
    if(!response.ok&&sentPhotos.length){aquoPhotos=sentPhotos;renderAquoPhotos()}
-   if(response.ok){aquoLastCaseId=data.caso_id||null;aquoHistory.push({role:'user',content:text},{role:'assistant',content:reply});if(aquoHistory.length>20)aquoHistory.splice(0,aquoHistory.length-20)}
+   if(response.ok){aquoLastCaseId=data.caso_id||null;aquoConversationId=data.conversacion_id||aquoConversationId;aquoLoadConversations();aquoHistory.push({role:'user',content:text},{role:'assistant',content:reply});if(aquoHistory.length>20)aquoHistory.splice(0,aquoHistory.length-20)}
    if(response.ok&&aquoLastCaseId&&/\b(tratamiento aplicado|apliqué|aplique|realicé el tratamiento|seguí los pasos|ya hice el tratamiento)\b/i.test(text)){const bar=document.createElement('div');bar.className='aquo-feedback';bar.innerHTML='<span>¿El tratamiento resolvió tu problema?</span><button type="button" data-result="favorable">Sí, quedó resuelto</button><button type="button" data-result="parcial">Parcialmente</button><button type="button" data-result="fallido">No funcionó</button>';bar.dataset.casoId=aquoLastCaseId;chatBody.appendChild(bar)}
    a.scrollIntoView({behavior:'smooth',block:'nearest'});
  }catch(err){const a=document.createElement('div');a.className='msg-row assistant dynamic-msg';a.innerHTML=aquaMiniTemplate+'<div class="bubble">No tengo conexión con el motor de IA en este momento. Puedes utilizar el diagnóstico técnico de la página.</div>';chatBody.appendChild(a)}

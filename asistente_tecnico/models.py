@@ -1154,3 +1154,16 @@ class ConsumoImagenAquo(models.Model):
 
     class Meta:
         indexes = [models.Index(fields=["suscriptor", "creado_en"], name="aquo_fotos_periodo_idx")]
+
+
+class ConversacionAquo(models.Model):
+    """Historial privado persistente; nunca se comparte entre suscriptores."""
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="conversaciones_aquo")
+    piscina = models.ForeignKey("PiscinaSuscriptor", null=True, blank=True, on_delete=models.SET_NULL)
+    titulo = models.CharField(max_length=100, default="Nueva conversación")
+    mensajes = models.JSONField(default=list, blank=True)
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True, db_index=True)
+
+    class Meta:
+        ordering = ["-actualizado_en"]
