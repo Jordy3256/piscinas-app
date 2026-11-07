@@ -139,7 +139,7 @@ body{background:linear-gradient(155deg,#eaf6ff 0%,#f4f9ff 45%,#edf7f8 100%)!impo
 <a class="mobile-orbit-item {% if request.resolver_match.url_name == 'digital_piscinas' or request.resolver_match.url_name == 'digital_piscina_detalle' %}active{% endif %}" href="{% url 'asistente_tecnico:digital_piscinas' %}"><span class="orbit-icon"><i class="bi bi-water"></i></span><span class="orbit-label">Piscinas</span></a>
 <a class="mobile-orbit-item {% if request.resolver_match.url_name == 'digital_academia_portal' %}active{% endif %}" href="{% url 'asistente_tecnico:digital_academia_portal' %}"><span class="orbit-icon"><i class="bi bi-mortarboard-fill"></i></span><span class="orbit-label">Academia</span></a>
 <a class="mobile-orbit-item {% if request.resolver_match.url_name == 'digital_agenda' %}active{% endif %}" href="{% url 'asistente_tecnico:digital_agenda' %}"><span class="orbit-icon"><i class="bi bi-calendar3"></i></span><span class="orbit-label">Agenda</span></a>
-<a class="mobile-orbit-item {% if request.resolver_match.url_name == 'digital_acceso' %}active{% endif %}" href="{% url 'asistente_tecnico:digital_acceso' %}?renovar=1"><span class="orbit-icon"><i class="bi bi-person-circle"></i></span><span class="orbit-label">Mi plan</span></a><a class="mobile-orbit-item {% if request.resolver_match.url_name == 'digital_soporte' or request.resolver_match.url_name == 'digital_soporte_chat' %}active{% endif %}" href="{% url 'asistente_tecnico:digital_soporte' %}"><span class="orbit-icon"><i class="bi bi-chat-dots-fill"></i></span><span class="orbit-label">Soporte</span></a></div><div class="mobile-orbit-dock"><button class="mobile-orbit-toggle" type="button" aria-label="Abrir menú" aria-expanded="false"><span class="orbit-grid">▦</span><span class="orbit-close">×</span></button></div></nav><script>
+<a class="mobile-orbit-item {% if request.resolver_match.url_name == 'digital_acceso' %}active{% endif %}" href="{% url 'asistente_tecnico:digital_acceso' %}?renovar=1"><span class="orbit-icon"><i class="bi bi-person-circle"></i></span><span class="orbit-label">Mi plan</span></a><a class="mobile-orbit-item {% if request.resolver_match.url_name == 'digital_soporte' or request.resolver_match.url_name == 'digital_soporte_chat' %}active{% endif %}" href="{% url 'asistente_tecnico:digital_soporte' %}"><span class="orbit-icon"><i class="bi bi-chat-dots-fill"></i></span><span class="orbit-label">Soporte</span></a></div><div class="mobile-orbit-dock"><button class="mobile-orbit-toggle" type="button" aria-label="Abrir menú" aria-expanded="false"><span class="orbit-grid" aria-hidden="true">+</span></button></div></nav><script>
 (function(){
   const nav=document.querySelector('.mobile-orbit-nav');
   if(!nav)return;
@@ -262,6 +262,30 @@ body{background:linear-gradient(155deg,#eaf6ff 0%,#f4f9ff 45%,#edf7f8 100%)!impo
  .mobile-orbit-items.count-7 .mobile-orbit-item:nth-child(5){--x:120px;--y:-15px}
  .mobile-orbit-items.count-7 .mobile-orbit-item:nth-child(6){--x:-54px;--y:-115px}
  .mobile-orbit-items.count-7 .mobile-orbit-item:nth-child(7){--x:54px;--y:-115px}
+}
+
+/* AQUO360 V2.7.1: restauración del menú móvil orbital circular de siete accesos. */
+@media(max-width:767.98px){
+ .mobile-orbit-nav .mobile-orbit-toggle{font-size:2.8rem!important;font-weight:300!important;line-height:1!important}
+ .mobile-orbit-nav .mobile-orbit-toggle .orbit-grid{display:block!important;line-height:1!important;transition:transform .22s ease}
+ .mobile-orbit-nav.is-open .mobile-orbit-toggle{transform:none!important}
+ .mobile-orbit-nav.is-open .mobile-orbit-toggle .orbit-grid{transform:rotate(45deg)}
+ .mobile-orbit-items.count-7{height:345px!important}
+ .mobile-orbit-items.count-7 .mobile-orbit-item{width:76px!important;min-height:76px!important;gap:4px!important}
+ .mobile-orbit-items.count-7 .mobile-orbit-item .orbit-icon{width:51px!important;height:51px!important;flex-basis:51px!important}
+ .mobile-orbit-items.count-7 .mobile-orbit-item:nth-child(1){--x:-128px;--y:-24px}
+ .mobile-orbit-items.count-7 .mobile-orbit-item:nth-child(2){--x:-67px;--y:-101px}
+ .mobile-orbit-items.count-7 .mobile-orbit-item:nth-child(3){--x:0px;--y:-124px}
+ .mobile-orbit-items.count-7 .mobile-orbit-item:nth-child(4){--x:67px;--y:-101px}
+ .mobile-orbit-items.count-7 .mobile-orbit-item:nth-child(5){--x:128px;--y:-24px}
+ .mobile-orbit-items.count-7 .mobile-orbit-item:nth-child(6){--x:-82px;--y:-244px}
+ .mobile-orbit-items.count-7 .mobile-orbit-item:nth-child(7){--x:82px;--y:-244px}
+}
+@media(max-width:370px){
+ .mobile-orbit-items.count-7 .mobile-orbit-item:nth-child(1){--x:-113px}
+ .mobile-orbit-items.count-7 .mobile-orbit-item:nth-child(2){--x:-61px}
+ .mobile-orbit-items.count-7 .mobile-orbit-item:nth-child(4){--x:61px}
+ .mobile-orbit-items.count-7 .mobile-orbit-item:nth-child(5){--x:113px}
 }
 </style>
 <div id="supportDock" class="support-dock"></div>
