@@ -1,5 +1,5 @@
 {% extends 'asistente_tecnico/base_suscriptor.html' %}
-{% block title %}Mi plan semanal · JVAQUA Digital{% endblock %}
+{% block title %}Plan de mantenimiento · JVAQUA Digital{% endblock %}
 {% block extra_head %}
 <style>
 .plan-wrap{max-width:1080px;margin:auto}.plan-hero{background:linear-gradient(135deg,#062b4d,#0879bb 62%,#12afd2);color:#fff;border-radius:28px;padding:26px}
@@ -13,6 +13,27 @@
 .flow-head h4{font-size:1.03rem!important}
 .flow-head{margin-bottom:10px!important}
 .plan-wrap{max-width:1160px}
+
+/* AQUO360 V2.7.4: panel compacto, adaptable y con visitas desplegables */
+.plan-wrap{max-width:1100px}.plan-hero{padding:14px 18px!important;margin-bottom:10px!important;border-radius:17px!important}
+.plan-hero h2{font-size:1.25rem!important;margin:2px 0!important}.plan-hero p{font-size:.86rem;line-height:1.35}
+.plan-hero .mt-3{margin-top:9px!important}.flow{gap:10px}.flow-card{padding:14px!important;border-radius:16px!important}
+.flow-head{gap:9px;margin-bottom:10px!important}.flow-num{width:31px;height:31px;border-radius:10px;font-size:.85rem}
+.flow-head h4{font-size:1rem!important}.flow-head .small{font-size:.68rem;letter-spacing:.05em}
+.freq-grid{gap:6px}.freq-option label{padding:8px 3px;border-radius:10px}
+.day-pill{padding:7px 10px;border-radius:10px;font-size:.86rem}.day-pill input{accent-color:#0878b7}
+.flow-card .form-label{margin-bottom:4px;font-size:.85rem}.flow-card .form-control,.flow-card .form-select{min-height:40px;border-radius:10px}
+.plan-submit{width:100%;padding:11px 16px;border-radius:12px;font-weight:800}
+.result-head,.schedule-note,.water-note{padding:10px 12px;border-radius:12px}.schedule-note{font-size:.85rem}
+.plan-visits{--bs-gutter-y:8px}.visit-card{padding:0;border-radius:13px;overflow:hidden;background:#fff}
+.visit-date{display:flex;cursor:pointer;list-style:none;padding:11px 13px;margin:0;min-height:58px;gap:12px}
+.visit-date::-webkit-details-marker{display:none}.visit-date::marker{content:''}
+.visit-date h5{font-size:.95rem}.visit-date .small{font-size:.68rem}
+.visit-summary-right{display:inline-flex;align-items:center;white-space:nowrap}.visit-summary-right i{font-size:.8rem;transition:transform .2s}
+.visit-card[open] .visit-summary-right i{transform:rotate(180deg)}.visit-body{padding:0 13px 12px;border-top:1px solid #edf2f5}
+.task{padding:9px 0;gap:9px}.task-icon{width:27px;height:27px;border-radius:8px}.task-title{font-size:.9rem}.dose{font-size:.96rem}
+.guide-link{padding:4px 8px;margin-top:4px}.visit-body form{padding:9px!important;margin-top:10px!important}
+@media(max-width:720px){.plan-hero{padding:12px 14px!important}.flow-card{padding:12px!important}.freq-grid{grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}.freq-option label{padding:8px 0;font-size:.86rem}.day-pill{padding:7px 8px}.visit-date{padding:10px}.visit-body{padding:0 10px 10px}}
 </style>
 {% endblock %}
 {% block content %}
@@ -21,7 +42,7 @@
 
   <section class="plan-hero mt-2 mb-3">
     <div class="small fw-bold text-white-50">AQUO · MANTENIMIENTO AUTÓNOMO</div>
-    <h2 class="fw-bold mb-2">Mi plan semanal</h2>
+    <h2 class="fw-bold mb-2">Plan de mantenimiento</h2>
     <p class="mb-0 text-white-50">Elige tus días. AQUO organizará tu agenda y te recordará cada mantenimiento.</p>
     <div class="d-flex gap-2 flex-wrap mt-3">
       <span class="badge rounded-pill bg-light text-dark">{{ piscina.nombre }}</span>
@@ -32,7 +53,7 @@
 
   {% if request.GET.recien_creada == "1" %}
   <div class="alert border-0 rounded-4 d-flex align-items-center justify-content-between gap-3 flex-wrap" style="background:linear-gradient(115deg,#ddfbf2,#e9f8ff);color:#0b5662">
-    <div><strong><i class="bi bi-check-circle-fill text-success me-1"></i> ¡Piscina registrada!</strong><div>¿Deseas crear su plan semanal ahora? Es opcional y puedes hacerlo después.</div></div>
+    <div><strong><i class="bi bi-check-circle-fill text-success me-1"></i> ¡Piscina registrada!</strong><div>¿Deseas crear su plan de mantenimiento ahora? Es opcional y puedes hacerlo después.</div></div>
     <div class="d-flex gap-2"><a class="btn btn-primary rounded-pill" href="#configurarPlan">Sí, crear ahora</a><a class="btn btn-light rounded-pill border" href="{% url 'asistente_tecnico:digital_piscinas' %}">Después</a></div>
   </div>
   {% endif %}
@@ -40,7 +61,7 @@
   <div class="water-note mb-3"><strong><i class="bi bi-exclamation-triangle me-1"></i>Agua de pozo/mixta:</strong> AQUO considera el posible riesgo de hierro y oxidación al recomendar químicos.</div>
   {% endif %}
 
-  <form method="post" class="flow mb-4" id="configurarPlan">
+  <form method="post" class="flow mb-3" id="configurarPlan">
     {% csrf_token %}
     <section class="flow-card">
       <div class="flow-head"><div class="flow-num">1</div><div><div class="small fw-bold text-muted">FRECUENCIA</div><h4 class="fw-bold mb-0">¿Cuántas visitas quieres realizar por semana?</h4></div></div>
@@ -49,9 +70,9 @@
         <div class="freq-option"><input id="f{{ valor }}" type="radio" name="frecuencia_semanal" value="{{ valor }}" {% if valores.frecuencia == valor %}checked{% endif %}><label for="f{{ valor }}">{{ valor }}</label></div>
         {% endfor %}
       </div>
-      <div class="small text-muted mt-2">Elige los días exactos de mantenimiento; la agenda se repetirá cada semana.</div>
-      <div class="d-flex flex-wrap gap-2 mt-3">{% for num,etiqueta in dias_opciones %}<label class="day-pill"><input type="checkbox" name="dias_semana" value="{{ num }}" {% if num in valores.dias_semana %}checked{% endif %}> {{ etiqueta }}</label>{% endfor %}</div>
-      <div class="small text-muted mt-2">Si no seleccionas días, AQUO distribuirá las visitas según la frecuencia.</div>
+      <div class="small text-muted mt-2">Selecciona los días de mantenimiento (se repiten semanalmente).</div>
+      <div class="d-flex flex-wrap gap-2 mt-2">{% for num,etiqueta in dias_opciones %}<label class="day-pill"><input type="checkbox" name="dias_semana" value="{{ num }}" {% if num in valores.dias_semana %}checked{% endif %}> {{ etiqueta }}</label>{% endfor %}</div>
+      <div class="small text-muted mt-1">Sin días seleccionados, AQUO distribuirá las visitas.</div>
     </section>
 
     {% if not perfil.es_profesional %}<section class="flow-card">
@@ -65,12 +86,12 @@
     </section>
 
     {% endif %}
-    <button class="btn jd-btn jd-btn-primary btn-lg"><i class="bi bi-stars me-1"></i>Crear mi plan semanal con AQUO</button>
+    <button class="btn jd-btn jd-btn-primary plan-submit"><i class="bi bi-stars me-1"></i>Crear plan de mantenimiento con AQUO</button>
   </form>
 
   {% if plan_visitas %}
-  <section class="flow-card mb-3">
-    <div class="flow-head"><div class="flow-num">3</div><div><div class="small fw-bold text-muted">RESULTADO</div><h4 class="fw-bold mb-0">Tu semana ya está organizada</h4></div></div>
+  <section class="flow-card mb-2">
+    <div class="flow-head"><div class="flow-num">3</div><div><div class="small fw-bold text-muted">RESULTADO</div><h4 class="fw-bold mb-0">Tus visitas del mes</h4></div></div>
 
     {% if resultado %}
     <div class="result-head mb-3">
@@ -81,17 +102,17 @@
     {% endif %}
 
     <a class="btn btn-outline-primary mb-3" href="{% url 'asistente_tecnico:digital_agenda' %}"><i class="bi bi-calendar3 me-1"></i>Ver agenda mensual</a>
-    <div class="schedule-note mb-3"><i class="bi bi-bell-fill text-primary me-1"></i><strong>Visitas programadas automáticamente.</strong> Recibirás una notificación dentro de JVAQUA Digital el día que corresponda cada mantenimiento.</div>
+    <div class="schedule-note mb-2"><i class="bi bi-bell-fill text-primary me-1"></i><strong>Visitas programadas automáticamente.</strong> Recibirás una notificación dentro de AQUO360 el día que corresponda cada mantenimiento.</div>
 
-    <div class="row g-3">
+    <div class="row g-2 plan-visits">
       {% for visita in plan_visitas %}
       <div class="col-12">
-        <article class="visit-card">
-          <div class="visit-date">
+        <details class="visit-card" {% if forloop.first %}open{% endif %}>
+          <summary class="visit-date">
             <div><div class="small fw-bold text-muted">VISITA {{ visita.numero }}</div><h5 class="fw-bold mb-0">{{ visita.fecha|date:"l d \\d\\e F" }}</h5></div>
-            <span class="badge rounded-pill text-bg-primary">Programada</span>
-          </div>
-
+            <span class="visit-summary-right"><span class="badge rounded-pill text-bg-primary">Programada</span><i class="bi bi-chevron-down ms-2" aria-hidden="true"></i></span>
+          </summary>
+          <div class="visit-body">
           {% for tarea in visita.tareas %}
           <div class="task {{ tarea.tipo }}">
             <div class="task-icon">
@@ -114,7 +135,8 @@
             <input type="hidden" name="visita_programada_id" value="{{ visita.obj.pk }}">
             <button class="btn btn-success w-100"><i class="bi bi-check-circle me-1"></i>Marcar como realizado</button>
           </form>{% endif %}
-        </article>
+          </div>
+        </details>
       </div>
       {% endfor %}
     </div>
@@ -124,7 +146,7 @@
   {% endif %}
 
   {% if historial %}
-  <section class="flow-card mb-4">
+  <section class="flow-card mb-3">
     <h4 class="fw-bold">Historial reciente</h4>
     {% for h in historial %}
     <div class="d-flex justify-content-between gap-3 py-2 border-bottom"><div><strong>{{ h.fecha|date:'d/m/Y' }} · Visita {{ h.visita_numero }}</strong><div class="small text-muted">pH {{ h.ph|default:'—' }} · CL {{ h.cloro|default:'—' }} ppm</div></div><span class="badge text-bg-success align-self-center">Completado</span></div>
