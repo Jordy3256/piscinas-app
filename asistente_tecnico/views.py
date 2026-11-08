@@ -1573,6 +1573,29 @@ def digital_inicio_view(request):
         contexto["piscinas_con_plan"] = PlanMantenimientoPiscina.objects.filter(
             piscina__suscriptor=perfil, piscina__activa=True, activo=True
         ).count()
+    if perfil.es_profesional:
+        # Resumen operativo aislado por suscriptor; sin alterar estados ni generar visitas.
+        hoy_operativo = timezone.localdate()
+        visitas_operativas = VisitaProgramadaPiscina.objects.filter(
+            piscina__suscriptor=perfil, piscina__activa=True
+        )
+        contexto.update({
+            "operativo_hoy": visitas_operativas.filter(fecha=hoy_operativo).count(),
+            "operativo_pendientes_hoy": visitas_operativas.filter(fecha=hoy_operativo, estado="programada").count(),
+            "operativo_atrasadas": visitas_operativas.filter(fecha__lt=hoy_operativo, estado="programada").count(),
+            "operativo_proximas": visitas_operativas.filter(fecha__gt=hoy_operativo, fecha__lte=hoy_operativo + timedelta(days=7), estado="programada").count(),
+            "operativo_visitas": visitas_operativas.filter(
+                fecha__gte=hoy_operativo, fecha__lte=hoy_operativo + timedelta(days=7)
+            ).select_related("piscina").order_by("fecha", "piscina__nombre")[:6],
+        })
+        if perfil.plan == "empresarial":
+            periodo_actual = hoy_operativo.replace(day=1)
+            cobros_mes = CobroPiscinaDigital.objects.filter(
+                piscina__suscriptor=perfil, periodo=periodo_actual
+            ).prefetch_related("pagos")
+            contexto["resumen_cobros_mes"] = sum((c.importe for c in cobros_mes), Decimal("0"))
+            contexto["resumen_pagado_mes"] = sum((c.total_pagado for c in cobros_mes), Decimal("0"))
+            contexto["resumen_pendiente_mes"] = sum((c.saldo for c in cobros_mes), Decimal("0"))
     return render(request, "asistente_tecnico/digital_inicio.html", contexto)
 
 
