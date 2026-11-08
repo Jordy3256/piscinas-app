@@ -133,13 +133,13 @@ body{background:linear-gradient(155deg,#eaf6ff 0%,#f4f9ff 45%,#edf7f8 100%)!impo
 <a class="{% if request.resolver_match.url_name == 'digital_agenda' %}active{% endif %}" href="{% url 'asistente_tecnico:digital_agenda' %}"><b><i class="bi bi-calendar3"></i></b>Agenda</a>
 <a class="{% if request.resolver_match.url_name == 'digital_soporte' or request.resolver_match.url_name == 'digital_soporte_chat' %}active{% endif %}" href="{% url 'asistente_tecnico:digital_soporte' %}"><b><i class="bi bi-chat-dots"></i></b>Soporte</a>
 {% if request.user.perfil_suscriptor.plan == 'empresarial' %}<a href="{% url 'asistente_tecnico:digital_cartera' %}"><b><i class="bi bi-wallet2"></i></b>Cartera</a>{% else %}<a href="{% url 'asistente_tecnico:digital_acceso' %}?renovar=1"><b><i class="bi bi-person"></i></b>Mi plan</a>{% endif %}
-</nav><nav class="mobile-orbit-nav" aria-label="Menú móvil"><div class="mobile-orbit-backdrop"></div><div class="mobile-orbit-items count-7"><a class="mobile-orbit-item {% if request.resolver_match.url_name == 'digital_inicio' %}active{% endif %}" href="{% url 'asistente_tecnico:digital_inicio' %}"><span class="orbit-icon"><i class="bi bi-house-fill"></i></span><span class="orbit-label">Inicio</span></a>
+</nav><nav class="mobile-orbit-nav" aria-label="Menú móvil"><div class="mobile-orbit-backdrop"></div><div class="mobile-orbit-items count-6"><a class="mobile-orbit-item {% if request.resolver_match.url_name == 'digital_inicio' %}active{% endif %}" href="{% url 'asistente_tecnico:digital_inicio' %}"><span class="orbit-icon"><i class="bi bi-house-fill"></i></span><span class="orbit-label">Inicio</span></a>
 
 <a class="mobile-orbit-item {% if request.resolver_match.url_name == 'digital_resolver' or request.resolver_match.url_name == 'digital_centro_aquo' %}active{% endif %}" href="{% url 'asistente_tecnico:digital_resolver' %}"><span class="orbit-icon"><i class="bi bi-stars"></i></span><span class="orbit-label">AQUO</span></a>
 <a class="mobile-orbit-item {% if request.resolver_match.url_name == 'digital_piscinas' or request.resolver_match.url_name == 'digital_piscina_detalle' %}active{% endif %}" href="{% url 'asistente_tecnico:digital_piscinas' %}"><span class="orbit-icon"><i class="bi bi-water"></i></span><span class="orbit-label">Piscinas</span></a>
 <a class="mobile-orbit-item {% if request.resolver_match.url_name == 'digital_academia_portal' %}active{% endif %}" href="{% url 'asistente_tecnico:digital_academia_portal' %}"><span class="orbit-icon"><i class="bi bi-mortarboard-fill"></i></span><span class="orbit-label">Academia</span></a>
 <a class="mobile-orbit-item {% if request.resolver_match.url_name == 'digital_agenda' %}active{% endif %}" href="{% url 'asistente_tecnico:digital_agenda' %}"><span class="orbit-icon"><i class="bi bi-calendar3"></i></span><span class="orbit-label">Agenda</span></a>
-<a class="mobile-orbit-item {% if request.resolver_match.url_name == 'digital_acceso' %}active{% endif %}" href="{% url 'asistente_tecnico:digital_acceso' %}?renovar=1"><span class="orbit-icon"><i class="bi bi-person-circle"></i></span><span class="orbit-label">Mi plan</span></a><a class="mobile-orbit-item {% if request.resolver_match.url_name == 'digital_soporte' or request.resolver_match.url_name == 'digital_soporte_chat' %}active{% endif %}" href="{% url 'asistente_tecnico:digital_soporte' %}"><span class="orbit-icon"><i class="bi bi-chat-dots-fill"></i></span><span class="orbit-label">Soporte</span></a></div><div class="mobile-orbit-dock"><button class="mobile-orbit-toggle" type="button" aria-label="Abrir menú" aria-expanded="false"><span class="orbit-grid" aria-hidden="true">+</span></button></div></nav><script>
+<a class="mobile-orbit-item {% if request.resolver_match.url_name == 'digital_soporte' or request.resolver_match.url_name == 'digital_soporte_chat' %}active{% endif %}" href="{% url 'asistente_tecnico:digital_soporte' %}"><span class="orbit-icon"><i class="bi bi-chat-dots-fill"></i></span><span class="orbit-label">Soporte</span></a></div><div class="mobile-orbit-dock"><button class="mobile-orbit-toggle" type="button" aria-label="Abrir menú" aria-expanded="false"><span class="orbit-grid">+</span><span class="orbit-close">×</span></button></div></nav><script>
 (function(){
   const nav=document.querySelector('.mobile-orbit-nav');
   if(!nav)return;
@@ -248,44 +248,28 @@ body{background:linear-gradient(155deg,#eaf6ff 0%,#f4f9ff 45%,#edf7f8 100%)!impo
   .support-head small{max-width:145px}
 }
 
-/* AQUO360 V2.5: siete accesos sin superposiciones en el menu movil */
-@media(min-width:768px){.jd-bottom{grid-template-columns:repeat(7,minmax(0,1fr))!important}.jd-bottom a{min-width:0;font-size:.64rem}}
+/* AQUO360 V2.7.2: seis accesos en un arco continuo, sin Mi plan. */
 @media(max-width:767.98px){
- .mobile-orbit-items.count-7{display:block!important;position:absolute!important;left:50%!important;right:auto!important;bottom:calc(99px + env(safe-area-inset-bottom))!important;width:min(360px,calc(100vw - 16px))!important;height:240px!important;transform:translateX(-50%)!important;background:transparent!important;border:0!important;box-shadow:none!important;pointer-events:none}
- .mobile-orbit-items.count-7 .mobile-orbit-item{position:absolute!important;left:50%!important;bottom:0!important;width:72px!important;min-height:72px!important;transform:translate(-50%,30px) scale(.72)!important;opacity:0!important;pointer-events:none!important}
- .mobile-orbit-nav.is-open .mobile-orbit-items.count-7 .mobile-orbit-item{opacity:1!important;transform:translate(calc(-50% + var(--x)),var(--y)) scale(1)!important;pointer-events:auto!important}
- .mobile-orbit-items.count-7 .mobile-orbit-item .orbit-icon{width:46px;height:46px;flex-basis:46px}
- .mobile-orbit-items.count-7 .mobile-orbit-item:nth-child(1){--x:-120px;--y:-15px}
- .mobile-orbit-items.count-7 .mobile-orbit-item:nth-child(2){--x:-62px;--y:-15px}
- .mobile-orbit-items.count-7 .mobile-orbit-item:nth-child(3){--x:0px;--y:-15px}
- .mobile-orbit-items.count-7 .mobile-orbit-item:nth-child(4){--x:62px;--y:-15px}
- .mobile-orbit-items.count-7 .mobile-orbit-item:nth-child(5){--x:120px;--y:-15px}
- .mobile-orbit-items.count-7 .mobile-orbit-item:nth-child(6){--x:-54px;--y:-115px}
- .mobile-orbit-items.count-7 .mobile-orbit-item:nth-child(7){--x:54px;--y:-115px}
-}
-
-/* AQUO360 V2.7.1: restauración del menú móvil orbital circular de siete accesos. */
-@media(max-width:767.98px){
- .mobile-orbit-nav .mobile-orbit-toggle{font-size:2.8rem!important;font-weight:300!important;line-height:1!important}
- .mobile-orbit-nav .mobile-orbit-toggle .orbit-grid{display:block!important;line-height:1!important;transition:transform .22s ease}
+ .mobile-orbit-items.count-6{display:block!important;position:absolute!important;left:50%!important;right:auto!important;bottom:calc(99px + env(safe-area-inset-bottom))!important;width:min(360px,calc(100vw - 12px))!important;height:260px!important;transform:translateX(-50%)!important;background:transparent!important;border:0!important;box-shadow:none!important;pointer-events:none!important}
+ .mobile-orbit-items.count-6 .mobile-orbit-item{position:absolute!important;left:50%!important;bottom:0!important;width:76px!important;min-height:76px!important;opacity:0!important;transform:translate(-50%,30px) scale(.72)!important;pointer-events:none!important}
+ .mobile-orbit-nav.is-open .mobile-orbit-items.count-6 .mobile-orbit-item{opacity:1!important;transform:translate(calc(-50% + var(--x)),var(--y)) scale(1)!important;pointer-events:auto!important}
+ .mobile-orbit-items.count-6 .mobile-orbit-item .orbit-icon{width:50px!important;height:50px!important;flex-basis:50px!important}
+ .mobile-orbit-items.count-6 .mobile-orbit-item:nth-child(1){--x:-132px;--y:-12px}
+ .mobile-orbit-items.count-6 .mobile-orbit-item:nth-child(2){--x:-105px;--y:-95px}
+ .mobile-orbit-items.count-6 .mobile-orbit-item:nth-child(3){--x:-43px;--y:-154px}
+ .mobile-orbit-items.count-6 .mobile-orbit-item:nth-child(4){--x:43px;--y:-154px}
+ .mobile-orbit-items.count-6 .mobile-orbit-item:nth-child(5){--x:105px;--y:-95px}
+ .mobile-orbit-items.count-6 .mobile-orbit-item:nth-child(6){--x:132px;--y:-12px}
+ .mobile-orbit-toggle .orbit-grid{font-size:2.3rem;font-weight:300;line-height:1}
  .mobile-orbit-nav.is-open .mobile-orbit-toggle{transform:none!important}
- .mobile-orbit-nav.is-open .mobile-orbit-toggle .orbit-grid{transform:rotate(45deg)}
- .mobile-orbit-items.count-7{height:345px!important}
- .mobile-orbit-items.count-7 .mobile-orbit-item{width:76px!important;min-height:76px!important;gap:4px!important}
- .mobile-orbit-items.count-7 .mobile-orbit-item .orbit-icon{width:51px!important;height:51px!important;flex-basis:51px!important}
- .mobile-orbit-items.count-7 .mobile-orbit-item:nth-child(1){--x:-128px;--y:-24px}
- .mobile-orbit-items.count-7 .mobile-orbit-item:nth-child(2){--x:-67px;--y:-101px}
- .mobile-orbit-items.count-7 .mobile-orbit-item:nth-child(3){--x:0px;--y:-124px}
- .mobile-orbit-items.count-7 .mobile-orbit-item:nth-child(4){--x:67px;--y:-101px}
- .mobile-orbit-items.count-7 .mobile-orbit-item:nth-child(5){--x:128px;--y:-24px}
- .mobile-orbit-items.count-7 .mobile-orbit-item:nth-child(6){--x:-82px;--y:-244px}
- .mobile-orbit-items.count-7 .mobile-orbit-item:nth-child(7){--x:82px;--y:-244px}
 }
-@media(max-width:370px){
- .mobile-orbit-items.count-7 .mobile-orbit-item:nth-child(1){--x:-113px}
- .mobile-orbit-items.count-7 .mobile-orbit-item:nth-child(2){--x:-61px}
- .mobile-orbit-items.count-7 .mobile-orbit-item:nth-child(4){--x:61px}
- .mobile-orbit-items.count-7 .mobile-orbit-item:nth-child(5){--x:113px}
+@media(max-width:390px){
+ .mobile-orbit-items.count-6 .mobile-orbit-item:nth-child(1){--x:-116px}
+ .mobile-orbit-items.count-6 .mobile-orbit-item:nth-child(2){--x:-92px}
+ .mobile-orbit-items.count-6 .mobile-orbit-item:nth-child(3){--x:-37px}
+ .mobile-orbit-items.count-6 .mobile-orbit-item:nth-child(4){--x:37px}
+ .mobile-orbit-items.count-6 .mobile-orbit-item:nth-child(5){--x:92px}
+ .mobile-orbit-items.count-6 .mobile-orbit-item:nth-child(6){--x:116px}
 }
 </style>
 <div id="supportDock" class="support-dock"></div>
