@@ -165,6 +165,7 @@ INSTALLED_APPS = [
     'django.contrib.humanize',
 
     "clientes",
+    "portal_clientes.apps.PortalClientesConfig",
     "contratos",
     "trabajadores",
     "mantenimientos",
