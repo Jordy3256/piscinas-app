@@ -9,3 +9,11 @@ urlpatterns += [path('soporte/', soporte.soporte_cliente, name='soporte'), path(
 urlpatterns += [path('soporte/<int:pk>/actualizaciones/', soporte.soporte_actualizaciones, name='soporte_actualizaciones'), path('soporte/contadores/', soporte.soporte_contadores, name='soporte_contadores')]
 
 urlpatterns += [path('soporte/archivos/<int:pk>/', soporte.soporte_archivo_cliente, name='soporte_archivo')]
+
+from . import notificaciones
+urlpatterns += [
+    path('notificaciones/', notificaciones.lista, name='notificaciones'),
+    path('notificaciones/contador/', notificaciones.contador, name='notificaciones_contador'),
+    path('notificaciones/<int:pk>/abrir/', notificaciones.abrir, name='notificacion_abrir'),
+    path('notificaciones/marcar-todas/', notificaciones.marcar_todas, name='notificaciones_marcar_todas'),
+]

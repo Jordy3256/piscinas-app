@@ -45,3 +45,19 @@ class MensajeSoporte(models.Model):
 
     class Meta:
         ordering = ['creado_en', 'pk']
+
+
+class NotificacionMantenimientoCliente(models.Model):
+    """Aviso persistente y privado, derivado de un mantenimiento real."""
+    TIPO_PROXIMA = 'proxima'
+    TIPO_REALIZADO = 'realizado'
+    TIPO_REPORTE = 'reporte'
+    cliente = models.ForeignKey('clientes.Cliente', on_delete=models.CASCADE, related_name='avisos_portal')
+    mantenimiento = models.ForeignKey('mantenimientos.Mantenimiento', on_delete=models.CASCADE, related_name='avisos_portal')
+    tipo = models.CharField(max_length=12)
+    creada_en = models.DateTimeField(default=timezone.now)
+    leida_en = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['cliente', 'mantenimiento', 'tipo'], name='portal_aviso_mantenimiento_unico')]
+        ordering = ['-creada_en', '-pk']

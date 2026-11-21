@@ -7,6 +7,10 @@
  <span class="status-tag" style="background:#ffffff24;color:white">● Portal privado de clientes</span>
 </section>
 <div class="grid">
+ <a class="card card-link portal-shortcut" href="{% url 'portal_clientes:notificaciones' %}">
+  <span class="shortcut-icon">🔔</span><h3>Notificaciones <span class="jv-bell-badge" data-jv-notification-count data-count="0" aria-live="polite"></span></h3>
+  <p class="muted">Avisos de próximas visitas, mantenimientos realizados y reportes disponibles.</p>
+ </a>
  <a class="card card-link portal-shortcut" href="{% url 'portal_clientes:mantenimientos' %}">
   <span class="shortcut-icon">✓</span><h3>Mis mantenimientos</h3>
   <p class="muted">Consulta las visitas anteriores, sus estados y actividades.</p>
