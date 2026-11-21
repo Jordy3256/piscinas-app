@@ -30,7 +30,7 @@ def _sincronizar(cliente_id):
         if visita.estado == 'pendiente':
             tipos = ('proxima',)
         else:
-            tipos = ('realizado', 'reporte') if visita.fotos.exists() else ('realizado',)
+            tipos = ('realizado',)
         for tipo in tipos:
             if (visita.pk,tipo) not in existentes:
                 nuevos.append(NotificacionMantenimientoCliente(cliente_id=cliente_id,mantenimiento_id=visita.pk,tipo=tipo))
@@ -43,7 +43,7 @@ def _avisos(cliente_id):
         cliente_id=cliente_id, mantenimiento__cliente_id=cliente_id, mantenimiento__contrato__cliente_id=cliente_id
     ).filter(
         Q(tipo='proxima', mantenimiento__estado='pendiente', mantenimiento__fecha__gte=hoy) |
-        Q(tipo__in=['realizado','reporte'], mantenimiento__estado='realizado')
+        Q(tipo='realizado', mantenimiento__estado='realizado')
     ).select_related('mantenimiento','mantenimiento__contrato')
 
 def _datos(aviso):
@@ -53,8 +53,8 @@ def _datos(aviso):
         detalle=f'Tu piscina tiene un mantenimiento programado para mañana, {m.fecha:%d/%m/%Y}.'
         destino='portal_clientes:proximas_visitas'
         return {'id':aviso.pk,'titulo':titulo,'detalle':detalle,'fecha':timezone.localtime(aviso.creada_en).strftime('%d/%m/%Y %H:%M'),'leida':bool(aviso.leida_en),'tipo':aviso.tipo}
-    titulo='Mantenimiento completado' if aviso.tipo=='realizado' else 'Reporte disponible'
-    detalle='Tu mantenimiento fue registrado.' if aviso.tipo=='realizado' else 'Consulta fotografías y el reporte del mantenimiento.'
+    titulo='Mantenimiento completado'
+    detalle='Tu mantenimiento fue registrado. Consulta las fotografías y el reporte completo desde este aviso.'
     return {'id':aviso.pk,'titulo':titulo,'detalle':detalle,'fecha':timezone.localtime(aviso.creada_en).strftime('%d/%m/%Y %H:%M'),'leida':bool(aviso.leida_en),'tipo':aviso.tipo}
 
 @login_required(login_url='/portal/ingresar/')
