@@ -16,3 +16,28 @@ class AccesoCliente(models.Model):
 
     def __str__(self):
         return f'Portal: {self.cliente}'
+
+
+class ConversacionSoporte(models.Model):
+    cliente = models.ForeignKey('clientes.Cliente', on_delete=models.PROTECT, related_name='conversaciones_soporte')
+    contrato = models.ForeignKey('contratos.Contrato', on_delete=models.PROTECT, null=True, blank=True, related_name='conversaciones_soporte')
+    creada_en = models.DateTimeField(auto_now_add=True)
+    actualizada_en = models.DateTimeField(default=timezone.now, db_index=True)
+
+    class Meta:
+        ordering = ['-actualizada_en', '-pk']
+
+    def __str__(self):
+        return f'Soporte #{self.pk} - {self.cliente}'
+
+
+class MensajeSoporte(models.Model):
+    conversacion = models.ForeignKey(ConversacionSoporte, on_delete=models.CASCADE, related_name='mensajes')
+    autor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    es_cliente = models.BooleanField()
+    contenido = models.TextField(max_length=2000)
+    creado_en = models.DateTimeField(auto_now_add=True)
+    leido_en = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['creado_en', 'pk']

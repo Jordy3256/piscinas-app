@@ -97,7 +97,7 @@ def mantenimientos(request):
     ).select_related('contrato').order_by('-fecha', '-pk')
     pagina = Paginator(registros, 20).get_page(request.GET.get('pagina'))
     return render(request, 'portal_clientes/mantenimientos.html', {
-        'cliente': acceso.cliente, 'pagina': pagina, 'proximas': proximas,
+        'cliente': acceso.cliente, 'pagina': pagina,
     })
 
 
@@ -131,7 +131,7 @@ def proximas_visitas(request):
     ).select_related('contrato').order_by('fecha', 'pk')
     pagina = Paginator(visitas, 20).get_page(request.GET.get('pagina'))
     return render(request, 'portal_clientes/proximas_visitas.html', {
-        'cliente': acceso.cliente, 'pagina': pagina, 'proximas': proximas,
+        'cliente': acceso.cliente, 'pagina': pagina,
     })
 
 

@@ -1,3 +1,4 @@
+from portal_clientes import soporte as soporte_portal
 from .mapa_expansion import mapa_expansion_view
 from .comunicados import comunicados_view
 from django.urls import path
@@ -633,3 +634,4 @@ urlpatterns = [
     ),
     path("metas/", metas_empresa_view, name="metas_empresa"),
 ]
+urlpatterns += [path('soporte-clientes/', soporte_portal.soporte_admin_lista, name='soporte_admin_lista'), path('soporte-clientes/<int:pk>/', soporte_portal.soporte_admin_chat, name='soporte_admin_chat')]

@@ -1,0 +1,11 @@
+{% extends 'portal_clientes/base.html' %}{% block content %}
+<p><a href="{% url 'portal_clientes:inicio' %}">← Volver al inicio</a></p>
+<div class="hero"><div class="eyebrow">ATENCIÓN AL CLIENTE</div><h2>Chat de soporte</h2><p>Escríbenos sobre tu servicio o tus pagos.</p></div>
+<h3>Iniciar conversación</h3>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+<form method="post" class="card">{% csrf_token %}<label for="contrato">Sobre qué servicio deseas consultar</label>
+<select name="contrato" id="contrato" style="padding:12px;max-width:100%;border:1px solid #c7d6e4;border-radius:10px"><option value="">Consulta general</option>{% for c in contratos %}<option value="{{ c.pk }}">Contrato #{{ c.pk }} · {{ c }}</option>{% endfor %}</select>
+<label for="mensaje">Mensaje</label><textarea name="mensaje" id="mensaje" required maxlength="2000" rows="4" style="width:100%;padding:12px;border:1px solid #c7d6e4;border-radius:10px"></textarea><p><button type="submit">Enviar mensaje</button></p></form>
+<h3 class="section-head">Mis conversaciones</h3>
+{% for c in conversaciones %}<a class="card card-link" style="display:block" href="{% url 'portal_clientes:soporte_conversacion' c.pk %}"><strong>{% if c.contrato %}Contrato #{{ c.contrato_id }}{% else %}Consulta general{% endif %}</strong><p class="muted">Última actividad: {{ c.actualizada_en|date:'d/m/Y H:i' }}</p>Ver conversación →</a>{% empty %}<p class="muted">Todavía no tienes conversaciones.</p>{% endfor %}
+{% endblock %}
