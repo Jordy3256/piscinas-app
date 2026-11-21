@@ -7,3 +7,5 @@ urlpatterns = [path('activar/', views.activar, name='activar'), path('ingresar/'
 urlpatterns += [path('soporte/', soporte.soporte_cliente, name='soporte'), path('soporte/<int:pk>/', soporte.soporte_conversacion, name='soporte_conversacion')]
 
 urlpatterns += [path('soporte/<int:pk>/actualizaciones/', soporte.soporte_actualizaciones, name='soporte_actualizaciones'), path('soporte/contadores/', soporte.soporte_contadores, name='soporte_contadores')]
+
+urlpatterns += [path('soporte/archivos/<int:pk>/', soporte.soporte_archivo_cliente, name='soporte_archivo')]

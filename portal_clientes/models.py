@@ -35,7 +35,11 @@ class MensajeSoporte(models.Model):
     conversacion = models.ForeignKey(ConversacionSoporte, on_delete=models.CASCADE, related_name='mensajes')
     autor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
     es_cliente = models.BooleanField()
-    contenido = models.TextField(max_length=2000)
+    contenido = models.TextField(max_length=2000, blank=True)
+    archivo = models.BinaryField(null=True, blank=True, editable=False)
+    archivo_tipo = models.CharField(max_length=80, blank=True)
+    archivo_nombre = models.CharField(max_length=120, blank=True)
+    archivo_clase = models.CharField(max_length=12, blank=True)
     creado_en = models.DateTimeField(auto_now_add=True)
     leido_en = models.DateTimeField(null=True, blank=True)
 
