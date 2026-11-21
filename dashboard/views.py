@@ -9906,7 +9906,35 @@ def contrato_promocion_nueva_view(request, pk):
         if tipo in {"valor_fijo", "valor_especial"} and valor < 0: errores.append("El valor no puede ser negativo.")
         if not datos["nombre"]: errores.append("Escribe un nombre para identificar la promoción.")
         if not datos["motivo"]: errores.append("El motivo es obligatorio para conservar el historial.")
+        periodos = []
         if not errores:
+            from finanzas.cuentas_por_cobrar import promocion_para_periodo
+            from types import SimpleNamespace
+            propuesta = SimpleNamespace(tipo=tipo, valor=valor)
+            propuesta.calcular = lambda base: PromocionContrato(tipo=tipo, valor=valor).calcular(base)
+            actual = ai * 12 + mi - 1
+            ultimo = af * 12 + mf - 1
+            if ultimo - actual > 23:
+                errores.append("Por seguridad, selecciona un máximo de 24 períodos.")
+            else:
+                for n in range(actual, ultimo + 1):
+                    anio, mes = divmod(n, 12); mes += 1
+                    anterior = promocion_para_periodo(contrato, anio, mes)
+                    if anterior:
+                        errores.append(f"El período {mes:02d}/{anio} ya tiene la promoción '{anterior.nombre}'.")
+                    cuotas = contrato.calendario_cobros(anio, mes)
+                    calculo = propuesta.calcular(contrato.precio_mensual)
+                    for cuota in cuotas:
+                        factura = Factura.objects.filter(contrato=contrato, periodo_anio=anio, periodo_mes=mes, cuota_numero=cuota['cuota_numero']).exclude(estado=Factura.ESTADO_ANULADA).first()
+                        proporcion = cuota['valor'] / Decimal(contrato.precio_mensual or 1)
+                        neto = (calculo['total'] * proporcion).quantize(Decimal('0.01'))
+                        total = contrato.desglose_valor(neto)['total']
+                        if factura and factura.monto_pagado > total:
+                            errores.append(f"La factura del período {mes:02d}/{anio}, cuota {cuota['cuota_numero']}, tiene pagos incompatibles con el descuento.")
+                        periodos.append({'anio': anio, 'mes': mes, 'cuota': cuota['cuota_numero'], 'original': cuota['valor'], 'nuevo': total, 'factura': factura.pk if factura else None, 'pagado': factura.monto_pagado if factura else Decimal('0')})
+        if not errores and request.POST.get('accion') != 'confirmar':
+            return render(request, "dashboard/contrato_promocion_form.html", {"contrato": contrato, "datos": datos, "tipos": PromocionContrato.TIPO_CHOICES, "es_admin": True, "periodos": periodos, "previsualizacion": True})
+        if not errores and request.POST.get('accion') == 'confirmar':
             with transaction.atomic():
                 promo = PromocionContrato.objects.create(contrato=contrato, nombre=datos["nombre"], motivo=datos["motivo"], tipo=tipo, valor=valor, anio_inicio=ai, mes_inicio=mi, anio_fin=af, mes_fin=mf, creado_por=request.user)
                 # Ajustar cuentas ya generadas dentro de la vigencia solo si todavía no tienen pagos.
@@ -9948,6 +9976,28 @@ def contrato_promocion_nueva_view(request, pk):
             return redirect("contrato_detalle", pk=contrato.pk)
         for error in errores: messages.error(request, error)
     return render(request, "dashboard/contrato_promocion_form.html", {"contrato": contrato, "datos": datos, "tipos": PromocionContrato.TIPO_CHOICES, "es_admin": True})
+
+
+@login_required
+@require_http_methods(["POST"])
+def contrato_promocion_desactivar_view(request, pk, promocion_id):
+    if not es_admin(request.user):
+        return render(request, "dashboard/no_autorizado.html", status=403)
+    with transaction.atomic():
+        contrato = get_object_or_404(Contrato, pk=pk)
+        promo = get_object_or_404(PromocionContrato.objects.select_for_update(), pk=promocion_id, contrato=contrato)
+        hoy = timezone.localdate()
+        if not promo.activa:
+            messages.info(request, "Esta promoción ya está inactiva.")
+        elif promo.periodo_inicio_clave <= hoy.year * 100 + hoy.month:
+            messages.error(request, "No se puede retirar una promoción que ya comenzó o corresponde al mes actual.")
+        elif Factura.objects.filter(promocion=promo).exists():
+            messages.error(request, "No se puede retirar esta promoción porque ya está vinculada a facturas. No se alteró ningún cobro.")
+        else:
+            promo.activa = False
+            promo.save(update_fields=["activa"])
+            messages.success(request, "Promoción futura desactivada. Se conservó el historial.")
+    return redirect("contrato_detalle", pk=pk)
 
 
 @login_required
