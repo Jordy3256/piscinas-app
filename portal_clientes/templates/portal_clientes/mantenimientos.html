@@ -1,1 +1,22 @@
-{% extends 'portal_clientes/base.html' %}{% block content %}<h2>Mis mantenimientos</h2><p class="muted">Historial y próximas visitas de tus contratos.</p>{% for item in pagina %}<article class="card"><strong>{{ item.fecha|date:'d/m/Y' }}</strong> <span class="tag">{{ item.get_estado_display }}</span><p class="muted">Contrato #{{ item.contrato_id }}</p><a href="{% url 'portal_clientes:mantenimiento_detalle' item.pk %}">Ver detalle</a></article>{% empty %}<p>No hay mantenimientos registrados.</p>{% endfor %}<div class="nav">{% if pagina.has_previous %}<a href="?pagina={{ pagina.previous_page_number }}">Anterior</a>{% endif %}<span>Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span>{% if pagina.has_next %}<a href="?pagina={{ pagina.next_page_number }}">Siguiente</a>{% endif %}</div>{% endblock %}
+{% extends 'portal_clientes/base.html' %}
+{% block content %}
+<div class="page-intro"><div class="eyebrow muted">HISTORIAL DE SERVICIO</div><h2>Mis mantenimientos</h2>
+<p class="muted">Visitas anteriores y visitas de hoy ya realizadas o canceladas. Las próximas visitas pendientes están en Programación.</p></div>
+{% for item in pagina %}
+<article class="card visit-card visit-{{ item.estado }}">
+ <div>
+  <div class="actions" style="align-items:center">
+   <span class="visit-date">{{ item.fecha|date:'d/m/Y' }}</span>
+   <span class="status-tag status-{{ item.estado }}">{{ item.get_estado_display }}</span>
+  </div>
+  <div class="visit-meta">Contrato #{{ item.contrato_id }}</div>
+ </div>
+ <a class="visit-action" href="{% url 'portal_clientes:mantenimiento_detalle' item.pk %}">Ver detalle →</a>
+</article>
+{% empty %}<div class="card"><p class="muted">Aún no hay visitas anteriores registradas.</p></div>{% endfor %}
+<div class="pagination">
+{% if pagina.has_previous %}<a href="?pagina={{ pagina.previous_page_number }}">← Anterior</a>{% endif %}
+<span class="muted">Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span>
+{% if pagina.has_next %}<a href="?pagina={{ pagina.next_page_number }}">Siguiente →</a>{% endif %}
+</div>
+{% endblock %}

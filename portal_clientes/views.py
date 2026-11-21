@@ -2,6 +2,7 @@ from django.contrib.auth import get_user_model, login, logout, authenticate
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.hashers import check_password
 from django.db import transaction
+from django.db.models import Q
 from django.shortcuts import render, redirect, get_object_or_404
 from django.core.paginator import Paginator
 from mantenimientos.models import Mantenimiento
@@ -87,6 +88,9 @@ def mantenimientos(request):
     registros = Mantenimiento.objects.filter(
         cliente_id=acceso.cliente_id,
         contrato__cliente_id=acceso.cliente_id,
+    ).filter(
+        Q(fecha__lt=timezone.localdate()) |
+        Q(fecha=timezone.localdate(), estado__in=['realizado', 'cancelado'])
     ).select_related('contrato').order_by('-fecha', '-pk')
     pagina = Paginator(registros, 20).get_page(request.GET.get('pagina'))
     return render(request, 'portal_clientes/mantenimientos.html', {

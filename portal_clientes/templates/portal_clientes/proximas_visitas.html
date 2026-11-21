@@ -1,17 +1,19 @@
 {% extends 'portal_clientes/base.html' %}
 {% block content %}
-<h2>Próximas visitas</h2>
-<p class="muted">Programación pendiente registrada por JVAQUA. Las fechas pueden cambiar por motivos operativos.</p>
+<div class="page-intro"><div class="eyebrow muted">AGENDA DE SERVICIO</div><h2>Próximas visitas</h2>
+<p class="muted">Programación pendiente registrada por JVAQUA. Las fechas pueden cambiar por motivos operativos.</p></div>
 {% for item in pagina %}
-<article class="card">
-  <strong>{{ item.fecha|date:'d/m/Y' }}</strong> <span class="tag">Programado</span>
-  <p class="muted">Contrato #{{ item.contrato_id }}</p>
-  <a href="{% url 'portal_clientes:mantenimiento_detalle' item.pk %}">Ver visita</a>
+<article class="card visit-card" style="border-left-color:#1684cf">
+ <div><div class="actions" style="align-items:center">
+  <span class="visit-date">{{ item.fecha|date:'d/m/Y' }}</span>
+  <span class="status-tag status-programado">Programado</span>
+ </div><div class="visit-meta">Contrato #{{ item.contrato_id }}</div></div>
+ <a class="visit-action" href="{% url 'portal_clientes:mantenimiento_detalle' item.pk %}">Ver visita →</a>
 </article>
-{% empty %}<p>No tienes próximas visitas programadas.</p>{% endfor %}
-<div class="nav">
-{% if pagina.has_previous %}<a href="?pagina={{ pagina.previous_page_number }}">Anterior</a>{% endif %}
-<span>Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span>
-{% if pagina.has_next %}<a href="?pagina={{ pagina.next_page_number }}">Siguiente</a>{% endif %}
+{% empty %}<div class="card"><p class="muted">No tienes próximas visitas programadas.</p></div>{% endfor %}
+<div class="pagination">
+{% if pagina.has_previous %}<a href="?pagina={{ pagina.previous_page_number }}">← Anterior</a>{% endif %}
+<span class="muted">Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span>
+{% if pagina.has_next %}<a href="?pagina={{ pagina.next_page_number }}">Siguiente →</a>{% endif %}
 </div>
 {% endblock %}
