@@ -2,7 +2,9 @@ from django.contrib.auth import get_user_model, login, logout, authenticate
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.hashers import check_password
 from django.db import transaction
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
+from django.core.paginator import Paginator
+from mantenimientos.models import Mantenimiento
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 from clientes.models import Cliente
@@ -68,3 +70,40 @@ def inicio(request):
 def salir(request):
     logout(request)
     return redirect('portal_clientes:ingresar')
+
+
+def _acceso_vigente(request):
+    return AccesoCliente.objects.select_related('cliente').filter(
+        usuario=request.user, habilitado=True, cliente__activo=True
+    ).first()
+
+
+@login_required(login_url='/portal/ingresar/')
+def mantenimientos(request):
+    acceso = _acceso_vigente(request)
+    if not acceso:
+        return render(request, 'portal_clientes/sin_acceso.html', status=403)
+    # Filtrar SIEMPRE por contrato y cliente para prevenir cruces de registros.
+    registros = Mantenimiento.objects.filter(
+        cliente_id=acceso.cliente_id,
+        contrato__cliente_id=acceso.cliente_id,
+    ).select_related('contrato').order_by('-fecha', '-pk')
+    pagina = Paginator(registros, 20).get_page(request.GET.get('pagina'))
+    return render(request, 'portal_clientes/mantenimientos.html', {
+        'cliente': acceso.cliente, 'pagina': pagina,
+    })
+
+
+@login_required(login_url='/portal/ingresar/')
+def mantenimiento_detalle(request, pk):
+    acceso = _acceso_vigente(request)
+    if not acceso:
+        return render(request, 'portal_clientes/sin_acceso.html', status=403)
+    mantenimiento = get_object_or_404(
+        Mantenimiento.objects.select_related('contrato'),
+        pk=pk, cliente_id=acceso.cliente_id, contrato__cliente_id=acceso.cliente_id,
+    )
+    checklist = getattr(mantenimiento, 'checklist_v2', None)
+    return render(request, 'portal_clientes/mantenimiento_detalle.html', {
+        'cliente': acceso.cliente, 'mantenimiento': mantenimiento, 'checklist': checklist,
+    })
