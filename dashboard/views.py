@@ -7039,17 +7039,29 @@ def inventario_view(request):
 
 @login_required
 def compra_inventario_view(request):
+    """Registra una o varias líneas en una transacción única, conservando los modelos históricos."""
     if not es_admin(request.user):
         return render(request, "dashboard/no_autorizado.html", status=403)
     if request.method != "POST":
         return redirect("inventario")
 
-    insumo = get_object_or_404(Insumo, pk=request.POST.get("insumo_id"))
+    ids = request.POST.getlist("insumo_id[]") or [request.POST.get("insumo_id")]
+    cantidades = request.POST.getlist("cantidad[]") or [request.POST.get("cantidad")]
+    unidades = request.POST.getlist("unidad[]") or [request.POST.get("unidad", "base")]
+    costos = request.POST.getlist("costo_unitario[]") or [request.POST.get("costo_unitario")]
+    if not (1 <= len(ids) <= 50 and len(ids) == len(cantidades) == len(unidades) == len(costos)):
+        messages.error(request, "La compra debe tener entre 1 y 50 productos completos.")
+        return redirect("inventario")
+
     try:
-        cantidad_base = convertir_a_base(insumo, request.POST.get("cantidad"), request.POST.get("unidad", "base"), request.POST.get("presentacion_id") or None)
-        costo_unitario = decimal_positivo(request.POST.get("costo_unitario"), "Costo unitario")
-    except (ValueError, PresentacionInsumo.DoesNotExist) as exc:
-        messages.error(request, str(exc))
+        lineas = []
+        for insumo_id, cantidad, unidad, costo in zip(ids, cantidades, unidades, costos):
+            insumo = Insumo.objects.get(pk=insumo_id, activo=True)
+            cantidad_base = convertir_a_base(insumo, cantidad, unidad or "base")
+            costo_unitario = decimal_positivo(costo, "Costo unitario")
+            lineas.append((insumo, cantidad_base, costo_unitario))
+    except (ValueError, Insumo.DoesNotExist, TypeError) as exc:
+        messages.error(request, f"Compra no registrada: {exc}")
         return redirect("inventario")
 
     proveedor = (request.POST.get("proveedor") or "").strip()
@@ -7057,37 +7069,40 @@ def compra_inventario_view(request):
     fecha_fabricacion = parse_date((request.POST.get("fecha_fabricacion") or "").strip()) or None
     fecha_vencimiento = parse_date((request.POST.get("fecha_vencimiento") or "").strip()) or None
     observacion = (request.POST.get("observacion") or "").strip()
-    total = (cantidad_base * costo_unitario).quantize(Decimal("0.01"))
-
+    total_documento = Decimal("0.00")
     with transaction.atomic():
-        insumo = Insumo.objects.select_for_update().get(pk=insumo.pk)
-        stock_anterior = Decimal(insumo.stock)
-        stock_nuevo = stock_anterior + cantidad_base
-        valor_anterior = stock_anterior * Decimal(insumo.costo or 0)
-        valor_compra = cantidad_base * costo_unitario
-        nuevo_costo = ((valor_anterior + valor_compra) / stock_nuevo) if stock_nuevo > 0 else costo_unitario
-        insumo.stock = stock_nuevo
-        insumo.costo = nuevo_costo.quantize(Decimal("0.0001"))
-        insumo.save(update_fields=["stock", "costo"])
+        for insumo_original, cantidad_base, costo_unitario in lineas:
+            insumo = Insumo.objects.select_for_update().get(pk=insumo_original.pk)
+            stock_anterior = Decimal(insumo.stock)
+            stock_nuevo = stock_anterior + cantidad_base
+            nuevo_costo = ((stock_anterior * Decimal(insumo.costo or 0) + cantidad_base * costo_unitario) / stock_nuevo)
+            total = (cantidad_base * costo_unitario).quantize(Decimal("0.01"))
+            insumo.stock = stock_nuevo
+            insumo.costo = nuevo_costo.quantize(Decimal("0.0001"))
+            insumo.save(update_fields=["stock", "costo"])
+            egreso = Egreso.objects.create(
+                concepto=f"Compra inventario: {insumo.nombre}",
+                categoria="quimicos" if insumo.categoria == "quimicos" else "materiales",
+                cantidad=1, costo_unitario=total, total=total,
+                fecha=timezone.localdate(), proveedor=proveedor,
+            )
+            compra = CompraInsumo.objects.create(
+                insumo=insumo, cantidad=cantidad_base, costo_unitario=costo_unitario,
+                total=total, proveedor=proveedor, lote=lote,
+                fecha_fabricacion=fecha_fabricacion, fecha_vencimiento=fecha_vencimiento,
+                observacion=observacion, egreso=egreso,
+            )
+            MovimientoInventario.objects.create(
+                insumo=insumo, tipo="compra", cantidad=cantidad_base,
+                stock_anterior=stock_anterior, stock_resultante=stock_nuevo,
+                costo_unitario=costo_unitario, total_costo=total,
+                usuario=request.user,
+                observacion=observacion or f"Compra #{compra.pk} · {proveedor or 'sin proveedor'}",
+            )
+            total_documento += total
 
-        egreso = Egreso.objects.create(
-            concepto=f"Compra inventario: {insumo.nombre}", categoria="quimicos" if insumo.categoria == "quimicos" else "materiales",
-            cantidad=1, costo_unitario=total, total=total, fecha=timezone.localdate(), proveedor=proveedor,
-        )
-        compra = CompraInsumo.objects.create(
-            insumo=insumo, cantidad=cantidad_base, costo_unitario=costo_unitario,
-            total=total, proveedor=proveedor, lote=lote, fecha_fabricacion=fecha_fabricacion,
-            fecha_vencimiento=fecha_vencimiento, observacion=observacion, egreso=egreso,
-        )
-        MovimientoInventario.objects.create(
-            insumo=insumo, tipo="compra", cantidad=cantidad_base,
-            stock_anterior=stock_anterior, stock_resultante=insumo.stock,
-            costo_unitario=costo_unitario, total_costo=total, usuario=request.user,
-            observacion=observacion or f"Compra #{compra.pk} · {proveedor or 'sin proveedor'}",
-        )
-
-    _registrar_actividad(request.user, "Compra de inventario", f"Se ingresaron {_cantidad_texto(insumo, cantidad_base)} de {insumo.nombre} por ${total}.", "/dashboard/inventario/")
-    messages.success(request, f"Compra registrada. Stock actual: {_cantidad_texto(insumo, insumo.stock)}")
+    _registrar_actividad(request.user, "Compra de inventario", f"Compra de {len(lineas)} producto(s) por ${total_documento}.", "/dashboard/inventario/")
+    messages.success(request, f"Compra registrada: {len(lineas)} producto(s), total ${total_documento}.")
     return redirect("inventario")
 
 
@@ -7167,19 +7182,31 @@ def vender_insumo_view(request):
 
 @login_required
 def inventario_entrega_trabajador_view(request):
+    """Entrega múltiples insumos de forma atómica al mismo trabajador."""
     if not es_admin(request.user):
         return render(request, "dashboard/no_autorizado.html", status=403)
     if request.method != "POST":
         return redirect("inventario")
-    insumo = get_object_or_404(Insumo, pk=request.POST.get("insumo_id"), puede_asignarse_trabajador=True)
     trabajador = get_object_or_404(Trabajador, pk=request.POST.get("trabajador_id"), activo=True)
-    try:
-        cantidad = convertir_a_base(insumo, request.POST.get("cantidad"), request.POST.get("unidad", "base"))
-        entregar_a_trabajador(insumo=insumo, trabajador=trabajador, cantidad_base=cantidad, usuario=request.user, observacion=request.POST.get("observacion", ""))
-    except ValueError as exc:
-        messages.error(request, str(exc))
+    ids = request.POST.getlist("insumo_id[]") or [request.POST.get("insumo_id")]
+    cantidades = request.POST.getlist("cantidad[]") or [request.POST.get("cantidad")]
+    unidades = request.POST.getlist("unidad[]") or [request.POST.get("unidad", "base")]
+    if not (1 <= len(ids) <= 50 and len(ids) == len(cantidades) == len(unidades)):
+        messages.error(request, "La entrega debe tener entre 1 y 50 productos completos.")
         return redirect("inventario")
-    messages.success(request, f"Entrega registrada a {trabajador}: {_cantidad_texto(insumo, cantidad)} de {insumo.nombre}.")
+    try:
+        lineas = []
+        for insumo_id, cantidad, unidad in zip(ids, cantidades, unidades):
+            insumo = Insumo.objects.get(pk=insumo_id, activo=True, puede_asignarse_trabajador=True)
+            lineas.append((insumo, convertir_a_base(insumo, cantidad, unidad or "base")))
+        with transaction.atomic():
+            for insumo, cantidad in lineas:
+                entregar_a_trabajador(insumo=insumo, trabajador=trabajador, cantidad_base=cantidad,
+                                     usuario=request.user, observacion=request.POST.get("observacion", ""))
+    except (ValueError, Insumo.DoesNotExist, TypeError) as exc:
+        messages.error(request, f"Entrega no registrada: {exc}")
+        return redirect("inventario")
+    messages.success(request, f"Entrega registrada a {trabajador}: {len(lineas)} producto(s).")
     return redirect("inventario")
 
 
