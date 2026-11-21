@@ -7,5 +7,23 @@
 {% if checklist %}<section class="card"><h3>Inspección de la piscina</h3><div class="grid"><div class="metric"><span>Estado de la bomba</span><strong>{{ checklist.get_bomba_estado_display|default:'Sin registrar' }}</strong></div><div class="metric"><span>Estado del filtro</span><strong>{{ checklist.get_filtro_estado_display|default:'Sin registrar' }}</strong></div><div class="metric"><span>Nivel del agua</span><strong>{{ checklist.get_nivel_agua_display|default:'Sin registrar' }}</strong></div></div></section>{% endif %}
 {% if mantenimiento.observaciones %}<section class="card"><h3>Observaciones del técnico</h3><p>{{ mantenimiento.observaciones|linebreaksbr }}</p></section>{% endif %}
 {% else %}<section class="card"><p class="muted">Esta visita todavía no tiene un registro de ejecución disponible.</p></section>{% endif %}
-<section class="card"><h3>Evidencia fotográfica</h3><p class="muted">Las fotografías del antes, después y pH/cloro se habilitarán al finalizar la protección de acceso a archivos. Los valores de pH y cloro se documentan mediante la tercera fotografía, no mediante campos numéricos.</p></section>
+{% if mantenimiento.estado == 'realizado' %}
+<section class="card">
+<h3>📷 Evidencia fotográfica</h3>
+<p class="muted">Fotografías registradas por el técnico. La medición de pH y cloro se documenta mediante fotografía.</p>
+{% if fotos %}
+<div class="grid">
+{% for foto in fotos %}
+<div class="metric" style="padding:12px">
+<strong>{% if forloop.counter == 1 %}1. Antes de iniciar{% elif forloop.counter == 2 %}2. Después de finalizar{% elif forloop.counter == 3 %}3. pH y cloro{% else %}Evidencia {{ forloop.counter }}{% endif %}</strong>
+<a href="{% url 'portal_clientes:foto_mantenimiento' mantenimiento.pk foto.pk %}" target="_blank" rel="noopener noreferrer" aria-label="Ampliar fotografía {{ forloop.counter }}">
+<img src="{% url 'portal_clientes:foto_mantenimiento' mantenimiento.pk foto.pk %}" alt="{{ foto.descripcion|default:'Fotografía del mantenimiento' }}" loading="lazy" style="display:block;width:100%;max-height:280px;object-fit:contain;border-radius:12px;margin-top:12px;background:#edf4fa">
+</a>
+{% if foto.descripcion %}<p class="muted" style="margin:8px 0 0">{{ foto.descripcion }}</p>{% endif %}
+</div>
+{% endfor %}
+</div>
+{% else %}<p class="muted">Este mantenimiento no tiene fotografías disponibles.</p>{% endif %}
+</section>
+{% endif %}
 {% endblock %}

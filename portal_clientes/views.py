@@ -5,6 +5,9 @@ from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import render, redirect, get_object_or_404
 from django.core.paginator import Paginator
+from django.http import FileResponse, Http404
+from django.views.decorators.cache import never_cache
+from mantenimientos.models import FotoMantenimiento
 from mantenimientos.models import Mantenimiento
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
@@ -108,8 +111,9 @@ def mantenimiento_detalle(request, pk):
         pk=pk, cliente_id=acceso.cliente_id, contrato__cliente_id=acceso.cliente_id,
     )
     checklist = getattr(mantenimiento, 'checklist_v2', None)
+    fotos = list(mantenimiento.fotos.order_by('creada_en', 'pk')) if mantenimiento.estado == 'realizado' else []
     return render(request, 'portal_clientes/mantenimiento_detalle.html', {
-        'cliente': acceso.cliente, 'mantenimiento': mantenimiento, 'checklist': checklist,
+        'cliente': acceso.cliente, 'mantenimiento': mantenimiento, 'checklist': checklist, 'fotos': fotos,
     })
 
 
@@ -128,3 +132,34 @@ def proximas_visitas(request):
     return render(request, 'portal_clientes/proximas_visitas.html', {
         'cliente': acceso.cliente, 'pagina': pagina,
     })
+
+
+@never_cache
+@login_required(login_url='/portal/ingresar/')
+def foto_mantenimiento(request, pk, foto_id):
+    """Lectura de evidencias mediante permisos por cliente, contrato y mantenimiento.
+
+    No publica ni expone la URL del proveedor de almacenamiento.
+    """
+    acceso = _acceso_vigente(request)
+    if not acceso:
+        raise Http404
+    foto = get_object_or_404(
+        FotoMantenimiento.objects.select_related('mantenimiento'),
+        pk=foto_id, mantenimiento_id=pk,
+        mantenimiento__cliente_id=acceso.cliente_id,
+        mantenimiento__contrato__cliente_id=acceso.cliente_id,
+        mantenimiento__estado='realizado',
+    )
+    if not foto.imagen or not foto.imagen.name:
+        raise Http404
+    try:
+        archivo = foto.imagen.open('rb')
+    except (OSError, IOError, ValueError):
+        raise Http404
+    respuesta = FileResponse(archivo, content_type='image/jpeg')
+    respuesta['Content-Disposition'] = 'inline'
+    respuesta['X-Content-Type-Options'] = 'nosniff'
+    respuesta['Cache-Control'] = 'private, no-store, max-age=0'
+    respuesta['Referrer-Policy'] = 'no-referrer'
+    return respuesta
