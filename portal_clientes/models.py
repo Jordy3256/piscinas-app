@@ -61,3 +61,35 @@ class NotificacionMantenimientoCliente(models.Model):
     class Meta:
         constraints = [models.UniqueConstraint(fields=['cliente', 'mantenimiento', 'tipo'], name='portal_aviso_mantenimiento_unico')]
         ordering = ['-creada_en', '-pk']
+
+
+class AvisoPortal(models.Model):
+    """Notificaciones de cobro, pagos y comunicados, separadas de los avisos de mantenimiento."""
+    cliente = models.ForeignKey('clientes.Cliente', on_delete=models.CASCADE, related_name='avisos_generales_portal')
+    clave = models.CharField(max_length=110)
+    tipo = models.CharField(max_length=20)
+    titulo = models.CharField(max_length=160)
+    detalle = models.TextField(max_length=1500)
+    creada_en = models.DateTimeField(default=timezone.now)
+    leida_en = models.DateTimeField(null=True, blank=True)
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['cliente','clave'], name='portal_aviso_general_unico')]
+        ordering = ['-creada_en','-pk']
+
+
+class ComunicadoPortal(models.Model):
+    DESTINOS = [('todos','Todos los clientes'),('ciudad','Clientes de una ciudad'),('cliente','Cliente individual')]
+    titulo = models.CharField(max_length=160)
+    contenido = models.TextField(max_length=1500)
+    destino = models.CharField(max_length=12, choices=DESTINOS, default='todos')
+    ciudad = models.ForeignKey('clientes.Ciudad', on_delete=models.PROTECT, null=True, blank=True)
+    cliente = models.ForeignKey('clientes.Cliente', on_delete=models.PROTECT, null=True, blank=True)
+    publicado_en = models.DateTimeField(null=True, blank=True, editable=False)
+    creado_en = models.DateTimeField(auto_now_add=True)
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        if self.destino == 'ciudad' and not self.ciudad_id:
+            raise ValidationError({'ciudad':'Seleccione una ciudad.'})
+        if self.destino == 'cliente' and not self.cliente_id:
+            raise ValidationError({'cliente':'Seleccione un cliente.'})
+    def __str__(self): return self.titulo
