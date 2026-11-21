@@ -20,7 +20,6 @@
 .portal-detail .photo-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
 .portal-detail .photo-tile{background:#f2f7fc;border-radius:12px;padding:10px;min-width:0}
 .portal-detail .photo-tile strong{font-size:13px}.portal-detail .photo-tile img{display:block;width:100%;height:205px;object-fit:contain;background:#eaf2f9;border-radius:9px;margin:8px 0}
-.portal-detail .photo-tile p{font-size:12px;margin:5px 0}
 .portal-detail .record-value{display:inline-block;background:#f2f7fc;border-radius:12px;padding:11px 16px;font-weight:800}
 @media(max-width:750px){.portal-detail .check-grid,.portal-detail .photo-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.portal-detail .info-grid{grid-template-columns:1fr 1fr}.portal-detail .chem-list{grid-template-columns:1fr}}
 @media(max-width:480px){.portal-detail .check-grid,.portal-detail .photo-grid{grid-template-columns:1fr}.portal-detail .info-grid{grid-template-columns:1fr}.portal-detail .photo-tile img{height:240px}}
@@ -29,14 +28,13 @@
 <p style="margin:0 0 12px"><a href="{% url 'portal_clientes:mantenimientos' %}">← Volver al historial</a></p>
 <section class="hero"><div class="eyebrow">DETALLE DEL MANTENIMIENTO</div><h2>{{ mantenimiento.fecha|date:'d/m/Y' }}</h2><p>Contrato #{{ mantenimiento.contrato_id }}</p><span class="status-tag status-{{ mantenimiento.estado }}">{{ mantenimiento.get_estado_display }}</span></section>
 {% if mantenimiento.estado == 'realizado' %}
-<section class="card"><h3>🔎 1. Inspección de la piscina</h3>
+<section class="card"><h3>🔎 Inspección de la piscina</h3>
 {% if checklist %}<div class="info-grid">
 <div class="info-tile"><small>Estado de la bomba</small><strong>{{ checklist.get_bomba_estado_display|default:'Sin registrar' }}</strong></div>
 <div class="info-tile"><small>Estado del filtro</small><strong>{{ checklist.get_filtro_estado_display|default:'Sin registrar' }}</strong></div>
 <div class="info-tile"><small>Nivel del agua</small><strong>{{ checklist.get_nivel_agua_display|default:'Sin registrar' }}</strong></div>
-{% if mantenimiento.estado_agua_rapido %}<div class="info-tile"><small>Estado del agua</small><strong>{{ mantenimiento.get_estado_agua_rapido_display }}</strong></div>{% endif %}
 </div>{% else %}<p class="muted">Sin inspección registrada.</p>{% endif %}</section>
-<section class="card"><h3>✓ 2. Checklist de mantenimiento</h3>
+<section class="card"><h3>✓ Checklist de mantenimiento</h3>
 {% if checklist %}<div class="check-grid">
 <div class="check-item {% if checklist.aspirado %}done{% endif %}"><span class="check-mark">{% if checklist.aspirado %}✓{% endif %}</span>Aspirado</div>
 <div class="check-item {% if checklist.cepillado %}done{% endif %}"><span class="check-mark">{% if checklist.cepillado %}✓{% endif %}</span>Cepillado</div>
@@ -45,16 +43,16 @@
 <div class="check-item {% if checklist.retrolavado_arena %}done{% endif %}"><span class="check-mark">{% if checklist.retrolavado_arena %}✓{% endif %}</span>Retrolavado de arena</div>
 <div class="check-item {% if checklist.limpieza_filos %}done{% endif %}"><span class="check-mark">{% if checklist.limpieza_filos %}✓{% endif %}</span>Limpieza de filos</div>
 </div>{% else %}<p class="muted">Sin checklist registrado.</p>{% endif %}</section>
-<section class="card"><h3>🧪 3. Insumos químicos utilizados</h3>
+<section class="card"><h3>🧪 Insumos químicos utilizados</h3>
 {% if usos %}<div class="chem-list">{% for uso in usos %}<div class="chem-item"><span>{{ uso.insumo.nombre }}</span><strong>{{ uso.cantidad_mostrada|floatformat:'-3' }} {{ uso.unidad_mostrada }}</strong></div>{% endfor %}</div>
 {% else %}<p class="muted" style="margin:0">No se registraron insumos químicos en esta visita.</p>{% endif %}</section>
-<section class="card"><h3>📷 4. Evidencia fotográfica</h3>
+<section class="card"><h3>📷 Evidencia fotográfica</h3>
 {% if fotos %}<div class="photo-grid">{% for foto in fotos %}<div class="photo-tile">
 <strong>{% if forloop.counter == 1 %}Antes de iniciar{% elif forloop.counter == 2 %}Después de finalizar{% elif forloop.counter == 3 %}pH y cloro{% else %}Evidencia {{ forloop.counter }}{% endif %}</strong>
 <a href="{% url 'portal_clientes:foto_mantenimiento' mantenimiento.pk foto.pk %}" target="_blank" rel="noopener noreferrer" aria-label="Ampliar fotografía {{ forloop.counter }}"><img src="{% url 'portal_clientes:foto_mantenimiento' mantenimiento.pk foto.pk %}" alt="{{ foto.descripcion|default:'Fotografía del mantenimiento' }}" loading="lazy"></a>
-{% if foto.descripcion %}<p class="muted">{{ foto.descripcion }}</p>{% endif %}</div>{% endfor %}</div>
+</div>{% endfor %}</div>
 {% else %}<p class="muted">Sin fotografías disponibles.</p>{% endif %}</section>
-<section class="card"><h3>◷ 5. Registro del mantenimiento</h3>
+<section class="card"><h3>◷ Registro del mantenimiento</h3>
 <div class="record-value">{% if mantenimiento.realizado_en %}{{ mantenimiento.realizado_en|date:'d/m/Y · H:i' }}{% else %}Sin fecha y hora registradas{% endif %}</div>
 {% if mantenimiento.observaciones %}<p class="muted" style="margin:10px 0 0">{{ mantenimiento.observaciones|linebreaksbr }}</p>{% endif %}</section>
 {% else %}<section class="card"><p class="muted">Esta visita no tiene un registro de ejecución disponible.</p></section>{% endif %}
