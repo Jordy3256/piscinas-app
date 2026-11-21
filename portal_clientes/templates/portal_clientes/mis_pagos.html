@@ -5,7 +5,7 @@
 <form method="get" style="margin:18px 0"><label for="contrato">Consultar contrato:</label> <select id="contrato" name="contrato" style="padding:10px;border:1px solid #dce7f3;border-radius:10px;max-width:100%"><option value="">Todos mis contratos</option>{% for c in contratos %}<option value="{{ c.pk }}" {% if seleccion == c.pk|stringformat:'s' %}selected{% endif %}>Contrato #{{ c.pk }} · {{ c }}</option>{% endfor %}</select> <button type="submit">Consultar</button></form>
 <div class="grid" style="margin:16px 0">
  <div class="card" style="background:#f0f7ff"><div class="muted">Próximos pagos</div><h2 style="color:#075a99">$ {{ saldo|floatformat:2 }}</h2></div>
- <div class="card" style="background:#fff4e9"><div class="muted">De los próximos pagos, vencido</div><h2 style="color:#a65d00">$ {{ vencido|floatformat:2 }}</h2></div>
+ <div class="card" style="background:#fff4e9"><div class="muted">Saldo total vencido</div><h2 style="color:#a65d00">$ {{ vencido|floatformat:2 }}</h2></div>
  <div class="card" style="background:#eaf8f0"><div class="muted">Total de pagos registrados</div><h2 style="color:#08724d">$ {{ pagado|floatformat:2 }}</h2></div>
 </div>
 <h3 class="section-head">{% if seleccion %}Próxima factura{% else %}Próxima factura por contrato{% endif %}</h3>
@@ -20,5 +20,5 @@
  {% if fila.pagos %}<details style="margin-top:12px"><summary style="cursor:pointer;color:#075a99;font-weight:700">Ver pagos registrados ({{ fila.pagos|length }})</summary><div style="padding:10px 0">{% for pago in fila.pagos %}<div style="padding:7px 0;border-bottom:1px solid #e5edf5">{{ pago.fecha|date:'d/m/Y' }} · $ {{ pago.monto|floatformat:2 }} · {{ pago.get_metodo_pago_display }}</div>{% endfor %}</div></details>{% endif %}
 </section>{% empty %}<div class="card"><p class="muted">Todavía no hay pagos o facturas bonificadas para esta selección.</p></div>{% endfor %}
 <div class="pagination">{% if pagina.has_previous %}<a href="?{% if seleccion %}contrato={{ seleccion }}&amp;{% endif %}pagina={{ pagina.previous_page_number }}">← Anterior</a>{% endif %}<span class="muted">Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span>{% if pagina.has_next %}<a href="?{% if seleccion %}contrato={{ seleccion }}&amp;{% endif %}pagina={{ pagina.next_page_number }}">Siguiente →</a>{% endif %}</div>
-<p class="muted" style="font-size:13px;margin-top:20px">Solo se muestran las próximas obligaciones de cada contrato y el historial de pagos; no se suman facturas futuras posteriores. Para aclaraciones, comunícate con administración de JVAQUA.</p>
+<p class="muted" style="font-size:13px;margin-top:20px">Se muestra una sola próxima factura por contrato. El saldo vencido suma todas las obligaciones exigibles atrasadas, aunque no se enumeren aquí; no incluye cuotas futuras todavía no exigibles. Para aclaraciones, comunícate con administración de JVAQUA.</p>
 {% endblock %}
