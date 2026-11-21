@@ -15,6 +15,10 @@
   <span class="shortcut-icon">▦</span><h3>Próximas visitas</h3>
   <p class="muted">Revisa la programación de mantenimiento de tus piscinas.</p>
  </a>
+ <a class="card card-link portal-shortcut" href="{% url 'portal_clientes:mis_pagos' %}">
+  <span class="shortcut-icon">$</span><h3>Mis pagos</h3>
+  <p class="muted">Consulta tus facturas, pagos y saldos pendientes.</p>
+ </a>
 </div>
 <h3 class="section-head">Mis contratos</h3>
 <div class="grid">
@@ -26,6 +30,6 @@
 </section>
 {% empty %}<p class="muted">No hay contratos asociados a tu cuenta.</p>{% endfor %}
 </div>
-<p class="muted" style="font-size:13px;margin-top:24px">Los pagos y las fotografías se habilitarán cuando estén completos sus controles de seguridad.</p>
+<p class="muted" style="font-size:13px;margin-top:24px">Consulta tus facturas y pagos en la sección Mis pagos.</p>
 <form action="{% url 'portal_clientes:salir' %}" method="post">{% csrf_token %}<button type="submit" style="background:#edf3fa;color:#244c70;margin-top:12px">Cerrar sesión</button></form>
 {% endblock %}

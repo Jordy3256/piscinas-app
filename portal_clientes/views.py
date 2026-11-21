@@ -164,3 +164,51 @@ def foto_mantenimiento(request, pk, foto_id):
     respuesta['Cache-Control'] = 'private, no-store, max-age=0'
     respuesta['Referrer-Policy'] = 'no-referrer'
     return respuesta
+
+
+@login_required(login_url='/portal/ingresar/')
+@never_cache
+def mis_pagos(request):
+    """Consulta financiera de solo lectura, limitada a contratos propios."""
+    from decimal import Decimal
+    from django.db.models import Prefetch
+    from finanzas.models import Factura, PagoFactura
+
+    acceso = _acceso_vigente(request)
+    if not acceso:
+        return render(request, 'portal_clientes/sin_acceso.html', status=403)
+    contratos = Contrato.objects.filter(cliente_id=acceso.cliente_id).order_by('pk')
+    contrato_ids = list(contratos.values_list('pk', flat=True))
+    seleccion = (request.GET.get('contrato') or '').strip()
+    if seleccion and (not seleccion.isdecimal() or int(seleccion) not in contrato_ids):
+        raise Http404('Contrato no disponible')
+    if seleccion:
+        contrato_ids = [int(seleccion)]
+    facturas = list(Factura.objects.filter(
+        cliente_id=acceso.cliente_id, contrato_id__in=contrato_ids
+    ).select_related('contrato').prefetch_related(
+        Prefetch('pagos', queryset=PagoFactura.objects.filter(activo=True).order_by('-fecha', '-pk'))
+    ).order_by('-fecha_vencimiento', '-pk'))
+    hoy = timezone.localdate()
+    saldo = Decimal('0.00')
+    vencido = Decimal('0.00')
+    pagado = Decimal('0.00')
+    filas = []
+    for factura in facturas:
+        # Respetar las propiedades del modelo, incluidas promociones y pagos históricos.
+        restante = factura.saldo
+        abonado = factura.monto_pagado
+        if factura.estado != Factura.ESTADO_ANULADA:
+            saldo += restante
+            pagado += abonado
+            if factura.fecha_vencimiento < hoy:
+                vencido += restante
+        filas.append({'factura': factura, 'saldo': restante, 'pagado': abonado,
+                      'vencida': restante > 0 and factura.fecha_vencimiento < hoy,
+                      'pagos': [p for p in factura.pagos.all() if p.activo]})
+    pagina = Paginator(filas, 15).get_page(request.GET.get('pagina'))
+    return render(request, 'portal_clientes/mis_pagos.html', {
+        'cliente': acceso.cliente, 'contratos': contratos, 'seleccion': seleccion,
+        'saldo': saldo, 'vencido': vencido, 'pagado': pagado,
+        'pagina': pagina,
+    })
