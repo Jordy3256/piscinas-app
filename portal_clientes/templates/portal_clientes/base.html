@@ -22,4 +22,14 @@ body{background:radial-gradient(ellipse at 15% 0%,#e3f2ff 0%,transparent 38%),li
 .pagination{display:flex;justify-content:center;align-items:center;gap:12px;margin-top:20px;flex-wrap:wrap}.pagination a{padding:9px 13px;background:#eaf4ff;border-radius:10px;font-weight:700}
 .contract-card{border-left:4px solid #1387cb;background:linear-gradient(120deg,#fff,#f8fbff)}
 @media(max-width:620px){.visit-card{align-items:flex-start;flex-direction:column}.visit-action{width:100%;justify-content:center}.account-pill{padding:7px 10px}.portal-shortcut{min-height:130px}}
-</style></head><body><div class="shell"><header class="topbar"><a href="{% url 'portal_clientes:inicio' %}" class="brand"><span class="brand-mark">JV</span><span>JVAQUA <small>PORTAL DE CLIENTES</small></span></a>{% if cliente %}<span class="account-pill">● Mi cuenta</span>{% endif %}</header>{% if cliente %}{% endif %}<main class="page">{% block content %}{% endblock %}</main><footer class="footer">JVAQUA POOL SERVICES · Portal privado de clientes</footer></div></body></html>
+
+.jv-support-link{display:inline-flex;align-items:center;gap:7px;background:#eaf4ff;color:#075b98;padding:9px 13px;border-radius:12px;font-weight:800;font-size:13px}.jv-support-badge{display:none;min-width:20px;height:20px;padding:1px 5px;border-radius:12px;background:#d92d20;color:#fff;font-size:11px;text-align:center}.jv-support-badge[data-count]:not([data-count="0"]){display:inline-block}
+</style></head><body><div class="shell"><header class="topbar"><a href="{% url 'portal_clientes:inicio' %}" class="brand"><span class="brand-mark">JV</span><span>JVAQUA <small>PORTAL DE CLIENTES</small></span></a>{% if cliente %}<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><a class="jv-support-link" href="{% url 'portal_clientes:soporte' %}" aria-label="Chat de soporte y mensajes pendientes">✉ Soporte <span class="jv-support-badge" data-jv-support-count data-count="0" aria-live="polite"></span></a><span class="account-pill">● Mi cuenta</span></div>{% endif %}</header>{% if cliente %}{% endif %}<main class="page">{% block content %}{% endblock %}</main><footer class="footer">JVAQUA POOL SERVICES · Portal privado de clientes</footer></div>{% if cliente %}<script>
+(function(){
+ const badges=document.querySelectorAll('[data-jv-support-count]');
+ if(!badges.length)return;
+ const endpoint="{% url 'portal_clientes:soporte_contadores' %}";
+ async function refresh(){if(document.hidden)return;try{const response=await fetch(endpoint,{credentials:'same-origin',cache:'no-store',headers:{'Accept':'application/json'}});if(!response.ok)return;const data=await response.json();const n=Math.max(0,Number(data.total)||0);badges.forEach(b=>{b.dataset.count=String(n);b.textContent=n>99?'99+':String(n);b.setAttribute('aria-label',n+' mensajes sin leer');});}catch(e){/* No interrumpir navegación si no hay red */}}
+ refresh();setInterval(refresh,15000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh()});
+})();
+</script>{% endif %}</body></html>

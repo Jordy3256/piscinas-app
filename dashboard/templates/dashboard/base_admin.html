@@ -950,6 +950,7 @@ form[method="get"]{position:relative} form[method="get"] .form-label{font-weight
                       data-bs-target="#jvModuleLauncher"
                       aria-controls="jvModuleLauncher"
                       title="Explorar módulos">☰</button>
+              <a class="btn btn-outline-primary btn-sm fw-bold" href="{% url 'soporte_admin_lista' %}" title="Mensajes de clientes" aria-label="Soporte de clientes">💬 Clientes <span id="jv-admin-chat-badge" style="display:none;background:#d92d20;color:white;border-radius:12px;padding:2px 6px;font-size:11px" aria-live="polite"></span></a>
               {% if novedades_mantenimiento_pendientes %}
               <a class="btn btn-warning btn-sm fw-bold" href="/dashboard/notificaciones/" title="Novedades de mantenimiento pendientes">
                 ⚠️ Novedades {{ novedades_mantenimiento_pendientes }}
@@ -2065,5 +2066,12 @@ form[method="get"]{position:relative} form[method="get"] .form-label{font-weight
 </script>
 {% endif %}
 
-</body>
+<script>
+(function(){
+ const badge=document.getElementById('jv-admin-chat-badge');if(!badge)return;
+ const endpoint="{% url 'soporte_admin_contadores' %}?lado=admin";
+ async function refresh(){if(document.hidden)return;try{const r=await fetch(endpoint,{credentials:'same-origin',cache:'no-store',headers:{'Accept':'application/json'}});if(!r.ok)return;const d=await r.json();const n=Math.max(0,Number(d.total)||0);badge.textContent=n>99?'99+':String(n);badge.style.display=n?'inline-block':'none';badge.setAttribute('aria-label',n+' mensajes sin leer');}catch(e){}}
+ refresh();setInterval(refresh,15000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh()});
+})();
+</script></body>
 </html>
