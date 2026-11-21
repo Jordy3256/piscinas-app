@@ -229,3 +229,37 @@ def mis_pagos(request):
         'saldo': saldo, 'vencido': vencido, 'pagado': pagado,
         'pagina': pagina, 'proximas': proximas,
     })
+
+
+@login_required(login_url='/portal/ingresar/')
+@never_cache
+def mi_contrato(request, pk):
+    """Ficha contractual de solo lectura; nunca permite consultar contratos ajenos."""
+    from finanzas.models import Factura
+
+    acceso = _acceso_vigente(request)
+    if not acceso:
+        return render(request, 'portal_clientes/sin_acceso.html', status=403)
+    contrato = get_object_or_404(Contrato, pk=pk, cliente_id=acceso.cliente_id)
+    hoy = timezone.localdate()
+    facturas = Factura.objects.filter(
+        cliente_id=acceso.cliente_id, contrato_id=contrato.pk
+    ).exclude(estado=Factura.ESTADO_ANULADA).order_by('periodo_inicio', 'pk')
+    periodo_actual = None
+    proximo_periodo = None
+    proxima_factura = None
+    for factura in facturas:
+        if factura.periodo_inicio and factura.periodo_fin:
+            if factura.periodo_inicio <= hoy < factura.periodo_fin:
+                if periodo_actual is None or factura.periodo_inicio > periodo_actual.periodo_inicio:
+                    periodo_actual = factura
+            elif factura.periodo_inicio > hoy:
+                if proximo_periodo is None or factura.periodo_inicio < proximo_periodo.periodo_inicio:
+                    proximo_periodo = factura
+        if factura.saldo > 0:
+            if proxima_factura is None or (factura.fecha_real_cobro, factura.fecha_vencimiento, factura.pk) < (proxima_factura.fecha_real_cobro, proxima_factura.fecha_vencimiento, proxima_factura.pk):
+                proxima_factura = factura
+    return render(request, 'portal_clientes/mi_contrato.html', {
+        'cliente': acceso.cliente, 'contrato': contrato, 'periodo_actual': periodo_actual,
+        'proximo_periodo': proximo_periodo, 'proxima_factura': proxima_factura,
+    })

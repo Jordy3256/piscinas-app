@@ -27,6 +27,7 @@
  <span class="eyebrow muted">Contrato #{{ contrato.pk }}</span>
  <h3 style="margin:12px 0">{{ contrato }}</h3>
  {% if contrato.activo %}<span class="status-tag status-realizado">● Activo</span>{% else %}<span class="status-tag status-cancelado">● Inactivo</span>{% endif %}
+<a class="visit-action" style="margin-top:12px" href="{% url 'portal_clientes:mi_contrato' contrato.pk %}">Ver mi contrato →</a>
 </section>
 {% empty %}<p class="muted">No hay contratos asociados a tu cuenta.</p>{% endfor %}
 </div>
