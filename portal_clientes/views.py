@@ -107,3 +107,20 @@ def mantenimiento_detalle(request, pk):
     return render(request, 'portal_clientes/mantenimiento_detalle.html', {
         'cliente': acceso.cliente, 'mantenimiento': mantenimiento, 'checklist': checklist,
     })
+
+
+@login_required(login_url='/portal/ingresar/')
+def proximas_visitas(request):
+    acceso = _acceso_vigente(request)
+    if not acceso:
+        return render(request, 'portal_clientes/sin_acceso.html', status=403)
+    visitas = Mantenimiento.objects.filter(
+        cliente_id=acceso.cliente_id,
+        contrato__cliente_id=acceso.cliente_id,
+        estado='pendiente',
+        fecha__gte=timezone.localdate(),
+    ).select_related('contrato').order_by('fecha', 'pk')
+    pagina = Paginator(visitas, 20).get_page(request.GET.get('pagina'))
+    return render(request, 'portal_clientes/proximas_visitas.html', {
+        'cliente': acceso.cliente, 'pagina': pagina,
+    })

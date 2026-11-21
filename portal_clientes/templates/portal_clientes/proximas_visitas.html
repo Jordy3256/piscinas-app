@@ -1,0 +1,17 @@
+{% extends 'portal_clientes/base.html' %}
+{% block content %}
+<h2>Próximas visitas</h2>
+<p class="muted">Programación pendiente registrada por JVAQUA. Las fechas pueden cambiar por motivos operativos.</p>
+{% for item in pagina %}
+<article class="card">
+  <strong>{{ item.fecha|date:'d/m/Y' }}</strong> <span class="tag">Programado</span>
+  <p class="muted">Contrato #{{ item.contrato_id }}</p>
+  <a href="{% url 'portal_clientes:mantenimiento_detalle' item.pk %}">Ver visita</a>
+</article>
+{% empty %}<p>No tienes próximas visitas programadas.</p>{% endfor %}
+<div class="nav">
+{% if pagina.has_previous %}<a href="?pagina={{ pagina.previous_page_number }}">Anterior</a>{% endif %}
+<span>Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span>
+{% if pagina.has_next %}<a href="?pagina={{ pagina.next_page_number }}">Siguiente</a>{% endif %}
+</div>
+{% endblock %}
