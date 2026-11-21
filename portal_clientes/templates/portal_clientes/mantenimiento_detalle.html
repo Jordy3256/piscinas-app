@@ -1,71 +1,62 @@
 {% extends 'portal_clientes/base.html' %}
 {% block content %}
 <style>
-.portal-cleaning-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:18px}
-.portal-cleaning-item{display:flex;align-items:center;gap:12px;padding:15px 16px;border:1px solid #dce5ef;border-radius:14px;background:#f8fbfe;color:#163452;font-weight:750;min-height:56px}
-.portal-cleaning-done{background:#eaf8f0;border-color:#8fd9b2;color:#0c6143}
-.portal-cleaning-box{display:inline-flex;align-items:center;justify-content:center;flex:0 0 25px;width:25px;height:25px;border:2px solid #b9cadd;border-radius:7px;background:white;color:white;font-size:17px;font-weight:900}
-.portal-cleaning-done .portal-cleaning-box{background:#159c68;border-color:#159c68}
-.portal-registration{max-width:480px;margin-top:15px}.portal-registration strong{display:block;margin-top:5px;font-size:20px}
-@media(max-width:600px){.portal-cleaning-grid{grid-template-columns:1fr}}
+.portal-detail .hero{padding:22px 25px;margin-bottom:12px;border-radius:18px}
+.portal-detail .hero h2{margin:5px 0;font-size:26px}.portal-detail .hero p{margin:5px 0 10px}
+.portal-detail .card{padding:16px 18px;margin:10px 0;border-radius:16px}
+.portal-detail .card h3{margin:0 0 12px;font-size:16px}
+.portal-detail .info-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.portal-detail .info-tile{background:#f2f7fc;border-radius:12px;padding:11px 13px;min-width:0}
+.portal-detail .info-tile small{display:block;color:#647d93;font-size:11px;margin-bottom:4px}
+.portal-detail .info-tile strong{display:block;font-size:14px;overflow-wrap:anywhere}
+.portal-detail .check-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.portal-detail .check-item{display:flex;align-items:center;gap:9px;padding:10px 12px;border:1px solid #dce7f3;border-radius:11px;background:#f8fbff;font-size:13px;font-weight:750;min-height:43px}
+.portal-detail .check-item.done{background:#e8f7ef;border-color:#8cdbb3;color:#086b47}
+.portal-detail .check-mark{display:grid;place-items:center;flex:none;width:23px;height:23px;border-radius:7px;border:2px solid #b8cbe0;background:white;color:white;font-size:16px}
+.portal-detail .done .check-mark{background:#139b68;border-color:#139b68}
+.portal-detail .chem-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.portal-detail .chem-item{display:flex;justify-content:space-between;align-items:center;gap:12px;background:#f2f7fc;border-radius:11px;padding:11px 13px;font-size:13px}
+.portal-detail .chem-item strong{white-space:nowrap;color:#075b9c}
+.portal-detail .photo-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.portal-detail .photo-tile{background:#f2f7fc;border-radius:12px;padding:10px;min-width:0}
+.portal-detail .photo-tile strong{font-size:13px}.portal-detail .photo-tile img{display:block;width:100%;height:205px;object-fit:contain;background:#eaf2f9;border-radius:9px;margin:8px 0}
+.portal-detail .photo-tile p{font-size:12px;margin:5px 0}
+.portal-detail .record-value{display:inline-block;background:#f2f7fc;border-radius:12px;padding:11px 16px;font-weight:800}
+@media(max-width:750px){.portal-detail .check-grid,.portal-detail .photo-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.portal-detail .info-grid{grid-template-columns:1fr 1fr}.portal-detail .chem-list{grid-template-columns:1fr}}
+@media(max-width:480px){.portal-detail .check-grid,.portal-detail .photo-grid{grid-template-columns:1fr}.portal-detail .info-grid{grid-template-columns:1fr}.portal-detail .photo-tile img{height:240px}}
 </style>
-
-<p><a href="{% url 'portal_clientes:mantenimientos' %}">← Volver al historial</a></p>
-<section class="hero"><div class="eyebrow">Detalle del mantenimiento</div><h2>{{ mantenimiento.fecha|date:'d/m/Y' }}</h2><p class="muted">Contrato #{{ mantenimiento.contrato_id }}</p><span class="status-tag status-{{ mantenimiento.estado }}">{{ mantenimiento.get_estado_display }}</span></section>
+<div class="portal-detail">
+<p style="margin:0 0 12px"><a href="{% url 'portal_clientes:mantenimientos' %}">← Volver al historial</a></p>
+<section class="hero"><div class="eyebrow">DETALLE DEL MANTENIMIENTO</div><h2>{{ mantenimiento.fecha|date:'d/m/Y' }}</h2><p>Contrato #{{ mantenimiento.contrato_id }}</p><span class="status-tag status-{{ mantenimiento.estado }}">{{ mantenimiento.get_estado_display }}</span></section>
 {% if mantenimiento.estado == 'realizado' %}
-<section class="card">
-<h3>✓ Limpieza realizada</h3>
-{% if checklist %}
-<div class="portal-cleaning-grid">
-<div class="portal-cleaning-item {% if checklist.aspirado %}portal-cleaning-done{% endif %}">
- <span class="portal-cleaning-box" aria-hidden="true">{% if checklist.aspirado %}✓{% endif %}</span>
- <span>Aspirado</span>
+<section class="card"><h3>🔎 1. Inspección de la piscina</h3>
+{% if checklist %}<div class="info-grid">
+<div class="info-tile"><small>Estado de la bomba</small><strong>{{ checklist.get_bomba_estado_display|default:'Sin registrar' }}</strong></div>
+<div class="info-tile"><small>Estado del filtro</small><strong>{{ checklist.get_filtro_estado_display|default:'Sin registrar' }}</strong></div>
+<div class="info-tile"><small>Nivel del agua</small><strong>{{ checklist.get_nivel_agua_display|default:'Sin registrar' }}</strong></div>
+{% if mantenimiento.estado_agua_rapido %}<div class="info-tile"><small>Estado del agua</small><strong>{{ mantenimiento.get_estado_agua_rapido_display }}</strong></div>{% endif %}
+</div>{% else %}<p class="muted">Sin inspección registrada.</p>{% endif %}</section>
+<section class="card"><h3>✓ 2. Checklist de mantenimiento</h3>
+{% if checklist %}<div class="check-grid">
+<div class="check-item {% if checklist.aspirado %}done{% endif %}"><span class="check-mark">{% if checklist.aspirado %}✓{% endif %}</span>Aspirado</div>
+<div class="check-item {% if checklist.cepillado %}done{% endif %}"><span class="check-mark">{% if checklist.cepillado %}✓{% endif %}</span>Cepillado</div>
+<div class="check-item {% if checklist.recoleccion_basura %}done{% endif %}"><span class="check-mark">{% if checklist.recoleccion_basura %}✓{% endif %}</span>Recolección de basura</div>
+<div class="check-item {% if checklist.limpieza_filtros %}done{% endif %}"><span class="check-mark">{% if checklist.limpieza_filtros %}✓{% endif %}</span>Limpieza de filtros</div>
+<div class="check-item {% if checklist.retrolavado_arena %}done{% endif %}"><span class="check-mark">{% if checklist.retrolavado_arena %}✓{% endif %}</span>Retrolavado de arena</div>
+<div class="check-item {% if checklist.limpieza_filos %}done{% endif %}"><span class="check-mark">{% if checklist.limpieza_filos %}✓{% endif %}</span>Limpieza de filos</div>
+</div>{% else %}<p class="muted">Sin checklist registrado.</p>{% endif %}</section>
+<section class="card"><h3>🧪 3. Insumos químicos utilizados</h3>
+{% if usos %}<div class="chem-list">{% for uso in usos %}<div class="chem-item"><span>{{ uso.insumo.nombre }}</span><strong>{{ uso.cantidad_mostrada|floatformat:'-3' }} {{ uso.unidad_mostrada }}</strong></div>{% endfor %}</div>
+{% else %}<p class="muted" style="margin:0">No se registraron insumos químicos en esta visita.</p>{% endif %}</section>
+<section class="card"><h3>📷 4. Evidencia fotográfica</h3>
+{% if fotos %}<div class="photo-grid">{% for foto in fotos %}<div class="photo-tile">
+<strong>{% if forloop.counter == 1 %}Antes de iniciar{% elif forloop.counter == 2 %}Después de finalizar{% elif forloop.counter == 3 %}pH y cloro{% else %}Evidencia {{ forloop.counter }}{% endif %}</strong>
+<a href="{% url 'portal_clientes:foto_mantenimiento' mantenimiento.pk foto.pk %}" target="_blank" rel="noopener noreferrer" aria-label="Ampliar fotografía {{ forloop.counter }}"><img src="{% url 'portal_clientes:foto_mantenimiento' mantenimiento.pk foto.pk %}" alt="{{ foto.descripcion|default:'Fotografía del mantenimiento' }}" loading="lazy"></a>
+{% if foto.descripcion %}<p class="muted">{{ foto.descripcion }}</p>{% endif %}</div>{% endfor %}</div>
+{% else %}<p class="muted">Sin fotografías disponibles.</p>{% endif %}</section>
+<section class="card"><h3>◷ 5. Registro del mantenimiento</h3>
+<div class="record-value">{% if mantenimiento.realizado_en %}{{ mantenimiento.realizado_en|date:'d/m/Y · H:i' }}{% else %}Sin fecha y hora registradas{% endif %}</div>
+{% if mantenimiento.observaciones %}<p class="muted" style="margin:10px 0 0">{{ mantenimiento.observaciones|linebreaksbr }}</p>{% endif %}</section>
+{% else %}<section class="card"><p class="muted">Esta visita no tiene un registro de ejecución disponible.</p></section>{% endif %}
 </div>
-<div class="portal-cleaning-item {% if checklist.cepillado %}portal-cleaning-done{% endif %}">
- <span class="portal-cleaning-box" aria-hidden="true">{% if checklist.cepillado %}✓{% endif %}</span>
- <span>Cepillado</span>
-</div>
-<div class="portal-cleaning-item {% if checklist.recoleccion_basura %}portal-cleaning-done{% endif %}">
- <span class="portal-cleaning-box" aria-hidden="true">{% if checklist.recoleccion_basura %}✓{% endif %}</span>
- <span>Recolección de basura</span>
-</div>
-<div class="portal-cleaning-item {% if checklist.limpieza_filtros %}portal-cleaning-done{% endif %}">
- <span class="portal-cleaning-box" aria-hidden="true">{% if checklist.limpieza_filtros %}✓{% endif %}</span>
- <span>Limpieza de filtros</span>
-</div>
-<div class="portal-cleaning-item {% if checklist.retrolavado_arena %}portal-cleaning-done{% endif %}">
- <span class="portal-cleaning-box" aria-hidden="true">{% if checklist.retrolavado_arena %}✓{% endif %}</span>
- <span>Retrolavado de arena</span>
-</div>
-</div>
-{% else %}<p class="muted">No hay actividades registradas para esta visita.</p>{% endif %}
-</section>
-<section class="card">
-<h3>◷ Registro del mantenimiento</h3>
-{% if mantenimiento.realizado_en %}
-<div class="metric portal-registration"><span>Fecha y hora de registro</span><strong>{{ mantenimiento.realizado_en|date:'d/m/Y · H:i' }}</strong></div>
-{% else %}<p class="muted">No consta una fecha y hora de registro de finalización para esta visita.</p>{% endif %}
-</section>
-{% if checklist %}<section class="card"><h3>Inspección de la piscina</h3><div class="grid"><div class="metric"><span>Estado de la bomba</span><strong>{{ checklist.get_bomba_estado_display|default:'Sin registrar' }}</strong></div><div class="metric"><span>Estado del filtro</span><strong>{{ checklist.get_filtro_estado_display|default:'Sin registrar' }}</strong></div><div class="metric"><span>Nivel del agua</span><strong>{{ checklist.get_nivel_agua_display|default:'Sin registrar' }}</strong></div></div></section>{% endif %}
-{% if mantenimiento.observaciones %}<section class="card"><h3>Observaciones del técnico</h3><p>{{ mantenimiento.observaciones|linebreaksbr }}</p></section>{% endif %}
-{% else %}<section class="card"><p class="muted">Esta visita todavía no tiene un registro de ejecución disponible.</p></section>{% endif %}
-{% if mantenimiento.estado == 'realizado' %}
-<section class="card">
-<h3>📷 Evidencia fotográfica</h3>
-<p class="muted">Fotografías registradas por el técnico. La medición de pH y cloro se documenta mediante fotografía.</p>
-{% if fotos %}
-<div class="grid">
-{% for foto in fotos %}
-<div class="metric" style="padding:12px">
-<strong>{% if forloop.counter == 1 %}1. Antes de iniciar{% elif forloop.counter == 2 %}2. Después de finalizar{% elif forloop.counter == 3 %}3. pH y cloro{% else %}Evidencia {{ forloop.counter }}{% endif %}</strong>
-<a href="{% url 'portal_clientes:foto_mantenimiento' mantenimiento.pk foto.pk %}" target="_blank" rel="noopener noreferrer" aria-label="Ampliar fotografía {{ forloop.counter }}">
-<img src="{% url 'portal_clientes:foto_mantenimiento' mantenimiento.pk foto.pk %}" alt="{{ foto.descripcion|default:'Fotografía del mantenimiento' }}" loading="lazy" style="display:block;width:100%;max-height:280px;object-fit:contain;border-radius:12px;margin-top:12px;background:#edf4fa">
-</a>
-{% if foto.descripcion %}<p class="muted" style="margin:8px 0 0">{{ foto.descripcion }}</p>{% endif %}
-</div>
-{% endfor %}
-</div>
-{% else %}<p class="muted">Este mantenimiento no tiene fotografías disponibles.</p>{% endif %}
-</section>
-{% endif %}
 {% endblock %}

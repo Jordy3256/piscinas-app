@@ -112,8 +112,9 @@ def mantenimiento_detalle(request, pk):
     )
     checklist = getattr(mantenimiento, 'checklist_v2', None)
     fotos = list(mantenimiento.fotos.order_by('creada_en', 'pk')) if mantenimiento.estado == 'realizado' else []
+    usos = list(mantenimiento.usos_insumos.select_related('insumo').order_by('pk')) if mantenimiento.estado == 'realizado' else []
     return render(request, 'portal_clientes/mantenimiento_detalle.html', {
-        'cliente': acceso.cliente, 'mantenimiento': mantenimiento, 'checklist': checklist, 'fotos': fotos,
+        'cliente': acceso.cliente, 'mantenimiento': mantenimiento, 'checklist': checklist, 'fotos': fotos, 'usos': usos,
     })
 
 
