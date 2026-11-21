@@ -27,6 +27,7 @@ urlpatterns = [
     path("healthz/", healthz),
 
     path("admin/", admin.site.urls),
+    path("portal/", include("portal_clientes.urls")),
 
     path("login/", login_view, name="login"),
     path("logout/", logout_view, name="logout"),
