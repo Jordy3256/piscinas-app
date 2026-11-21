@@ -635,3 +635,5 @@ urlpatterns = [
     path("metas/", metas_empresa_view, name="metas_empresa"),
 ]
 urlpatterns += [path('soporte-clientes/', soporte_portal.soporte_admin_lista, name='soporte_admin_lista'), path('soporte-clientes/<int:pk>/', soporte_portal.soporte_admin_chat, name='soporte_admin_chat')]
+
+urlpatterns += [path('soporte-clientes/contadores/', soporte_portal.soporte_contadores, name='soporte_admin_contadores'), path('soporte-clientes/<int:pk>/actualizaciones/', soporte_portal.soporte_actualizaciones, name='soporte_admin_actualizaciones')]

@@ -2,8 +2,9 @@
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.db.models import Count, Q
-from django.http import Http404
+from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.template.loader import render_to_string
 from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_http_methods
@@ -101,3 +102,44 @@ def soporte_admin_chat(request, pk):
             return redirect('soporte_admin_chat', pk=pk)
     MensajeSoporte.objects.filter(conversacion=conversacion, es_cliente=True, leido_en__isnull=True).update(leido_en=timezone.now())
     return render(request, 'portal_clientes/soporte_admin_chat.html', {'conversacion': conversacion, 'mensajes_chat': conversacion.mensajes.select_related('autor'), 'error': error})
+
+
+@login_required(login_url='/portal/ingresar/')
+@never_cache
+@require_http_methods(['GET'])
+def soporte_actualizaciones(request, pk):
+    """Consulta ligera para refrescar el chat; nunca expone mensajes ajenos."""
+    if request.GET.get('lado') == 'admin':
+        if not _admin(request):
+            return JsonResponse({'error': 'No autorizado'}, status=403)
+        conversacion = get_object_or_404(ConversacionSoporte, pk=pk)
+        es_cliente = False
+    else:
+        acceso = _acceso(request)
+        if not acceso:
+            return JsonResponse({'error': 'No autorizado'}, status=403)
+        conversacion = get_object_or_404(ConversacionSoporte, pk=pk, cliente_id=acceso.cliente_id)
+        es_cliente = True
+    # Marcar como leídos únicamente cuando el usuario mantiene abierto el chat.
+    MensajeSoporte.objects.filter(conversacion=conversacion, es_cliente=not es_cliente, leido_en__isnull=True).update(leido_en=timezone.now())
+    mensajes = list(conversacion.mensajes.all())
+    html = render_to_string('portal_clientes/soporte_mensajes.html', {'mensajes_chat': mensajes, 'es_cliente_actual': es_cliente}, request=request)
+    return JsonResponse({'html': html, 'ultimo_id': mensajes[-1].pk if mensajes else 0})
+
+
+@login_required(login_url='/portal/ingresar/')
+@never_cache
+@require_http_methods(['GET'])
+def soporte_contadores(request):
+    """Contadores agregados por usuario y conversación, sin filtrar contenido."""
+    if request.GET.get('lado') == 'admin':
+        if not _admin(request):
+            return JsonResponse({'error': 'No autorizado'}, status=403)
+        mensajes = MensajeSoporte.objects.filter(es_cliente=True, leido_en__isnull=True)
+    else:
+        acceso = _acceso(request)
+        if not acceso:
+            return JsonResponse({'error': 'No autorizado'}, status=403)
+        mensajes = MensajeSoporte.objects.filter(conversacion__cliente_id=acceso.cliente_id, es_cliente=False, leido_en__isnull=True)
+    por_chat = {str(item['conversacion_id']): item['total'] for item in mensajes.values('conversacion_id').annotate(total=Count('pk'))}
+    return JsonResponse({'total': sum(por_chat.values()), 'conversaciones': por_chat})
