@@ -97,7 +97,7 @@ def mantenimientos(request):
     ).select_related('contrato').order_by('-fecha', '-pk')
     pagina = Paginator(registros, 20).get_page(request.GET.get('pagina'))
     return render(request, 'portal_clientes/mantenimientos.html', {
-        'cliente': acceso.cliente, 'pagina': pagina,
+        'cliente': acceso.cliente, 'pagina': pagina, 'proximas': proximas,
     })
 
 
@@ -131,7 +131,7 @@ def proximas_visitas(request):
     ).select_related('contrato').order_by('fecha', 'pk')
     pagina = Paginator(visitas, 20).get_page(request.GET.get('pagina'))
     return render(request, 'portal_clientes/proximas_visitas.html', {
-        'cliente': acceso.cliente, 'pagina': pagina,
+        'cliente': acceso.cliente, 'pagina': pagina, 'proximas': proximas,
     })
 
 
@@ -190,25 +190,42 @@ def mis_pagos(request):
         Prefetch('pagos', queryset=PagoFactura.objects.filter(activo=True).order_by('-fecha', '-pk'))
     ).order_by('-fecha_vencimiento', '-pk'))
     hoy = timezone.localdate()
-    saldo = Decimal('0.00')
-    vencido = Decimal('0.00')
     pagado = Decimal('0.00')
-    filas = []
+    proximas_por_contrato = {}
+    historial = []
     for factura in facturas:
-        # Respetar las propiedades del modelo, incluidas promociones y pagos históricos.
+        if factura.estado == Factura.ESTADO_ANULADA:
+            continue
         restante = factura.saldo
         abonado = factura.monto_pagado
-        if factura.estado != Factura.ESTADO_ANULADA:
-            saldo += restante
-            pagado += abonado
-            if factura.fecha_vencimiento < hoy:
-                vencido += restante
-        filas.append({'factura': factura, 'saldo': restante, 'pagado': abonado,
-                      'vencida': restante > 0 and factura.fecha_vencimiento < hoy,
-                      'pagos': [p for p in factura.pagos.all() if p.activo]})
-    pagina = Paginator(filas, 15).get_page(request.GET.get('pagina'))
+        pagos_activos = [p for p in factura.pagos.all() if p.activo]
+        pagado += abonado
+        fila = {
+            'factura': factura, 'saldo': restante, 'pagado': abonado,
+            'vencida': restante > 0 and factura.fecha_vencimiento < hoy,
+            'pagos': pagos_activos,
+        }
+        # Mostrar únicamente la primera obligación pendiente de cada contrato.
+        # fecha_real_cobro respeta la fecha real de cartera, no el ciclo de servicio.
+        if restante > 0:
+            anterior = proximas_por_contrato.get(factura.contrato_id)
+            clave = (factura.fecha_real_cobro, factura.fecha_vencimiento, factura.pk)
+            if anterior is None or clave < anterior[0]:
+                proximas_por_contrato[factura.contrato_id] = (clave, fila)
+        # Historial: facturas pagadas, bonificadas o con abonos reales.
+        # No exponer facturas futuras sin pagos.
+        elif factura.estado in (Factura.ESTADO_PAGADA, Factura.ESTADO_PROMOCION):
+            historial.append(fila)
+        if restante > 0 and pagos_activos:
+            historial.append(fila)
+    proximas = [par[1] for par in proximas_por_contrato.values()]
+    proximas.sort(key=lambda f: (f['factura'].fecha_real_cobro, f['factura'].fecha_vencimiento, f['factura'].pk))
+    saldo = sum((fila['saldo'] for fila in proximas), Decimal('0.00'))
+    vencido = sum((fila['saldo'] for fila in proximas if fila['vencida']), Decimal('0.00'))
+    historial.sort(key=lambda f: (f['factura'].pagada_en or f['factura'].fecha_vencimiento, f['factura'].pk), reverse=True)
+    pagina = Paginator(historial, 15).get_page(request.GET.get('pagina'))
     return render(request, 'portal_clientes/mis_pagos.html', {
         'cliente': acceso.cliente, 'contratos': contratos, 'seleccion': seleccion,
         'saldo': saldo, 'vencido': vencido, 'pagado': pagado,
-        'pagina': pagina,
+        'pagina': pagina, 'proximas': proximas,
     })
