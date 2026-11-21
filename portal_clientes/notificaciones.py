@@ -42,7 +42,7 @@ def _avisos(cliente_id):
     return NotificacionMantenimientoCliente.objects.filter(
         cliente_id=cliente_id, mantenimiento__cliente_id=cliente_id, mantenimiento__contrato__cliente_id=cliente_id
     ).filter(
-        Q(tipo='proxima', mantenimiento__estado='pendiente', mantenimiento__fecha__gte=hoy) |
+        Q(tipo='proxima', mantenimiento__estado='pendiente', mantenimiento__fecha=hoy + timedelta(days=1)) |
         Q(tipo='realizado', mantenimiento__estado='realizado')
     ).select_related('mantenimiento','mantenimiento__contrato')
 
@@ -67,6 +67,33 @@ def _sincronizar_cobros(cliente_id):
         if f.saldo <= 0: continue
         clave=(f.fecha_real_cobro,f.fecha_vencimiento,f.pk)
         if f.contrato_id not in primeras or clave < primeras[f.contrato_id][0]: primeras[f.contrato_id]=(clave,f)
+    # Retirar únicamente recordatorios de facturas que ya no tienen saldo.
+    # Los avisos de pago registrado y los comunicados son históricos y se conservan.
+    avisos_pendientes = AvisoPortal.objects.filter(
+        cliente_id=cliente_id, tipo__in=('cobro', 'vencido')
+    ).only('pk', 'clave')
+    ids_facturas = set()
+    for aviso in avisos_pendientes:
+        partes = aviso.clave.split(':')
+        if len(partes) == 3 and partes[1].isdigit():
+            ids_facturas.add(int(partes[1]))
+    if ids_facturas:
+        saldos = {
+            f.pk: f.saldo for f in Factura.objects.filter(
+                pk__in=ids_facturas, cliente_id=cliente_id,
+                contrato__cliente_id=cliente_id
+            ).prefetch_related('pagos')
+        }
+        # No se borra ningún aviso cuya factura no pueda verificarse.
+        saldados = {pk for pk, saldo in saldos.items() if saldo <= 0}
+        if saldados:
+            borrar = []
+            for aviso in avisos_pendientes:
+                partes = aviso.clave.split(':')
+                if len(partes) == 3 and partes[1].isdigit() and int(partes[1]) in saldados:
+                    borrar.append(aviso.pk)
+            if borrar:
+                AvisoPortal.objects.filter(cliente_id=cliente_id, pk__in=borrar).delete()
     nuevos=[]
     for _,f in primeras.values():
         fecha=f.fecha_real_cobro
