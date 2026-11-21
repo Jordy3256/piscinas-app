@@ -1,6 +1,7 @@
 from portal_clientes import soporte as soporte_portal
 from .mapa_expansion import mapa_expansion_view
 from .comunicados import comunicados_view
+from .comunicados_clientes import comunicados_clientes, publicar_borrador_clientes
 from django.urls import path
 
 from .views import (
@@ -160,6 +161,8 @@ from .views import (
 urlpatterns = [
     path("mapa/", mapa_expansion_view, name="mapa_expansion"),
     path("comunicados/", comunicados_view, name="comunicados"),
+    path("comunicados-clientes/", comunicados_clientes, name="comunicados_clientes"),
+    path("comunicados-clientes/<int:pk>/publicar/", publicar_borrador_clientes, name="comunicados_clientes_publicar"),
     # ======================
     # PWA
     # ======================
