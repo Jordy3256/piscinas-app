@@ -1,1 +1,12 @@
-{% extends 'portal_clientes/base.html' %}{% block content %}<h2>Activar cuenta</h2><p>Utiliza el correo registrado y el código entregado por JVAQUA.</p>{% if error %}<p class="error">{{ error }}</p>{% endif %}<form method="post">{% csrf_token %}<label>Correo</label><input type="email" name="email" required><label>Código de activación</label><input name="codigo" required><label>Contraseña nueva (mínimo 12 caracteres)</label><input type="password" name="password" minlength="12" required><button>Activar cuenta</button></form><p><a href="{% url 'portal_clientes:ingresar' %}">Ya tengo cuenta</a></p>{% endblock %}
+{% extends 'portal_clientes/base.html' %}{% block content %}
+<h2>Crea tu contraseña</h2>
+<p>Tu correo y código fueron verificados. Configura una contraseña personal para ingresar al portal.</p>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+<form method="post">{% csrf_token %}
+<label>Nueva contraseña (mínimo 12 caracteres)</label>
+<input type="password" name="password" minlength="12" autocomplete="new-password" required>
+<label>Confirma tu contraseña</label>
+<input type="password" name="confirmacion" minlength="12" autocomplete="new-password" required>
+<button type="submit">Activar mi cuenta</button></form>
+<p><a href="/login/">Volver al acceso principal</a></p>
+{% endblock %}

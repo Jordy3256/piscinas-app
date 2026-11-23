@@ -17,50 +17,58 @@ from .models import AccesoCliente
 
 MENSAJE = 'No se pudo completar la solicitud. Compruebe los datos o contacte con JVAQUA.'
 
+@never_cache
 @require_http_methods(['GET', 'POST'])
 def activar(request):
+    """Segunda etapa de activación: código validado en el acceso principal."""
+    from datetime import timedelta
+    from django.contrib.auth.password_validation import validate_password
+    from django.core.exceptions import ValidationError
+
+    acceso_id = request.session.get('portal_activacion_id')
+    verificado_en = request.session.get('portal_activacion_verificada_en', 0)
+    valido = bool(acceso_id and verificado_en and
+                  timezone.now().timestamp() - float(verificado_en) <= 900)
+    if not valido:
+        request.session.pop('portal_activacion_id', None)
+        request.session.pop('portal_activacion_verificada_en', None)
+        return redirect('/login/')
     error = None
     if request.method == 'POST':
-        email = (request.POST.get('email') or '').strip()
-        codigo = (request.POST.get('codigo') or '').strip()
         password = request.POST.get('password') or ''
-        if len(password) < 12:
+        confirmacion = request.POST.get('confirmacion') or ''
+        if password != confirmacion:
+            error = 'Las contraseñas no coinciden.'
+        elif len(password) < 12:
             error = 'La contraseña debe contener al menos 12 caracteres.'
         else:
+            try:
+                validate_password(password)
+            except ValidationError as exc:
+                error = ' '.join(exc.messages)
+        if not error:
             with transaction.atomic():
-                clientes = list(Cliente.objects.select_for_update().filter(email__iexact=email, activo=True)[:2])
-                if len(clientes) == 1:
-                    acceso = AccesoCliente.objects.select_for_update().filter(cliente=clientes[0]).first()
-                    if acceso and acceso.codigo_valido() and check_password(codigo, acceso.codigo_hash):
-                        User = get_user_model()
-                        user = User(username=f'portal_cliente_{clientes[0].pk}', is_active=True)
-                        user.set_password(password)
-                        user.save()
-                        acceso.usuario = user
-                        acceso.codigo_hash = ''
-                        acceso.codigo_expira = None
-                        acceso.activado_en = timezone.now()
-                        acceso.save(update_fields=['usuario','codigo_hash','codigo_expira','activado_en'])
-                        return redirect('portal_clientes:ingresar')
+                acceso = AccesoCliente.objects.select_for_update().select_related('cliente').filter(pk=acceso_id).first()
+                if acceso and acceso.codigo_valido() and acceso.cliente.activo:
+                    User = get_user_model()
+                    usuario = User(username=f'portal_cliente_{acceso.cliente_id}', is_active=True)
+                    usuario.set_password(password)
+                    usuario.save()
+                    acceso.usuario = usuario
+                    acceso.codigo_hash = ''
+                    acceso.codigo_expira = None
+                    acceso.activado_en = timezone.now()
+                    acceso.save(update_fields=['usuario', 'codigo_hash', 'codigo_expira', 'activado_en'])
+                    request.session.pop('portal_activacion_id', None)
+                    request.session.pop('portal_activacion_verificada_en', None)
+                    return redirect('/login/')
                 error = MENSAJE
     return render(request, 'portal_clientes/activar.html', {'error': error})
 
-@require_http_methods(['GET','POST'])
+@require_http_methods(['GET', 'POST'])
 def ingresar(request):
-    error = None
-    if request.method == 'POST':
-        email = (request.POST.get('email') or '').strip()
-        password = request.POST.get('password') or ''
-        clientes = list(Cliente.objects.filter(email__iexact=email, activo=True)[:2])
-        if len(clientes) == 1:
-            acceso = AccesoCliente.objects.select_related('usuario').filter(cliente=clientes[0], habilitado=True).first()
-            if acceso and acceso.usuario_id and acceso.usuario.is_active:
-                user = authenticate(request, username=acceso.usuario.username, password=password)
-                if user is not None:
-                    login(request, user)
-                    return redirect('portal_clientes:inicio')
-        error = 'Credenciales incorrectas.'
-    return render(request, 'portal_clientes/ingresar.html', {'error':error})
+    """Ruta antigua conservada, pero el ingreso es siempre por el acceso principal."""
+    return redirect('/login/')
 
 @login_required(login_url='/portal/ingresar/')
 def inicio(request):
@@ -73,7 +81,7 @@ def inicio(request):
 @require_http_methods(['POST'])
 def salir(request):
     logout(request)
-    return redirect('portal_clientes:ingresar')
+    return redirect('/login/')
 
 
 def _acceso_vigente(request):

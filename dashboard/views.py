@@ -1020,46 +1020,55 @@ def procesar_movimientos_recurrentes():
 # Login / Logout
 # -------------------
 def login_view(request):
-    ctx = {"error": ""}
+    """Acceso común; clientes se identifican por email, equipo por usuario habitual."""
+    from django.contrib.auth.hashers import check_password
+    from portal_clientes.models import AccesoCliente
 
-    next_url = (request.GET.get("next", "") or "").strip()
-    if request.method == "POST":
-        next_url = (request.POST.get("next", next_url) or "").strip()
+    ctx = {'error': ''}
+    if request.user.is_authenticated:
+        acceso_actual = AccesoCliente.objects.filter(usuario=request.user).first()
+        if acceso_actual:
+            if acceso_actual.habilitado and acceso_actual.cliente.activo:
+                return redirect('portal_clientes:inicio')
+            logout(request)
+        else:
+            return redirect('/dashboard/inicio/')
 
-    def safe_redirect_target(url: str) -> str:
-        if url and url_has_allowed_host_and_scheme(
-            url=url,
-            allowed_hosts={request.get_host()},
-            require_https=not settings.DEBUG,
-        ):
-            return url
-        return "/dashboard/inicio/"
-
-    if request.method == "POST":
-        username = (request.POST.get("username", "") or "").strip()
-        password = (request.POST.get("password", "") or "").strip()
-        user = authenticate(request, username=username, password=password)
-
-        if user is not None:
-            login(request, user)
-            messages.success(request, "Bienvenido.")
-            if not next_url:
-                try:
-                    perfil_digital = user.perfil_suscriptor
-                    if perfil_digital.tiene_acceso:
-                        return redirect("/dashboard/asistente/digital/")
-                    return redirect("/dashboard/asistente/digital/suscripcion/")
-                except Exception:
-                    pass
-            return redirect(safe_redirect_target(next_url))
-
-        ctx["error"] = "Usuario o contraseña incorrectos"
-        ctx["next"] = next_url
-        messages.error(request, ctx["error"])
-        return render(request, "dashboard/login.html", ctx)
-
-    ctx["next"] = next_url
-    return render(request, "dashboard/login.html", ctx)
+    if request.method == 'POST':
+        identificador = (request.POST.get('username') or '').strip()
+        password = request.POST.get('password') or ''
+        # No permitir que un "next" altere la separación entre áreas.
+        if '@' in identificador:
+            coincidencias = list(Cliente.objects.filter(email__iexact=identificador, activo=True)[:2])
+            if len(coincidencias) == 1:
+                acceso = AccesoCliente.objects.select_related('usuario').filter(
+                    cliente=coincidencias[0], habilitado=True
+                ).first()
+                if acceso:
+                    if acceso.usuario_id and acceso.usuario.is_active:
+                        usuario = authenticate(request, username=acceso.usuario.username, password=password)
+                        if usuario and not (usuario.is_staff or usuario.is_superuser):
+                            login(request, usuario)
+                            return redirect('portal_clientes:inicio')
+                    elif acceso.codigo_valido() and check_password(password, acceso.codigo_hash):
+                        request.session.cycle_key()
+                        request.session['portal_activacion_id'] = acceso.pk
+                        request.session['portal_activacion_verificada_en'] = timezone.now().timestamp()
+                        return redirect('portal_clientes:activar')
+        # El personal sigue utilizando su usuario habitual, sin cambios en contraseñas.
+        usuario = authenticate(request, username=identificador, password=password)
+        if usuario is not None and not AccesoCliente.objects.filter(usuario=usuario).exists():
+            login(request, usuario)
+            try:
+                perfil_digital = usuario.perfil_suscriptor
+                if perfil_digital.tiene_acceso:
+                    return redirect('/dashboard/asistente/digital/')
+                return redirect('/dashboard/asistente/digital/suscripcion/')
+            except Exception:
+                return redirect('/dashboard/inicio/')
+        ctx['error'] = 'Credenciales incorrectas o cuenta no habilitada.'
+        messages.error(request, ctx['error'])
+    return render(request, 'dashboard/login.html', ctx)
 
 
 def logout_view(request):

@@ -18,8 +18,13 @@ def comprobante_digital_publico_bloqueado(_request, path=""):
     raise Http404("Archivo privado de AQUO360")
 
 
-def root_redirect(_request):
-    return redirect("/dashboard/", permanent=False)
+def root_redirect(request):
+    if request.user.is_authenticated:
+        from portal_clientes.models import AccesoCliente
+        if AccesoCliente.objects.filter(usuario=request.user).exists():
+            return redirect("/portal/inicio/", permanent=False)
+        return redirect("/dashboard/inicio/", permanent=False)
+    return redirect("/login/", permanent=False)
 
 
 urlpatterns = [
