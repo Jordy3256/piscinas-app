@@ -89,22 +89,11 @@
   <div class="exec-grid equal mb-3"><section class="exec-card"><div class="exec-card-head"><div class="exec-card-title">💰 Evolución financiera · 12 meses</div></div><div class="chart-wrap"><canvas id="biFinanceChart"></canvas></div></section><section class="exec-card"><div class="exec-card-head"><div class="exec-card-title">📄 Evolución de contratos</div></div><div class="chart-wrap"><canvas id="biContractsChart"></canvas></div></section></div>
   <div class="exec-grid equal mb-3">
     <section class="exec-card">
-      <div class="exec-card-head"><div class="exec-card-title">💧 Nuevos clientes JVAQUA Digital · 12 meses</div><a class="exec-link" href="{% url 'asistente_tecnico:digital_suscripciones_admin' %}">Suscripciones →</a></div>
-      <div class="exec-card-body pt-2">
-        <div class="mini-stats mb-2">
-          <div class="mini-stat"><strong>{{ digital_nuevos_mes }}</strong><span>Nuevos este mes</span></div>
-          <div class="mini-stat"><strong>{{ digital_activos_actuales }}</strong><span>Suscriptores activos</span></div>
-        </div>
-        <div class="chart-wrap"><canvas id="biDigitalChart"></canvas></div>
-      </div>
-    </section>
-    <section class="exec-card">
       <div class="exec-card-head"><div class="exec-card-title">🧠 Ecosistema AQUO</div><a class="exec-link" href="{% url 'asistente_tecnico:admin' %}">Abrir panel →</a></div>
       <div class="exec-card-body pt-2">
         <div class="simple-list">
           <a class="simple-row" href="{% url 'asistente_tecnico:admin' %}" style="text-decoration:none"><div class="simple-main"><div class="simple-title">Casos y recomendaciones</div><div class="simple-meta">Historial, resultados y rendimiento del asistente</div></div><span>→</span></a>
           <a class="simple-row" href="{% url 'asistente_tecnico:cms_admin' %}" style="text-decoration:none"><div class="simple-main"><div class="simple-title">Aprendizaje y biblioteca</div><div class="simple-meta">Curso, contenidos y material audiovisual</div></div><span>→</span></a>
-          <a class="simple-row" href="{% url 'asistente_tecnico:digital_suscripciones_admin' %}" style="text-decoration:none"><div class="simple-main"><div class="simple-title">Suscripciones Digital</div><div class="simple-meta">Altas, pagos, renovaciones y usuarios</div></div><span>→</span></a>
         </div>
       </div>
     </section>
@@ -231,12 +220,11 @@
 <script>
 (function(){
   if(!window.Chart) return;
-  const fin={{ grafico_bi_finanzas|safe }}, con={{ grafico_bi_contratos|safe }}, ciu={{ grafico_bi_ciudades|safe }}, dig={{ grafico_bi_digital|safe }};
+  const fin={{ grafico_bi_finanzas|safe }}, con={{ grafico_bi_contratos|safe }}, ciu={{ grafico_bi_ciudades|safe }};
   const common={responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{position:'bottom'}}};
   const f=document.getElementById('biFinanceChart'); if(f)new Chart(f,{type:'line',data:{labels:fin.labels,datasets:[{label:'Ingresos',data:fin.ingresos,tension:.32},{label:'Egresos',data:fin.egresos,tension:.32},{label:'Utilidad',data:fin.utilidad,tension:.32}]},options:common});
   const c=document.getElementById('biContractsChart'); if(c)new Chart(c,{type:'line',data:{labels:con.labels,datasets:[{label:'Contratos activos',data:con.activos,tension:.32},{label:'Altas',data:con.altas,tension:.32},{label:'Bajas',data:con.bajas,tension:.32}]},options:common});
   const x=document.getElementById('biCitiesChart'); if(x)new Chart(x,{type:'bar',data:{labels:ciu.labels,datasets:[{label:'Utilidad base $',data:ciu.utilidad},{label:'Margen %',data:ciu.margen}]},options:common});
-  const d=document.getElementById('biDigitalChart'); if(d)new Chart(d,{type:'bar',data:{labels:dig.labels,datasets:[{label:'Nuevos registros',data:dig.nuevos},{label:'Suscriptores activos',data:dig.activos}]},options:common});
 })();
 (function(){
   const finance = {{ grafico_tendencia_financiera|safe }};

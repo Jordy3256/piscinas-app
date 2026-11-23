@@ -1044,12 +1044,11 @@ form[method="get"]{position:relative} form[method="get"] .form-label{font-weight
       <a href="{% url 'ordenes_trabajo:lista' %}">Órdenes</a>
     </nav></div>
     {% elif '/dashboard/asistente/administracion/' in request.path %}
-    <div class="jv-context-wrap"><nav class="jv-context-nav" aria-label="JVAQUA Digital">
-      <span class="jv-context-label">Digital</span>
+    <div class="jv-context-wrap"><nav class="jv-context-nav" aria-label="Asistente técnico JVAQUA">
+      <span class="jv-context-label">AQUO Técnico</span>
       <a href="{% url 'asistente_tecnico:admin' %}">AQUO</a>
       <a href="{% url 'asistente_tecnico:cms_admin' %}">Aprendizaje</a>
       <a href="{% url 'asistente_tecnico:soporte_admin_lista' %}">Soporte</a>
-      <a href="{% url 'asistente_tecnico:digital_suscripciones_admin' %}">Suscripciones</a>
     </nav></div>
     {% elif request.path == '/dashboard/' or request.path == '/dashboard/home/' or '/dashboard/metas/' in request.path or '/dashboard/salud-erp/' in request.path or '/dashboard/inteligencia/' in request.path %}
     <div class="jv-context-wrap"><nav class="jv-context-nav" aria-label="Dirección">
@@ -1147,12 +1146,11 @@ form[method="get"]{position:relative} form[method="get"] .form-label{font-weight
       </div>
     </div>
     <div class="jv-launch-group">
-      <div class="jv-launch-kicker">JVAQUA Digital</div>
+      <div class="jv-launch-kicker">Asistente técnico JVAQUA</div>
       <div class="jv-launch-grid">
         <a class="jv-launch-link" href="{% url 'asistente_tecnico:admin' %}"><span class="jv-launch-icon">🧠</span><span><span class="jv-launch-name">AQUO</span><span class="jv-launch-desc">Casos y recomendaciones</span></span></a>
         <a class="jv-launch-link" href="{% url 'asistente_tecnico:cms_admin' %}"><span class="jv-launch-icon">📚</span><span><span class="jv-launch-name">Aprendizaje</span><span class="jv-launch-desc">Curso y biblioteca técnica</span></span></a>
         <a class="jv-launch-link" href="{% url 'asistente_tecnico:soporte_admin_lista' %}"><span class="jv-launch-icon">💬</span><span><span class="jv-launch-name">Soporte</span><span class="jv-launch-desc">Conversaciones con clientes</span></span></a>
-        <a class="jv-launch-link" href="{% url 'asistente_tecnico:digital_suscripciones_admin' %}"><span class="jv-launch-icon">💳</span><span><span class="jv-launch-name">Suscripciones</span><span class="jv-launch-desc">Altas, pagos y renovaciones</span></span></a>
       </div>
     </div>
     <div class="jv-launch-group mb-0">
