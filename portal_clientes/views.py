@@ -76,7 +76,18 @@ def inicio(request):
     if not acceso:
         return render(request, 'portal_clientes/sin_acceso.html', status=403)
     contratos = Contrato.objects.filter(cliente_id=acceso.cliente_id).order_by('-id')
-    return render(request, 'portal_clientes/inicio.html', {'cliente':acceso.cliente, 'contratos':contratos})
+    hoy = timezone.localdate()
+    visitas_cliente = Mantenimiento.objects.filter(
+        cliente_id=acceso.cliente_id, contrato__cliente_id=acceso.cliente_id
+    )
+    ultimo = (visitas_cliente.filter(estado='realizado', fecha__lte=hoy)
+              .order_by('-fecha', '-pk').first())
+    proxima = (visitas_cliente.filter(estado='pendiente', fecha__gte=hoy)
+               .order_by('fecha', 'pk').first())
+    return render(request, 'portal_clientes/inicio.html', {
+        'cliente': acceso.cliente, 'contratos': contratos,
+        'ultimo_mantenimiento': ultimo, 'proxima_visita': proxima,
+    })
 
 @require_http_methods(['POST'])
 def salir(request):

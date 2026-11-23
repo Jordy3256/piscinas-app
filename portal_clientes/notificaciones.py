@@ -182,3 +182,36 @@ def abrir_general(request,pk):
         _generales(acceso.cliente_id).filter(pk=pk,leida_en__isnull=True).update(leida_en=timezone.now())
     if aviso.tipo in ('cobro','vencido','pago'): return redirect('portal_clientes:mis_pagos')
     return redirect('portal_clientes:notificaciones')
+
+@login_required(login_url='/login/')
+@never_cache
+@require_GET
+def resumen(request):
+    """Vista previa privada para la campanita; no marca avisos como leídos."""
+    acceso = _acceso(request)
+    _sincronizar(acceso.cliente_id)
+    _sincronizar_cobros(acceso.cliente_id)
+    generales = list(_generales(acceso.cliente_id).order_by('-creada_en', '-pk')[:8])
+    mantenimientos = list(_avisos(acceso.cliente_id).order_by('-creada_en', '-pk')[:8])
+    items = []
+    for a in generales:
+        items.append({'id': a.pk, 'origen': 'general', 'titulo': a.titulo,
+                      'detalle': a.detalle, 'fecha': a.creada_en,
+                      'leida': bool(a.leida_en), 'url': '/portal/notificaciones/general/%s/abrir/' % a.pk})
+    for a in mantenimientos:
+        datos = _datos(a)
+        items.append({'id': a.pk, 'origen': 'mantenimiento', 'titulo': datos['titulo'],
+                      'detalle': datos['detalle'], 'fecha': a.creada_en,
+                      'leida': bool(a.leida_en), 'url': '/portal/notificaciones/%s/abrir/' % a.pk})
+    items.sort(key=lambda item: item['fecha'], reverse=True)
+    from django.urls import reverse
+    for item in items:
+        if item['origen'] == 'general':
+            item['url'] = reverse('portal_clientes:notificacion_general_abrir', args=[item['id']])
+        else:
+            item['url'] = reverse('portal_clientes:notificacion_abrir', args=[item['id']])
+        item['fecha'] = timezone.localtime(item['fecha']).strftime('%d/%m/%Y %H:%M')
+    response = JsonResponse({'total': _total_pendientes(acceso.cliente_id), 'avisos': items[:8]})
+    response['Cache-Control'] = 'private, no-store'
+    return response
+

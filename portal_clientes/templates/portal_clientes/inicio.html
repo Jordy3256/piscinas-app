@@ -1,44 +1,23 @@
 {% extends 'portal_clientes/base.html' %}
 {% block content %}
-<section class="hero">
- <div class="eyebrow">MI ESPACIO JVAQUA</div>
- <h2>Hola, {{ cliente.nombre }}</h2>
- <p class="muted">Tus piscinas, visitas y servicios, siempre a tu alcance.</p>
- <span class="status-tag" style="background:#ffffff24;color:white">● Portal privado de clientes</span>
+<section class="portal-home-hero">
+ <h1>Hola, {{ cliente.nombre }}</h1>
+ <div class="portal-visit-summary">
+  <div class="summary-item"><span>✓ Último mantenimiento</span><strong>{% if ultimo_mantenimiento %}{{ ultimo_mantenimiento.fecha|date:'d/m/Y' }}{% else %}Sin registros{% endif %}</strong></div>
+  <div class="summary-item"><span>▦ Próxima visita</span><strong>{% if proxima_visita %}{{ proxima_visita.fecha|date:'d/m/Y' }}{% else %}Por programar{% endif %}</strong></div>
+ </div>
 </section>
+<div class="portal-home-heading"><h2>Accesos rápidos</h2></div>
 <div class="grid">
- <a class="card card-link portal-shortcut" href="{% url 'portal_clientes:notificaciones' %}">
-  <span class="shortcut-icon">🔔</span><h3>Notificaciones <span class="jv-bell-badge" data-jv-notification-count data-count="0" aria-live="polite"></span></h3>
-  <p class="muted">Avisos de próximas visitas, mantenimientos realizados y reportes disponibles.</p>
- </a>
- <a class="card card-link portal-shortcut" href="{% url 'portal_clientes:mantenimientos' %}">
-  <span class="shortcut-icon">✓</span><h3>Mis mantenimientos</h3>
-  <p class="muted">Consulta las visitas anteriores, sus estados y actividades.</p>
- </a>
- <a class="card card-link portal-shortcut" href="{% url 'portal_clientes:proximas_visitas' %}">
-  <span class="shortcut-icon">▦</span><h3>Próximas visitas</h3>
-  <p class="muted">Revisa la programación de mantenimiento de tus piscinas.</p>
- </a>
- <a class="card card-link portal-shortcut" href="{% url 'portal_clientes:mis_pagos' %}">
-  <span class="shortcut-icon">$</span><h3>Mis pagos</h3>
-  <p class="muted">Consulta tus facturas, pagos y saldos pendientes.</p>
- </a>
- <a class="card card-link portal-shortcut" href="{% url 'portal_clientes:soporte' %}">
-  <span class="shortcut-icon">✉</span><h3>Chat de soporte <span class="jv-support-badge" data-jv-support-count data-count="0" aria-live="polite"></span></h3>
-  <p class="muted">Escríbenos y revisa las respuestas de JVAQUA.</p>
- </a>
+ <a class="card card-link portal-shortcut" href="{% url 'portal_clientes:mantenimientos' %}"><span class="shortcut-icon">✓</span><h3>Mis mantenimientos</h3><p class="muted">Trabajos realizados, fotografías y reportes.</p></a>
+ <a class="card card-link portal-shortcut" href="{% url 'portal_clientes:proximas_visitas' %}"><span class="shortcut-icon">▦</span><h3>Próximas visitas</h3><p class="muted">Consulta las fechas programadas.</p></a>
+ <a class="card card-link portal-shortcut" href="{% url 'portal_clientes:mis_pagos' %}"><span class="shortcut-icon">$</span><h3>Mis pagos</h3><p class="muted">Facturas, pagos y saldos pendientes.</p></a>
+ <a class="card card-link portal-shortcut" href="{% url 'portal_clientes:soporte' %}"><span class="shortcut-icon">✉</span><h3>Soporte</h3><p class="muted">Comunícate directamente con JVAQUA.</p></a>
 </div>
-<h3 class="section-head">Mis contratos</h3>
+<div class="portal-home-heading"><h2>{% if contratos|length == 1 %}Mi contrato{% else %}Contratos{% endif %}</h2></div>
 <div class="grid">
 {% for contrato in contratos %}
-<section class="card contract-card">
- <span class="eyebrow muted">Contrato #{{ contrato.pk }}</span>
- <h3 style="margin:12px 0">{{ contrato }}</h3>
- {% if contrato.activo %}<span class="status-tag status-realizado">● Activo</span>{% else %}<span class="status-tag status-cancelado">● Inactivo</span>{% endif %}
-<a class="visit-action" style="margin-top:12px" href="{% url 'portal_clientes:mi_contrato' contrato.pk %}">Ver mi contrato →</a>
-</section>
+ <section class="card portal-home-contract"><h3>{{ contrato }}</h3>{% if contrato.activo %}<span class="status-tag status-realizado">● Activo</span>{% else %}<span class="status-tag status-cancelado">● Inactivo</span>{% endif %}<div><a class="visit-action" href="{% url 'portal_clientes:mi_contrato' contrato.pk %}">Ver contrato →</a></div></section>
 {% empty %}<p class="muted">No hay contratos asociados a tu cuenta.</p>{% endfor %}
 </div>
-<p class="muted" style="font-size:13px;margin-top:24px">Consulta tus facturas y pagos en la sección Mis pagos.</p>
-<form action="{% url 'portal_clientes:salir' %}" method="post">{% csrf_token %}<button type="submit" style="background:#edf3fa;color:#244c70;margin-top:12px">Cerrar sesión</button></form>
 {% endblock %}

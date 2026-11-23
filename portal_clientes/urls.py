@@ -14,6 +14,7 @@ from . import notificaciones
 urlpatterns += [
     path('notificaciones/', notificaciones.lista, name='notificaciones'),
     path('notificaciones/contador/', notificaciones.contador, name='notificaciones_contador'),
+    path('notificaciones/resumen/', notificaciones.resumen, name='notificaciones_resumen'),
     path('notificaciones/<int:pk>/abrir/', notificaciones.abrir, name='notificacion_abrir'),
     path('notificaciones/marcar-todas/', notificaciones.marcar_todas, name='notificaciones_marcar_todas'),
 ]
