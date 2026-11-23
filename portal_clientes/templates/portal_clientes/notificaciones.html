@@ -2,11 +2,12 @@
 {% block content %}
 <div class="page-intro"><div class="eyebrow muted">MI ESPACIO JVAQUA</div><h1>🔔 Notificaciones</h1><p class="muted">Avisos de mantenimientos, pagos y comunicados de JVAQUA.</p></div>
 {% if no_leidas %}<form method="post" action="{% url 'portal_clientes:notificaciones_marcar_todas' %}" style="margin-bottom:18px">{% csrf_token %}<button type="submit" style="background:#eaf4ff;color:#086bb5">Marcar todas como leídas ({{ no_leidas }})</button></form>{% endif %}
+<form method="post" action="{% url 'portal_clientes:notificaciones_eliminar_todas' %}" class="jv-clear-all" onsubmit="return confirm('¿Eliminar todas tus notificaciones?')">{% csrf_token %}<button type="submit" class="jv-delete-button">Eliminar todas</button></form>
 {% for aviso in generales %}
 <section class="card" style="background:{% if aviso.leida_en %}#fff{% else %}#f0f8ff{% endif %};display:flex;align-items:center;gap:14px;justify-content:space-between;flex-wrap:wrap">
 <div style="flex:1;min-width:200px"><div style="font-weight:800;margin-bottom:6px">{% if aviso.tipo == 'comunicado' %}📣{% elif aviso.tipo == 'pago' %}💳{% elif aviso.tipo == 'vencido' %}⚠️{% else %}📅{% endif %} {{ aviso.titulo }}{% if not aviso.leida_en %} <span class="tag">Nuevo</span>{% endif %}</div>
 <p class="muted" style="margin:0 0 7px;white-space:pre-line">{{ aviso.detalle }}</p><small class="muted">{{ aviso.creada_en|date:'d/m/Y H:i' }}</small></div>
-<form method="post" action="{% url 'portal_clientes:notificacion_general_abrir' aviso.pk %}">{% csrf_token %}<button type="submit">{% if aviso.leida_en %}Ver detalle{% else %}Abrir aviso{% endif %}</button></form>
+<form method="post" action="{% url 'portal_clientes:notificacion_general_abrir' aviso.pk %}">{% csrf_token %}<button type="submit">{% if aviso.leida_en %}Ver detalle{% else %}Abrir aviso{% endif %}</button></form><form method="post" action="{% url 'portal_clientes:notificacion_eliminar' 'general' aviso.pk %}">{% csrf_token %}<button class="jv-delete-button" type="submit" aria-label="Eliminar notificación">✕ Eliminar</button></form>
 </section>
 {% endfor %}
 {% for aviso in avisos %}
@@ -14,7 +15,7 @@
 <div style="flex:1;min-width:200px"><div style="font-weight:800;margin-bottom:6px">{% if aviso.tipo == 'proxima' %}📅 Próxima visita programada{% else %}✅ Mantenimiento completado{% endif %}{% if not aviso.leida_en %} <span class="tag">Nuevo</span>{% endif %}</div>
 <p class="muted" style="margin:0 0 7px">{% if aviso.tipo == 'proxima' %}Mañana, {{ aviso.mantenimiento.fecha|date:'d/m/Y' }}, tienes una visita de mantenimiento programada.{% else %}El mantenimiento de tu piscina ha sido registrado correctamente. Puedes consultar las fotografías y el reporte completo.{% endif %}</p>
 <small class="muted">{{ aviso.creada_en|date:'d/m/Y H:i' }}</small></div>
-<form method="post" action="{% url 'portal_clientes:notificacion_abrir' aviso.pk %}">{% csrf_token %}<button type="submit">{% if aviso.leida_en %}Ver detalle{% else %}Abrir aviso{% endif %}</button></form>
+<form method="post" action="{% url 'portal_clientes:notificacion_abrir' aviso.pk %}">{% csrf_token %}<button type="submit">{% if aviso.leida_en %}Ver detalle{% else %}Abrir aviso{% endif %}</button></form><form method="post" action="{% url 'portal_clientes:notificacion_eliminar' 'mantenimiento' aviso.pk %}">{% csrf_token %}<button class="jv-delete-button" type="submit" aria-label="Eliminar notificación">✕ Eliminar</button></form>
 </section>
 {% endfor %}{% if not avisos and not generales %}<div class="card"><p class="muted">No tienes notificaciones por el momento.</p></div>{% endif %}
 <a class="btn secondary" href="{% url 'portal_clientes:inicio' %}" style="background:#eaf4ff;color:#075b98;margin-top:14px">← Volver al inicio</a>

@@ -25,6 +25,7 @@ def _sincronizar(cliente_id):
         Q(estado='realizado', realizado_en__date__gte=hoy-timedelta(days=30))
     ).only('pk', 'cliente_id', 'estado', 'fecha', 'realizado_en')
     existentes = set(NotificacionMantenimientoCliente.objects.filter(cliente_id=cliente_id).values_list('mantenimiento_id','tipo'))
+    ocultos = set(AvisoPortal.objects.filter(cliente_id=cliente_id, tipo='oculta', clave__startswith='oculta:m:').values_list('clave', flat=True))
     nuevos = []
     for visita in visitas:
         if visita.estado == 'pendiente':
@@ -32,7 +33,7 @@ def _sincronizar(cliente_id):
         else:
             tipos = ('realizado',)
         for tipo in tipos:
-            if (visita.pk,tipo) not in existentes:
+            if (visita.pk,tipo) not in existentes and f'oculta:m:{visita.pk}:{tipo}' not in ocultos:
                 nuevos.append(NotificacionMantenimientoCliente(cliente_id=cliente_id,mantenimiento_id=visita.pk,tipo=tipo))
     if nuevos:
         NotificacionMantenimientoCliente.objects.bulk_create(nuevos, ignore_conflicts=True)
@@ -125,7 +126,7 @@ def _sincronizar_cobros(cliente_id, hoy=None):
     return len(nuevos)
 
 def _generales(cliente_id):
-    return AvisoPortal.objects.filter(cliente_id=cliente_id)
+    return AvisoPortal.objects.filter(cliente_id=cliente_id).exclude(tipo='oculta')
 
 def _total_pendientes(cliente_id):
     return _avisos(cliente_id).filter(leida_en__isnull=True).count()+_generales(cliente_id).filter(leida_en__isnull=True).count()
@@ -215,3 +216,44 @@ def resumen(request):
     response['Cache-Control'] = 'private, no-store'
     return response
 
+
+
+@login_required(login_url='/login/')
+@never_cache
+@require_POST
+def eliminar(request, origen, pk):
+    """El cliente oculta un aviso sin borrar el evento de negocio subyacente."""
+    acceso = _acceso(request)
+    if origen == 'general':
+        aviso = get_object_or_404(_generales(acceso.cliente_id), pk=pk)
+        # Mantener la clave original evita que el sincronizador recree el aviso.
+        AvisoPortal.objects.filter(pk=aviso.pk, cliente_id=acceso.cliente_id).update(tipo='oculta', leida_en=timezone.now())
+    elif origen == 'mantenimiento':
+        aviso = get_object_or_404(_avisos(acceso.cliente_id), pk=pk)
+        AvisoPortal.objects.get_or_create(cliente_id=acceso.cliente_id,
+            clave=f'oculta:m:{aviso.mantenimiento_id}:{aviso.tipo}',
+            defaults={'tipo':'oculta','titulo':'Aviso oculto','detalle':''})
+        NotificacionMantenimientoCliente.objects.filter(pk=pk, cliente_id=acceso.cliente_id).delete()
+    else:
+        raise Http404
+    if request.headers.get('Accept') == 'application/json':
+        response = JsonResponse({'ok':True, 'total':_total_pendientes(acceso.cliente_id)})
+        response['Cache-Control']='private, no-store'
+        return response
+    return redirect('portal_clientes:notificaciones')
+
+
+@login_required(login_url='/login/')
+@never_cache
+@require_POST
+def eliminar_todas(request):
+    acceso = _acceso(request)
+    _sincronizar(acceso.cliente_id)
+    _sincronizar_cobros(acceso.cliente_id)
+    for aviso in _avisos(acceso.cliente_id):
+        AvisoPortal.objects.get_or_create(cliente_id=acceso.cliente_id,
+            clave=f'oculta:m:{aviso.mantenimiento_id}:{aviso.tipo}',
+            defaults={'tipo':'oculta','titulo':'Aviso oculto','detalle':''})
+    NotificacionMantenimientoCliente.objects.filter(cliente_id=acceso.cliente_id).delete()
+    _generales(acceso.cliente_id).update(tipo='oculta', leida_en=timezone.now())
+    return redirect('portal_clientes:notificaciones')

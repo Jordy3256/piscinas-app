@@ -20,3 +20,5 @@ urlpatterns += [
 ]
 
 urlpatterns += [path('notificaciones/general/<int:pk>/abrir/',notificaciones.abrir_general,name='notificacion_general_abrir')]
+
+urlpatterns += [path('notificaciones/<str:origen>/<int:pk>/eliminar/', notificaciones.eliminar, name='notificacion_eliminar'), path('notificaciones/eliminar-todas/', notificaciones.eliminar_todas, name='notificaciones_eliminar_todas')]

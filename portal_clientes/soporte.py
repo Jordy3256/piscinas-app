@@ -117,25 +117,22 @@ def soporte_cliente(request):
     acceso = _acceso(request)
     if not acceso:
         return render(request, 'portal_clientes/sin_acceso.html', status=403)
-    contratos = Contrato.objects.filter(cliente_id=acceso.cliente_id).order_by('pk')
-    conversaciones = ConversacionSoporte.objects.filter(cliente_id=acceso.cliente_id).select_related('contrato')
-    error = None
-    if request.method == 'POST':
-        contrato_id = (request.POST.get('contrato') or '').strip()
-        if contrato_id and (not contrato_id.isdecimal() or not contratos.filter(pk=int(contrato_id)).exists()):
-            raise Http404('Contrato no disponible')
-        if not contrato_id:
-            contrato_id = None
-        # Una conversación por cliente y contrato (o general), con bloqueo para evitar duplicados.
-        with transaction.atomic():
-            AccesoCliente.objects.select_for_update().get(pk=acceso.pk)
-            conversacion = ConversacionSoporte.objects.filter(cliente_id=acceso.cliente_id, contrato_id=contrato_id).first()
-            if conversacion is None:
-                conversacion = ConversacionSoporte.objects.create(cliente_id=acceso.cliente_id, contrato_id=contrato_id)
-        error = _mensaje(request, conversacion, True)
-        if error is None:
-            return redirect('portal_clientes:soporte_conversacion', pk=conversacion.pk)
-    return render(request, 'portal_clientes/soporte_lista.html', {'cliente': acceso.cliente, 'contratos': contratos, 'conversaciones': conversaciones, 'error': error})
+    # Una conversación permanente por cliente. Conservar mensajes anteriores.
+    with transaction.atomic():
+        AccesoCliente.objects.select_for_update().get(pk=acceso.pk)
+        existentes = list(ConversacionSoporte.objects.filter(cliente_id=acceso.cliente_id).order_by('creada_en', 'pk'))
+        if existentes:
+            conversacion = existentes[0]
+            sobrantes = [c.pk for c in existentes[1:]]
+            if sobrantes:
+                MensajeSoporte.objects.filter(conversacion_id__in=sobrantes).update(conversacion=conversacion)
+                ConversacionSoporte.objects.filter(pk__in=sobrantes, cliente_id=acceso.cliente_id).delete()
+            if conversacion.contrato_id:
+                conversacion.contrato = None
+                conversacion.save(update_fields=['contrato'])
+        else:
+            conversacion = ConversacionSoporte.objects.create(cliente_id=acceso.cliente_id)
+    return redirect('portal_clientes:soporte_conversacion', pk=conversacion.pk)
 
 
 @login_required(login_url='/portal/ingresar/')

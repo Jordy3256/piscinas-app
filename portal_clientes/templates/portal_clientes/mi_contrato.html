@@ -9,6 +9,23 @@
 <div class="metric"><span>Inicio del contrato</span><strong style="font-size:16px">{{ contrato.fecha_inicio|date:'d/m/Y' }}</strong></div>
 <div class="metric"><span>Vigencia</span><strong style="font-size:16px">{% if contrato.fecha_fin_contrato %}Hasta {{ contrato.fecha_fin_contrato|date:'d/m/Y' }}{% else %}Sin fecha de finalización definida{% endif %}</strong></div>
 </div>
+<h3 class="section-head">💧 Ficha técnica de la piscina</h3>
+<section class="card jv-pool-sheet">
+<div class="grid jv-pool-grid">
+<div class="metric"><span>Largo</span><strong>{% if contrato.piscina_largo_m != None %}{{ contrato.piscina_largo_m|floatformat:2 }} m{% else %}Sin registrar{% endif %}</strong></div>
+<div class="metric"><span>Ancho</span><strong>{% if contrato.piscina_ancho_m != None %}{{ contrato.piscina_ancho_m|floatformat:2 }} m{% else %}Sin registrar{% endif %}</strong></div>
+<div class="metric"><span>Profundidad</span><strong>{% if contrato.piscina_profundidad_min_m != None %}{{ contrato.piscina_profundidad_min_m|floatformat:2 }}{% if contrato.piscina_profundidad_max_m != None and contrato.piscina_profundidad_max_m != contrato.piscina_profundidad_min_m %} – {{ contrato.piscina_profundidad_max_m|floatformat:2 }}{% endif %} m{% elif contrato.piscina_profundidad_max_m != None %}{{ contrato.piscina_profundidad_max_m|floatformat:2 }} m{% else %}Sin registrar{% endif %}</strong></div>
+<div class="metric"><span>Volumen</span><strong>{% if contrato.piscina_volumen_m3 != None %}{{ contrato.piscina_volumen_m3|floatformat:2 }} m³{% else %}Sin registrar{% endif %}</strong></div>
+</div>
+<div class="jv-pool-extra">
+{% if contrato.piscina_tipo %}<span>🏊 Tipo: <strong>{{ contrato.piscina_tipo }}</strong></span>{% endif %}
+{% if contrato.piscina_uso %}<span>🏠 Uso: <strong>{{ contrato.piscina_uso }}</strong></span>{% endif %}
+{% if contrato.piscina_filtracion %}<span>⚙️ Filtración: <strong>{{ contrato.piscina_filtracion }}</strong></span>{% endif %}
+{% if contrato.piscina_desinfeccion %}<span>🧪 Desinfección: <strong>{{ contrato.piscina_desinfeccion }}</strong></span>{% endif %}
+{% if contrato.direccion %}<span>📍 Ubicación: <strong>{{ contrato.direccion }}</strong></span>{% endif %}
+</div>
+{% if contrato.piscina_observaciones %}<p class="muted">{{ contrato.piscina_observaciones|linebreaksbr }}</p>{% endif %}
+</section>
 <h3 class="section-head">Período de servicio</h3>
 {% if periodo_actual %}<section class="card" style="border-left:4px solid #149b74"><span class="status-tag status-realizado">Período vigente según facturación</span><p style="font-weight:800;margin-bottom:0">{{ periodo_actual.periodo_inicio|date:'d/m/Y' }} — {{ periodo_actual.periodo_fin|date:'d/m/Y' }}</p></section>
 {% elif proximo_periodo %}<section class="card"><span class="status-tag status-programado">Siguiente período registrado</span><p style="font-weight:800;margin-bottom:0">{{ proximo_periodo.periodo_inicio|date:'d/m/Y' }} — {{ proximo_periodo.periodo_fin|date:'d/m/Y' }}</p></section>
