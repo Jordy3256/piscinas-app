@@ -1,11 +1,11 @@
 {% extends 'portal_clientes/base.html' %}
 {% block content %}
-<p><a href="{% url 'portal_clientes:inicio' %}">← Volver a mis contratos</a></p>
-<div class="hero" style="margin-top:16px"><div class="eyebrow">MI CONTRATO · SOLO LECTURA</div><h2>Contrato #{{ contrato.pk }}</h2><p>{{ contrato }}</p>{% if contrato.activo %}<span class="status-tag status-realizado">Activo</span>{% else %}<span class="status-tag status-cancelado">Inactivo</span>{% endif %}</div>
+<p><a href="{% url 'portal_clientes:inicio' %}">← Volver al inicio</a></p>
+<div class="jv-section-hero jv-contract-hero" style="margin-top:16px"><span class="jv-hero-icon">🏊</span><div><h1>Mi contrato</h1><p>{{ contrato }}</p></div>{% if contrato.activo %}<span class="status-tag status-realizado">Activo</span>{% else %}<span class="status-tag status-cancelado">Inactivo</span>{% endif %}</div>
 <h3 class="section-head">Información de mi servicio</h3>
 <div class="grid">
 <div class="metric"><span>Frecuencia</span><strong style="font-size:16px">{% if contrato.frecuencia == 'personalizado' and contrato.frecuencia_personalizada %}{{ contrato.frecuencia_personalizada }}{% else %}{{ contrato.get_frecuencia_display|default:'No especificada' }}{% endif %}</strong></div>
-<div class="metric"><span>Mensualidad base (antes de impuestos)</span><strong>$ {{ contrato.precio_mensual|floatformat:2 }}</strong></div>
+<div class="metric"><span>Mensualidad del servicio</span><strong>$ {{ contrato.precio_mensual|floatformat:2 }}</strong></div>
 <div class="metric"><span>Inicio del contrato</span><strong style="font-size:16px">{{ contrato.fecha_inicio|date:'d/m/Y' }}</strong></div>
 <div class="metric"><span>Vigencia</span><strong style="font-size:16px">{% if contrato.fecha_fin_contrato %}Hasta {{ contrato.fecha_fin_contrato|date:'d/m/Y' }}{% else %}Sin fecha de finalización definida{% endif %}</strong></div>
 </div>
@@ -17,5 +17,5 @@
 {% if proxima_factura %}<section class="card" style="border-left:4px solid #e49a28"><div class="actions" style="justify-content:space-between;align-items:center"><div><div class="muted">Saldo de la siguiente factura pendiente</div><h2>$ {{ proxima_factura.saldo|floatformat:2 }}</h2><p class="muted">Cobro previsto: {{ proxima_factura.fecha_real_cobro|date:'d/m/Y' }} · Vencimiento: {{ proxima_factura.fecha_vencimiento|date:'d/m/Y' }}</p></div><span class="status-tag status-pendiente">Pendiente</span></div></section>
 {% else %}<section class="card"><p class="muted">No hay facturas pendientes registradas para este contrato.</p></section>{% endif %}
 <p><a class="visit-action" href="{% url 'portal_clientes:mis_pagos' %}?contrato={{ contrato.pk }}">Consultar pagos e historial →</a></p>
-<p class="muted" style="font-size:12px">Las fechas y valores provienen de los registros existentes. Esta página no permite modificar contratos, facturas ni pagos.</p>
+
 {% endblock %}
