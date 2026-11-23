@@ -57,57 +57,72 @@ def _datos(aviso):
     detalle='Tu mantenimiento fue registrado. Consulta las fotografías y el reporte completo desde este aviso.'
     return {'id':aviso.pk,'titulo':titulo,'detalle':detalle,'fecha':timezone.localtime(aviso.creada_en).strftime('%d/%m/%Y %H:%M'),'leida':bool(aviso.leida_en),'tipo':aviso.tipo}
 
-def _sincronizar_cobros(cliente_id):
-    """Solo la primera obligación impaga por contrato; vencidos cada 3 días (3,6,9...)."""
+def _evento_cobro(factura, hoy):
+    """Decide el aviso del día sin modificar facturas ni pagos."""
+    fecha = factura.fecha_real_cobro
+    if not fecha or factura.saldo <= 0 or factura.estado in ('anulada', 'promocion') or getattr(factura, 'anulada_manual', False):
+        return None
+    if fecha == hoy:
+        return ('cobro', f'cobro:{factura.pk}:{hoy.isoformat()}',
+                'Hoy corresponde tu pago',
+                f'Hoy corresponde el pago de la factura {factura.numero}. Saldo pendiente: ${factura.saldo:.2f}.')
+    dias = (hoy - fecha).days
+    if dias >= 3 and dias % 3 == 0:
+        return ('vencido', f'ven:{factura.pk}:{hoy.isoformat()}',
+                'Pago vencido',
+                f'La factura {factura.numero} tiene un saldo pendiente de ${factura.saldo:.2f}. Puedes consultar el detalle en Mis pagos.')
+    return None
+
+
+def _sincronizar_cobros(cliente_id, hoy=None):
+    """Genera avisos idempotentes; una obligación por contrato y sin cobros futuros."""
     from finanzas.models import Factura
-    hoy=timezone.localdate()
-    facturas=Factura.objects.filter(cliente_id=cliente_id,contrato__cliente_id=cliente_id).exclude(estado__in=['anulada','promocion']).prefetch_related('pagos').order_by('fecha_vencimiento','pk')
-    primeras={}
+    hoy = hoy or timezone.localdate()
+    facturas = (Factura.objects.filter(cliente_id=cliente_id, contrato__cliente_id=cliente_id)
+                .exclude(estado__in=['anulada', 'promocion'])
+                .filter(anulada_manual=False)
+                .prefetch_related('pagos')
+                .order_by('fecha_vencimiento', 'pk'))
+    primeras = {}
+    saldos = {}
     for f in facturas:
-        if f.saldo <= 0: continue
-        clave=(f.fecha_real_cobro,f.fecha_vencimiento,f.pk)
-        if f.contrato_id not in primeras or clave < primeras[f.contrato_id][0]: primeras[f.contrato_id]=(clave,f)
-    # Retirar únicamente recordatorios de facturas que ya no tienen saldo.
-    # Los avisos de pago registrado y los comunicados son históricos y se conservan.
-    avisos_pendientes = AvisoPortal.objects.filter(
-        cliente_id=cliente_id, tipo__in=('cobro', 'vencido')
-    ).only('pk', 'clave')
-    ids_facturas = set()
-    for aviso in avisos_pendientes:
+        saldos[f.pk] = f.saldo
+        if f.saldo <= 0:
+            continue
+        clave = (f.fecha_real_cobro, f.fecha_vencimiento, f.pk)
+        if f.contrato_id not in primeras or clave < primeras[f.contrato_id][0]:
+            primeras[f.contrato_id] = (clave, f)
+
+    # Los recordatorios de una obligación pagada, bonificada o anulada dejan
+    # de mostrarse. Nunca se eliminan avisos de pagos recibidos ni comunicados.
+    avisos = list(AvisoPortal.objects.filter(cliente_id=cliente_id, tipo__in=('cobro', 'vencido'))
+                  .only('pk', 'clave'))
+    referencias = set()
+    for aviso in avisos:
         partes = aviso.clave.split(':')
         if len(partes) == 3 and partes[1].isdigit():
-            ids_facturas.add(int(partes[1]))
-    if ids_facturas:
-        saldos = {
-            f.pk: f.saldo for f in Factura.objects.filter(
-                pk__in=ids_facturas, cliente_id=cliente_id,
-                contrato__cliente_id=cliente_id
-            ).prefetch_related('pagos')
-        }
-        # No se borra ningún aviso cuya factura no pueda verificarse.
-        saldados = {pk for pk, saldo in saldos.items() if saldo <= 0}
-        if saldados:
-            borrar = []
-            for aviso in avisos_pendientes:
-                partes = aviso.clave.split(':')
-                if len(partes) == 3 and partes[1].isdigit() and int(partes[1]) in saldados:
-                    borrar.append(aviso.pk)
-            if borrar:
-                AvisoPortal.objects.filter(cliente_id=cliente_id, pk__in=borrar).delete()
-    nuevos=[]
-    for _,f in primeras.values():
-        fecha=f.fecha_real_cobro
-        if fecha == hoy:
-            tipo='cobro';clave=f'cobro:{f.pk}:{hoy.isoformat()}'
-            titulo='Hoy corresponde tu pago'
-            detalle=f'Hoy corresponde el pago de la factura {f.numero}. Saldo pendiente: ${f.saldo:.2f}.'
-        elif fecha < hoy and (hoy-fecha).days % 3 == 0:
-            tipo='vencido';clave=f'ven:{f.pk}:{hoy.isoformat()}'
-            titulo='Pago vencido'
-            detalle=f'La factura {f.numero} tiene un saldo pendiente de ${f.saldo:.2f}. Puedes consultar el detalle en Mis pagos.'
-        else: continue
-        nuevos.append(AvisoPortal(cliente_id=cliente_id,clave=clave,tipo=tipo,titulo=titulo,detalle=detalle))
-    if nuevos: AvisoPortal.objects.bulk_create(nuevos,ignore_conflicts=True)
+            referencias.add(int(partes[1]))
+    if referencias:
+        for f in (Factura.objects.filter(pk__in=referencias, cliente_id=cliente_id,
+                                         contrato__cliente_id=cliente_id)
+                  .prefetch_related('pagos')):
+            saldos[f.pk] = 0 if f.anulada_manual or f.estado in ('anulada', 'promocion') else f.saldo
+        eliminar = [aviso.pk for aviso in avisos
+                    if len(partes := aviso.clave.split(':')) == 3
+                    and partes[1].isdigit() and saldos.get(int(partes[1]), 1) <= 0]
+        if eliminar:
+            AvisoPortal.objects.filter(cliente_id=cliente_id, pk__in=eliminar).delete()
+
+    nuevos = []
+    for _, factura in primeras.values():
+        evento = _evento_cobro(factura, hoy)
+        if evento:
+            tipo, clave, titulo, detalle = evento
+            nuevos.append(AvisoPortal(cliente_id=cliente_id, clave=clave, tipo=tipo,
+                                      titulo=titulo, detalle=detalle))
+    if nuevos:
+        AvisoPortal.objects.bulk_create(nuevos, ignore_conflicts=True)
+    return len(nuevos)
 
 def _generales(cliente_id):
     return AvisoPortal.objects.filter(cliente_id=cliente_id)
