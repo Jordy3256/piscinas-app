@@ -181,6 +181,7 @@ def foto_mantenimiento(request, pk, foto_id):
         mantenimiento__cliente_id=acceso.cliente_id,
         mantenimiento__contrato__cliente_id=acceso.cliente_id,
         mantenimiento__estado='realizado',
+        mantenimiento__fecha__lte=timezone.localdate(),
     )
     if not foto.imagen or not foto.imagen.name:
         raise Http404

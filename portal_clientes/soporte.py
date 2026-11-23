@@ -112,7 +112,7 @@ def soporte_archivo_admin(request, pk):
 
 @login_required(login_url='/portal/ingresar/')
 @never_cache
-@require_http_methods(['GET', 'POST'])
+@require_http_methods(['GET'])
 def soporte_cliente(request):
     acceso = _acceso(request)
     if not acceso:
