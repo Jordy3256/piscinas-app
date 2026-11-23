@@ -1,22 +1,37 @@
 {% extends 'portal_clientes/base.html' %}
 {% block content %}
-<div class="page-intro"><div class="eyebrow muted">HISTORIAL DE SERVICIO</div><h2>Mis mantenimientos</h2>
-<p class="muted">Visitas anteriores y visitas de hoy ya realizadas o canceladas. Las próximas visitas pendientes están en Programación.</p></div>
+<style>
+.portal-agenda-head{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:18px}.portal-agenda-head h2{margin:4px 0}.agenda-switch{display:inline-flex;background:#eaf2fa;padding:5px;border-radius:14px;gap:4px}.agenda-switch button{border:0;background:transparent;padding:10px 17px;border-radius:10px;font-weight:750;color:#45627f;cursor:pointer}.agenda-switch button[aria-pressed="true"]{background:white;color:#0875c5;box-shadow:0 3px 12px #12395b1c}.agenda-calendar{background:#fff;border:1px solid #e0eaf3;border-radius:19px;padding:clamp(12px,2vw,22px)}.agenda-cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:15px;gap:8px}.agenda-cal-head strong{text-transform:capitalize;font-size:18px}.agenda-cal-head button{border:1px solid #d9e6f1;border-radius:10px;background:#f4f8fc;color:#135c95;padding:8px 13px;cursor:pointer;font-weight:800}.agenda-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px}.agenda-weekday{text-align:center;color:#6b8298;font-size:12px;font-weight:800;padding:7px 0}.agenda-day{min-height:64px;border:1px solid #e7edf4;border-radius:11px;background:#fafcff;color:#24435e;display:flex;align-items:flex-start;justify-content:space-between;flex-direction:column;padding:9px;cursor:pointer;font-weight:700}.agenda-day[disabled]{cursor:default;opacity:.3}.agenda-day.has-event{background:#e8f5ff;border-color:#95d4fa;color:#086bb5}.agenda-day.selected{outline:2px solid #0875c5;outline-offset:-2px}.agenda-dot{font-size:11px;color:#0875c5}.agenda-selection{margin-top:16px;background:#f2f8fe;border:1px solid #dbeaf8;border-radius:14px;padding:14px}.agenda-selection h3{margin:0 0 8px}.agenda-selection a{font-weight:750}.agenda-selection p{margin:5px 0}.agenda-list-row{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}.agenda-date-pill{display:flex;align-items:center;gap:12px}.agenda-date-pill .day{background:#e7f4ff;color:#0966a6;padding:10px 12px;border-radius:12px;font-weight:900;min-width:65px;text-align:center}.agenda-date-pill small{display:block;font-size:11px}.agenda-list-row .visit-action{white-space:nowrap}.agenda-muted{color:#647d92;font-size:13px}.agenda-list-section[hidden],.agenda-calendar-section[hidden]{display:none!important}@media(max-width:560px){.agenda-day{min-height:49px;padding:6px;font-size:12px}.agenda-dot{font-size:10px}.portal-agenda-head{align-items:stretch}.agenda-switch{width:100%;justify-content:center}.agenda-switch button{flex:1}.agenda-list-row .visit-action{width:100%;text-align:center}}
+</style>
+<div class="portal-agenda-head"><div><div class="eyebrow muted">HISTORIAL DE SERVICIO</div><h2>Mis mantenimientos</h2><p class="muted">Consulta tus visitas anteriores y abre los informes de los trabajos realizados.</p></div><div class="agenda-switch" role="group" aria-label="Visualización"><button type="button" data-agenda-view="lista" aria-pressed="true">☷ Lista</button><button type="button" data-agenda-view="calendario" aria-pressed="false">▦ Calendario</button></div></div>
+<div id="agenda-list" class="agenda-list-section">
 {% for item in pagina %}
-<article class="card visit-card visit-{{ item.estado }}">
- <div>
-  <div class="actions" style="align-items:center">
-   <span class="visit-date">{{ item.fecha|date:'d/m/Y' }}</span>
-   <span class="status-tag status-{{ item.estado }}">{{ item.get_estado_display }}</span>
-  </div>
-  <div class="visit-meta">Contrato #{{ item.contrato_id }}</div>
- </div>
- <a class="visit-action" href="{% url 'portal_clientes:mantenimiento_detalle' item.pk %}">Ver detalle →</a>
-</article>
-{% empty %}<div class="card"><p class="muted">Aún no hay visitas anteriores registradas.</p></div>{% endfor %}
-<div class="pagination">
-{% if pagina.has_previous %}<a href="?pagina={{ pagina.previous_page_number }}">← Anterior</a>{% endif %}
-<span class="muted">Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span>
-{% if pagina.has_next %}<a href="?pagina={{ pagina.next_page_number }}">Siguiente →</a>{% endif %}
+<article class="card visit-card visit-{{ item.estado }} agenda-list-row"><div class="agenda-date-pill"><div class="day">{{ item.fecha|date:'d' }}<small>{{ item.fecha|date:'M' }}</small></div><div><strong>{{ item.get_estado_display }}</strong><div class="agenda-muted">{{ item.fecha|date:'l, d/m/Y' }}</div></div></div><a class="visit-action" href="{% url 'portal_clientes:mantenimiento_detalle' item.pk %}">Ver detalle →</a></article>
+{% empty %}<div class="card"><p class="muted">Aún no hay mantenimientos anteriores registrados.</p></div>{% endfor %}
+<div class="pagination">{% if pagina.has_previous %}<a href="?pagina={{ pagina.previous_page_number }}">← Anterior</a>{% endif %}<span class="muted">Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span>{% if pagina.has_next %}<a href="?pagina={{ pagina.next_page_number }}">Siguiente →</a>{% endif %}</div>
 </div>
+<div id="agenda-calendar" class="agenda-calendar-section" hidden><div class="agenda-calendar"><div class="agenda-cal-head"><button id="agenda-prev" type="button" aria-label="Mes anterior">‹</button><strong id="agenda-month"></strong><button id="agenda-next" type="button" aria-label="Mes siguiente">›</button></div><div id="agenda-grid" class="agenda-grid"></div><div id="agenda-selection" class="agenda-selection" data-detail-base="{% url 'portal_clientes:mantenimiento_detalle' 0 %}" aria-live="polite"></div></div><p class="agenda-muted">Se muestran hasta 1500 visitas en el calendario.</p></div>
+{{ calendario|json_script:"agenda-datos" }}
+<script>
+(function(){
+'use strict';
+const data=JSON.parse(document.getElementById('agenda-datos').textContent);
+const list=document.getElementById('agenda-list'), calendar=document.getElementById('agenda-calendar');
+const buttons=document.querySelectorAll('[data-agenda-view]');
+const grid=document.getElementById('agenda-grid'),monthLabel=document.getElementById('agenda-month'),detail=document.getElementById('agenda-selection');
+const now=new Date();let year=now.getFullYear(),month=now.getMonth(),selected='';
+if(data.length){const first=data[0].fecha.split('-').map(Number);year=first[0];month=first[1]-1;}
+const months=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+const dates=new Map();for(const item of data){if(!dates.has(item.fecha))dates.set(item.fecha,[]);dates.get(item.fecha).push(item);}
+function element(tag,cls,txt){const e=document.createElement(tag);if(cls)e.className=cls;if(txt!==undefined)e.textContent=txt;return e;}
+function dayKey(y,m,d){return `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;}
+function pick(key){selected=key;detail.replaceChildren();const items=dates.get(key)||[];const heading=element('h3','',`Visitas del ${key.split('-').reverse().join('/')}`);detail.append(heading);if(!items.length){detail.append(element('p','','No hay visitas registradas para este día.'));return;}
+for(const item of items){const p=element('p','',item.estado==='pendiente'?'Visita programada':item.estado==='realizado'?'Mantenimiento realizado':'Visita cancelada');if(item.id&&item.estado!=='pendiente'){p.append(' · ');const a=element('a','','Ver detalle');a.href=detail.dataset.detailBase.replace('/0/','/'+item.id+'/');p.append(a);}detail.append(p);}}
+function render(){monthLabel.textContent=`${months[month]} ${year}`;grid.replaceChildren();for(const label of ['D','L','M','M','J','V','S'])grid.append(element('div','agenda-weekday',label));const first=new Date(year,month,1).getDay();const count=new Date(year,month+1,0).getDate();for(let i=0;i<first;i++){const blank=element('div','');grid.append(blank);}for(let d=1;d<=count;d++){const key=dayKey(year,month,d),items=dates.get(key)||[];const b=element('button','agenda-day'+(items.length?' has-event':'')+(selected===key?' selected':''));b.type='button';b.setAttribute('aria-label',`${d} de ${months[month]}, ${items.length} visitas`);b.append(element('span','',String(d)));if(items.length)b.append(element('span','agenda-dot',items.length===1?'●':`${items.length} ●`));b.addEventListener('click',()=>{pick(key);render();});grid.append(b);}}
+for(const b of buttons)b.addEventListener('click',()=>{const isCal=b.dataset.agendaView==='calendario';list.hidden=isCal;calendar.hidden=!isCal;buttons.forEach(x=>x.setAttribute('aria-pressed',String(x===b)));if(isCal)render();});
+document.getElementById('agenda-prev').addEventListener('click',()=>{month--;if(month<0){month=11;year--;}selected='';detail.replaceChildren();render();});
+document.getElementById('agenda-next').addEventListener('click',()=>{month++;if(month>11){month=0;year++;}selected='';detail.replaceChildren();render();});
+render();
+})();
+</script>
 {% endblock %}

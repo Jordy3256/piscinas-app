@@ -115,8 +115,12 @@ def mantenimientos(request):
         Q(fecha=timezone.localdate(), estado__in=['realizado', 'cancelado'])
     ).select_related('contrato').order_by('-fecha', '-pk')
     pagina = Paginator(registros, 20).get_page(request.GET.get('pagina'))
+    calendario = [
+        {'fecha': fecha.isoformat(), 'estado': estado, 'id': pk}
+        for pk, fecha, estado in registros.values_list('pk', 'fecha', 'estado')[:1500]
+    ]
     return render(request, 'portal_clientes/mantenimientos.html', {
-        'cliente': acceso.cliente, 'pagina': pagina,
+        'cliente': acceso.cliente, 'pagina': pagina, 'calendario': calendario,
     })
 
 
@@ -129,6 +133,9 @@ def mantenimiento_detalle(request, pk):
         Mantenimiento.objects.select_related('contrato'),
         pk=pk, cliente_id=acceso.cliente_id, contrato__cliente_id=acceso.cliente_id,
     )
+    # Los mantenimientos pendientes/futuros son solo referencias de agenda.
+    if mantenimiento.fecha > timezone.localdate() or mantenimiento.estado not in ('realizado', 'cancelado'):
+        raise Http404
     checklist = getattr(mantenimiento, 'checklist_v2', None)
     fotos = list(mantenimiento.fotos.order_by('creada_en', 'pk')) if mantenimiento.estado == 'realizado' else []
     usos = list(mantenimiento.usos_insumos.select_related('insumo').order_by('pk')) if mantenimiento.estado == 'realizado' else []
@@ -149,8 +156,12 @@ def proximas_visitas(request):
         fecha__gte=timezone.localdate(),
     ).select_related('contrato').order_by('fecha', 'pk')
     pagina = Paginator(visitas, 20).get_page(request.GET.get('pagina'))
+    calendario = [
+        {'fecha': fecha.isoformat(), 'estado': 'pendiente'}
+        for fecha in visitas.values_list('fecha', flat=True)[:1500]
+    ]
     return render(request, 'portal_clientes/proximas_visitas.html', {
-        'cliente': acceso.cliente, 'pagina': pagina,
+        'cliente': acceso.cliente, 'pagina': pagina, 'calendario': calendario,
     })
 
 
