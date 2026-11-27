@@ -887,13 +887,15 @@ def _top_insumos_mes(fecha_inicio, fecha_fin, limite=5):
     return items
 
 
-def _kpis_analitica_pro(hoy):
+def _kpis_analitica_pro(hoy, resumen_mes_actual=None, resumen_mes_anterior=None):
     inicio_mes, fin_mes = _inicio_fin_mes(hoy.year, hoy.month)
     anio_ant, mes_ant = _mes_anterior(hoy.year, hoy.month)
     inicio_mes_ant, fin_mes_ant = _inicio_fin_mes(anio_ant, mes_ant)
 
-    resumen_mes_actual = _resumen_financiero_rango(inicio_mes, fin_mes)
-    resumen_mes_anterior = _resumen_financiero_rango(inicio_mes_ant, fin_mes_ant)
+    if resumen_mes_actual is None:
+        resumen_mes_actual = _resumen_financiero_rango(inicio_mes, fin_mes)
+    if resumen_mes_anterior is None:
+        resumen_mes_anterior = _resumen_financiero_rango(inicio_mes_ant, fin_mes_ant)
 
     ingresos_mes_qs = Ingreso.objects.filter(fecha__range=(inicio_mes, fin_mes))
     ingresos_mes_count = ingresos_mes_qs.count()
@@ -910,10 +912,15 @@ def _kpis_analitica_pro(hoy):
     clientes_activos_ids = {cid for cid in clientes_activos_ids if cid}
 
     mantenimientos_mes_qs = Mantenimiento.objects.filter(fecha__range=(inicio_mes, fin_mes))
-    mantenimientos_realizados_mes = mantenimientos_mes_qs.filter(estado="realizado").count()
-    mantenimientos_pendientes_mes = mantenimientos_mes_qs.filter(estado="pendiente").count()
+    conteos = mantenimientos_mes_qs.aggregate(
+        realizados=Count("pk", filter=Q(estado="realizado")),
+        pendientes=Count("pk", filter=Q(estado="pendiente")),
+        total=Count("pk"),
+    )
+    mantenimientos_realizados_mes = conteos["realizados"]
+    mantenimientos_pendientes_mes = conteos["pendientes"]
     mantenimientos_atrasados_mes = Mantenimiento.objects.filter(fecha__lt=hoy, estado="pendiente").count()
-    total_mantenimientos_mes = mantenimientos_mes_qs.count()
+    total_mantenimientos_mes = conteos["total"]
 
     cumplimiento_mes = _tasa_cumplimiento(mantenimientos_realizados_mes, total_mantenimientos_mes)
 
@@ -2241,6 +2248,10 @@ def _centro_acciones_contexto():
     facturas_base = list(
         Factura.objects
         .exclude(estado=Factura.ESTADO_ANULADA)
+        .filter(
+            Q(fecha_vencimiento__lte=hoy)
+            | Q(fecha_cobro_desde__lte=proximos_tres_dias)
+        )
         .select_related("cliente", "contrato")
         .prefetch_related("pagos")
         .order_by("fecha_vencimiento", "id")
@@ -2289,9 +2300,17 @@ def _centro_acciones_contexto():
         )
         .order_by("fecha_pago_programada", "trabajador_id", "id")
     )
-    obligaciones_pendientes = [o for o in obligaciones if o.saldo > 0]
     nomina_por_trabajador = {}
-    for obligacion in obligaciones_pendientes:
+    for obligacion in obligaciones:
+        saldo = max(
+            obligacion.valor_acordado - sum(
+                (p.monto for p in obligacion.pagos.all() if p.activo),
+                Decimal("0.00"),
+            ),
+            Decimal("0.00"),
+        )
+        if saldo <= 0:
+            continue
         clave = obligacion.trabajador_id
         fila = nomina_por_trabajador.setdefault(
             clave,
@@ -2302,7 +2321,7 @@ def _centro_acciones_contexto():
                 "fecha_mas_antigua": obligacion.fecha_pago_programada,
             },
         )
-        fila["saldo"] += obligacion.saldo
+        fila["saldo"] += saldo
         fila["cantidad"] += 1
         if obligacion.fecha_pago_programada < fila["fecha_mas_antigua"]:
             fila["fecha_mas_antigua"] = obligacion.fecha_pago_programada
@@ -3141,7 +3160,7 @@ def dashboard_view(request):
             resumen_mes_anterior["balance"],
         )
 
-        analitica_pro = _kpis_analitica_pro(hoy)
+        analitica_pro = _kpis_analitica_pro(hoy, resumen_mes_actual, resumen_mes_anterior)
 
         recurrentes_proximos_3_dias = list(
             MovimientoRecurrente.objects.filter(
@@ -3171,7 +3190,7 @@ def dashboard_view(request):
         mantenimientos_hoy_qs = (
             Mantenimiento.objects.filter(fecha=hoy)
             .select_related("cliente", "contrato")
-            .prefetch_related("trabajadores")
+            .prefetch_related(models.Prefetch("trabajadores", queryset=Trabajador.objects.select_related("user")))
             .order_by("estado", "id")
         )
 
@@ -3205,7 +3224,7 @@ def dashboard_view(request):
                 estado="pendiente",
             )
             .select_related("cliente", "contrato")
-            .prefetch_related("trabajadores")
+            .prefetch_related(models.Prefetch("trabajadores", queryset=Trabajador.objects.select_related("user")))
             .order_by("fecha", "id")
         )
 
@@ -3270,7 +3289,7 @@ def dashboard_view(request):
         proximos = list(
             Mantenimiento.objects.filter(fecha__gt=hoy, estado="pendiente")
             .select_related("cliente", "contrato")
-            .prefetch_related("trabajadores")
+            .prefetch_related(models.Prefetch("trabajadores", queryset=Trabajador.objects.select_related("user")))
             .order_by("fecha", "id")[:50]
         )
 
@@ -3909,7 +3928,7 @@ def dashboard_view(request):
                 trabajadores=trabajador
             )
             .select_related("cliente", "contrato")
-            .prefetch_related("trabajadores")
+            .prefetch_related(models.Prefetch("trabajadores", queryset=Trabajador.objects.select_related("user")))
             .order_by("fecha", "estado", "id")
         )
 
