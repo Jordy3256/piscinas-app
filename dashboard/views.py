@@ -1519,6 +1519,33 @@ def _sin_asignar_count(items):
     return total
 
 
+def _estadisticas_periodo_operativo(seleccion_qs, trabajadores):
+    if not trabajadores:
+        return []
+    # La subconsulta conserva los filtros originales, incluso el trabajador seleccionado.
+    ids = seleccion_qs.order_by().values("pk")
+    filas = Mantenimiento.trabajadores.through.objects.filter(
+        mantenimiento_id__in=ids, trabajador_id__in=[t.pk for t in trabajadores]
+    ).order_by().values("trabajador_id").annotate(
+        total=Count("mantenimiento_id", distinct=True),
+        realizados=Count("mantenimiento_id", filter=Q(mantenimiento__estado="realizado"), distinct=True),
+        pendientes=Count("mantenimiento_id", filter=Q(mantenimiento__estado="pendiente"), distinct=True),
+    )
+    por_trabajador = {fila["trabajador_id"]: fila for fila in filas}
+    resultado = []
+    for t in trabajadores:
+        datos = por_trabajador.get(t.pk)
+        if not datos or not datos["total"]:
+            continue
+        resultado.append({
+            "id": t.pk, "nombre": t.user.get_full_name() or t.user.username,
+            "total": datos["total"], "realizados": datos["realizados"],
+            "pendientes": datos["pendientes"],
+            "cumplimiento": round(datos["realizados"] / datos["total"] * 100, 1),
+        })
+    return resultado
+
+
 def _clasificar_estado_trabajador(carga_hoy, atrasados, proximos):
     carga_total = carga_hoy + atrasados + proximos
 
@@ -4601,7 +4628,7 @@ def admin_operativo_view(request):
     base_qs = (
         Mantenimiento.objects
         .select_related("cliente", "contrato")
-        .prefetch_related("trabajadores")
+        .prefetch_related("trabajadores__user")
         .order_by("fecha", "estado", "id")
     )
 
@@ -4610,7 +4637,10 @@ def admin_operativo_view(request):
     if trabajador_id.isdigit():
         base_qs = base_qs.filter(trabajadores__id=int(trabajador_id)).distinct()
 
-    if fecha_seleccionada:
+    if seleccion_inicio and seleccion_fin:
+        dia_list = atrasados = proximos = []
+        etiqueta_periodo = ""
+    elif fecha_seleccionada:
         dia_list = list(
             base_qs.filter(fecha=fecha_seleccionada)
         )
@@ -4807,21 +4837,8 @@ def admin_operativo_view(request):
     # Análisis exacto del período seleccionado, sin usar listas truncadas de interfaz.
     seleccion_qs = base_qs.exclude(estado="cancelado").filter(fecha__range=(seleccion_inicio, seleccion_fin)) if seleccion_inicio and seleccion_fin else base_qs.exclude(estado="cancelado").filter(fecha=fecha_resumen)
     kpi_seleccion = _kpis_periodo(seleccion_qs)
-    trabajadores_periodo = []
-    for t in Trabajador.objects.select_related("user").filter(activo=True).order_by("user__first_name", "user__username"):
-        tq = seleccion_qs.filter(trabajadores=t).distinct()
-        total_t = tq.count()
-        if not total_t:
-            continue
-        realizados_t = tq.filter(estado="realizado").count()
-        trabajadores_periodo.append({
-            "id": t.id,
-            "nombre": t.user.get_full_name() or t.user.username,
-            "total": total_t,
-            "realizados": realizados_t,
-            "pendientes": tq.filter(estado="pendiente").count(),
-            "cumplimiento": round((realizados_t / total_t) * 100, 1) if total_t else 0,
-        })
+    trabajadores_activos = list(Trabajador.objects.select_related("user").filter(activo=True).order_by("user__first_name", "user__username"))
+    trabajadores_periodo = _estadisticas_periodo_operativo(seleccion_qs, trabajadores_activos)
 
     return render(
         request,
@@ -4832,7 +4849,7 @@ def admin_operativo_view(request):
             "ciudad": ciudad,
             "ciudades": Ciudad.objects.filter(activa=True).order_by("orden", "nombre"),
             "trabajador_id": trabajador_id,
-            "trabajadores_filtro": Trabajador.objects.select_related("user").filter(activo=True).order_by("user__first_name", "user__username"),
+            "trabajadores_filtro": trabajadores_activos,
             "modo_actual": filtro,
             "vista_actual": vista_actual,
             "etiqueta_periodo": etiqueta_periodo,
