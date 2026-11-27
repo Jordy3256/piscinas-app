@@ -23,6 +23,7 @@ from django.core.paginator import Paginator
 from django.db import transaction, models
 from django.db.models import Sum, Count, Q
 from django.db.models import F
+from django.db.models.functions import TruncMonth
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.templatetags.static import static
@@ -678,48 +679,42 @@ def _iterar_meses_hacia_atras(fecha_base, cantidad=6):
 
 
 def _build_serie_financiera_meses(fecha_base, cantidad=6):
-    labels = []
-    ingresos = []
-    egresos = []
-    balances = []
+    meses = _iterar_meses_hacia_atras(fecha_base, cantidad=cantidad)
+    inicio = _inicio_fin_mes(*meses[0])[0]
+    fin = _inicio_fin_mes(*meses[-1])[1]
 
-    for anio, mes in _iterar_meses_hacia_atras(fecha_base, cantidad=cantidad):
-        inicio_mes, fin_mes = _inicio_fin_mes(anio, mes)
-        resumen = _resumen_financiero_rango(inicio_mes, fin_mes)
+    def totales(modelo):
+        filas = (modelo.objects.filter(fecha__range=(inicio, fin))
+                 .order_by().annotate(mes=TruncMonth("fecha"))
+                 .values("mes").annotate(total=Sum("total")))
+        return {(f["mes"].year, f["mes"].month): f["total"] or 0 for f in filas}
 
-        labels.append(_mes_label(anio, mes))
-        ingresos.append(float(resumen["ingresos"]))
-        egresos.append(float(resumen["egresos"]))
-        balances.append(float(resumen["balance"]))
-
+    ingresos = totales(Ingreso)
+    egresos = totales(Egreso)
     return {
-        "labels": labels,
-        "ingresos": ingresos,
-        "egresos": egresos,
-        "balance": balances,
+        "labels": [_mes_label(*m) for m in meses],
+        "ingresos": [float(ingresos.get(m, 0)) for m in meses],
+        "egresos": [float(egresos.get(m, 0)) for m in meses],
+        "balance": [float(ingresos.get(m, 0) - egresos.get(m, 0)) for m in meses],
     }
 
 
 def _build_serie_operativa_meses(fecha_base, cantidad=6):
-    labels = []
-    realizados = []
-    pendientes = []
-    atrasados = []
-
-    for anio, mes in _iterar_meses_hacia_atras(fecha_base, cantidad=cantidad):
-        inicio_mes, fin_mes = _inicio_fin_mes(anio, mes)
-
-        qs_mes = Mantenimiento.objects.filter(fecha__range=(inicio_mes, fin_mes))
-        labels.append(_mes_label(anio, mes))
-        realizados.append(qs_mes.filter(estado="realizado").count())
-        pendientes.append(qs_mes.filter(estado="pendiente").count())
-        atrasados.append(qs_mes.filter(estado="pendiente", fecha__lt=timezone.localdate()).count())
-
+    meses = _iterar_meses_hacia_atras(fecha_base, cantidad=cantidad)
+    inicio = _inicio_fin_mes(*meses[0])[0]
+    fin = _inicio_fin_mes(*meses[-1])[1]
+    filas = (Mantenimiento.objects.filter(fecha__range=(inicio, fin))
+             .order_by().annotate(mes=TruncMonth("fecha"))
+             .values("mes").annotate(
+                 realizados=Count("pk", filter=Q(estado="realizado")),
+                 pendientes=Count("pk", filter=Q(estado="pendiente")),
+                 atrasados=Count("pk", filter=Q(estado="pendiente", fecha__lt=timezone.localdate())),
+             ))
+    por_mes = {(f["mes"].year, f["mes"].month): f for f in filas}
     return {
-        "labels": labels,
-        "realizados": realizados,
-        "pendientes": pendientes,
-        "atrasados": atrasados,
+        "labels": [_mes_label(*m) for m in meses],
+        **{campo: [por_mes.get(m, {}).get(campo, 0) for m in meses]
+           for campo in ("realizados", "pendientes", "atrasados")},
     }
 
 
@@ -2540,6 +2535,39 @@ def _inicio_trabajador_contexto(user):
     }
 
 
+def _estadisticas_trabajadores(trabajadores, inicio_mes, hoy):
+    ids = [t.pk for t in trabajadores]
+    if not ids:
+        return {}
+    periodo = dict(fecha__gte=inicio_mes, fecha__lte=hoy)
+    mantenimientos = {
+        f["trabajadores"]: f for f in Mantenimiento.objects.filter(
+            trabajadores__in=ids, **periodo).order_by().values("trabajadores").annotate(
+                mantenimientos_mes=Count("pk", filter=Q(estado="realizado")),
+                mantenimientos_programados=Count("pk"),
+                mantenimientos_pendientes=Count("pk", filter=~Q(estado="realizado")),
+                mantenimientos_atrasados=Count("pk", filter=~Q(estado="realizado") & Q(fecha__lt=hoy)),
+            )
+    }
+    def conteos(qs, campo):
+        return dict(qs.order_by().values(campo).annotate(n=Count("pk")).values_list(campo, "n"))
+
+    ordenes = conteos(OrdenTrabajo.objects.filter(trabajador_id__in=ids, estado="completada", **periodo), "trabajador_id")
+    inventario = conteos(InventarioTrabajador.objects.filter(trabajador_id__in=ids, stock__gt=0), "trabajador_id")
+    contratos = conteos(Contrato.objects.filter(tecnico_designado_id__in=ids, activo=True), "tecnico_designado_id")
+    pagos = dict(PagoTrabajador.objects.filter(obligacion__trabajador_id__in=ids, activo=True, **periodo)
+                 .order_by().values("obligacion__trabajador_id").annotate(n=Sum("monto"))
+                 .values_list("obligacion__trabajador_id", "n"))
+    return {pk: {
+        **{campo: mantenimientos.get(pk, {}).get(campo, 0) for campo in (
+            "mantenimientos_mes", "mantenimientos_programados", "mantenimientos_pendientes", "mantenimientos_atrasados")},
+        "ordenes_mes": ordenes.get(pk, 0),
+        "inventario_productos_count": inventario.get(pk, 0),
+        "contratos_activos_count": contratos.get(pk, 0),
+        "pagos_mes": pagos.get(pk) or Decimal("0.00"),
+    } for pk in ids}
+
+
 @login_required
 def trabajadores_list_view(request):
     if not es_admin(request.user):
@@ -2554,17 +2582,11 @@ def trabajadores_list_view(request):
     # Estadísticas del periodo actual, con la misma fecha de corte para todo el equipo.
     total_contratos = total_realizados = total_programados = total_atrasados = 0
     total_pagos = Decimal("0.00")
+    estadisticas = _estadisticas_trabajadores(trabajadores, inicio_mes, hoy)
     for t in trabajadores:
-        mantenimientos = Mantenimiento.objects.filter(trabajadores=t, fecha__gte=inicio_mes, fecha__lte=hoy)
-        t.mantenimientos_mes = mantenimientos.filter(estado="realizado").count()
-        t.mantenimientos_programados = mantenimientos.count()
-        t.mantenimientos_pendientes = mantenimientos.exclude(estado="realizado").count()
-        t.mantenimientos_atrasados = mantenimientos.filter(fecha__lt=hoy).exclude(estado="realizado").count()
+        for campo, valor in estadisticas[t.pk].items():
+            setattr(t, campo, valor)
         t.cumplimiento_pct = round(100 * t.mantenimientos_mes / t.mantenimientos_programados) if t.mantenimientos_programados else None
-        t.ordenes_mes = OrdenTrabajo.objects.filter(trabajador=t, fecha__gte=inicio_mes, fecha__lte=hoy, estado="completada").count()
-        t.inventario_productos_count = InventarioTrabajador.objects.filter(trabajador=t, stock__gt=0).count()
-        t.contratos_activos_count = Contrato.objects.filter(tecnico_designado=t, activo=True).count()
-        t.pagos_mes = PagoTrabajador.objects.filter(obligacion__trabajador=t, activo=True, fecha__gte=inicio_mes, fecha__lte=hoy).aggregate(total=Sum("monto"))["total"] or Decimal("0.00")
         total_contratos += t.contratos_activos_count
         total_realizados += t.mantenimientos_mes
         total_programados += t.mantenimientos_programados
