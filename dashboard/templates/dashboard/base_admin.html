@@ -923,6 +923,18 @@
 .jv-global-back{max-width:1320px}.jv-global-back .btn{background:#fff;box-shadow:0 5px 16px rgba(15,23,42,.06)}
 form[method="get"]{position:relative} form[method="get"] .form-label{font-weight:700;color:#475569} form[method="get"] .form-control,form[method="get"] .form-select{border-radius:12px;min-height:42px}
 .dropdown-menu{border-radius:14px;border-color:#e2e8f0;box-shadow:0 16px 40px rgba(15,23,42,.13);padding:.45rem}.dropdown-item{border-radius:9px;padding:.6rem .75rem}
+
+.jv-top-brand{min-width:0;flex:1 1 auto}.jv-chat-count{background:#d92d20;color:white;border-radius:12px;padding:2px 6px;font-size:11px}
+@media(max-width:767.98px){
+ .topbar .container > .d-flex{gap:6px!important;flex-wrap:wrap}
+ .jv-top-brand{gap:6px!important;min-width:38px}
+ .topbar-actions{flex:0 1 auto;min-width:0;max-width:100%;flex-wrap:wrap;justify-content:flex-end;gap:5px!important}
+ .topbar-actions .topbar-text-action span:not(.action-icon),.jv-novedades-label{display:none}
+ .topbar-actions .btn{min-height:36px}
+ .topbar-actions .topbar-text-action{width:36px;min-width:36px}
+ .jv-top-brand .brand-title{max-width:100%}
+}
+@media(max-width:480px){.jv-top-brand .brand-copy{display:none}.jv-top-brand{flex:0 0 auto}.topbar-actions{flex:1 1 0}}
 </style></head>
 
 <body class="app-body {% if request.GET.support_float == '1' %}support-float-mode{% endif %}">
@@ -932,7 +944,7 @@ form[method="get"]{position:relative} form[method="get"] .form-label{font-weight
       <div class="topbar-inner">
         <div class="container py-3">
           <div class="d-flex justify-content-between align-items-center gap-3">
-            <div class="d-flex align-items-center gap-3 min-w-0">
+            <div class="d-flex align-items-center gap-3 min-w-0 jv-top-brand">
               <div class="brand-mark">JV</div>
               <div class="brand-copy">
                 <div class="brand-name">JVAQUA</div>
@@ -943,18 +955,17 @@ form[method="get"]{position:relative} form[method="get"] .form-label{font-weight
             </div>
 
             <div class="d-flex gap-2 align-items-center topbar-actions">
-            {% block top_actions %}
               <button class="btn btn-outline-secondary btn-sm jv-nav-trigger"
                       type="button"
                       data-bs-toggle="offcanvas"
                       data-bs-target="#jvModuleLauncher"
                       aria-controls="jvModuleLauncher"
-                      title="Explorar módulos">☰</button>
-              <a class="btn btn-outline-primary btn-sm fw-bold" href="{% url 'comunicados_clientes' %}" title="Comunicados a clientes">📣 Comunicados clientes</a>
-              <a class="btn btn-outline-primary btn-sm fw-bold" href="{% url 'soporte_admin_lista' %}" title="Mensajes de clientes" aria-label="Soporte de clientes">💬 Clientes <span id="jv-admin-chat-badge" style="display:none;background:#d92d20;color:white;border-radius:12px;padding:2px 6px;font-size:11px" aria-live="polite"></span></a>
+                      title="Explorar módulos" aria-label="Explorar módulos">☰</button>
+            {% block top_actions %}
+
               {% if novedades_mantenimiento_pendientes %}
-              <a class="btn btn-warning btn-sm fw-bold" href="/dashboard/notificaciones/" title="Novedades de mantenimiento pendientes">
-                ⚠️ Novedades {{ novedades_mantenimiento_pendientes }}
+              <a class="btn btn-warning btn-sm fw-bold jv-top-novedades" href="/dashboard/notificaciones/" title="Novedades de mantenimiento pendientes">
+                ⚠️ <span class="jv-novedades-label">Novedades</span> {{ novedades_mantenimiento_pendientes }}
               </a>
               {% endif %}
               <div class="dropdown">
@@ -996,8 +1007,8 @@ form[method="get"]{position:relative} form[method="get"] .form-label{font-weight
                 </div>
               </div>
 
-              <a class="btn btn-outline-secondary btn-sm topbar-text-action" href="/dashboard/inicio/"><span class="action-icon">🏠</span><span>Inicio</span></a>
-              <a class="btn btn-outline-danger btn-sm topbar-text-action" href="/logout/"><span class="action-icon">↪</span><span>Salir</span></a>
+              <a class="btn btn-outline-secondary btn-sm topbar-text-action" href="/dashboard/inicio/" aria-label="Inicio"><span class="action-icon">🏠</span><span>Inicio</span></a>
+              <a class="btn btn-outline-danger btn-sm topbar-text-action" href="/logout/" aria-label="Salir"><span class="action-icon">↪</span><span>Salir</span></a>
             {% endblock %}
             </div>
           </div>
@@ -1131,6 +1142,13 @@ form[method="get"]{position:relative} form[method="get"] .form-label{font-weight
         <a class="jv-launch-link" href="{% url 'flujo_mensual' %}"><span class="jv-launch-icon">💰</span><span><span class="jv-launch-name">Finanzas</span><span class="jv-launch-desc">Cartera, nómina y movimientos</span></span></a>
         <a class="jv-launch-link" href="{% url 'inventario' %}"><span class="jv-launch-icon">📦</span><span><span class="jv-launch-name">Inventario</span><span class="jv-launch-desc">Stock, técnicos y trazabilidad</span></span></a>
         <a class="jv-launch-link" href="{% url 'trabajadores_list' %}"><span class="jv-launch-icon">👷</span><span><span class="jv-launch-name">Equipo</span><span class="jv-launch-desc">Trabajadores y expedientes</span></span></a>
+      </div>
+    </div>
+    <div class="jv-launch-group">
+      <div class="jv-launch-kicker">Comunicaciones</div>
+      <div class="jv-launch-grid">
+        <a class="jv-launch-link" href="{% url 'comunicados_clientes' %}"><span class="jv-launch-icon">📣</span><span><span class="jv-launch-name">Comunicados a clientes</span><span class="jv-launch-desc">Enviar y consultar comunicados</span></span></a>
+        <a class="jv-launch-link" href="{% url 'soporte_admin_lista' %}"><span class="jv-launch-icon">💬</span><span><span class="jv-launch-name">Mensajes de clientes <span id="jv-admin-chat-badge" class="jv-chat-count" style="display:none" aria-live="polite"></span></span><span class="jv-launch-desc">Conversaciones y mensajes pendientes</span></span></a>
       </div>
     </div>
     <div class="jv-launch-group">
@@ -1430,8 +1448,10 @@ form[method="get"]{position:relative} form[method="get"] .form-label{font-weight
       `;
     }
 
+    let notifListPending = false;
     async function refreshNotifDropdown() {
-      if (!notifDropdownList) return;
+      if (!notifDropdownList || notifListPending) return;
+      notifListPending = true;
 
       try {
         const res = await fetch("/dashboard/notificaciones/json/", {
@@ -1473,7 +1493,7 @@ form[method="get"]{position:relative} form[method="get"] .form-label{font-weight
         console.error("Error cargando dropdown de notificaciones:", e);
         notifDropdownList.innerHTML = '<div class="p-3 text-danger">Error cargando notificaciones.</div>';
         if (notifDropdownMeta) notifDropdownMeta.textContent = "Error cargando.";
-      }
+      } finally { notifListPending = false; }
     }
 
     function bindNotifDropdownActions() {
@@ -1597,23 +1617,19 @@ form[method="get"]{position:relative} form[method="get"] .form-label{font-weight
       });
     }
 
-    document.addEventListener("visibilitychange", () => {
-      if (!document.hidden) {
-        refreshNotifBadge();
-        refreshNotifDropdown();
-      }
-    });
-
+    const notifToggle = document.getElementById("notifDropdown");
+    function refreshVisibleNotifications() {
+      if (document.hidden) return;
+      refreshNotifBadge();
+      if (notifToggle && notifToggle.getAttribute("aria-expanded") === "true") refreshNotifDropdown();
+    }
+    if (notifToggle) notifToggle.addEventListener("shown.bs.dropdown", refreshNotifDropdown);
+    document.addEventListener("visibilitychange", refreshVisibleNotifications);
     window.addEventListener("load", async () => {
+      refreshVisibleNotifications();
+      setInterval(refreshVisibleNotifications, 30000);
       const reg = await registerSW();
       await syncPushButtons(reg);
-      await refreshNotifBadge();
-      await refreshNotifDropdown();
-
-      setInterval(() => {
-        refreshNotifBadge();
-        refreshNotifDropdown();
-      }, 30000);
 
       if (btnPushAdmin) btnPushAdmin.addEventListener("click", enablePushAdmin);
       if (btnPushTest) btnPushTest.addEventListener("click", sendTestPush);

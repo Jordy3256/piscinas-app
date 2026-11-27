@@ -35,19 +35,18 @@ def _usuarios_admin():
     )
 
 
-def _crear_para_admins(*, tipo, referencia_id, titulo, mensaje, url, enviar_push=False):
+def _crear_para_admins(*, usuarios, tipo, referencia_id, titulo, mensaje, url, enviar_push=False):
     creadas = []
-    for user in _usuarios_admin():
-        notif, creada = Notificacion.objects.update_or_create(
-            user=user,
-            tipo=tipo,
-            referencia_id=referencia_id,
-            defaults={
-                "titulo": titulo,
-                "mensaje": mensaje,
-                "url": url,
-            },
+    for user in usuarios:
+        datos = {"titulo": titulo, "mensaje": mensaje, "url": url}
+        notif, creada = Notificacion.objects.get_or_create(
+            user=user, tipo=tipo, referencia_id=referencia_id, defaults=datos,
         )
+        if not creada:
+            cambios = {campo: valor for campo, valor in datos.items()
+                       if getattr(notif, campo) != valor}
+            if cambios:
+                Notificacion.objects.filter(pk=notif.pk).update(**cambios)
         if creada:
             creadas.append((user, notif))
 
@@ -80,10 +79,11 @@ def generar_alertas_financieras(*, enviar_push=False):
     )
     obligaciones = (
         ObligacionTrabajador.objects.exclude(estado=ObligacionTrabajador.ESTADO_ANULADO)
-        .select_related("trabajador", "contrato", "contrato__cliente")
+        .select_related("trabajador", "trabajador__user", "contrato", "contrato__cliente")
         .prefetch_related("pagos")
     )
 
+    usuarios = list(_usuarios_admin())
     activas = set()
 
     for factura in facturas:
@@ -96,6 +96,7 @@ def generar_alertas_financieras(*, enviar_push=False):
             activas.add((tipo, factura.pk))
             dias = (hoy - factura.fecha_vencimiento).days
             _crear_para_admins(
+                usuarios=usuarios,
                 tipo=tipo,
                 referencia_id=factura.pk,
                 titulo="🔴 Cobro vencido",
@@ -107,6 +108,7 @@ def generar_alertas_financieras(*, enviar_push=False):
             tipo = "cobro_hoy"
             activas.add((tipo, factura.pk))
             _crear_para_admins(
+                usuarios=usuarios,
                 tipo=tipo,
                 referencia_id=factura.pk,
                 titulo="🟠 Cobro pendiente para hoy",
@@ -118,6 +120,7 @@ def generar_alertas_financieras(*, enviar_push=False):
             tipo = "cobro_proximo"
             activas.add((tipo, factura.pk))
             _crear_para_admins(
+                usuarios=usuarios,
                 tipo=tipo,
                 referencia_id=factura.pk,
                 titulo="🟡 Cobro programado para mañana",
@@ -135,6 +138,7 @@ def generar_alertas_financieras(*, enviar_push=False):
             tipo = "factura_emitir"
             activas.add((tipo, factura.pk))
             _crear_para_admins(
+                usuarios=usuarios,
                 tipo=tipo,
                 referencia_id=factura.pk,
                 titulo="📄 Factura pendiente de emitir/enviar",
@@ -144,15 +148,19 @@ def generar_alertas_financieras(*, enviar_push=False):
             )
 
     for obligacion in obligaciones:
-        if obligacion.saldo <= 0 or obligacion.fecha_pago_programada > hoy:
+        if obligacion.fecha_pago_programada > hoy:
+            continue
+        saldo = obligacion.saldo
+        if saldo <= 0:
             continue
         tipo = "nomina_pagar"
         activas.add((tipo, obligacion.pk))
         _crear_para_admins(
+            usuarios=usuarios,
             tipo=tipo,
             referencia_id=obligacion.pk,
             titulo="🔵 Pago de nómina pendiente",
-            mensaje=f"{obligacion.trabajador}: ${obligacion.saldo:.2f} por {obligacion.contrato.cliente}.",
+            mensaje=f"{obligacion.trabajador}: ${saldo:.2f} por {obligacion.concepto_origen}.",
             url=f"/dashboard/finanzas/nomina/?anio={obligacion.periodo_anio}&mes={obligacion.periodo_mes}",
             enviar_push=enviar_push,
         )

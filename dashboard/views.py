@@ -6847,13 +6847,8 @@ def offline_view(request):
 def unread_count_view(request):
     if es_trabajador(request.user):
         _actualizar_seguimientos_asistente(request.user)
-    if es_admin(request.user):
-        try:
-            from finanzas.alertas_financieras import generar_alertas_financieras
-            generar_alertas_financieras(enviar_push=True)
-        except Exception:
-            logger.exception("No se pudieron actualizar las alertas financieras.")
-
+    # El sondeo de campana no debe ejecutar la sincronización financiera.
+    # Se conserva en Inicio, bandeja de notificaciones y proceso diario.
     if Notificacion is None:
         return JsonResponse({"count": 0})
 
