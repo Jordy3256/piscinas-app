@@ -74,7 +74,7 @@
 
     <section class="ad-resolve course-aquo">
       <div><div class="small fw-bold text-primary">LLEVARLO A TU PISCINA</div><h4 class="mb-1">🤖 Pregúntale a AQUO</h4><div class="text-muted">Si tu caso tiene condiciones particulares, AQUO puede orientarte usando los datos de tu piscina.</div></div>
-      <a class="btn btn-primary" href="{% if base_template == 'asistente_tecnico/base_suscriptor.html' %}{% url 'asistente_tecnico:digital_resolver' %}{% else %}{% url 'asistente_tecnico:inicio' %}{% endif %}">Abrir AQUO →</a>
+      <a class="btn btn-primary" href="{% url 'asistente_tecnico:inicio' %}">Abrir AQUO →</a>
     </section>
   </article>
 
@@ -113,7 +113,7 @@
     {% if obj.referencias_tecnicas %}<section id="referencias" class="ad-section library-reference"><h4>📑 Referencias técnicas</h4><div class="ad-text">{{ obj.referencias_tecnicas|linebreaks }}</div></section>{% endif %}
     {% if obj.relacionados.all %}<section class="ad-section"><h4>🔗 Temas relacionados</h4><div class="ad-related">{% for r in obj.relacionados.all %}{% if r.estado == 'aprobado' %}<a href="{% url 'asistente_tecnico:academia_contenido_detalle' r.slug %}"><span>{{ r.titulo }}</span><span>→</span></a>{% endif %}{% endfor %}</div></section>{% endif %}
 
-    <section class="ad-resolve"><div><div class="small fw-bold text-primary">¿NECESITAS APLICARLO A TU CASO?</div><h4 class="mb-1">🤖 Consultar con AQUO</h4><div class="text-muted">La Biblioteca explica el tema. AQUO puede ayudarte a aplicarlo a una piscina específica.</div></div><a class="btn btn-primary" href="{% if base_template == 'asistente_tecnico/base_suscriptor.html' %}{% url 'asistente_tecnico:digital_resolver' %}{% else %}{% url 'asistente_tecnico:inicio' %}{% endif %}">Abrir AQUO →</a></section>
+    <section class="ad-resolve"><div><div class="small fw-bold text-primary">¿NECESITAS APLICARLO A TU CASO?</div><h4 class="mb-1">🤖 Consultar con AQUO</h4><div class="text-muted">La Biblioteca explica el tema. AQUO puede ayudarte a aplicarlo a una piscina específica.</div></div><a class="btn btn-primary" href="{% url 'asistente_tecnico:inicio' %}">Abrir AQUO →</a></section>
   </article>
   {% endif %}
 </div>

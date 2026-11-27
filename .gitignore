@@ -4,25 +4,35 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.coverage
+htmlcov/
 *.log
 
-# Entornos y builds
+# Entornos virtuales y compilaciones
 venv/
 .venv/
 node_modules/
 staticfiles/
 
-# Datos locales y credenciales
+# Variables de entorno y credenciales
 .env
 .env.*
 !.env.example
 *.pem
 *.key
-*.sqlite3
 backup_postgres.json
-media/
 
-# Copias temporales y paquetes
+# Bases de datos locales
+*.sqlite3
+*.sqlite3-journal
+*.sqlite3-wal
+*.sqlite3-shm
+
+# Archivos multimedia locales
+media/
+/private_aquo360/
+
+# Copias y archivos temporales
 *.bak
 *.orig
 *.swp
@@ -30,18 +40,15 @@ media/
 *~
 /auditoria_finanzas_contratos.zip
 /mnt/
+/tmp/
 
-# IDE y sistema
+# IDE y sistema operativo
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
+desktop.ini
 
-# Proteccion de bases de datos locales
-*.sqlite3
-*.sqlite3-journal
-*.pyo
-*.pyd
-
-# AQUO360: evidencia privada (fuera de MEDIA_ROOT)
-/private_aquo360/
+# Scripts temporales de limpieza
+/APLICAR_ETAPA*.ps1
+/RECONCILIAR_ETAPA*.ps1

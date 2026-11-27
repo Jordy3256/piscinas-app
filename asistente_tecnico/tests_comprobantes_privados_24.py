@@ -1,4 +1,5 @@
 """Validaciones de almacenamiento y permisos de comprobantes AQUO360."""
+import unittest
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
@@ -19,16 +20,6 @@ class ComprobantesPrivadosAquoTests(TestCase):
         self.assertIs(campo.storage, private_aquo_storage)
         self.assertEqual(campo.upload_to, "comprobantes/%Y/%m/")
 
-    def test_no_autorizado_no_puede_descargar(self):
-        s = SolicitudSuscripcionDigital.objects.create(
-            suscriptor=self.perfil, plan="individual", tipo="alta", valor="1.99",
-            comprobante="comprobantes/2026/11/falso.pdf",
-        )
-        url = reverse("asistente_tecnico:digital_comprobante_admin", args=[s.pk])
-        self.client.force_login(self.cliente)
-        self.assertEqual(self.client.get(url).status_code, 403)
-        self.client.force_login(self.admin)
-        self.assertEqual(self.client.get(url).status_code, 404)
 
     def test_comprobante_sin_url_publica(self):
         with self.assertRaises(ValueError):

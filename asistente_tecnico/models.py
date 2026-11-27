@@ -1127,6 +1127,7 @@ class AvisoAdministrativoAquo(models.Model):
 
 class ExperienciaAquo(models.Model):
     """Caso conversacional: solo la validación técnica habilita reutilización entre usuarios."""
+    id = models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")
     usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="experiencias_aquo")
     piscina = models.ForeignKey("PiscinaSuscriptor", on_delete=models.SET_NULL, null=True, blank=True, related_name="experiencias_aquo")
     problema = models.TextField(max_length=2000)

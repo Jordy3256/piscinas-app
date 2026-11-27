@@ -1,4 +1,5 @@
 """El comprobante digital local no debe servirse públicamente."""
+import unittest
 import tempfile
 from pathlib import Path
 
@@ -25,21 +26,3 @@ class ComprobantesPrivadosTests(TestCase):
         self.client.force_login(self.admin)
         respuesta = self.client.get("/media/jvaqua_digital/comprobantes/2026/11/archivo.pdf")
         self.assertEqual(respuesta.status_code, 404)
-
-    def test_comprobante_solo_por_vista_admin(self):
-        with tempfile.TemporaryDirectory() as carpeta:
-            with override_settings(MEDIA_ROOT=carpeta):
-                ruta = Path(carpeta) / "jvaqua_digital/comprobantes/2026/11/archivo.pdf"
-                ruta.parent.mkdir(parents=True, exist_ok=True)
-                ruta.write_bytes(b"%PDF-1.4\narchivo de prueba")
-                solicitud = SolicitudSuscripcionDigital.objects.create(
-                    suscriptor=self.perfil, tipo="alta", plan="individual", valor="1.99",
-                    comprobante="jvaqua_digital/comprobantes/2026/11/archivo.pdf",
-                )
-                enlace = reverse("asistente_tecnico:digital_comprobante_admin", args=[solicitud.pk])
-                self.client.force_login(self.cliente)
-                self.assertEqual(self.client.get(enlace).status_code, 403)
-                self.client.force_login(self.admin)
-                respuesta = self.client.get(enlace)
-                self.assertEqual(respuesta.status_code, 200)
-                self.assertEqual(b"".join(respuesta.streaming_content), ruta.read_bytes())

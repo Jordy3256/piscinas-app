@@ -10,7 +10,7 @@ from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Q, Sum
 from django.shortcuts import get_object_or_404, redirect, render
-from django.http import HttpResponse
+from django.http import HttpResponse, FileResponse
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.urls import reverse
@@ -250,15 +250,16 @@ def archivo_financiero_view(request, tipo, pk):
     if not archivo or not archivo.name:
         return HttpResponse("Este movimiento no tiene comprobante adjunto.", status=404)
     try:
-        existe = archivo.storage.exists(archivo.name)
-    except Exception:
-        existe = bool(settings.CLOUDINARY_URL)
-    if not existe:
-        return HttpResponse("El registro del comprobante existe, pero el archivo físico ya no está disponible.", status=404, content_type="text/plain; charset=utf-8")
-    try:
-        return redirect(archivo.url)
-    except Exception:
-        return HttpResponse("No fue posible abrir el comprobante.", status=404)
+        # Nunca redirigir a /media/ ni a una URL pública del almacenamiento:
+        # la autorización debe permanecer asociada a cada descarga.
+        contenido = archivo.open("rb")
+    except (OSError, IOError, ValueError, FileNotFoundError):
+        return HttpResponse("El comprobante no está disponible.", status=404)
+    respuesta = FileResponse(contenido, as_attachment=False)
+    respuesta["Cache-Control"] = "private, no-store, max-age=0"
+    respuesta["X-Content-Type-Options"] = "nosniff"
+    respuesta["Referrer-Policy"] = "no-referrer"
+    return respuesta
 
 
 @login_required

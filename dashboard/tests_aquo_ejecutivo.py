@@ -20,6 +20,9 @@ class AquoEjecutivoTests(TestCase):
                 "retencion": 100.0, "ingreso_ganado": Decimal("0"), "ingreso_recuperado": Decimal("0"),
                 "ingreso_perdido": Decimal("0")}, "ranking_ciudades": []},
             "salud": {"criticas": 0, "atencion": 0, "avisos": 0, "total_afectados": 0, "incidencias": []},
+            "cartera_inteligente": {"total": Decimal("0"), "vencido": Decimal("0"), "clientes_prioritarios": 0, "recuperable_30": Decimal("0"), "ranking": []},
+            "operacion": {"cumplimiento": 100, "realizados_mes": 0, "programados_mes": 0, "atrasados": 0, "proximos_7": 0, "recurrentes": [], "trabajadores": []},
+            "inventario": {"costo_mes": Decimal("0"), "agotados": 0, "criticos": 0, "proximos": 0, "anomalos": 0, "ranking_productos": []},
             "cartera_pendiente": Decimal("0"), "cartera_vencida": Decimal("0"),
             "cobrado_mes": Decimal("0"), "nomina_pendiente": Decimal("0"),
         }
@@ -42,6 +45,9 @@ class AquoEjecutivoTests(TestCase):
                 "ingreso_recuperado": Decimal("0"), "ingreso_perdido": Decimal("200"),
             }, "ranking_ciudades": []},
             "salud": {"criticas": 1, "atencion": 0, "avisos": 0, "total_afectados": 1, "items": []},
+            "cartera_inteligente": {"total": Decimal("300"), "vencido": Decimal("150"), "clientes_prioritarios": 1, "recuperable_30": Decimal("0"), "ranking": []},
+            "operacion": {"cumplimiento": 100, "realizados_mes": 0, "programados_mes": 0, "atrasados": 0, "proximos_7": 0, "recurrentes": [], "trabajadores": []},
+            "inventario": {"costo_mes": Decimal("0"), "agotados": 0, "criticos": 0, "proximos": 0, "anomalos": 0, "ranking_productos": []},
             "cartera_pendiente": Decimal("300"), "cartera_vencida": Decimal("150"),
             "cobrado_mes": Decimal("500"), "nomina_pendiente": Decimal("100"),
         }
@@ -69,6 +75,9 @@ class AquoEjecutivoTests(TestCase):
                 "ingreso_recuperado": Decimal("0"), "ingreso_perdido": Decimal("100"),
             }, "ranking_ciudades": []},
             "salud": {"criticas": 0, "atencion": 1, "avisos": 0, "total_afectados": 1, "items": []},
+            "cartera_inteligente": {"total": Decimal("100"), "vencido": Decimal("0"), "clientes_prioritarios": 0, "recuperable_30": Decimal("0"), "ranking": []},
+            "operacion": {"cumplimiento": 100, "realizados_mes": 0, "programados_mes": 0, "atrasados": 0, "proximos_7": 0, "recurrentes": [], "trabajadores": []},
+            "inventario": {"costo_mes": Decimal("0"), "agotados": 0, "criticos": 0, "proximos": 0, "anomalos": 0, "ranking_productos": []},
             "cartera_pendiente": Decimal("100"), "cartera_vencida": Decimal("0"),
             "cobrado_mes": Decimal("500"), "nomina_pendiente": Decimal("0"),
         }

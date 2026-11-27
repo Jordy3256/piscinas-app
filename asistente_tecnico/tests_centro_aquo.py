@@ -1,15 +1,17 @@
-from unittest.mock import Mock, patch
-from django.test import RequestFactory, SimpleTestCase
-from django.urls import reverse
-from .views import digital_centro_aquo_view
+from django.test import SimpleTestCase
+from django.urls import reverse, resolve
+from . import views
+from .urls import plataforma_digital_retirada
+
 
 class CentroAquoAccesoTests(SimpleTestCase):
     def test_ruta_del_centro(self):
-        self.assertIn("/digital/aquo/", reverse("asistente_tecnico:digital_centro_aquo"))
+        url = reverse("asistente_tecnico:digital_centro_aquo")
+        self.assertIn("/digital/aquo/", url)
+        self.assertIs(resolve(url).func, plataforma_digital_retirada)
 
-    def test_rechaza_usuario_sin_suscripcion(self):
-        request = RequestFactory().get("/digital/aquo/")
-        request.user = Mock(is_authenticated=True)
-        with patch("asistente_tecnico.views._suscriptor", return_value=None):
-            response = digital_centro_aquo_view(request)
-        self.assertEqual(response.status_code, 403)
+    def test_centro_retirado(self):
+        self.assertFalse(hasattr(views, "digital_centro_aquo_view"))
+        url = reverse("asistente_tecnico:digital_centro_aquo")
+        self.assertEqual(self.client.get(url).status_code, 410)
+        self.assertEqual(self.client.post(url).status_code, 410)

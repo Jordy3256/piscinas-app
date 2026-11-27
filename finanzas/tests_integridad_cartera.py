@@ -115,3 +115,35 @@ class IntegridadCarteraTests(TestCase):
             Mantenimiento.objects.create(contrato=contrato, cliente=self.cliente, fecha=fecha_visita)
         cuotas = contrato.calendario_cobros(2026, 9)
         self.assertEqual(sum((c["valor"] for c in cuotas), Decimal("0.00")), Decimal("80.00"))
+
+    def test_sincronizacion_repetida_no_duplica_facturas_del_ciclo(self):
+        """Repetir la sincronización no debe crear cobros duplicados."""
+        contrato = self._contrato()
+        fecha_revision = date(2026, 9, 17)
+        sincronizar_contrato_activo(contrato, desde_fecha=fecha_revision, horizonte_meses=0)
+        facturas_iniciales = list(
+            Factura.objects.filter(contrato=contrato).values_list("pk", flat=True)
+        )
+        self.assertEqual(len(facturas_iniciales), 1)
+
+        sincronizar_contrato_activo(contrato, desde_fecha=fecha_revision, horizonte_meses=0)
+        facturas_finales = list(
+            Factura.objects.filter(contrato=contrato).values_list("pk", flat=True)
+        )
+        self.assertCountEqual(facturas_finales, facturas_iniciales)
+
+    def test_ciclo_25_a_25_cierre_periodo_cobra_en_octubre(self):
+        """El cobro al cierre no debe adelantarse al inicio del ciclo."""
+        contrato = self._contrato(
+            forma_pago="fin_mensualidad",
+            programacion_cobro="cierre_periodo",
+        )
+        cuotas = cuotas_programadas_para_mes_cobro(contrato, 2026, 10)
+        cuotas_septiembre = [
+            cuota for anio, mes, cuota in cuotas if (anio, mes) == (2026, 9)
+        ]
+        self.assertTrue(cuotas_septiembre)
+        self.assertTrue(all(
+            cuota["fecha_cobro_desde"] == date(2026, 10, 25)
+            for cuota in cuotas_septiembre
+        ))

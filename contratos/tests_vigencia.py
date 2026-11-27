@@ -8,6 +8,7 @@ from clientes.models import Cliente
 from contratos.models import Contrato
 from trabajadores.models import Trabajador
 from contratos.programacion import generar_mantenimientos_contrato
+from mantenimientos.models import Mantenimiento
 
 
 class VigenciaContratoTests(TestCase):
@@ -52,4 +53,4 @@ class VigenciaContratoTests(TestCase):
             hasta=date(2026, 11, 30),
         )
         self.assertLessEqual(resultado["hasta"], contrato.fecha_fin_contrato)
-        self.assertFalse(contrato.mantenimientos.filter(fecha__gt=contrato.fecha_fin_contrato).exists())
+        self.assertFalse(Mantenimiento.objects.filter(contrato=contrato, fecha__gt=contrato.fecha_fin_contrato).exists())

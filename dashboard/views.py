@@ -2924,13 +2924,29 @@ def ruta_resolver_coordenadas_view(request):
 
     api_key = os.environ.get("GOOGLE_MAPS_API_KEY", "").strip()
     contratos_ruta = Contrato.objects.filter(pk__in=contrato_ids).select_related("cliente")
+    clientes_ruta = Cliente.objects.filter(pk__in=ids)
+    if not es_admin(request.user):
+        # Los identificadores recibidos del navegador nunca son una autorización.
+        try:
+            trabajador = request.user.trabajador
+        except Exception:
+            return JsonResponse({"ok": False, "error": "No autorizado."}, status=403)
+        contratos_permitidos = Contrato.objects.filter(
+            Q(responsable_reposicion=trabajador)
+            | Q(pk__in=Mantenimiento.objects.filter(
+                trabajadores=trabajador, estado="pendiente"
+            ).values("contrato_id"))
+        ).values("pk")
+        contratos_ruta = contratos_ruta.filter(pk__in=contratos_permitidos)
+        clientes_ruta = clientes_ruta.filter(pk__in=Contrato.objects.filter(
+            pk__in=contratos_permitidos
+        ).values("cliente_id"))
     resultados = {}
     for contrato in contratos_ruta:
         resolved = _geocodificar_contrato_google(contrato, api_key)
         if resolved:
             resultados[f"contrato:{contrato.pk}"] = resolved
-    clientes = Cliente.objects.filter(pk__in=ids)
-    for cliente in clientes:
+    for cliente in clientes_ruta:
         if cliente.latitud is not None and cliente.longitud is not None:
             resultados[str(cliente.pk)] = {"lat": float(cliente.latitud), "lng": float(cliente.longitud), "fuente": "guardada"}
             continue
@@ -2956,6 +2972,9 @@ def ruta_matriz_google_view(request):
     servidor mediante GOOGLE_MAPS_API_KEY. Si no está configurada, el cliente
     conserva su optimización local como fallback.
     """
+    if not (es_admin(request.user) or es_trabajador(request.user)):
+        return JsonResponse({"ok": False, "error": "No autorizado."}, status=403)
+
     try:
         payload = json.loads(request.body.decode("utf-8") or "{}")
     except Exception:
@@ -4888,6 +4907,19 @@ def mantenimiento_cancelar_view(request, pk):
 def foto_mantenimiento_archivo_view(request, pk):
     """Abre una evidencia persistente o muestra un aviso si el archivo histórico se perdió."""
     foto = get_object_or_404(FotoMantenimiento, pk=pk)
+    mantenimiento = foto.mantenimiento
+    if es_admin(request.user):
+        permitido = True
+    elif es_trabajador(request.user):
+        try:
+            permitido = mantenimiento.trabajadores.filter(pk=request.user.trabajador.pk).exists()
+        except Exception:
+            permitido = False
+    else:
+        permitido = False
+    if not permitido:
+        return render(request, "dashboard/no_autorizado.html", status=403)
+
     archivo = foto.imagen
     disponible = False
     if archivo and archivo.name:
@@ -9992,7 +10024,7 @@ def inventario_contrato_trabajador_view(request, pk):
             trabajador and (
                 contrato.responsable_reposicion_id == trabajador.id
                 or (contrato.responsable_reposicion_id is None and contrato.tecnico_designado_id == trabajador.id)
-                or Mantenimiento.objects.filter(contrato=contrato, trabajadores=trabajador).exists()
+                or Mantenimiento.objects.filter(contrato=contrato, trabajadores=trabajador, estado="pendiente").exists()
             )
         )
         if not permitido:
@@ -10129,7 +10161,7 @@ def contrato_inventario_ajustar_view(request, pk, inventario_id):
     trabajador = getattr(request.user, "trabajador", None) if es_trabajador(request.user) else None
     if not es_admin(request.user):
         responsable = contrato.responsable_reposicion or contrato.tecnico_designado
-        permitido = bool(trabajador and (not responsable or responsable.pk == trabajador.pk or Mantenimiento.objects.filter(contrato=contrato, trabajadores=trabajador).exists()))
+        permitido = bool(trabajador and (not responsable or responsable.pk == trabajador.pk or Mantenimiento.objects.filter(contrato=contrato, trabajadores=trabajador, estado="pendiente").exists()))
         if not permitido:
             return render(request, "dashboard/no_autorizado.html", status=403)
     try:

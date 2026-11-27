@@ -58,3 +58,37 @@ class NominaFijaTests(TestCase):
             fecha_pago_programada=date(2026, 9, 30),
         )
         self.assertEqual(obligacion.concepto_origen, "Mensualidad fija")
+
+    def test_trabajador_inactivo_no_genera_nomina_fija(self):
+        self.trabajador.activo = False
+        self.trabajador.save(update_fields=["activo"])
+        resultado = materializar_nomina_fija_trabajador(
+            self.trabajador, desde_fecha=date(2026, 9, 1), horizonte_meses=0,
+        )
+        self.assertEqual(resultado["creadas"], 0)
+        self.assertFalse(ObligacionTrabajador.objects.filter(trabajador=self.trabajador).exists())
+
+    def test_modalidad_por_contrato_no_genera_mensualidad_fija(self):
+        self.trabajador.tipo_remuneracion = "por_contrato"
+        self.trabajador.save(update_fields=["tipo_remuneracion"])
+        resultado = materializar_nomina_fija_trabajador(
+            self.trabajador, desde_fecha=date(2026, 9, 1), horizonte_meses=0,
+        )
+        self.assertEqual(resultado["creadas"], 0)
+        self.assertFalse(ObligacionTrabajador.objects.filter(trabajador=self.trabajador).exists())
+
+    def test_cambio_sueldo_actualiza_obligacion_pendiente_sin_duplicar(self):
+        materializar_nomina_fija_trabajador(
+            self.trabajador, desde_fecha=date(2026, 9, 1), horizonte_meses=0,
+        )
+        self.trabajador.sueldo_mensual_fijo = Decimal("650.00")
+        self.trabajador.save(update_fields=["sueldo_mensual_fijo"])
+        materializar_nomina_fija_trabajador(
+            self.trabajador, desde_fecha=date(2026, 9, 1), horizonte_meses=0,
+        )
+        obligaciones = ObligacionTrabajador.objects.filter(
+            trabajador=self.trabajador, contrato__isnull=True,
+            periodo_anio=2026, periodo_mes=9,
+        )
+        self.assertEqual(obligaciones.count(), 1)
+        self.assertEqual(obligaciones.get().valor_acordado, Decimal("650.00"))
