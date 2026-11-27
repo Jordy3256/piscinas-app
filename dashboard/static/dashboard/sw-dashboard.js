@@ -1,193 +1,57 @@
-/* dashboard/static/dashboard/sw-dashboard.js */
-
-const VERSION = "v2026-10-25-click-01";
-const CACHE = {
-  static: `static-${VERSION}`,
-  pages: `pages-${VERSION}`,
-  images: `images-${VERSION}`,
-};
-
-const PRECACHE_URLS = [
-  "/dashboard/offline/",
-  "/dashboard/manifest.json",
-  "/static/dashboard/icons/icon-192.png",
-  "/static/dashboard/icons/icon-192-maskable.png",
-  "/static/dashboard/icons/icon-512.png",
-  "/static/dashboard/icons/icon-512-maskable.png",
-  "/static/dashboard/icons/aquo-192.png",
-  "/static/dashboard/icons/aquo-192-maskable.png",
-  "/static/dashboard/icons/aquo-512.png",
-  "/static/dashboard/icons/aquo-512-maskable.png",
-  "/static/dashboard/icons/aquo-apple-touch.png",
-  "/static/dashboard/icons/aquo-favicon-32.png",
-  "/static/dashboard/icons/aquo-favicon-48.png",
-];
-
-function log(...args) {
-  console.log("[SW-DASH]", ...args);
+/* JVAQUA: cache exclusivamente de recursos públicos. */
+const VERSION = "jvaqua-static-20261127-08";
+const OFFLINE = "/dashboard/offline/";
+const ICONS = ["icon-192.png", "icon-512.png", "aquo-192.png", "aquo-512.png"];
+function warn(...args) { console.warn("[SW-DASH]", ...args); }
+function publicStatic(req) {
+  const url = new URL(req.url);
+  return url.origin === self.location.origin && url.pathname.startsWith("/static/");
 }
-
-function warn(...args) {
-  console.warn("[SW-DASH]", ...args);
-}
-
-function isSameOrigin(url) {
-  try {
-    return new URL(url).origin === self.location.origin;
-  } catch {
-    return false;
+async function savePublic(cache, req, res) {
+  const control = res.headers.get("Cache-Control") || "";
+  if (res.status === 200 && !res.redirected && !/private|no-store|no-cache/i.test(control)) {
+    await cache.put(req, res.clone());
   }
 }
-
-function isHtml(request) {
-  return (
-    request.mode === "navigate" ||
-    (request.headers.get("accept") || "").includes("text/html")
-  );
+async function precache() {
+  const cache = await caches.open(VERSION);
+  // Offline es una página genérica, solicitada sin cookies. El manifest depende del rol.
+  const urls = [OFFLINE, ...ICONS.map(n => "/static/dashboard/icons/" + n)];
+  await Promise.allSettled(urls.map(async url => {
+    const req = new Request(new URL(url, self.location.origin), {credentials: "omit", cache: "reload"});
+    const res = await fetch(req);
+    await savePublic(cache, req, res);
+  }));
 }
-
-function isImage(request) {
-  return (
-    request.destination === "image" ||
-    request.url.includes("/media/") ||
-    /\.(png|jpg|jpeg|gif|webp|svg)$/i.test(request.url)
-  );
-}
-
-function isStaticAsset(request) {
-  return (
-    request.url.includes("/static/") ||
-    request.destination === "style" ||
-    request.destination === "script" ||
-    request.destination === "font"
-  );
-}
-
-function shouldBypassCache(request) {
-  const url = new URL(request.url);
-
-  if (url.pathname.startsWith("/admin/")) return true;
-  if (url.pathname.startsWith("/logout/")) return true;
-  if (url.pathname.startsWith("/login/")) return true;
-
-  // No cachear pantallas HTML críticas
-  if (url.pathname === "/dashboard") return true;
-  if (url.pathname === "/dashboard/") return true;
-  if (url.pathname === "/dashboard/inicio/") return true;
-  if (url.pathname === "/dashboard/home/") return true;
-
-  return false;
-}
-
-async function safePut(cacheName, request, response) {
-  try {
-    if (!isSameOrigin(request.url)) return;
-    if (!response || response.status !== 200) return;
-
-    const cache = await caches.open(cacheName);
-    await cache.put(request, response.clone());
-  } catch (e) {
-    warn("safePut error:", e);
-  }
-}
-
-async function cacheFirst(request, cacheName) {
-  const cache = await caches.open(cacheName);
-  const cached = await cache.match(request);
+self.addEventListener("install", event => {
+  event.waitUntil((async () => { await precache(); await self.skipWaiting(); })());
+});
+self.addEventListener("activate", event => {
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.filter(k => k !== VERSION && /^(?:static-v|pages-v|images-v|jvaqua-static-)/.test(k)).map(k => caches.delete(k)));
+    await self.clients.claim();
+  })());
+});
+self.addEventListener("message", event => {
+  if (event.data === "SKIP_WAITING") event.waitUntil(self.skipWaiting());
+});
+async function staticAsset(req) {
+  // Solo nombres con huella de contenido: los demás usan la caché HTTP normal.
+  const cache = await caches.open(VERSION);
+  const cached = await cache.match(req);
   if (cached) return cached;
-
-  const fresh = await fetch(request, { cache: "no-store" });
-  await safePut(cacheName, request, fresh);
-  return fresh;
+  const res = await fetch(req);
+  try { await savePublic(cache, req, res); } catch (e) { warn(e); }
+  return res;
 }
-
-async function networkOnlyHtml(request) {
-  try {
-    return await fetch(request, { cache: "no-store" });
-  } catch (e) {
-    const cache = await caches.open(CACHE.static);
-    const offline = await cache.match("/dashboard/offline/");
-    return offline || new Response("Offline", { status: 503 });
+async function navigate(req) {
+  try { return await fetch(req, {cache: "no-store"}); }
+  catch (e) {
+    const cache = await caches.open(VERSION);
+    return (await cache.match(OFFLINE)) || new Response("Sin conexión. Intenta nuevamente.", {status: 503, headers: {"Content-Type": "text/plain; charset=utf-8"}});
   }
 }
-
-async function networkFirst(request, cacheName) {
-  const cache = await caches.open(cacheName);
-
-  try {
-    const fresh = await fetch(request, { cache: "no-store" });
-    await safePut(cacheName, request, fresh);
-    return fresh;
-  } catch (e) {
-    const cached = await cache.match(request);
-    if (cached) return cached;
-
-    if (isHtml(request)) {
-      const staticCache = await caches.open(CACHE.static);
-      const off = await staticCache.match("/dashboard/offline/");
-      if (off) return off;
-    }
-
-    throw e;
-  }
-}
-
-async function precacheAll(cache, urls) {
-  for (const u of urls) {
-    try {
-      const req = new Request(u, { cache: "reload" });
-      const res = await fetch(req);
-      if (res.status === 200) {
-        await cache.put(req, res);
-      }
-    } catch (e) {
-      warn("precache fail:", u, e);
-    }
-  }
-}
-
-self.addEventListener("install", (event) => {
-  log("INSTALL", VERSION);
-
-  event.waitUntil(
-    (async () => {
-      const cache = await caches.open(CACHE.static);
-      await precacheAll(cache, PRECACHE_URLS);
-      await self.skipWaiting();
-    })()
-  );
-});
-
-self.addEventListener("activate", (event) => {
-  log("ACTIVATE", VERSION);
-
-  event.waitUntil(
-    (async () => {
-      const keys = await caches.keys();
-      const allow = new Set([CACHE.static, CACHE.pages, CACHE.images]);
-
-      await Promise.all(
-        keys.map((k) => {
-          if (!allow.has(k)) {
-            log("Deleting old cache:", k);
-            return caches.delete(k);
-          }
-          return null;
-        })
-      );
-
-      await self.clients.claim();
-    })()
-  );
-});
-
-self.addEventListener("message", (event) => {
-  if (event.data === "SKIP_WAITING") {
-    log("message: SKIP_WAITING");
-    self.skipWaiting();
-  }
-});
-
 self.addEventListener("push", (event) => {
   let data = {};
 
@@ -268,33 +132,12 @@ self.addEventListener("notificationclick", (event) => {
   })());
 });
 
-self.addEventListener("fetch", (event) => {
+self.addEventListener("fetch", event => {
   const req = event.request;
-
-  if (req.method !== "GET") return;
-  if (!isSameOrigin(req.url)) return;
-
-  if (shouldBypassCache(req)) {
-    if (isHtml(req)) {
-      event.respondWith(networkOnlyHtml(req));
-    }
-    return;
+  if (req.method !== "GET" || new URL(req.url).origin !== self.location.origin) return;
+  if (req.mode === "navigate") { event.respondWith(navigate(req)); return; }
+  if (publicStatic(req) && /\.[0-9a-f]{12}\.[^/]+$/i.test(new URL(req.url).pathname)) {
+    event.respondWith(staticAsset(req));
   }
-
-  if (isHtml(req)) {
-    event.respondWith(networkFirst(req, CACHE.pages));
-    return;
-  }
-
-  if (isImage(req)) {
-    event.respondWith(cacheFirst(req, CACHE.images));
-    return;
-  }
-
-  if (isStaticAsset(req)) {
-    event.respondWith(cacheFirst(req, CACHE.static));
-    return;
-  }
-
-  event.respondWith(networkFirst(req, CACHE.pages));
+  // API, manifest, fotos privadas y demás recursos: comportamiento HTTP normal.
 });
